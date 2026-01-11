@@ -1,0 +1,11 @@
+-- Seed data for development
+-- Note: This is for development purposes only
+-- In production, users will be created through authentication
+
+-- Example: Insert test user (requires auth.users entry first)
+-- INSERT INTO public.profiles (id, email, full_name)
+-- VALUES (
+--   '00000000-0000-0000-0000-000000000000',
+--   'test@example.com',
+--   'Test User'
+-- );

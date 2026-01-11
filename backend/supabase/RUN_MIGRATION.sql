@@ -1,0 +1,16 @@
+-- SweatDrop Database Migration
+-- Run this SQL in your Supabase SQL Editor
+-- Copy the entire contents of 20240101000001_sweatdrop_schema.sql and paste it here
+
+-- IMPORTANT: This file is just a reminder
+-- The actual migration is in: backend/supabase/migrations/20240101000001_sweatdrop_schema.sql
+-- 
+-- To run the migration:
+-- 1. Open your Supabase dashboard
+-- 2. Go to SQL Editor
+-- 3. Click "New Query"
+-- 4. Open and copy the contents of: backend/supabase/migrations/20240101000001_sweatdrop_schema.sql
+-- 5. Paste into SQL Editor
+-- 6. Click "Run" (or press Cmd+Enter / Ctrl+Enter)
+--
+-- This will create all tables, functions, triggers, and RLS policies needed for SweatDrop.

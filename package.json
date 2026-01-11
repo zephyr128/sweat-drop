@@ -1,0 +1,28 @@
+{
+  "name": "sweatdrop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SweatDrop - Fitness tracking platform",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run start --workspace=apps/mobile-app",
+    "dev:admin": "npm run dev --workspace=apps/admin-panel",
+    "build:mobile": "npm run build --workspace=apps/mobile-app",
+    "build:admin": "npm run build --workspace=apps/admin-panel",
+    "lint": "npm run lint --workspaces",
+    "type-check": "npm run type-check --workspaces"
+  },
+  "devDependencies": {
+    "prettier": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}
