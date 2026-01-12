@@ -52,9 +52,22 @@ export default function ScanScreen() {
       .single();
 
     if (eqError || !equipment) {
-      Alert.alert('Error', 'Invalid QR code');
+      console.error('Equipment lookup error:', eqError);
+      Alert.alert('Error', `Invalid QR code: ${eqError?.message || 'Equipment not found'}`);
       return;
     }
+
+    if (!equipment.gym_id) {
+      console.error('Equipment missing gym_id:', equipment);
+      Alert.alert('Error', 'Equipment is not associated with a gym');
+      return;
+    }
+
+    console.log('Creating session:', {
+      userId: session.user.id,
+      gymId: equipment.gym_id,
+      equipmentId: equipment.id,
+    });
 
     // Start session
     const { data: newSession, error: sessionError } = await supabase
@@ -66,13 +79,25 @@ export default function ScanScreen() {
         started_at: new Date().toISOString(),
         is_active: true,
       })
-      .select()
+      .select('*, equipment:equipment_id(*), gym:gym_id(*)')
       .single();
 
     if (sessionError) {
-      Alert.alert('Error', sessionError.message);
+      console.error('Session creation error:', sessionError);
+      Alert.alert('Error', `Failed to start workout: ${sessionError.message}`);
       return;
     }
+
+    if (!newSession) {
+      Alert.alert('Error', 'Failed to create workout session');
+      return;
+    }
+
+    console.log('Session created successfully:', {
+      id: newSession.id,
+      gymId: newSession.gym_id,
+      gymName: newSession.gym?.name,
+    });
 
     router.push({
       pathname: '/workout',
@@ -144,7 +169,15 @@ export default function ScanScreen() {
           />
           <TouchableOpacity
             style={styles.button}
-            onPress={() => router.push('/workout')}
+            onPress={async () => {
+              // For testing: create a mock session if no QR code entered
+              if (!manualQRCode.trim()) {
+                Alert.alert('Info', 'Please enter a QR code or scan one to start a workout');
+                return;
+              }
+              // If QR code is entered, handleQRCodeSubmit will create the session
+              await handleQRCodeSubmit(manualQRCode);
+            }}
             activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>Start Workout</Text>

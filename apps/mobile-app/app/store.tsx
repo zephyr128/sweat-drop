@@ -7,9 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
+import { useGymStore } from '@/lib/stores/useGymStore';
+import { useLocalDrops } from '@/hooks/useLocalDrops';
 
 export default function StoreScreen() {
   const { session } = useSession();
+  const { getActiveGymId } = useGymStore();
+  const activeGymId = getActiveGymId();
+  const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const [rewards, setRewards] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -18,8 +23,9 @@ export default function StoreScreen() {
     if (session?.user) {
       loadProfile();
       loadRewards();
+      refreshLocalDrops();
     }
-  }, [session]);
+  }, [session, activeGymId]);
 
   const loadProfile = async () => {
     if (!session?.user) return;
@@ -79,10 +85,11 @@ export default function StoreScreen() {
   };
 
   const redeemReward = async (reward: any) => {
-    if (!session?.user || !profile) return;
+    if (!session?.user || !activeGymId) return;
 
-    if (profile.total_drops < reward.price_drops) {
-      Alert.alert('Insufficient Drops', `You need ${reward.price_drops} drops to redeem this reward.`);
+    // Check local balance for this gym
+    if (localDrops < reward.price_drops) {
+      Alert.alert('Insufficient Drops', `You need ${reward.price_drops} drops to redeem this reward. You have ${localDrops} drops available at this gym.`);
       return;
     }
 
@@ -98,33 +105,46 @@ export default function StoreScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Redeem',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('redemptions')
-              .insert({
-                user_id: session.user.id,
-                reward_id: reward.id,
-                gym_id: reward.gym_id,
-                drops_spent: reward.price_drops,
-                status: 'pending',
-              });
-
-            if (error) {
-              Alert.alert('Error', error.message);
-            } else {
-              await supabase.rpc('add_drops', {
+            onPress: async () => {
+              // Use spend_local_drops function to deduct from local balance
+              const { data, error } = await supabase.rpc('spend_local_drops', {
                 p_user_id: session.user.id,
-                p_amount: -reward.price_drops,
-                p_transaction_type: 'reward',
-                p_reference_id: reward.id,
+                p_gym_id: activeGymId,
+                p_amount: reward.price_drops,
+                p_reward_id: reward.id,
                 p_description: `Redeemed: ${reward.name}`,
               });
 
-              Alert.alert('Success', 'Reward redeemed! Please show this to gym staff.');
-              loadProfile();
-              loadRewards();
-            }
-          },
+              if (error) {
+                Alert.alert('Error', error.message);
+                return;
+              }
+
+              if (!data) {
+                Alert.alert('Insufficient Drops', 'You do not have enough drops at this gym.');
+                return;
+              }
+
+              // Create redemption record
+              const { error: redemptionError } = await supabase
+                .from('redemptions')
+                .insert({
+                  user_id: session.user.id,
+                  reward_id: reward.id,
+                  gym_id: reward.gym_id,
+                  drops_spent: reward.price_drops,
+                  status: 'pending',
+                });
+
+              if (redemptionError) {
+                Alert.alert('Error', redemptionError.message);
+              } else {
+                Alert.alert('Success', 'Reward redeemed! Please show this to gym staff.');
+                loadProfile();
+                loadRewards();
+                refreshLocalDrops();
+              }
+            },
         },
       ]
     );
@@ -145,7 +165,7 @@ export default function StoreScreen() {
     }
   };
 
-  const canAfford = (price: number) => (profile?.total_drops || 0) >= price;
+  const canAfford = (price: number) => localDrops >= price;
 
   if (loading) {
     return (
@@ -178,8 +198,9 @@ export default function StoreScreen() {
         <View style={styles.balanceCard}>
           <Ionicons name="water" size={24} color={theme.colors.primary} />
           <Text style={[styles.balanceText, getNumberStyle(18)]}>
-            {profile?.total_drops || 0} drops
+            {localDrops} drops
           </Text>
+          <Text style={styles.balanceLabel}>Available at this gym</Text>
         </View>
 
         {rewards.length === 0 ? (
@@ -284,6 +305,11 @@ const styles = StyleSheet.create({
   balanceText: {
     color: theme.colors.primary,
     fontWeight: theme.typography.fontWeight.bold,
+  },
+  balanceLabel: {
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.textSecondary,
+    marginLeft: 'auto',
   },
   emptyState: {
     padding: theme.spacing['3xl'],

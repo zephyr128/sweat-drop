@@ -7,14 +7,17 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
+import { useGymStore } from '@/lib/stores/useGymStore';
 
 type Period = 'daily' | 'weekly' | 'monthly';
-type Scope = 'gym' | 'city' | 'country';
+type LeaderboardType = 'local' | 'global';
 
 export default function LeaderboardScreen() {
   const { session } = useSession();
+  const { getActiveGymId } = useGymStore();
+  const activeGymId = getActiveGymId();
   const [period, setPeriod] = useState<Period>('daily');
-  const [scope, setScope] = useState<Scope>('gym');
+  const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>('local');
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
@@ -23,75 +26,77 @@ export default function LeaderboardScreen() {
     if (session?.user) {
       loadLeaderboard();
     }
-  }, [session, period, scope]);
+  }, [session, period, leaderboardType, activeGymId]);
 
   const loadLeaderboard = async () => {
     if (!session?.user) return;
 
     setLoading(true);
 
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('home_gym_id, gym:home_gym_id(city, country)')
-      .eq('id', session.user.id)
-      .single();
+    if (leaderboardType === 'local') {
+      // Local leaderboard: ranked by local_drops_balance for the active gym
+      if (!activeGymId) {
+        setLeaderboard([]);
+        setLoading(false);
+        return;
+      }
 
-    const gymId = profileData?.home_gym_id;
+      const { data, error } = await supabase
+        .from('gym_memberships')
+        .select('user_id, local_drops_balance, profiles:user_id(username)')
+        .eq('gym_id', activeGymId)
+        .order('local_drops_balance', { ascending: false })
+        .limit(100);
 
-    const now = new Date();
-    let startDate = new Date();
+      if (error) {
+        console.error('Error loading local leaderboard:', error);
+        setLeaderboard([]);
+      } else if (data) {
+        const leaderboardData = data
+          .map((entry: any) => ({
+            user_id: entry.user_id,
+            username: entry.profiles?.username || 'Unknown',
+            drops: entry.local_drops_balance || 0,
+          }))
+          .sort((a, b) => b.drops - a.drops);
 
-    switch (period) {
-      case 'daily':
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'weekly':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'monthly':
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-    }
+        setLeaderboard(leaderboardData);
 
-    let query = supabase
-      .from('sessions')
-      .select('user_id, drops_earned, profiles:user_id(username)')
-      .gte('started_at', startDate.toISOString())
-      .not('drops_earned', 'is', null);
-
-    if (scope === 'gym' && gymId) {
-      query = query.eq('gym_id', gymId);
-    }
-
-    const { data } = await query;
-
-    if (data) {
-      const userMap: Record<string, { username: string; drops: number }> = {};
-
-      data.forEach((session: any) => {
-        const userId = session.user_id;
-        const username = session.profiles?.username || 'Unknown';
-        const drops = session.drops_earned || 0;
-
-        if (!userMap[userId]) {
-          userMap[userId] = { username, drops: 0 };
+        // Find current user rank
+        const userIndex = leaderboardData.findIndex((entry) => entry.user_id === session.user.id);
+        if (userIndex !== -1) {
+          setCurrentUserRank(userIndex + 1);
+        } else {
+          setCurrentUserRank(null);
         }
-        userMap[userId].drops += drops;
-      });
+      }
+    } else {
+      // Global leaderboard: ranked by total_drops from profiles
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, total_drops')
+        .order('total_drops', { ascending: false })
+        .limit(100);
 
-      const leaderboardData = Object.entries(userMap)
-        .map(([userId, data]) => ({
-          user_id: userId,
-          ...data,
-        }))
-        .sort((a, b) => b.drops - a.drops);
+      if (error) {
+        console.error('Error loading global leaderboard:', error);
+        setLeaderboard([]);
+      } else if (data) {
+        const leaderboardData = data.map((profile: any) => ({
+          user_id: profile.id,
+          username: profile.username || 'Unknown',
+          drops: profile.total_drops || 0,
+        }));
 
-      setLeaderboard(leaderboardData);
-      
-      // Find current user rank
-      const userIndex = leaderboardData.findIndex((entry) => entry.user_id === session.user.id);
-      if (userIndex !== -1) {
-        setCurrentUserRank(userIndex + 1);
+        setLeaderboard(leaderboardData);
+
+        // Find current user rank
+        const userIndex = leaderboardData.findIndex((entry) => entry.user_id === session.user.id);
+        if (userIndex !== -1) {
+          setCurrentUserRank(userIndex + 1);
+        } else {
+          setCurrentUserRank(null);
+        }
       }
     }
 
@@ -130,45 +135,51 @@ export default function LeaderboardScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.filters}>
-          <View style={styles.periodFilter}>
-            <Text style={styles.filterLabel}>Period:</Text>
-            {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
+          {/* Local/Global Tabs */}
+          <View style={styles.typeFilter}>
+            {(['local', 'global'] as LeaderboardType[]).map((type) => (
               <TouchableOpacity
-                key={p}
-                style={[styles.filterButton, period === p && styles.filterButtonActive]}
-                onPress={() => setPeriod(p)}
+                key={type}
+                style={[
+                  styles.typeTab,
+                  leaderboardType === type && styles.typeTabActive,
+                ]}
+                onPress={() => setLeaderboardType(type)}
               >
                 <Text
                   style={[
-                    styles.filterButtonText,
-                    period === p && styles.filterButtonTextActive,
+                    styles.typeTabText,
+                    leaderboardType === type && styles.typeTabTextActive,
                   ]}
                 >
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                  {type === 'local' ? 'Local' : 'Global'}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <View style={styles.scopeFilter}>
-            <Text style={styles.filterLabel}>Scope:</Text>
-            {(['gym', 'city', 'country'] as Scope[]).map((s) => (
-              <TouchableOpacity
-                key={s}
-                style={[styles.filterButton, scope === s && styles.filterButtonActive]}
-                onPress={() => setScope(s)}
-              >
-                <Text
-                  style={[
-                    styles.filterButtonText,
-                    scope === s && styles.filterButtonTextActive,
-                  ]}
+          {/* Period Filter (only for historical data if needed) */}
+          {leaderboardType === 'local' && (
+            <View style={styles.periodFilter}>
+              <Text style={styles.filterLabel}>Period:</Text>
+              {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.filterButton, period === p && styles.filterButtonActive]}
+                  onPress={() => setPeriod(p)}
                 >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      period === p && styles.filterButtonTextActive,
+                    ]}
+                  >
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
         {loading ? (
@@ -262,11 +273,36 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
   },
-  scopeFilter: {
+  typeFilter: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: theme.spacing.sm,
-    flexWrap: 'wrap',
+    marginBottom: theme.spacing.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: theme.borderRadius.lg,
+    padding: 4,
+  },
+  typeTab: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeTabActive: {
+    backgroundColor: theme.colors.primary + '20',
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '40',
+  },
+  typeTabText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.5,
+  },
+  typeTabTextActive: {
+    color: theme.colors.primary,
+    fontWeight: theme.typography.fontWeight.bold,
   },
   filterLabel: {
     fontSize: theme.typography.fontSize.base,

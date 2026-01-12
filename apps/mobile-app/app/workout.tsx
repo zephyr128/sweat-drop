@@ -73,7 +73,10 @@ export default function WorkoutScreen() {
 
   // Create new session
   const createSession = async () => {
-    if (!authSession?.user || !equipmentId || !gymId) return;
+    if (!authSession?.user || !equipmentId || !gymId) {
+      console.error('Missing required data for session:', { user: !!authSession?.user, equipmentId, gymId });
+      return;
+    }
 
     const { data, error } = await supabase
       .from('sessions')
@@ -88,11 +91,13 @@ export default function WorkoutScreen() {
       .single();
 
     if (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error creating session:', error);
+      Alert.alert('Error', `Failed to start workout: ${error.message}`);
       return;
     }
 
     if (data) {
+      console.log('Session created:', { id: data.id, gym_id: data.gym_id, gym_name: data.gym?.name });
       setSession(data);
       setStartTime(new Date(data.started_at));
     }
@@ -308,15 +313,65 @@ export default function WorkoutScreen() {
       return;
     }
 
+    // Verify session has gym_id before ending
+    if (!session.gym_id) {
+      console.error('Session missing gym_id:', session);
+      Alert.alert('Error', 'Workout session is missing gym information. Cannot save drops.');
+      return;
+    }
+
+    console.log('Ending session:', {
+      sessionId: session.id,
+      gymId: session.gym_id,
+      drops: displayDrops,
+      userId: authSession.user.id,
+    });
+
     // End session in Supabase
-    const { error } = await supabase.rpc('end_session', {
+    // This will automatically:
+    // 1. Update the session with end time and drops_earned
+    // 2. Add drops to global balance (profiles.total_drops)
+    // 3. Add drops to local balance (gym_memberships.local_drops_balance) for the gym where workout was performed
+    const { data: endSessionData, error } = await supabase.rpc('end_session', {
       p_session_id: session.id,
       p_drops_earned: displayDrops,
     });
 
     if (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error ending session:', error);
+      Alert.alert('Error', `Failed to save workout: ${error.message}`);
       return;
+    }
+
+    console.log('Session ended successfully:', endSessionData);
+
+    // Verify that drops were saved by checking the profile
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('total_drops')
+      .eq('id', authSession.user.id)
+      .single();
+
+    if (profileError) {
+      console.error('Error verifying drops:', profileError);
+    } else {
+      console.log('Profile total_drops after workout:', profileData?.total_drops);
+    }
+
+    // Verify local balance
+    const { data: membershipData, error: membershipError } = await supabase
+      .from('gym_memberships')
+      .select('local_drops_balance')
+      .eq('user_id', authSession.user.id)
+      .eq('gym_id', session.gym_id)
+      .single();
+
+    if (membershipError && membershipError.code !== 'PGRST116') {
+      console.error('Error verifying local drops:', membershipError);
+    } else if (membershipData) {
+      console.log('Local drops balance after workout:', membershipData.local_drops_balance);
+    } else {
+      console.warn('No gym membership found - this might be normal if add_drops failed to create it');
     }
 
     router.push({

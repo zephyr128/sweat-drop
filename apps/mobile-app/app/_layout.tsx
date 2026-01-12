@@ -3,6 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { ThemeProvider } from '@/lib/contexts/ThemeContext';
+import { GymDataInitializer } from '@/components/GymDataInitializer';
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -22,7 +24,8 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
+    <ThemeProvider>
+      <GymDataInitializer />
       <Stack
         screenOptions={{
           headerStyle: {
@@ -46,6 +49,6 @@ export default function RootLayout() {
         <Stack.Screen name="session-summary" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
-    </>
+    </ThemeProvider>
   );
 }
