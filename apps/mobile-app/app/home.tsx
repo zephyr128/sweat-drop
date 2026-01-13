@@ -16,6 +16,7 @@ import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { getNumberStyle } from '@/lib/theme';
 import { GymSelectorModal } from '@/components/GymSelectorModal';
 import { LockedOverlay } from '@/components/LockedOverlay';
+import { UserSettingsSheet } from '@/components/UserSettingsSheet';
 import { Gym } from '@/lib/stores/useGymStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -41,6 +42,7 @@ export default function HomeScreen() {
   const [leaderboardRank, setLeaderboardRank] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [gymSelectorVisible, setGymSelectorVisible] = useState(false);
+  const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
 
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading } = useChallengeProgress(activeGymId, null);
@@ -328,14 +330,18 @@ export default function HomeScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
+          <TouchableOpacity
+            style={styles.headerLeft}
+            onPress={() => setSettingsSheetVisible(true)}
+            activeOpacity={0.7}
+          >
             <View style={[styles.avatarContainer, { borderColor: theme.colors.primary + '30' }]}>
               <Text style={[styles.avatarText, { color: theme.colors.primary }]}>
                 {profile?.username?.charAt(0).toUpperCase() || 'U'}
               </Text>
             </View>
             <Text style={styles.username}>{profile?.username || 'User'}</Text>
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.headerRight}>
             {/* Gym Selector Chip */}
@@ -671,6 +677,13 @@ export default function HomeScreen() {
         visible={gymSelectorVisible}
         onClose={() => setGymSelectorVisible(false)}
         onSelectGym={handleGymSelect}
+      />
+
+      {/* User Settings Sheet */}
+      <UserSettingsSheet
+        visible={settingsSheetVisible}
+        onClose={() => setSettingsSheetVisible(false)}
+        profile={profile}
       />
     </SafeAreaView>
   );

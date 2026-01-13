@@ -39,7 +39,7 @@ export default function AuthScreen() {
     if (error) {
       Alert.alert('Error', error.message);
     } else {
-      router.replace('/(tabs)');
+      router.replace('/home');
     }
   };
 
