@@ -1,11 +1,17 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { theme, getNumberStyle } from '@/lib/theme';
+
+// Complete OAuth session in browser
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -13,25 +19,108 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignUp = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    setLoading(false);
+  const checkUsernameAndRedirect = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    if (error) {
-      Alert.alert('Error', error.message);
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single();
+
+    // Check if username is missing or is a temporary/random username (starts with 'user_')
+    const hasValidUsername = profile?.username && !profile.username.startsWith('user_');
+    
+    if (!hasValidUsername) {
+      router.replace('/(onboarding)/username');
     } else {
-      router.push('/(onboarding)/username');
+      router.replace('/home');
+    }
+  }, [router]);
+
+  // Listen for OAuth redirects
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        // User signed in via OAuth
+        checkUsernameAndRedirect();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [checkUsernameAndRedirect]);
+
+  const handleSignUp = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        console.error('Sign up error:', error);
+        Alert.alert('Error', error.message);
+        setLoading(false);
+        return;
+      }
+
+      // Check if email confirmation is required
+      if (data.user && !data.session) {
+        // Email confirmation required
+        Alert.alert(
+          'Check your email',
+          'We sent you a confirmation email. Please check your inbox and click the link to verify your account.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // User can try to sign in after confirming email
+                setLoading(false);
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      // User is signed in (no email confirmation required or already confirmed)
+      if (data.session) {
+        // Check if user needs to set username
+        await checkUsernameAndRedirect();
+      } else {
+        Alert.alert('Error', 'Failed to create account. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('Sign up exception:', err);
+      Alert.alert('Error', err.message || 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
     setLoading(false);
@@ -39,7 +128,87 @@ export default function AuthScreen() {
     if (error) {
       Alert.alert('Error', error.message);
     } else {
-      router.replace('/home');
+      // Check if user needs to set username
+      await checkUsernameAndRedirect();
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      // Use the app scheme for redirect URL
+      // This must match what's configured in Supabase URL Configuration
+      // For development: exp://localhost:8081 or sweatdrop://
+      // For production: sweatdrop://
+      let redirectTo: string;
+      
+      if (__DEV__) {
+        // In development, prefer exp:// if using Expo Go, otherwise use app scheme
+        redirectTo = Constants.expoConfig?.hostUri 
+          ? `exp://${Constants.expoConfig.hostUri}`
+          : 'sweatdrop://';
+      } else {
+        // In production, use the app scheme
+        redirectTo = 'sweatdrop://';
+      }
+      
+      // Ensure the URL is valid (contains ://)
+      if (!redirectTo || !redirectTo.includes('://')) {
+        Alert.alert('Error', 'Invalid redirect URL configuration. Please check app.config.js');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Using redirect URL:', redirectTo);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        Alert.alert('Error', error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectTo
+        );
+
+        if (result.type === 'success') {
+          // Supabase will automatically handle the session via the redirect URL
+          // The onAuthStateChange listener will catch the SIGNED_IN event
+          // Just wait a bit for the session to be established
+          setTimeout(async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              await checkUsernameAndRedirect();
+            } else {
+              Alert.alert('Error', 'Failed to complete Google sign in');
+            }
+          }, 1000);
+        } else if (result.type === 'cancel') {
+          // User cancelled - no action needed
+          setLoading(false);
+        } else {
+          Alert.alert('Error', 'Failed to sign in with Google');
+          setLoading(false);
+        }
+      }
+    } catch (error: any) {
+      console.error('Google sign in error:', error);
+      Alert.alert('Error', error.message || 'Failed to sign in with Google');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -119,6 +288,26 @@ export default function AuthScreen() {
             activeOpacity={0.8}
           >
             <Text style={styles.secondaryButtonText}>Sign Up</Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google Sign In Button */}
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-google" size={20} color={theme.colors.text} />
+            <Text style={styles.googleButtonText}>
+              {loading ? 'Signing in...' : 'Continue with Google'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -208,6 +397,40 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: theme.colors.primary,
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.semibold,
+    letterSpacing: 0.5,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.glass.border,
+  },
+  dividerText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.medium,
+    letterSpacing: 0.5,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.glass.background,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.glass.border,
+    paddingVertical: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  googleButtonText: {
+    color: theme.colors.text,
     fontSize: theme.typography.fontSize.base,
     fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.5,

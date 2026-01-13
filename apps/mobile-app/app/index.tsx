@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Redirect, usePathname } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -10,13 +10,39 @@ export default function Index() {
   const { session, loading } = useSession();
   const pathname = usePathname();
   const { theme } = useTheme();
+  const [checkingUsername, setCheckingUsername] = useState(true);
+  const [hasUsername, setHasUsername] = useState(false);
 
-  // Handle root path explicitly
+  // Check if user has username after session is loaded
   useEffect(() => {
-    // This helps handle deep links properly
-  }, [pathname]);
+    async function checkUsername() {
+      if (loading || !session) {
+        setCheckingUsername(false);
+        return;
+      }
 
-  if (loading) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', session.user.id)
+          .single();
+
+        // Check if username is missing or is a temporary/random username (starts with 'user_')
+        const hasValidUsername = profile?.username && !profile.username.startsWith('user_');
+        setHasUsername(!!hasValidUsername);
+      } catch (error) {
+        console.error('Error checking username:', error);
+        setHasUsername(false);
+      } finally {
+        setCheckingUsername(false);
+      }
+    }
+
+    checkUsername();
+  }, [session, loading]);
+
+  if (loading || checkingUsername) {
     return (
       <View style={styles.container}>
         <LinearGradient
@@ -36,8 +62,12 @@ export default function Index() {
     return <Redirect href="/(onboarding)/welcome" />;
   }
 
-  // Check if user has completed onboarding (has username set)
-  // For now, redirect to home - you can add onboarding check later
+  // If user doesn't have username, redirect to username screen
+  if (!hasUsername) {
+    return <Redirect href="/(onboarding)/username" />;
+  }
+
+  // User has username, redirect to home
   return <Redirect href="/home" />;
 }
 
