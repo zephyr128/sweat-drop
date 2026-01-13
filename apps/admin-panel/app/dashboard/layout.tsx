@@ -16,15 +16,10 @@ export default async function DashboardLayout({
     return null;
   }
 
-  // If we're on a gym-specific route, don't render this layout
-  // GymLayout will handle it completely
-  // We can't check pathname in server components easily, so we'll let it render
-  // and GymLayout will handle its own rendering
-
   return (
     <div className="min-h-screen bg-[#000000]">
       <Sidebar role={profile.role} currentGymId={profile.admin_gym_id} />
-      <main className="w-full p-4 md:pl-[12rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</main>
+      <div className="w-full p-4 md:pl-[12rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</div>
     </div>
   );
 }

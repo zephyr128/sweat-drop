@@ -39,9 +39,9 @@ export default async function GymLayout({
   // At this point, if we reach here, the user has access
   // Just render the layout
   return (
-    <div className="min-h-screen bg-[#000000]">
+    <>
       <Sidebar role={profile.role} currentGymId={id} />
-      <main className="w-full p-4 md:pl-[12rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</main>
-    </div>
+      <div className="w-full p-4 md:pl-[12rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</div>
+    </>
   );
 }
