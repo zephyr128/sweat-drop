@@ -1,0 +1,139 @@
+import { getCurrentProfile } from '@/lib/auth';
+import { createClient } from '@/lib/supabase-server';
+import { StatsCard } from '@/components/StatsCard';
+import { notFound } from 'next/navigation';
+
+export default async function GymDashboardPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  // Await params in Next.js 14
+  const { id } = await params;
+  
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    notFound();
+  }
+
+  const supabase = createClient();
+
+  // Fetch gym details
+  const { data: gym, error: gymError } = await supabase
+    .from('gyms')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (gymError || !gym) {
+    notFound();
+  }
+
+  // Fetch gym-specific stats
+  const [
+    { count: members },
+    { count: challenges },
+    { count: storeItems },
+    { data: recentSessions },
+    { data: pendingRedemptions },
+  ] = await Promise.all([
+    supabase
+      .from('gym_memberships')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id),
+    supabase
+      .from('challenges')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id)
+      .eq('is_active', true),
+    supabase
+      .from('rewards')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id)
+      .eq('is_active', true),
+    supabase
+      .from('sessions')
+      .select('drops_earned')
+      .eq('gym_id', id)
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(100),
+    supabase
+      .from('redemptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id)
+      .eq('status', 'pending'),
+  ]);
+
+  const weeklyDropsEarned = recentSessions?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold text-white mb-2">{gym.name}</h1>
+        <p className="text-[#808080]">
+          {gym.city && `${gym.city}, `}
+          {gym.country}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatsCard
+          title="Members"
+          value={members || 0}
+          icon="👥"
+          gradient="cyan"
+        />
+        <StatsCard
+          title="Active Challenges"
+          value={challenges || 0}
+          icon="🏆"
+          gradient="cyan"
+        />
+        <StatsCard
+          title="Store Items"
+          value={storeItems || 0}
+          icon="🛒"
+          gradient="cyan"
+        />
+        <StatsCard
+          title="Drops Earned (7d)"
+          value={weeklyDropsEarned}
+          icon="💧"
+          gradient="cyan"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
+          <h2 className="text-xl font-bold text-white mb-4">Pending Redemptions</h2>
+          <p className="text-3xl font-bold text-[#00E5FF] mb-2">{pendingRedemptions?.length || 0}</p>
+          <p className="text-sm text-[#808080]">Awaiting confirmation</p>
+        </div>
+
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
+          <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
+          <div className="space-y-3">
+            <a
+              href={`/dashboard/gym/${id}/challenges`}
+              className="block px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors"
+            >
+              Manage Challenges
+            </a>
+            <a
+              href={`/dashboard/gym/${id}/store`}
+              className="block px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors"
+            >
+              Manage Store
+            </a>
+            <a
+              href={`/dashboard/gym/${id}/branding`}
+              className="block px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors"
+            >
+              Update Branding
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
