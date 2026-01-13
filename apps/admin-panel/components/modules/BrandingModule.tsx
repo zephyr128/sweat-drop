@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -36,6 +36,35 @@ export function BrandingModule({ gymId, initialData }: BrandingModuleProps) {
   );
   const [uploading, setUploading] = useState(false);
 
+  // Normalize color to ensure it's in #RRGGBB format
+  const normalizeColor = (color: string | null | undefined): string => {
+    if (!color) return '#00E5FF';
+    const trimmed = color.trim();
+    if (trimmed.startsWith('#')) {
+      // Ensure it's uppercase and has 6 hex digits
+      const hex = trimmed.slice(1).toUpperCase();
+      if (/^[0-9A-F]{6}$/.test(hex)) {
+        return `#${hex}`;
+      }
+      // If it's 3 digits, expand to 6
+      if (/^[0-9A-F]{3}$/.test(hex)) {
+        return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+      }
+    } else {
+      // If no #, add it and ensure uppercase
+      const hex = trimmed.toUpperCase();
+      if (/^[0-9A-F]{6}$/.test(hex)) {
+        return `#${hex}`;
+      }
+      if (/^[0-9A-F]{3}$/.test(hex)) {
+        return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+      }
+    }
+    return '#00E5FF';
+  };
+
+  const normalizedInitialColor = normalizeColor(initialData.primary_color);
+
   const {
     register,
     handleSubmit,
@@ -45,13 +74,23 @@ export function BrandingModule({ gymId, initialData }: BrandingModuleProps) {
   } = useForm<BrandingFormData>({
     resolver: zodResolver(brandingSchema),
     defaultValues: {
-      primaryColor: initialData.primary_color || '#00E5FF',
+      primaryColor: normalizedInitialColor,
       logoUrl: initialData.logo_url || '',
       backgroundUrl: initialData.background_url || '',
     },
   });
 
   const primaryColor = watch('primaryColor');
+
+  // Update form when initialData changes
+  useEffect(() => {
+    const normalizedColor = normalizeColor(initialData.primary_color);
+    setValue('primaryColor', normalizedColor, { shouldValidate: false });
+    setValue('logoUrl', initialData.logo_url || '', { shouldValidate: false });
+    setValue('backgroundUrl', initialData.background_url || '', { shouldValidate: false });
+    setLogoPreview(initialData.logo_url || null);
+    setBackgroundPreview(initialData.background_url || null);
+  }, [initialData.primary_color, initialData.logo_url, initialData.background_url, setValue]);
 
   const logoDropzone = useDropzone({
     accept: {
@@ -130,12 +169,24 @@ export function BrandingModule({ gymId, initialData }: BrandingModuleProps) {
             <div className="flex items-center gap-4">
               <input
                 type="color"
-                {...register('primaryColor')}
+                value={primaryColor}
+                onChange={(e) => {
+                  const newColor = e.target.value.toUpperCase();
+                  setValue('primaryColor', newColor, { shouldValidate: true });
+                }}
                 className="w-20 h-12 rounded-lg cursor-pointer border border-[#1A1A1A]"
               />
               <input
                 type="text"
-                {...register('primaryColor')}
+                value={primaryColor}
+                onChange={(e) => {
+                  let value = e.target.value.toUpperCase();
+                  // Allow typing without #, but add it if missing
+                  if (value && !value.startsWith('#')) {
+                    value = `#${value}`;
+                  }
+                  setValue('primaryColor', value, { shouldValidate: true });
+                }}
                 className="flex-1 px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none uppercase"
                 placeholder="#00E5FF"
                 maxLength={7}

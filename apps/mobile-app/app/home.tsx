@@ -498,11 +498,80 @@ export default function HomeScreen() {
                       style={styles.viewAllGradient}
                     >
                       <View style={styles.viewAllContent}>
-                        <Ionicons name="list" size={32} color={theme.colors.primary} />
+                        <View style={styles.viewAllIconContainer}>
+                          <Ionicons name="list" size={40} color={theme.colors.primary} />
+                        </View>
                         <Text style={styles.viewAllText}>View All</Text>
-                        <Text style={styles.viewAllCount}>
-                          {activeChallenges.length} challenges
+                        <Text style={styles.viewAllSubtext}>See all challenges</Text>
+                        <Ionicons name="arrow-forward-circle" size={24} color={theme.colors.primary} style={styles.viewAllArrow} />
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          )}
+
+          {/* No Active Challenges Card with View All */}
+          {!challengesLoading && activeChallenges.length === 0 && (
+            <View style={styles.challengesSection}>
+              <View style={styles.challengesSectionHeader}>
+                <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.challengesScrollContent}
+                style={styles.challengesScrollView}
+                snapToInterval={SNAP_INTERVAL}
+                snapToAlignment="start"
+                decelerationRate="fast"
+                pagingEnabled={false}
+              >
+                {/* No Active Challenges Card */}
+                <View style={[styles.horizontalChallengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
+                  <View style={styles.noChallengesCard}>
+                    <LinearGradient
+                      colors={['#0A1A2E', '#1A1A2E', '#0F0F1E']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.horizontalChallengeGradient}
+                    >
+                      <View style={styles.noChallengesContent}>
+                        <Ionicons name="trophy-outline" size={48} color={theme.colors.primary} style={styles.noChallengesIcon} />
+                        <Text style={styles.noChallengesTitle}>No Active Challenges</Text>
+                        <Text style={styles.noChallengesSubtitle}>
+                          There are no active challenges at your gym right now. Check back soon!
                         </Text>
+                      </View>
+                    </LinearGradient>
+                  </View>
+                </View>
+
+                {/* View All Button */}
+                <View style={[styles.viewAllCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
+                  <TouchableOpacity
+                    style={styles.viewAllCard}
+                    onPress={() => {
+                      if (!isUnlocked) return;
+                      router.push('/challenges');
+                    }}
+                    activeOpacity={isUnlocked ? 0.9 : 1}
+                    disabled={!isUnlocked}
+                  >
+                    <LinearGradient
+                      colors={['#1A1A2E', '#0A1A2E', '#1A1A2E']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.viewAllGradient}
+                    >
+                      <View style={styles.viewAllContent}>
+                        <View style={styles.viewAllIconContainer}>
+                          <Ionicons name="list" size={40} color={theme.colors.primary} />
+                        </View>
+                        <Text style={styles.viewAllText}>View All</Text>
+                        <Text style={styles.viewAllSubtext}>See all challenges</Text>
+                        <Ionicons name="arrow-forward-circle" size={24} color={theme.colors.primary} style={styles.viewAllArrow} />
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
@@ -1039,17 +1108,65 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  viewAllIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   viewAllText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  viewAllCount: {
+  viewAllSubtext: {
     fontSize: 12,
     color: '#B0B0B0',
     letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+  viewAllArrow: {
+    marginTop: 8,
+    opacity: 0.8,
+  },
+  noChallengesCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    height: '100%',
+    width: '100%',
+  },
+  noChallengesContent: {
+    padding: 16,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  noChallengesIcon: {
+    opacity: 0.6,
+    marginBottom: 8,
+  },
+  noChallengesTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  noChallengesSubtitle: {
+    fontSize: 12,
+    color: '#B0B0B0',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 8,
   },
 });

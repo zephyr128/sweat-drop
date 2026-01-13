@@ -1,6 +1,7 @@
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { StatsCard } from '@/components/StatsCard';
+import { AnalyticsSection } from '@/components/analytics/AnalyticsSection';
 import { notFound } from 'next/navigation';
 
 export default async function GymDashboardPage({
@@ -103,7 +104,11 @@ export default async function GymDashboardPage({
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Analytics Section */}
+      <AnalyticsSection gymId={id} />
+
+      {/* Quick Actions Section */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
           <h2 className="text-xl font-bold text-white mb-4">Pending Redemptions</h2>
           <p className="text-3xl font-bold text-[#00E5FF] mb-2">{pendingRedemptions?.length || 0}</p>

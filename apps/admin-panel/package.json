@@ -10,17 +10,18 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.3.4",
     "@supabase/ssr": "^0.1.0",
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.17.0",
+    "lucide-react": "^0.303.0",
     "next": "^14.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-hook-form": "^7.49.2",
-    "@hookform/resolvers": "^3.3.4",
     "react-dropzone": "^14.2.3",
+    "react-hook-form": "^7.49.2",
+    "recharts": "^2.15.4",
     "sonner": "^1.3.1",
-    "lucide-react": "^0.303.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
