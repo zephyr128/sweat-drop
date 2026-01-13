@@ -50,13 +50,13 @@ export function Sidebar({ role, currentGymId }: SidebarProps) {
       { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
       { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
       { href: `${base}/settings`, label: 'Leaderboard Rewards', icon: '🥇' },
+      { href: `${base}/team`, label: 'Team', icon: '👥' },
     ];
   };
 
   const receptionistLinks = (gymId?: string | null) => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [
-      { href: `${base}/dashboard`, label: 'Check-in', icon: '✅' },
       { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
     ];
   };

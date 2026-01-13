@@ -5,8 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { createMachine, deleteMachine, toggleMachineStatus } from '@/lib/actions/machine-actions';
-import { X, Trash2, Power, QrCode } from 'lucide-react';
+import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance } from '@/lib/actions/machine-actions';
+import { X, Trash2, Power, QrCode, Wrench, AlertTriangle } from 'lucide-react';
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -23,6 +23,8 @@ interface Machine {
   type: 'treadmill' | 'bike';
   unique_qr_code: string;
   is_active: boolean;
+  is_under_maintenance?: boolean;
+  maintenance_notes?: string;
   created_at: string;
   updated_at: string;
 }
@@ -30,12 +32,16 @@ interface Machine {
 interface MachinesManagerProps {
   gymId: string;
   initialMachines: Machine[];
+  initialReports?: Map<string, number>;
 }
 
-export function MachinesManager({ gymId, initialMachines }: MachinesManagerProps) {
+export function MachinesManager({ gymId, initialMachines, initialReports = new Map() }: MachinesManagerProps) {
   const [machines, setMachines] = useState<Machine[]>(initialMachines);
+  const [reportsMap, setReportsMap] = useState<Map<string, number>>(initialReports);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [maintenanceMachineId, setMaintenanceMachineId] = useState<string | null>(null);
+  const [maintenanceNotes, setMaintenanceNotes] = useState('');
 
   const {
     register,
@@ -110,6 +116,40 @@ export function MachinesManager({ gymId, initialMachines }: MachinesManagerProps
     }
   };
 
+  const handleToggleMaintenance = async (machineId: string, currentStatus: boolean) => {
+    try {
+      const result = await toggleMaintenance(
+        machineId,
+        gymId,
+        !currentStatus,
+        maintenanceNotes || undefined
+      );
+      if (result.success) {
+        setMachines(
+          machines.map((m) =>
+            m.id === machineId
+              ? {
+                  ...m,
+                  is_under_maintenance: !currentStatus,
+                  maintenance_notes: !currentStatus ? maintenanceNotes : undefined,
+                  maintenance_started_at: !currentStatus ? new Date().toISOString() : undefined,
+                }
+              : m
+          )
+        );
+        toast.success(
+          `Machine ${!currentStatus ? 'marked as under maintenance' : 'removed from maintenance'}`
+        );
+        setMaintenanceMachineId(null);
+        setMaintenanceNotes('');
+      } else {
+        toast.error(`Failed to update maintenance status: ${result.error}`);
+      }
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    }
+  };
+
   const copyQRCode = (qrCode: string) => {
     navigator.clipboard.writeText(qrCode);
     toast.success('QR code copied to clipboard');
@@ -136,79 +176,107 @@ export function MachinesManager({ gymId, initialMachines }: MachinesManagerProps
                 <th className="px-6 py-4 text-left text-sm font-medium text-white">Type</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-white">QR Code</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-white">Status</th>
+                <th className="px-6 py-4 text-left text-sm font-medium text-white">Maintenance</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-white">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]">
               {machines.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-[#808080]">
+                  <td colSpan={6} className="px-6 py-12 text-center text-[#808080]">
                     No machines yet. Create your first machine!
                   </td>
                 </tr>
               ) : (
-                machines.map((machine) => (
-                  <tr key={machine.id} className="hover:bg-[#1A1A1A]/50">
-                    <td className="px-6 py-4">
-                      <div className="text-white font-medium">{machine.name}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100]">
-                        {machine.type === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm text-[#00E5FF] font-mono bg-[#1A1A1A] px-2 py-1 rounded">
-                          {machine.unique_qr_code}
-                        </code>
-                        <button
-                          onClick={() => copyQRCode(machine.unique_qr_code)}
-                          className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
-                          title="Copy QR code"
+                machines.map((machine) => {
+                  const reportCount = reportsMap.get(machine.id) || 0;
+                  return (
+                    <tr key={machine.id} className="hover:bg-[#1A1A1A]/50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="text-white font-medium">{machine.name}</div>
+                          {reportCount > 0 && (
+                            <div className="flex items-center gap-1" title={`${reportCount} pending report(s)`}>
+                              <AlertTriangle className="w-4 h-4 text-[#FF6B6B]" />
+                              <span className="text-xs text-[#FF6B6B]">{reportCount}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100]">
+                          {machine.type === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <code className="text-sm text-[#00E5FF] font-mono bg-[#1A1A1A] px-2 py-1 rounded">
+                            {machine.unique_qr_code}
+                          </code>
+                          <button
+                            onClick={() => copyQRCode(machine.unique_qr_code)}
+                            className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                            title="Copy QR code"
+                          >
+                            <QrCode className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            machine.is_active
+                              ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                              : 'bg-[#808080]/10 text-[#808080]'
+                          }`}
                         >
-                          <QrCode className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          machine.is_active
-                            ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
-                            : 'bg-[#808080]/10 text-[#808080]'
-                        }`}
-                      >
-                        {machine.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                          {machine.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
                         <button
-                          onClick={() =>
-                            handleToggleStatus(machine.id, machine.is_active)
-                          }
-                          className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
-                          title={machine.is_active ? 'Deactivate' : 'Activate'}
+                          onClick={() => {
+                            setMaintenanceMachineId(machine.id);
+                            setMaintenanceNotes(machine.maintenance_notes || '');
+                          }}
+                          className={`p-2 transition-colors ${
+                            machine.is_under_maintenance
+                              ? 'text-[#FF6B6B] hover:text-[#FF5252]'
+                              : 'text-[#808080] hover:text-[#FF6B6B]'
+                          }`}
+                          title={machine.is_under_maintenance ? 'Remove from maintenance' : 'Mark as under maintenance'}
                         >
-                          <Power
-                            className={`w-4 h-4 ${
-                              machine.is_active ? 'text-[#00E5FF]' : ''
-                            }`}
-                          />
+                          <Wrench className={`w-4 h-4 ${machine.is_under_maintenance ? 'opacity-100' : 'opacity-50'}`} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(machine.id)}
-                          disabled={deletingId === machine.id}
-                          className="p-2 text-[#808080] hover:text-[#FF5252] transition-colors disabled:opacity-50"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() =>
+                              handleToggleStatus(machine.id, machine.is_active)
+                            }
+                            className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                            title={machine.is_active ? 'Deactivate' : 'Activate'}
+                          >
+                            <Power
+                              className={`w-4 h-4 ${
+                                machine.is_active ? 'text-[#00E5FF]' : ''
+                              }`}
+                            />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(machine.id)}
+                            disabled={deletingId === machine.id}
+                            className="p-2 text-[#808080] hover:text-[#FF5252] transition-colors disabled:opacity-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -297,6 +365,70 @@ export function MachinesManager({ gymId, initialMachines }: MachinesManagerProps
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Maintenance Modal */}
+      {maintenanceMachineId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">
+                {machines.find((m) => m.id === maintenanceMachineId)?.is_under_maintenance
+                  ? 'Remove from Maintenance'
+                  : 'Mark as Under Maintenance'}
+              </h2>
+              <button
+                onClick={() => {
+                  setMaintenanceMachineId(null);
+                  setMaintenanceNotes('');
+                }}
+                className="text-[#808080] hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Maintenance Notes (Optional)
+                </label>
+                <textarea
+                  value={maintenanceNotes}
+                  onChange={(e) => setMaintenanceNotes(e.target.value)}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none resize-none"
+                  placeholder="E.g., Waiting for parts, sensor replacement needed..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    const machine = machines.find((m) => m.id === maintenanceMachineId);
+                    if (machine) {
+                      handleToggleMaintenance(machine.id, machine.is_under_maintenance || false);
+                    }
+                  }}
+                  className="flex-1 px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+                >
+                  {machines.find((m) => m.id === maintenanceMachineId)?.is_under_maintenance
+                    ? 'Remove from Maintenance'
+                    : 'Mark as Under Maintenance'}
+                </button>
+                <button
+                  onClick={() => {
+                    setMaintenanceMachineId(null);
+                    setMaintenanceNotes('');
+                  }}
+                  className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

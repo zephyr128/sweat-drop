@@ -3,13 +3,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
+import { ReportIssueModal } from '@/components/ReportIssueModal';
 
 export default function ScanScreen() {
   const [manualQRCode, setManualQRCode] = useState('');
   const [activeSession, setActiveSession] = useState<any>(null);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [lastScannedMachine, setLastScannedMachine] = useState<{ id: string; name: string } | null>(null);
   const router = useRouter();
   const { session } = useSession();
 
@@ -55,7 +59,6 @@ export default function ScanScreen() {
       .from('machines')
       .select('*, gym:gym_id(*)')
       .eq('unique_qr_code', qrCode.trim())
-      .eq('is_active', true)
       .single();
 
     console.log('[Scan] Machine lookup result:', { machineData, machineError });
@@ -64,6 +67,36 @@ export default function ScanScreen() {
       machine = machineData;
       gymId = machine.gym_id;
       machineType = machine.type as 'treadmill' | 'bike';
+      
+      // Check if machine is active
+      if (!machine.is_active) {
+        Alert.alert(
+          'Machine Inactive',
+          'This machine is currently inactive. Please use another machine.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      // Check if machine is under maintenance
+      if (machine.is_under_maintenance) {
+        setLastScannedMachine({ id: machine.id, name: machine.name });
+        Alert.alert(
+          'Machine Unavailable',
+          'Sorry, this machine is currently out of order. Please use another machine.',
+          [
+            { text: 'OK' },
+            {
+              text: 'Report Issue',
+              onPress: () => {
+                setReportModalVisible(true);
+              },
+            },
+          ]
+        );
+        return;
+      }
+      
       console.log('[Scan] Machine found:', { id: machine.id, name: machine.name, type: machineType, gymId });
     } else {
       // Fallback to equipment table for backward compatibility
@@ -238,8 +271,48 @@ export default function ScanScreen() {
           >
             <Text style={styles.buttonText}>Start Workout</Text>
           </TouchableOpacity>
+
+          {/* Report Issue Button - Always visible */}
+          <TouchableOpacity
+            style={styles.reportButton}
+            onPress={async () => {
+              if (!manualQRCode.trim()) {
+                Alert.alert('Info', 'Please enter a QR code first to report an issue');
+                return;
+              }
+
+              // Try to find machine to report
+              const { data: machineData, error: machineError } = await supabase
+                .from('machines')
+                .select('id, name')
+                .eq('unique_qr_code', manualQRCode.trim())
+                .single();
+
+              if (machineError || !machineData) {
+                Alert.alert('Error', 'Machine not found. Please check the QR code.');
+                return;
+              }
+
+              setLastScannedMachine({ id: machineData.id, name: machineData.name });
+              setReportModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="warning-outline" size={20} color={theme.colors.primary} />
+            <Text style={styles.reportButtonText}>Report Issue</Text>
+          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Report Issue Modal */}
+      {lastScannedMachine && (
+        <ReportIssueModal
+          visible={reportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          machineId={lastScannedMachine.id}
+          machineName={lastScannedMachine.name}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -343,5 +416,24 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.5,
+  },
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
+  },
+  reportButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.semibold,
+    letterSpacing: 0.3,
   },
 });

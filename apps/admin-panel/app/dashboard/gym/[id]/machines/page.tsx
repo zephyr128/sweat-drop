@@ -21,15 +21,22 @@ export default async function MachinesPage({
   }
 
   const supabase = createClient();
-  const { data: machines, error } = await supabase
-    .from('machines')
-    .select('*')
-    .eq('gym_id', id)
-    .order('created_at', { ascending: false });
+  const [machinesResult, reportsResult] = await Promise.all([
+    supabase
+      .from('machines')
+      .select('*')
+      .eq('gym_id', id)
+      .order('created_at', { ascending: false }),
+    supabase.rpc('get_machines_with_reports', { p_gym_id: id }),
+  ]);
 
-  if (error) {
-    // Error handled gracefully
-  }
+  const machines = machinesResult.data || [];
+  const reports = reportsResult.data || [];
+
+  // Create a map of machine_id -> report_count
+  const reportsMap = new Map(
+    reports.map((r: any) => [r.machine_id, r.report_count])
+  );
 
   return (
     <div>
@@ -38,7 +45,11 @@ export default async function MachinesPage({
         <p className="text-[#808080]">Manage treadmills and bikes with QR codes</p>
       </div>
 
-      <MachinesManager gymId={id} initialMachines={machines || []} />
+      <MachinesManager 
+        gymId={id} 
+        initialMachines={machines} 
+        initialReports={reportsMap}
+      />
     </div>
   );
 }

@@ -114,3 +114,53 @@ export async function toggleMachineStatus(
     return { success: false, error: error.message };
   }
 }
+
+export async function toggleMaintenance(
+  machineId: string,
+  gymId: string,
+  isUnderMaintenance: boolean,
+  maintenanceNotes?: string
+) {
+  try {
+    const updateData: any = {
+      is_under_maintenance: isUnderMaintenance,
+    };
+
+    if (isUnderMaintenance) {
+      updateData.maintenance_started_at = new Date().toISOString();
+      if (maintenanceNotes) {
+        updateData.maintenance_notes = maintenanceNotes;
+      }
+    } else {
+      updateData.maintenance_started_at = null;
+      updateData.maintenance_notes = null;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('machines')
+      .update(updateData)
+      .eq('id', machineId)
+      .eq('gym_id', gymId);
+
+    if (error) throw error;
+
+    revalidatePath(`/dashboard/gym/${gymId}/machines`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getMachineReports(gymId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_machines_with_reports', {
+      p_gym_id: gymId,
+    });
+
+    if (error) throw error;
+
+    return { success: true, data: data || [] };
+  } catch (error: any) {
+    return { success: false, error: error.message, data: [] };
+  }
+}

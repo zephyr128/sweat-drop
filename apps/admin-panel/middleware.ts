@@ -86,10 +86,14 @@ export async function middleware(req: NextRequest) {
         }
       }
 
-      // RECEPTIONIST LOGIKA
+      // RECEPTIONIST LOGIKA - Can only access redemptions
       if (profile.role === 'receptionist') {
         const targetPathStart = `/dashboard/gym/${profile.admin_gym_id}`;
         if (!pathname.startsWith(targetPathStart)) {
+          return NextResponse.redirect(new URL(`${targetPathStart}/redemptions`, req.url));
+        }
+        // Receptionist can only access redemptions page
+        if (pathname !== `${targetPathStart}/redemptions`) {
           return NextResponse.redirect(new URL(`${targetPathStart}/redemptions`, req.url));
         }
       }

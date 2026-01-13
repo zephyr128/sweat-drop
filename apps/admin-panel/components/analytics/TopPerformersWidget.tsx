@@ -1,17 +1,11 @@
 'use client';
 
-import { createClient } from '@/lib/supabase-client';
 import { useEffect, useState } from 'react';
-
-interface TopPerformer {
-  id: string;
-  username: string;
-  avatar_url: string | null;
-  total_drops: number;
-}
+import { getTopPerformers, TopPerformer } from '@/lib/actions/top-performers-actions';
 
 interface TopPerformersWidgetProps {
   gymId: string;
+  compact?: boolean;
 }
 
 export function TopPerformersWidget({ gymId }: TopPerformersWidgetProps) {
@@ -21,49 +15,8 @@ export function TopPerformersWidget({ gymId }: TopPerformersWidgetProps) {
   useEffect(() => {
     async function fetchTopPerformers() {
       try {
-        const supabase = createClient();
-        
-        // Get top 3 users by total_drops for this gym
-        const { data: memberships, error } = await supabase
-          .from('gym_memberships')
-          .select('user_id, local_drops_balance')
-          .eq('gym_id', gymId)
-          .order('local_drops_balance', { ascending: false })
-          .limit(3);
-
-        if (error) throw error;
-
-        if (!memberships || memberships.length === 0) {
-          setPerformers([]);
-          setLoading(false);
-          return;
-        }
-
-        // Get user profiles
-        const userIds = memberships.map((m) => m.user_id);
-        const { data: profiles, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, username, avatar_url, total_drops')
-          .in('id', userIds);
-
-        if (profileError) throw profileError;
-
-        // Combine data and sort by local_drops_balance
-        const combined = memberships
-          .map((membership) => {
-            const profile = profiles?.find((p) => p.id === membership.user_id);
-            if (!profile) return null;
-            return {
-              id: profile.id,
-              username: profile.username,
-              avatar_url: profile.avatar_url,
-              total_drops: membership.local_drops_balance || 0,
-            };
-          })
-          .filter((p): p is TopPerformer => p !== null)
-          .sort((a, b) => b.total_drops - a.total_drops);
-
-        setPerformers(combined);
+        const data = await getTopPerformers(gymId);
+        setPerformers(data);
       } catch (error) {
         console.error('Error fetching top performers:', error);
         setPerformers([]);
@@ -77,48 +30,50 @@ export function TopPerformersWidget({ gymId }: TopPerformersWidgetProps) {
 
   if (loading) {
     return (
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
-        <h3 className="text-lg font-bold text-white mb-4">Top Performers</h3>
-        <p className="text-[#808080]">Loading...</p>
+      <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4">
+        <h3 className="text-base font-semibold text-white mb-1">Top Performers</h3>
+        <p className="text-[#808080] text-sm">Loading...</p>
       </div>
     );
   }
 
   if (performers.length === 0) {
     return (
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
-        <h3 className="text-lg font-bold text-white mb-4">Top Performers</h3>
-        <p className="text-[#808080]">No performers data available</p>
+      <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4">
+        <h3 className="text-base font-semibold text-white mb-1">Top Performers</h3>
+        <p className="text-xs text-[#808080] mb-3">By Drops</p>
+        <p className="text-[#808080] text-sm">No performers data available</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
-      <h3 className="text-lg font-bold text-white mb-4">Top Performers</h3>
-      <div className="space-y-4">
+    <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4">
+      <h3 className="text-base font-semibold text-white mb-1">Top Performers</h3>
+      <p className="text-xs text-[#808080] mb-3">By Drops</p>
+      <div className="space-y-2">
         {performers.map((performer, index) => (
           <div
             key={performer.id}
-            className="flex items-center gap-4 p-4 bg-[#1A1A1A] rounded-lg border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-colors"
+            className="flex items-center gap-2 p-2 bg-[#1A1A1A] rounded-lg border border-[#333] hover:border-[#00E5FF]/30 transition-colors"
           >
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-[#00E5FF] to-[#00B8CC] text-black font-bold text-lg">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-[#00E5FF] to-[#00B8CC] text-black font-bold text-sm flex-shrink-0">
               {index + 1}
             </div>
             {performer.avatar_url ? (
               <img
                 src={performer.avatar_url}
                 alt={performer.username}
-                className="w-12 h-12 rounded-full object-cover"
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] font-bold">
+              <div className="w-8 h-8 rounded-full bg-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] font-bold text-xs flex-shrink-0">
                 {performer.username.charAt(0).toUpperCase()}
               </div>
             )}
-            <div className="flex-1">
-              <p className="text-white font-medium">{performer.username}</p>
-              <p className="text-sm text-[#808080]">
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-medium truncate">{performer.username}</p>
+              <p className="text-xs text-[#808080]">
                 {performer.total_drops.toLocaleString()} drops
               </p>
             </div>

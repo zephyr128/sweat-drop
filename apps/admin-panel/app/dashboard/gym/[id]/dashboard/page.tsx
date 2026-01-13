@@ -69,7 +69,7 @@ export default async function GymDashboardPage({
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-6 pt-16 md:pt-0">
         <h1 className="text-4xl font-bold text-white mb-2">{gym.name}</h1>
         <p className="text-[#808080]">
           {gym.city && `${gym.city}, `}
@@ -77,7 +77,8 @@ export default async function GymDashboardPage({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Header Row: Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatsCard
           title="Members"
           value={members || 0}
@@ -104,41 +105,8 @@ export default async function GymDashboardPage({
         />
       </div>
 
-      {/* Analytics Section */}
-      <AnalyticsSection gymId={id} />
-
-      {/* Quick Actions Section */}
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Pending Redemptions</h2>
-          <p className="text-3xl font-bold text-[#00E5FF] mb-2">{pendingRedemptions?.length || 0}</p>
-          <p className="text-sm text-[#808080]">Awaiting confirmation</p>
-        </div>
-
-        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
-          <div className="space-y-3">
-            <a
-              href={`/dashboard/gym/${id}/challenges`}
-              className="block px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors"
-            >
-              Manage Challenges
-            </a>
-            <a
-              href={`/dashboard/gym/${id}/store`}
-              className="block px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors"
-            >
-              Manage Store
-            </a>
-            <a
-              href={`/dashboard/gym/${id}/branding`}
-              className="block px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors"
-            >
-              Update Branding
-            </a>
-          </div>
-        </div>
-      </div>
+      {/* Analytics Section with Time Filter */}
+      <AnalyticsSection gymId={id} pendingRedemptions={pendingRedemptions?.length || 0} />
     </div>
   );
 }
