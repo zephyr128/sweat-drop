@@ -41,7 +41,7 @@ export default async function GymLayout({
   return (
     <div className="min-h-screen bg-[#000000]">
       <Sidebar role={profile.role} currentGymId={id} />
-      <main className="w-full p-4 md:pl-64 md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</main>
+      <main className="w-full p-4 md:pl-[17rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</main>
     </div>
   );
 }
