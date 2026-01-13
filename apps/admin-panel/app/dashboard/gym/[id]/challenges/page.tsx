@@ -33,7 +33,7 @@ export default async function ChallengesPage({
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-8 pt-16 md:pt-0">
         <h1 className="text-4xl font-bold text-white mb-2">Challenges Manager</h1>
         <p className="text-[#808080]">Create and manage daily, weekly, and custom challenges</p>
       </div>

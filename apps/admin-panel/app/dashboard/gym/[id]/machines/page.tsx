@@ -33,7 +33,7 @@ export default async function MachinesPage({
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-8 pt-16 md:pt-0">
         <h1 className="text-4xl font-bold text-white mb-2">Machine Management</h1>
         <p className="text-[#808080]">Manage treadmills and bikes with QR codes</p>
       </div>
