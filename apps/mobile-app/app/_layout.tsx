@@ -42,8 +42,10 @@ export default function RootLayout() {
         <Stack.Screen name="home" options={{ headerShown: false }} />
         <Stack.Screen name="wallet" options={{ headerShown: false }} />
         <Stack.Screen name="store" options={{ headerShown: false }} />
-        <Stack.Screen name="challenges" options={{ headerShown: false }} />
-        <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
+                <Stack.Screen name="challenges" options={{ headerShown: false }} />
+                <Stack.Screen name="challenge-detail" options={{ headerShown: false }} />
+                <Stack.Screen name="redemptions" options={{ headerShown: false }} />
+                <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
         <Stack.Screen name="scan" options={{ headerShown: false }} />
         <Stack.Screen name="workout" options={{ headerShown: false }} />
         <Stack.Screen name="session-summary" options={{ headerShown: false }} />

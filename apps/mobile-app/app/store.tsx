@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +12,7 @@ import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 
 export default function StoreScreen() {
+  const router = useRouter();
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
@@ -87,12 +89,16 @@ export default function StoreScreen() {
   const redeemReward = async (reward: any) => {
     if (!session?.user || !activeGymId) return;
 
-    // Check local balance for this gym
+    // Pre-check local balance (client-side validation)
     if (localDrops < reward.price_drops) {
-      Alert.alert('Insufficient Drops', `You need ${reward.price_drops} drops to redeem this reward. You have ${localDrops} drops available at this gym.`);
+      Alert.alert(
+        'Insufficient Drops',
+        `You need ${reward.price_drops} drops to redeem this reward.\n\nYou have ${localDrops} drops available at this gym.`
+      );
       return;
     }
 
+    // Pre-check stock (client-side validation)
     if (reward.stock !== null && reward.stock <= 0) {
       Alert.alert('Out of Stock', 'This reward is currently unavailable.');
       return;
@@ -105,14 +111,13 @@ export default function StoreScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Redeem',
-            onPress: async () => {
-              // Use spend_local_drops function to deduct from local balance
-              const { data, error } = await supabase.rpc('spend_local_drops', {
+          onPress: async () => {
+            try {
+              // Use secure create_redemption function (handles everything atomically)
+              const { data, error } = await supabase.rpc('create_redemption', {
                 p_user_id: session.user.id,
-                p_gym_id: activeGymId,
-                p_amount: reward.price_drops,
                 p_reward_id: reward.id,
-                p_description: `Redeemed: ${reward.name}`,
+                p_gym_id: activeGymId,
               });
 
               if (error) {
@@ -120,31 +125,41 @@ export default function StoreScreen() {
                 return;
               }
 
-              if (!data) {
-                Alert.alert('Insufficient Drops', 'You do not have enough drops at this gym.');
+              if (!data || data.length === 0 || !data[0].success) {
+                Alert.alert(
+                  'Redemption Failed',
+                  data?.[0]?.error_message || 'Failed to create redemption. Please try again.'
+                );
                 return;
               }
 
-              // Create redemption record
-              const { error: redemptionError } = await supabase
-                .from('redemptions')
-                .insert({
-                  user_id: session.user.id,
-                  reward_id: reward.id,
-                  gym_id: reward.gym_id,
-                  drops_spent: reward.price_drops,
-                  status: 'pending',
-                });
+              const redemption = data[0];
 
-              if (redemptionError) {
-                Alert.alert('Error', redemptionError.message);
-              } else {
-                Alert.alert('Success', 'Reward redeemed! Please show this to gym staff.');
-                loadProfile();
-                loadRewards();
-                refreshLocalDrops();
-              }
-            },
+              // Show success with redemption code
+              Alert.alert(
+                'Redemption Successful! 🎉',
+                `Your redemption code:\n\n${redemption.redemption_code}\n\nShow this code to gym staff to claim your reward.`,
+                [
+                  {
+                    text: 'View History',
+                    onPress: () => {
+                      router.push('/redemptions');
+                      loadProfile();
+                      loadRewards();
+                      refreshLocalDrops();
+                    },
+                  },
+                  { text: 'OK', onPress: () => {
+                    loadProfile();
+                    loadRewards();
+                    refreshLocalDrops();
+                  }},
+                ]
+              );
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'An unexpected error occurred');
+            }
+          },
         },
       ]
     );
@@ -191,7 +206,12 @@ export default function StoreScreen() {
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>Rewards Store</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          onPress={() => router.push('/redemptions')}
+          style={styles.headerButton}
+        >
+          <Ionicons name="receipt-outline" size={24} color={theme.colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -277,8 +297,11 @@ const styles = StyleSheet.create({
     flex: 1,
     letterSpacing: 0.5,
   },
-  headerSpacer: {
+  headerButton: {
     width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   centerContent: {
     flex: 1,
