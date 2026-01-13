@@ -1,12 +1,10 @@
 import { redirect } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth';
 
 export default async function HomePage() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const user = await getCurrentUser();
 
-  if (!session) {
+  if (!user) {
     redirect('/login');
   }
 

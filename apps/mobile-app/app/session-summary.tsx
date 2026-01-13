@@ -33,7 +33,7 @@ export default function SessionSummaryScreen() {
 
     const { data } = await supabase
       .from('sessions')
-      .select('*, equipment:equipment_id(*), gym:gym_id(*)')
+      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
       .eq('id', sessionId)
       .single();
 

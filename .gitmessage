@@ -1,0 +1,9 @@
+# Commit Message Template
+
+## Commit Groups:
+1. Database migrations and backend setup
+2. Admin panel core features (auth, routing, layout)
+3. Admin panel modules (challenges, store, machines, redemptions)
+4. Mobile app features (workout, challenges, redemptions)
+5. Cleanup and organization (remove duplicates, console.logs)
+6. Documentation and production setup
