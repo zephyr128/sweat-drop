@@ -1,11 +1,7 @@
-# Supabase local development configuration
-
-[project]
-# Project ID
-id = "sweatdrop"
+# Supabase configuration
+# This config is used for both local development and remote deployment
 
 [auth]
-# Auth configuration
 enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["exp://localhost:8081"]
@@ -13,7 +9,6 @@ jwt_expiry = 3600
 enable_signup = true
 
 [api]
-# API configuration
 enabled = true
 port = 54321
 schemas = ["public", "storage"]
@@ -21,26 +16,17 @@ extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-# Database configuration
 port = 54322
 major_version = 15
 
 [studio]
-# Studio configuration
 enabled = true
 port = 54323
 
 [storage]
-# Storage configuration
 enabled = true
 file_size_limit = "50MiB"
 
-[functions]
-# Edge Functions
-enabled = true
-
 [realtime]
-# Realtime configuration
 enabled = true
-ip_version = "ipv4"
-port = 4000
+ip_version = "IPv4"
