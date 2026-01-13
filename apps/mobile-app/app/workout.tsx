@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -17,6 +17,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import LiquidGauge, { LiquidGaugeRef } from '@/components/LiquidGauge';
 import FallingDrop from '@/components/FallingDrop';
 import CircularProgressRing from '@/components/CircularProgressRing';
+import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 
 interface ActiveDrop {
   id: string;
@@ -24,10 +25,11 @@ interface ActiveDrop {
 }
 
 export default function WorkoutScreen() {
-  const { sessionId, equipmentId, gymId } = useLocalSearchParams<{
+  const { sessionId, equipmentId, gymId, machineType: paramMachineType } = useLocalSearchParams<{
     sessionId?: string;
     equipmentId?: string;
     gymId?: string;
+    machineType?: string;
   }>();
   const [session, setSession] = useState<any>(null);
   const [drops, setDrops] = useState(0);
@@ -40,11 +42,40 @@ export default function WorkoutScreen() {
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [activeDrops, setActiveDrops] = useState<ActiveDrop[]>([]);
+  const [challengeMessage, setChallengeMessage] = useState<string | null>(null);
   const router = useRouter();
   const { session: authSession } = useSession();
   const liquidGaugeRef = useRef<LiquidGaugeRef>(null);
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const challengeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastChallengeUpdateRef = useRef<number>(0);
+  const challengeMessageTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Determine machine type from machine (preferred) or equipment (fallback)
+  const machineType = paramMachineType || 
+    session?.machine?.type || 
+    session?.equipment?.equipment_type || 
+    (session?.equipment?.name?.toLowerCase().includes('treadmill') ? 'treadmill' :
+     session?.equipment?.name?.toLowerCase().includes('bike') ? 'bike' : null);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[Workout] Machine type determined:', {
+      paramMachineType,
+      machineType: session?.machine?.type,
+      equipmentType: session?.equipment?.equipment_type,
+      finalMachineType: machineType,
+      gymId: session?.gym_id,
+    });
+  }, [paramMachineType, session?.machine?.type, session?.equipment?.equipment_type, machineType, session?.gym_id]);
+
+  // Load challenge progress
+  const { challenges, updateProgress, refresh: refreshChallenges } = useChallengeProgress(
+    session?.gym_id || null,
+    machineType
+  );
+
   
   // Animation values
   const splashAnim = useSharedValue(0);
@@ -83,11 +114,11 @@ export default function WorkoutScreen() {
       .insert({
         user_id: authSession.user.id,
         gym_id: gymId,
-        equipment_id: equipmentId,
+        equipment_id: equipmentId, // Keep for backward compatibility
         started_at: new Date().toISOString(),
         is_active: true,
       })
-      .select('*, equipment:equipment_id(*), gym:gym_id(*)')
+      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
       .single();
 
     if (error) {
@@ -109,13 +140,21 @@ export default function WorkoutScreen() {
 
     const { data } = await supabase
       .from('sessions')
-      .select('*, equipment:equipment_id(*), gym:gym_id(*)')
+      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
       .eq('id', sessionId)
       .single();
 
     if (data) {
       setSession(data);
       setStartTime(new Date(data.started_at));
+      
+      console.log('[Workout] Session loaded:', {
+        id: data.id,
+        gymId: data.gym_id,
+        machine: data.machine,
+        equipment: data.equipment,
+        machineType: data.machine?.type || data.equipment?.equipment_type,
+      });
       
       // Load saved progress
       if (data.drops_earned > 0) {
@@ -124,6 +163,8 @@ export default function WorkoutScreen() {
       }
       if (data.duration_seconds) {
         setDuration(data.duration_seconds);
+        // Reset challenge update ref if resuming a session
+        lastChallengeUpdateRef.current = Math.floor(data.duration_seconds / 60);
         // Recalculate calories based on drops (1 drop ≈ 0.4 kcal)
         setCalories(Math.floor(data.drops_earned * 0.4));
       }
@@ -205,6 +246,75 @@ export default function WorkoutScreen() {
 
     return () => clearInterval(interval);
   }, [session, startTime, isPaused, pausedTime, splashAnim]);
+
+  // Calculate current minutes (memoized to avoid recalculating on every render)
+  const currentMinutes = useMemo(() => Math.floor(duration / 60), [duration]);
+
+  // Update challenge progress every minute (only when a new minute is reached)
+  useEffect(() => {
+    if (!session?.gym_id || !machineType || isPaused) {
+      return;
+    }
+
+    // Don't update if challenges haven't loaded yet
+    if (challenges.length === 0) {
+      return;
+    }
+    
+    // Only update when we cross a new minute threshold (1, 2, 3, etc.)
+    // Don't update on every second - only when minutes change
+    if (currentMinutes > 0 && currentMinutes > lastChallengeUpdateRef.current) {
+      const minutesToAdd = 1; // Always add exactly 1 minute per update
+      
+      console.log('[Workout] Updating challenge progress:', {
+        minutes: currentMinutes,
+        minutesToAdd,
+        gymId: session.gym_id,
+        machineType,
+      });
+
+      lastChallengeUpdateRef.current = currentMinutes;
+
+      // Update challenge progress
+      if (updateProgress) {
+        updateProgress(minutesToAdd).then((result) => {
+          console.log('[Workout] Challenge update result:', result);
+          if (result.success && result.totalDropsAwarded && result.totalDropsAwarded > 0) {
+            // Show challenge completion message in liquid gauge for 5 seconds
+            setChallengeMessage(`Challenge Completed! 🎉\n+${result.totalDropsAwarded} drops`);
+            
+            // Clear any existing timer
+            if (challengeMessageTimerRef.current) {
+              clearTimeout(challengeMessageTimerRef.current);
+            }
+            
+            // Hide message after 5 seconds
+            challengeMessageTimerRef.current = setTimeout(() => {
+              setChallengeMessage(null);
+              challengeMessageTimerRef.current = null;
+            }, 5000);
+          } else if (!result.success) {
+            console.error('[Workout] Challenge update failed:', result.error);
+          } else {
+            console.log('[Workout] Challenge progress updated successfully (no completions)');
+          }
+        }).catch((error) => {
+          console.error('[Workout] Challenge update error:', error);
+        });
+      } else {
+        console.error('[Workout] updateProgress function is not available');
+      }
+    }
+  }, [currentMinutes, session?.gym_id, machineType, isPaused, updateProgress, challenges.length]);
+
+  // Cleanup challenge message timer on unmount
+  useEffect(() => {
+    return () => {
+      if (challengeMessageTimerRef.current) {
+        clearTimeout(challengeMessageTimerRef.current);
+      }
+    };
+  }, []);
 
   // Track drops changes and add falling drops
   const prevDropsRef = useRef(0);
@@ -374,6 +484,17 @@ export default function WorkoutScreen() {
       console.warn('No gym membership found - this might be normal if add_drops failed to create it');
     }
 
+    // Final challenge progress update with remaining minutes
+    const finalMinutes = Math.floor(duration / 60);
+    const remainingMinutes = finalMinutes - lastChallengeUpdateRef.current;
+    if (remainingMinutes > 0 && machineType) {
+      const result = await updateProgress(remainingMinutes);
+      if (result.success && result.totalDropsAwarded && result.totalDropsAwarded > 0) {
+        // Challenge completion will be shown in session summary
+        console.log('Challenges completed:', result.completedChallenges);
+      }
+    }
+
     router.push({
       pathname: '/session-summary',
       params: {
@@ -456,7 +577,7 @@ export default function WorkoutScreen() {
           <LiquidGauge
             ref={liquidGaugeRef}
             progress={progress}
-            value={displayDrops}
+            value={challengeMessage || displayDrops}
             size={280}
             strokeWidth={4}
           />

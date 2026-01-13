@@ -296,9 +296,22 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
 
       {/* Center Content - Using React Native Text with shadow */}
       <View style={styles.centerContent}>
-        <Text style={[styles.valueText, getNumberStyle(64)]}>
-          {displayValue}
-        </Text>
+        {typeof value === 'string' && value.includes('\n') ? (
+          // Multi-line message (for challenge completion)
+          <Text style={[styles.messageText, { fontSize: size * 0.12, lineHeight: size * 0.15 }]}>
+            {value.split('\n').map((line, index) => (
+              <Text key={index}>
+                {line}
+                {index < value.split('\n').length - 1 && '\n'}
+              </Text>
+            ))}
+          </Text>
+        ) : (
+          // Single value (drops count or percentage)
+          <Text style={[styles.valueText, getNumberStyle(64)]}>
+            {displayValue}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -320,6 +333,14 @@ const styles = StyleSheet.create({
   },
   valueText: {
     color: theme.colors.text,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  messageText: {
+    color: theme.colors.secondary,
     fontWeight: 'bold',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.8)',

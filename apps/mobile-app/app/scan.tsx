@@ -22,7 +22,7 @@ export default function ScanScreen() {
 
     const { data } = await supabase
       .from('sessions')
-      .select('*, equipment:equipment_id(*), gym:gym_id(*)')
+      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
       .eq('user_id', session.user.id)
       .eq('is_active', true)
       .single();
@@ -43,43 +43,95 @@ export default function ScanScreen() {
       return;
     }
 
-    // Find equipment by QR code
-    const { data: equipment, error: eqError } = await supabase
-      .from('equipment')
+    // Find machine by QR code (preferred) or fallback to equipment
+    let machine = null;
+    let equipment = null;
+    let gymId = null;
+    let machineType: 'treadmill' | 'bike' | null = null;
+
+    // Try to find in machines table first
+    console.log('[Scan] Looking for machine with QR code:', qrCode.trim());
+    const { data: machineData, error: machineError } = await supabase
+      .from('machines')
       .select('*, gym:gym_id(*)')
-      .eq('qr_code', qrCode.trim())
+      .eq('unique_qr_code', qrCode.trim())
       .eq('is_active', true)
       .single();
 
-    if (eqError || !equipment) {
-      console.error('Equipment lookup error:', eqError);
-      Alert.alert('Error', `Invalid QR code: ${eqError?.message || 'Equipment not found'}`);
-      return;
+    console.log('[Scan] Machine lookup result:', { machineData, machineError });
+
+    if (!machineError && machineData) {
+      machine = machineData;
+      gymId = machine.gym_id;
+      machineType = machine.type as 'treadmill' | 'bike';
+      console.log('[Scan] Machine found:', { id: machine.id, name: machine.name, type: machineType, gymId });
+    } else {
+      // Fallback to equipment table for backward compatibility
+      const { data: equipmentData, error: eqError } = await supabase
+        .from('equipment')
+        .select('*, gym:gym_id(*)')
+        .eq('qr_code', qrCode.trim())
+        .eq('is_active', true)
+        .single();
+
+      if (eqError || !equipmentData) {
+        console.error('Machine/Equipment lookup error:', machineError || eqError);
+        console.log('Machine error details:', machineError);
+        console.log('Equipment error details:', eqError);
+        Alert.alert(
+          'Invalid QR Code',
+          `QR code not found. Please check:\n\n1. Is the machine active in Admin Panel?\n2. Is the QR code correct?\n\nError: ${machineError?.message || eqError?.message || 'Machine/Equipment not found'}`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      equipment = equipmentData;
+      gymId = equipment.gym_id;
+      // Try to infer machine type from equipment_type
+      if (equipment.equipment_type) {
+        const eqType = equipment.equipment_type.toLowerCase();
+        if (eqType.includes('treadmill')) {
+          machineType = 'treadmill';
+        } else if (eqType.includes('bike') || eqType.includes('bicycle')) {
+          machineType = 'bike';
+        }
+      }
     }
 
-    if (!equipment.gym_id) {
-      console.error('Equipment missing gym_id:', equipment);
-      Alert.alert('Error', 'Equipment is not associated with a gym');
+    if (!gymId) {
+      console.error('Machine/Equipment missing gym_id:', machine || equipment);
+      Alert.alert('Error', 'Machine/Equipment is not associated with a gym');
       return;
     }
 
     console.log('Creating session:', {
       userId: session.user.id,
-      gymId: equipment.gym_id,
-      equipmentId: equipment.id,
+      gymId,
+      machineId: machine?.id,
+      equipmentId: equipment?.id,
+      machineType,
     });
 
     // Start session
+    const sessionData: any = {
+      user_id: session.user.id,
+      gym_id: gymId,
+      started_at: new Date().toISOString(),
+      is_active: true,
+    };
+
+    // Add machine_id if machine found, otherwise use equipment_id for backward compatibility
+    if (machine) {
+      sessionData.machine_id = machine.id;
+    } else if (equipment) {
+      sessionData.equipment_id = equipment.id;
+    }
+
     const { data: newSession, error: sessionError } = await supabase
       .from('sessions')
-      .insert({
-        user_id: session.user.id,
-        gym_id: equipment.gym_id,
-        equipment_id: equipment.id,
-        started_at: new Date().toISOString(),
-        is_active: true,
-      })
-      .select('*, equipment:equipment_id(*), gym:gym_id(*)')
+      .insert(sessionData)
+      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
       .single();
 
     if (sessionError) {
@@ -97,11 +149,15 @@ export default function ScanScreen() {
       id: newSession.id,
       gymId: newSession.gym_id,
       gymName: newSession.gym?.name,
+      machineType,
     });
 
     router.push({
       pathname: '/workout',
-      params: { sessionId: newSession.id },
+      params: { 
+        sessionId: newSession.id,
+        machineType: machineType || '',
+      },
     });
   };
 

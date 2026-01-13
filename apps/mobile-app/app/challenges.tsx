@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -8,6 +10,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 
 export default function ChallengesScreen() {
+  const router = useRouter();
   const { session } = useSession();
   const [challenges, setChallenges] = useState<any[]>([]);
   const [progress, setProgress] = useState<Record<string, any>>({});
@@ -20,13 +23,11 @@ export default function ChallengesScreen() {
   }, [session]);
 
   useEffect(() => {
-    if (session?.user && challenges.length > 0) {
+    if (challenges.length > 0) {
       loadProgress();
-      setLoading(false);
-    } else if (challenges.length === 0) {
-      setLoading(false);
     }
-  }, [session, challenges]);
+    setLoading(false);
+  }, [challenges]);
 
   const loadChallenges = async () => {
     if (!session?.user) return;
@@ -39,40 +40,74 @@ export default function ChallengesScreen() {
 
     const gymId = profileData?.home_gym_id;
 
-    const query = supabase
-      .from('challenges')
-      .select('*')
-      .eq('is_active', true)
-      .gte('end_date', new Date().toISOString().split('T')[0]);
-
-    if (gymId) {
-      query.eq('gym_id', gymId);
+    if (!gymId) {
+      setChallenges([]);
+      return;
     }
 
-    const { data } = await query.order('end_date');
+    // Use the same RPC function as home screen to get consistent results
+    const { data, error } = await supabase.rpc('get_active_challenges_for_user', {
+      p_user_id: session.user.id,
+      p_gym_id: gymId,
+      p_machine_type: null, // Get all machine types
+    });
 
+    if (error) {
+      console.error('Error loading challenges:', error);
+      setChallenges([]);
+      return;
+    }
+
+    // Transform the RPC result to match the expected format
     if (data) {
-      setChallenges(data);
+      // Fetch full challenge details for each challenge
+      const challengeIds = data.map((c: any) => c.challenge_id);
+      if (challengeIds.length > 0) {
+        const { data: fullChallenges, error: fullError } = await supabase
+          .from('challenges')
+          .select('*')
+          .in('id', challengeIds);
+
+        if (fullError) {
+          console.error('Error loading full challenge details:', fullError);
+          setChallenges([]);
+          return;
+        }
+
+        // Merge RPC data with full challenge data
+        const mergedChallenges = (fullChallenges || []).map((challenge: any) => {
+          const progressData = data.find((p: any) => p.challenge_id === challenge.id);
+          return {
+            ...challenge,
+            progress: progressData,
+          };
+        });
+
+        setChallenges(mergedChallenges);
+      } else {
+        setChallenges([]);
+      }
+    } else {
+      setChallenges([]);
     }
   };
 
   const loadProgress = async () => {
     if (!session?.user) return;
 
-    const challengeIds = challenges.map((c) => c.id);
-    const { data } = await supabase
-      .from('challenge_progress')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .in('challenge_id', challengeIds);
-
-    if (data) {
-      const progressMap: Record<string, any> = {};
-      data.forEach((p) => {
-        progressMap[p.challenge_id] = p;
-      });
-      setProgress(progressMap);
-    }
+    // Progress is already loaded in loadChallenges via RPC
+    // Just create a map from the progress data
+    const progressMap: Record<string, any> = {};
+    challenges.forEach((c: any) => {
+      if (c.progress) {
+        progressMap[c.id] = {
+          current_drops: c.progress.current_minutes, // Map minutes to drops for display
+          current_minutes: c.progress.current_minutes,
+          is_completed: c.progress.is_completed,
+        };
+      }
+    });
+    setProgress(progressMap);
   };
 
   const getTimeRemaining = (endDate: string) => {
@@ -135,27 +170,47 @@ export default function ChallengesScreen() {
             <Text style={styles.emptyText}>No active challenges</Text>
           </View>
         ) : (
-          challenges.map((challenge) => {
+          challenges.map((challenge: any) => {
             const userProgress = progress[challenge.id];
-            const currentDrops = userProgress?.current_drops || 0;
-            const progressPercent = Math.min(
-              (currentDrops / challenge.target_drops) * 100,
-              100
-            );
+            const currentMinutes = userProgress?.current_minutes || 0;
+            const requiredMinutes = challenge.required_minutes || challenge.target_drops || 0;
+            const progressPercent = requiredMinutes > 0 
+              ? Math.min((currentMinutes / requiredMinutes) * 100, 100)
+              : 0;
             const isCompleted = userProgress?.is_completed || false;
 
+            // Determine challenge type label
+            const challengeTypeLabel = challenge.frequency 
+              ? (challenge.frequency === 'daily' ? 'Daily' : challenge.frequency === 'weekly' ? 'Weekly' : 'One-Time')
+              : getChallengeTypeLabel(challenge.challenge_type || 'one-time');
+
             return (
-              <View key={challenge.id} style={styles.challengeCard}>
+              <TouchableOpacity
+                key={challenge.id}
+                style={styles.challengeCard}
+                onPress={() => {
+                  router.push({
+                    pathname: '/challenge-detail',
+                    params: {
+                      challengeId: challenge.id,
+                      gymId: challenge.gym_id,
+                    },
+                  });
+                }}
+                activeOpacity={0.9}
+              >
                 <View style={styles.challengeHeader}>
                   <View>
                     <Text style={styles.challengeType}>
-                      {getChallengeTypeLabel(challenge.challenge_type)}
+                      {challengeTypeLabel}
                     </Text>
                     <Text style={styles.challengeName}>{challenge.name}</Text>
                   </View>
-                  <Text style={styles.timeRemaining}>
-                    {getTimeRemaining(challenge.end_date)}
-                  </Text>
+                  {challenge.end_date && (
+                    <Text style={styles.timeRemaining}>
+                      {getTimeRemaining(challenge.end_date)}
+                    </Text>
+                  )}
                 </View>
 
                 {challenge.description && (
@@ -175,21 +230,30 @@ export default function ChallengesScreen() {
                     />
                   </View>
                   <Text style={styles.progressText}>
-                    <Text style={[getNumberStyle(14)]}>{currentDrops}</Text>
+                    <Text style={[getNumberStyle(14)]}>{currentMinutes}</Text>
                     {' / '}
-                    <Text style={[getNumberStyle(14)]}>{challenge.target_drops}</Text>
-                    {' drops'}
+                    <Text style={[getNumberStyle(14)]}>{requiredMinutes}</Text>
+                    {' min'}
                   </Text>
                 </View>
+
+                {challenge.drops_bounty > 0 && (
+                  <View style={styles.rewardInfo}>
+                    <Ionicons name="water" size={14} color={theme.colors.primary} />
+                    <Text style={styles.rewardText}>
+                      {challenge.drops_bounty} drops reward
+                    </Text>
+                  </View>
+                )}
 
                 {isCompleted && (
                   <View style={styles.completedBadge}>
                     <Text style={styles.completedText}>
-                      ✅ Completed! {challenge.reward_drops} drops earned
+                      ✅ Completed! {challenge.drops_bounty || challenge.reward_drops || 0} drops earned
                     </Text>
                   </View>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -313,6 +377,21 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.secondary,
+    letterSpacing: 0.3,
+  },
+  rewardInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  rewardText: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.primary,
+    fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.3,
   },
 });
