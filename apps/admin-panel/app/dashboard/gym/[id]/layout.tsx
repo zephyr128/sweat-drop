@@ -38,10 +38,13 @@ export default async function GymLayout({
   // Middleware already handles all redirects and access control
   // At this point, if we reach here, the user has access
   // Just render the layout
+  // This layout is nested inside dashboard/layout.tsx
+  // We only need to update the sidebar, not create a new wrapper
+  // The parent layout already provides the main wrapper and padding
   return (
     <>
       <Sidebar role={profile.role} currentGymId={id} />
-      <div className="w-full p-4 md:pl-[12rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</div>
+      {children}
     </>
   );
 }
