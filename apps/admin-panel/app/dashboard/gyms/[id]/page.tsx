@@ -1,12 +1,14 @@
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase-server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export default async function GymDetailPage({ params }: { params: { id: string } }) {
+export default async function GymDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = createClient();
   const { data: gym, error } = await supabase
     .from('gyms')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (error || !gym) {
