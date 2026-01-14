@@ -15,11 +15,11 @@ export default async function GymDetailPage({ params }: { params: Promise<{ id: 
     notFound();
   }
 
-  // Get gym admin
+  // Get gym admin (if any)
   const { data: admin } = await supabase
     .from('profiles')
     .select('username, email')
-    .eq('admin_gym_id', gym.id)
+    .eq('assigned_gym_id', gym.id)
     .eq('role', 'gym_admin')
     .single();
 

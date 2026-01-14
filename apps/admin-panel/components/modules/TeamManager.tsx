@@ -27,9 +27,10 @@ interface TeamManagerProps {
   gymId: string;
   initialInvitations: StaffInvitation[];
   initialStaff: StaffMember[];
+  isGymOwner?: boolean;
 }
 
-export function TeamManager({ gymId, initialInvitations, initialStaff }: TeamManagerProps) {
+export function TeamManager({ gymId, initialInvitations, initialStaff, isGymOwner = false }: TeamManagerProps) {
   const [invitations, setInvitations] = useState<StaffInvitation[]>(initialInvitations);
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -299,14 +300,22 @@ export function TeamManager({ gymId, initialInvitations, initialStaff }: TeamMan
                   {...register('role')}
                   className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
                 >
-                  <option value="receptionist">Receptionist (Redemptions only)</option>
-                  <option value="gym_admin">Gym Admin (Full access)</option>
+                  {isGymOwner ? (
+                    <>
+                      <option value="gym_admin">Gym Admin (Full access to this gym)</option>
+                      <option value="receptionist">Receptionist (Redemptions only)</option>
+                    </>
+                  ) : (
+                    <option value="receptionist">Receptionist (Redemptions only)</option>
+                  )}
                 </select>
                 {errors.role && (
                   <p className="mt-1 text-sm text-[#FF5252]">{errors.role.message}</p>
                 )}
                 <p className="mt-2 text-xs text-[#808080]">
-                  Receptionists can only access the Redemptions terminal. Gym Admins have full access to all features.
+                  {isGymOwner 
+                    ? 'Gym Owners can assign Gym Admins and Receptionists. Gym Admins can only assign Receptionists.'
+                    : 'Receptionists can only access the Redemptions terminal.'}
                 </p>
               </div>
 

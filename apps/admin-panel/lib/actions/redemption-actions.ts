@@ -21,12 +21,27 @@ export async function confirmRedemption(redemptionId: string, gymId: string) {
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Verify access
-    if (profile.role === 'gym_admin' && profile.admin_gym_id !== gymId) {
-      return { success: false, error: 'Unauthorized' };
+    // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
+    if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
+      const { data: gym } = await supabaseAdmin
+        .from('gyms')
+        .select('owner_id')
+        .eq('id', gymId)
+        .single();
+      
+      if (!gym) {
+        return { success: false, error: 'Gym not found' };
+      }
+      
+      const ownsGym = gym.owner_id === profile.id;
+      const isAssignedGym = profile.assigned_gym_id === gymId;
+      
+      if (!ownsGym && !isAssignedGym) {
+        return { success: false, error: 'Unauthorized' };
+      }
     }
 
-    if (profile.role !== 'gym_admin' && profile.role !== 'receptionist' && profile.role !== 'superadmin') {
+    if (profile.role !== 'gym_owner' && profile.role !== 'gym_admin' && profile.role !== 'receptionist' && profile.role !== 'superadmin') {
       return { success: false, error: 'Unauthorized' };
     }
 
@@ -56,12 +71,27 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Verify access
-    if (profile.role === 'gym_admin' && profile.admin_gym_id !== gymId) {
-      return { success: false, error: 'Unauthorized' };
+    // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
+    if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
+      const { data: gym } = await supabaseAdmin
+        .from('gyms')
+        .select('owner_id')
+        .eq('id', gymId)
+        .single();
+      
+      if (!gym) {
+        return { success: false, error: 'Gym not found' };
+      }
+      
+      const ownsGym = gym.owner_id === profile.id;
+      const isAssignedGym = profile.assigned_gym_id === gymId;
+      
+      if (!ownsGym && !isAssignedGym) {
+        return { success: false, error: 'Unauthorized' };
+      }
     }
 
-    if (profile.role !== 'gym_admin' && profile.role !== 'receptionist' && profile.role !== 'superadmin') {
+    if (profile.role !== 'gym_owner' && profile.role !== 'gym_admin' && profile.role !== 'receptionist' && profile.role !== 'superadmin') {
       return { success: false, error: 'Unauthorized' };
     }
 
@@ -92,12 +122,27 @@ export async function validateRedemptionCode(code: string, gymId: string) {
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Verify access
-    if (profile.role === 'gym_admin' && profile.admin_gym_id !== gymId) {
-      return { success: false, error: 'Unauthorized' };
+    // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
+    if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
+      const { data: gym } = await supabaseAdmin
+        .from('gyms')
+        .select('owner_id')
+        .eq('id', gymId)
+        .single();
+      
+      if (!gym) {
+        return { success: false, error: 'Gym not found' };
+      }
+      
+      const ownsGym = gym.owner_id === profile.id;
+      const isAssignedGym = profile.assigned_gym_id === gymId;
+      
+      if (!ownsGym && !isAssignedGym) {
+        return { success: false, error: 'Unauthorized' };
+      }
     }
 
-    if (profile.role !== 'gym_admin' && profile.role !== 'receptionist' && profile.role !== 'superadmin') {
+    if (profile.role !== 'gym_owner' && profile.role !== 'gym_admin' && profile.role !== 'receptionist' && profile.role !== 'superadmin') {
       return { success: false, error: 'Unauthorized' };
     }
 

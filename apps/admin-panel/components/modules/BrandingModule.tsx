@@ -19,7 +19,7 @@ const brandingSchema = z.object({
 type BrandingFormData = z.infer<typeof brandingSchema>;
 
 interface BrandingModuleProps {
-  gymId: string;
+  ownerId: string; // Now uses owner_id for global branding
   initialData: {
     primary_color?: string | null;
     logo_url?: string | null;
@@ -27,7 +27,7 @@ interface BrandingModuleProps {
   };
 }
 
-export function BrandingModule({ gymId, initialData }: BrandingModuleProps) {
+export function BrandingModule({ ownerId, initialData }: BrandingModuleProps) {
   const [logoPreview, setLogoPreview] = useState<string | null>(
     initialData.logo_url || null
   );
@@ -141,7 +141,7 @@ export function BrandingModule({ gymId, initialData }: BrandingModuleProps) {
   const onSubmit = async (data: BrandingFormData) => {
     try {
       const result = await updateBranding({
-        gymId,
+        ownerId,
         primaryColor: data.primaryColor,
         logoUrl: data.logoUrl || undefined,
         backgroundUrl: data.backgroundUrl || undefined,

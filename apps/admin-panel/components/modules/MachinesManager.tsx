@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance } from '@/lib/actions/machine-actions';
-import { X, Trash2, Power, QrCode, Wrench, AlertTriangle } from 'lucide-react';
+import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine } from '@/lib/actions/machine-actions';
+import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save } from 'lucide-react';
+import { UserRole } from '@/lib/auth';
+import { supabase } from '@/lib/supabase-client';
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -25,23 +27,69 @@ interface Machine {
   is_active: boolean;
   is_under_maintenance?: boolean;
   maintenance_notes?: string;
+  sensor_id?: string | null;
+  sensor_paired_at?: string | null;
   created_at: string;
   updated_at: string;
+  gyms?: {
+    id: string;
+    name: string;
+    city: string | null;
+    country: string | null;
+  };
 }
 
 interface MachinesManagerProps {
   gymId: string;
   initialMachines: Machine[];
   initialReports?: Map<string, number>;
+  userRole: UserRole;
+  isGlobalView?: boolean;
 }
 
-export function MachinesManager({ gymId, initialMachines, initialReports = new Map() }: MachinesManagerProps) {
+export function MachinesManager({ gymId, initialMachines, initialReports = new Map(), userRole, isGlobalView = false }: MachinesManagerProps) {
   const [machines, setMachines] = useState<Machine[]>(initialMachines);
   const [reportsMap, setReportsMap] = useState<Map<string, number>>(initialReports);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [maintenanceMachineId, setMaintenanceMachineId] = useState<string | null>(null);
   const [maintenanceNotes, setMaintenanceNotes] = useState('');
+  const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [editingType, setEditingType] = useState<'treadmill' | 'bike'>('treadmill');
+  const [pairingMachineId, setPairingMachineId] = useState<string | null>(null);
+  const [isPairing, setIsPairing] = useState(false);
+  const [gyms, setGyms] = useState<Array<{ id: string; name: string; city: string | null; country: string | null }>>([]);
+  const [selectedGymId, setSelectedGymId] = useState<string>(gymId || '');
+  const [loadingGyms, setLoadingGyms] = useState(false);
+  
+  const isSuperAdmin = userRole === 'superadmin';
+  const canCreateMachines = isSuperAdmin;
+  const canEditMachines = userRole === 'gym_owner' || userRole === 'gym_admin' || userRole === 'superadmin';
+  const canToggleActive = isSuperAdmin;
+
+  // Load gyms for global view
+  useEffect(() => {
+    if (isGlobalView && isSuperAdmin) {
+      setLoadingGyms(true);
+      supabase
+        .from('gyms')
+        .select('id, name, city, country')
+        .eq('status', 'active')
+        .order('name')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error loading gyms:', error);
+          } else {
+            setGyms(data || []);
+            if (data && data.length > 0 && !selectedGymId) {
+              setSelectedGymId(data[0].id);
+            }
+          }
+          setLoadingGyms(false);
+        });
+    }
+  }, [isGlobalView, isSuperAdmin]);
 
   const {
     register,
@@ -57,9 +105,17 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
   const onSubmit = async (data: MachineFormData) => {
     try {
+      // For global view, use selected gym; otherwise use prop gymId
+      const effectiveGymId = isGlobalView ? selectedGymId : gymId;
+      
+      if (!effectiveGymId) {
+        toast.error('Please select a gym');
+        return;
+      }
+
       const submitData: any = {
         ...data,
-        gymId,
+        gymId: effectiveGymId,
       };
 
       const result = await createMachine(submitData);
@@ -82,7 +138,9 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
     setDeletingId(machineId);
     try {
-      const result = await deleteMachine(machineId, gymId);
+      const machine = machines.find(m => m.id === machineId);
+      const effectiveGymId = isGlobalView && machine ? machine.gym_id : gymId;
+      const result = await deleteMachine(machineId, effectiveGymId);
       if (result.success) {
         setMachines(machines.filter((m) => m.id !== machineId));
         toast.success('Machine deleted successfully');
@@ -98,7 +156,9 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
   const handleToggleStatus = async (machineId: string, currentStatus: boolean) => {
     try {
-      const result = await toggleMachineStatus(machineId, gymId, !currentStatus);
+      const machine = machines.find(m => m.id === machineId);
+      const effectiveGymId = isGlobalView && machine ? machine.gym_id : gymId;
+      const result = await toggleMachineStatus(machineId, effectiveGymId, !currentStatus);
       if (result.success) {
         setMachines(
           machines.map((m) =>
@@ -118,9 +178,11 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
   const handleToggleMaintenance = async (machineId: string, currentStatus: boolean) => {
     try {
+      const machine = machines.find(m => m.id === machineId);
+      const effectiveGymId = isGlobalView && machine ? machine.gym_id : gymId;
       const result = await toggleMaintenance(
         machineId,
-        gymId,
+        effectiveGymId,
         !currentStatus,
         maintenanceNotes || undefined
       );
@@ -155,15 +217,107 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
     toast.success('QR code copied to clipboard');
   };
 
+  const handleEdit = (machine: Machine) => {
+    setEditingMachineId(machine.id);
+    setEditingName(machine.name);
+    setEditingType(machine.type);
+  };
+
+  const handleSaveEdit = async (machineId: string) => {
+    try {
+      const machine = machines.find(m => m.id === machineId);
+      const effectiveGymId = isGlobalView && machine ? machine.gym_id : gymId;
+      const result = await updateMachine(machineId, effectiveGymId, {
+        name: editingName,
+        type: editingType,
+      });
+
+      if (result.success) {
+        setMachines(
+          machines.map((m) =>
+            m.id === machineId ? { ...m, name: editingName, type: editingType } : m
+          )
+        );
+        toast.success('Machine updated successfully');
+        setEditingMachineId(null);
+      } else {
+        toast.error(`Failed to update: ${result.error}`);
+      }
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    }
+  };
+
+  const handlePairSensor = async (machineId: string) => {
+    if (!('bluetooth' in navigator)) {
+      toast.error('Web Bluetooth is not supported in this browser');
+      return;
+    }
+
+    setIsPairing(true);
+    setPairingMachineId(machineId);
+
+    try {
+      // Request Bluetooth device
+      const device = await (navigator as any).bluetooth.requestDevice({
+        filters: [{ services: ['battery_service'] }], // Adjust based on your BLE service
+        optionalServices: ['generic_access', 'device_information'],
+      });
+
+      // Connect to GATT server
+      const server = await device.gatt.connect();
+      
+      // Get the device name or ID (adjust based on your BLE device structure)
+      const sensorId = device.id || device.name || `BLE-${Date.now()}`;
+
+      // Pair sensor to machine via server action
+      const result = await pairSensorToMachine(machineId, sensorId);
+
+      if (result.success) {
+        setMachines(
+          machines.map((m) =>
+            m.id === machineId
+              ? { ...m, sensor_id: sensorId, sensor_paired_at: new Date().toISOString() }
+              : m
+          )
+        );
+        toast.success('Sensor paired successfully');
+      } else {
+        toast.error(`Failed to pair sensor: ${result.error}`);
+      }
+
+      // Disconnect
+      device.gatt.disconnect();
+    } catch (error: any) {
+      if (error.name === 'NotFoundError') {
+        toast.error('No Bluetooth device selected');
+      } else {
+        toast.error(`Bluetooth error: ${error.message}`);
+      }
+    } finally {
+      setIsPairing(false);
+      setPairingMachineId(null);
+    }
+  };
+
   return (
     <div>
-      <div className="mb-6 flex justify-end">
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
-        >
-          + Add Machine
-        </button>
+      <div className="mb-6 flex justify-between items-center">
+        {canCreateMachines ? (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+          >
+            + Add Machine
+          </button>
+        ) : (
+          <div className="px-6 py-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-[#808080]">
+            <p className="text-sm">
+              To add more machines, please contact{' '}
+              <span className="text-[#00E5FF]">SweatDrop Support</span>
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Machines Table */}
@@ -183,8 +337,8 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
             <tbody className="divide-y divide-[#1A1A1A]">
               {machines.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-[#808080]">
-                    No machines yet. Create your first machine!
+                  <td colSpan={isGlobalView ? 7 : 6} className="px-6 py-12 text-center text-[#808080]">
+                    No machines yet. {isSuperAdmin ? 'Create your first machine!' : 'No machines assigned to this gym.'}
                   </td>
                 </tr>
               ) : (
@@ -192,21 +346,54 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                   const reportCount = reportsMap.get(machine.id) || 0;
                   return (
                     <tr key={machine.id} className="hover:bg-[#1A1A1A]/50">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="text-white font-medium">{machine.name}</div>
-                          {reportCount > 0 && (
-                            <div className="flex items-center gap-1" title={`${reportCount} pending report(s)`}>
-                              <AlertTriangle className="w-4 h-4 text-[#FF6B6B]" />
-                              <span className="text-xs text-[#FF6B6B]">{reportCount}</span>
+                      {isGlobalView && (
+                        <td className="px-6 py-4">
+                          <div className="text-white font-medium">
+                            {machine.gyms?.name || 'Unknown Gym'}
+                          </div>
+                          {machine.gyms?.city && (
+                            <div className="text-xs text-[#808080]">
+                              {machine.gyms.city}{machine.gyms.country ? `, ${machine.gyms.country}` : ''}
                             </div>
                           )}
-                        </div>
+                        </td>
+                      )}
+                      <td className="px-6 py-4">
+                        {editingMachineId === machine.id ? (
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="px-3 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="text-white font-medium">{machine.name}</div>
+                            {reportCount > 0 && (
+                              <div className="flex items-center gap-1" title={`${reportCount} pending report(s)`}>
+                                <AlertTriangle className="w-4 h-4 text-[#FF6B6B]" />
+                                <span className="text-xs text-[#FF6B6B]">{reportCount}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100]">
-                          {machine.type === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}
-                        </span>
+                        {editingMachineId === machine.id ? (
+                          <select
+                            value={editingType}
+                            onChange={(e) => setEditingType(e.target.value as 'treadmill' | 'bike')}
+                            className="px-3 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                          >
+                            <option value="treadmill">🏃 Treadmill</option>
+                            <option value="bike">🚴 Bike</option>
+                          </select>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100]">
+                            {machine.type === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
@@ -221,17 +408,36 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                             <QrCode className="w-4 h-4" />
                           </button>
                         </div>
+                        {isSuperAdmin && machine.sensor_id && (
+                          <div className="mt-2 text-xs text-[#808080]">
+                            Sensor: <span className="text-[#00E5FF]">{machine.sensor_id}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            machine.is_active
-                              ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
-                              : 'bg-[#808080]/10 text-[#808080]'
-                          }`}
-                        >
-                          {machine.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        {canToggleActive ? (
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer ${
+                              machine.is_active
+                                ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                                : 'bg-[#808080]/10 text-[#808080]'
+                            }`}
+                            onClick={() => handleToggleStatus(machine.id, machine.is_active)}
+                            title="Click to toggle (SuperAdmin only)"
+                          >
+                            {machine.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        ) : (
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              machine.is_active
+                                ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                                : 'bg-[#808080]/10 text-[#808080]'
+                            }`}
+                          >
+                            {machine.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <button
@@ -251,27 +457,78 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() =>
-                              handleToggleStatus(machine.id, machine.is_active)
-                            }
-                            className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
-                            title={machine.is_active ? 'Deactivate' : 'Activate'}
-                          >
-                            <Power
-                              className={`w-4 h-4 ${
-                                machine.is_active ? 'text-[#00E5FF]' : ''
-                              }`}
-                            />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(machine.id)}
-                            disabled={deletingId === machine.id}
-                            className="p-2 text-[#808080] hover:text-[#FF5252] transition-colors disabled:opacity-50"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {editingMachineId === machine.id ? (
+                            <>
+                              <button
+                                onClick={() => handleSaveEdit(machine.id)}
+                                className="p-2 text-[#00E5FF] hover:text-[#00B8CC] transition-colors"
+                                title="Save"
+                              >
+                                <Save className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingMachineId(null);
+                                  setEditingName('');
+                                }}
+                                className="p-2 text-[#808080] hover:text-white transition-colors"
+                                title="Cancel"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {canEditMachines && (
+                                <button
+                                  onClick={() => handleEdit(machine)}
+                                  className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                                  title="Edit name/type"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              )}
+                              {isSuperAdmin && (
+                                <>
+                                  <button
+                                    onClick={() => handlePairSensor(machine.id)}
+                                    disabled={isPairing && pairingMachineId === machine.id}
+                                    className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors disabled:opacity-50"
+                                    title={machine.sensor_id ? 'Re-pair sensor' : 'Pair BLE sensor'}
+                                  >
+                                    <Bluetooth
+                                      className={`w-4 h-4 ${
+                                        machine.sensor_id ? 'text-[#00E5FF]' : ''
+                                      }`}
+                                    />
+                                  </button>
+                                  {canToggleActive && (
+                                    <button
+                                      onClick={() =>
+                                        handleToggleStatus(machine.id, machine.is_active)
+                                      }
+                                      className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                                      title={machine.is_active ? 'Deactivate' : 'Activate'}
+                                    >
+                                      <Power
+                                        className={`w-4 h-4 ${
+                                          machine.is_active ? 'text-[#00E5FF]' : ''
+                                        }`}
+                                      />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDelete(machine.id)}
+                                    disabled={deletingId === machine.id}
+                                    className="p-2 text-[#808080] hover:text-[#FF5252] transition-colors disabled:opacity-50"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -301,6 +558,33 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* Gym Selection for Global View */}
+              {isGlobalView && (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Gym <span className="text-[#FF5252]">*</span>
+                  </label>
+                  {loadingGyms ? (
+                    <div className="px-4 py-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-[#808080]">
+                      Loading gyms...
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedGymId}
+                      onChange={(e) => setSelectedGymId(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    >
+                      <option value="">Select a gym...</option>
+                      {gyms.map((gym) => (
+                        <option key={gym.id} value={gym.id}>
+                          {gym.name} {gym.city && `(${gym.city}${gym.country ? `, ${gym.country}` : ''})`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
                   Machine Name *

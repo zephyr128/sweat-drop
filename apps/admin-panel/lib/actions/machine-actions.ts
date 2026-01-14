@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { getCurrentProfile } from '../auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -23,6 +24,12 @@ const createMachineSchema = z.object({
 
 export async function createMachine(input: z.infer<typeof createMachineSchema>) {
   try {
+    // Only SuperAdmin can create machines
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can create machines' };
+    }
+
     const validated = createMachineSchema.parse(input);
 
     // Generate QR code if not provided
@@ -77,6 +84,12 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
 
 export async function deleteMachine(machineId: string, gymId: string) {
   try {
+    // Only SuperAdmin can delete machines
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can delete machines' };
+    }
+
     const { error } = await supabaseAdmin
       .from('machines')
       .delete()
@@ -99,6 +112,12 @@ export async function toggleMachineStatus(
   isActive: boolean
 ) {
   try {
+    // Only SuperAdmin can toggle is_active
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can toggle machine status' };
+    }
+
     const { error } = await supabaseAdmin
       .from('machines')
       .update({ is_active: isActive })
@@ -111,6 +130,73 @@ export async function toggleMachineStatus(
     return { success: true };
   } catch (error: any) {
     // Error toggling machine status
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateMachine(
+  machineId: string,
+  gymId: string,
+  input: { name?: string; type?: 'treadmill' | 'bike' }
+) {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Gym owners/admins can only update name and type
+    if (profile.role === 'gym_admin' || profile.role === 'superadmin') {
+      const updateData: any = {};
+      if (input.name !== undefined) updateData.name = input.name;
+      if (input.type !== undefined) updateData.type = input.type;
+
+      const { error } = await supabaseAdmin
+        .from('machines')
+        .update(updateData)
+        .eq('id', machineId)
+        .eq('gym_id', gymId);
+
+      if (error) throw error;
+
+      revalidatePath(`/dashboard/gym/${gymId}/machines`);
+      return { success: true };
+    }
+
+    return { success: false, error: 'Unauthorized' };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function pairSensorToMachine(machineId: string, sensorId: string) {
+  try {
+    // Only SuperAdmin can pair sensors
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can pair sensors' };
+    }
+
+    const { data, error } = await supabaseAdmin.rpc('pair_sensor_to_machine', {
+      p_machine_id: machineId,
+      p_sensor_id: sensorId,
+    });
+
+    if (error) throw error;
+
+    // Get the machine to revalidate the correct path
+    const { data: machine } = await supabaseAdmin
+      .from('machines')
+      .select('gym_id')
+      .eq('id', machineId)
+      .single();
+
+    if (machine) {
+      revalidatePath(`/dashboard/gym/${machine.gym_id}/machines`);
+    }
+
+    return { success: true };
+  } catch (error: any) {
     return { success: false, error: error.message };
   }
 }

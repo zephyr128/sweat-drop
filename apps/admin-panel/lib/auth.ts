@@ -1,14 +1,15 @@
 import { createClient } from './supabase-server';
 import { User } from '@supabase/supabase-js';
 
-export type UserRole = 'superadmin' | 'gym_admin' | 'receptionist' | 'user';
+export type UserRole = 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user';
 
 export interface UserProfile {
   id: string;
   email: string;
   username: string;
   role: UserRole;
-  admin_gym_id: string | null;
+  assigned_gym_id: string | null; // For gym_admin and receptionist
+  owner_id: string | null; // For gym_owner (primary gym)
   home_gym_id: string | null;
 }
 
@@ -47,7 +48,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, username, role, admin_gym_id, home_gym_id')
+      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
       .eq('id', user.id)
       .single();
 
@@ -66,7 +67,8 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       email: data.email || user.email || '',
       username: data.username,
       role: (data.role as UserRole) || 'user',
-      admin_gym_id: data.admin_gym_id,
+      assigned_gym_id: data.assigned_gym_id,
+      owner_id: data.owner_id,
       home_gym_id: data.home_gym_id,
     };
   } catch (error) {
@@ -80,6 +82,11 @@ export async function isSuperadmin(): Promise<boolean> {
   return profile?.role === 'superadmin';
 }
 
+export async function isGymOwner(): Promise<boolean> {
+  const profile = await getCurrentProfile();
+  return profile?.role === 'gym_owner';
+}
+
 export async function isGymAdmin(): Promise<boolean> {
   const profile = await getCurrentProfile();
   return profile?.role === 'gym_admin';
@@ -90,7 +97,7 @@ export async function isReceptionist(): Promise<boolean> {
   return profile?.role === 'receptionist';
 }
 
-export async function getAdminGymId(): Promise<string | null> {
+export async function getAssignedGymId(): Promise<string | null> {
   const profile = await getCurrentProfile();
-  return profile?.admin_gym_id || null;
+  return profile?.assigned_gym_id || null;
 }
