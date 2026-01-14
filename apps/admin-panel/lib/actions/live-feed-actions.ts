@@ -1,7 +1,20 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/utils/logger';
+
+// Service role client to bypass RLS for fetching profiles
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseAdmin = supabaseServiceKey 
+  ? createAdminClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  : null;
 
 export interface LiveFeedItem {
   id: string;
@@ -15,6 +28,8 @@ export interface LiveFeedItem {
 export async function getLiveFeed(gymId: string): Promise<LiveFeedItem[]> {
   try {
     const supabase = createClient();
+    // Use service role client to fetch profiles (bypasses RLS)
+    const clientToUse = supabaseAdmin || supabase;
 
     // Fetch recent sessions (scans) - include both active and completed
     const { data: sessions, error: sessionsError } = await supabase
@@ -42,14 +57,14 @@ export async function getLiveFeed(gymId: string): Promise<LiveFeedItem[]> {
       throw redemptionsError;
     }
 
-    // Get user profiles
+    // Get user profiles using service role client (bypasses RLS)
     const userIds = [
       ...(sessions?.map((s) => s.user_id) || []),
       ...(redemptions?.map((r) => r.user_id) || []),
     ].filter((id, index, self) => self.indexOf(id) === index);
 
     const { data: profiles } = userIds.length > 0
-      ? await supabase
+      ? await clientToUse
           .from('profiles')
           .select('id, username')
           .in('id', userIds)

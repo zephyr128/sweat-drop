@@ -20,18 +20,18 @@ interface Redemption {
     id: string;
     username: string;
     email: string;
-  };
+  } | null;
   rewards: {
     id: string;
     name: string;
     reward_type: string;
     price_drops: number;
     image_url?: string;
-  };
+  } | null;
   confirmed_by_profile?: {
     id: string;
     username: string;
-  };
+  } | null;
 }
 
 interface RedemptionsManagerProps {
@@ -271,13 +271,13 @@ export function RedemptionsManager({
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-3">
-                          <div className="text-3xl">{getRewardEmoji(redemption.rewards.reward_type)}</div>
+                          <div className="text-3xl">{getRewardEmoji(redemption.rewards?.reward_type || 'unknown')}</div>
                           <div className="flex-1">
                             <h3 className="text-lg font-bold text-white mb-1">
-                              {redemption.rewards.name}
+                              {redemption.rewards?.name || 'Unknown Reward'}
                             </h3>
                             <p className="text-sm text-[#808080]">
-                              {redemption.profiles.username} • {redemption.rewards.reward_type}
+                              {redemption.profiles?.username || 'Unknown User'} • {redemption.rewards?.reward_type || 'Unknown'}
                             </p>
                           </div>
                         </div>
@@ -342,18 +342,18 @@ export function RedemptionsManager({
                     className="bg-[#1A1A1A] border border-[#00E5FF]/20 rounded-lg p-6"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="text-3xl">{getRewardEmoji(redemption.rewards.reward_type)}</div>
+                      <div className="text-3xl">{getRewardEmoji(redemption.rewards?.reward_type || 'unknown')}</div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="text-lg font-bold text-white">
-                            {redemption.rewards.name}
+                            {redemption.rewards?.name || 'Unknown Reward'}
                           </h3>
                           <span className="px-2 py-1 bg-[#00E5FF]/10 text-[#00E5FF] rounded text-xs font-medium">
                             Confirmed
                           </span>
                         </div>
                         <p className="text-sm text-[#808080] mb-4">
-                          {redemption.profiles.username} • {redemption.drops_spent} drops
+                          {redemption.profiles?.username || 'Unknown User'} • {redemption.drops_spent} drops
                         </p>
                         <div className="flex items-center gap-4 text-xs text-[#808080]">
                           <span>Code: <code className="text-[#00E5FF]">{redemption.redemption_code}</code></span>
@@ -373,13 +373,13 @@ export function RedemptionsManager({
           <div className="p-6">
             <div className="bg-[#1A1A1A] border border-[#00E5FF]/30 rounded-lg p-6">
               <div className="flex items-start gap-4 mb-6">
-                <div className="text-4xl">{getRewardEmoji(searchResult.rewards.reward_type)}</div>
+                <div className="text-4xl">{getRewardEmoji(searchResult.rewards?.reward_type || 'unknown')}</div>
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-white mb-2">
-                    {searchResult.rewards.name}
+                    {searchResult.rewards?.name || 'Unknown Reward'}
                   </h3>
                   <p className="text-sm text-[#808080] mb-4">
-                    {searchResult.profiles.username} • {searchResult.rewards.reward_type}
+                    {searchResult.profiles?.username || 'Unknown User'} • {searchResult.rewards?.reward_type || 'Unknown'}
                   </p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
