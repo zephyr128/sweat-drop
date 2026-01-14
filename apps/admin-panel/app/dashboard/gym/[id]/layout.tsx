@@ -39,12 +39,7 @@ export default async function GymLayout({
   // At this point, if we reach here, the user has access
   // Just render the layout
   // This layout is nested inside dashboard/layout.tsx
-  // We only need to update the sidebar, not create a new wrapper
-  // The parent layout already provides the main wrapper and padding
-  return (
-    <>
-      <Sidebar role={profile.role} currentGymId={id} />
-      {children}
-    </>
-  );
+  // The parent layout already provides the sidebar and main wrapper
+  // We just need to render children
+  return <>{children}</>;
 }

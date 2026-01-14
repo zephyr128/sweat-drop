@@ -2,6 +2,7 @@ import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { StatsCard } from '@/components/StatsCard';
 import { AnalyticsSection } from '@/components/analytics/AnalyticsSection';
+import { NetworkOverviewToggle } from '@/components/dashboards/NetworkOverviewToggle';
 import { notFound } from 'next/navigation';
 
 export default async function GymDashboardPage({
@@ -67,6 +68,9 @@ export default async function GymDashboardPage({
 
   const weeklyDropsEarned = recentSessions?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
 
+  // Get owner_id for network overview (if user is gym owner)
+  const ownerId = gym.owner_id || profile.id;
+
   return (
     <div>
       <div className="mb-6 pt-16 md:pt-0">
@@ -76,6 +80,11 @@ export default async function GymDashboardPage({
           {gym.country}
         </p>
       </div>
+
+      {/* Network Overview Toggle (only for gym owners with multiple gyms) */}
+      {profile.role === 'gym_owner' && gym.owner_id && (
+        <NetworkOverviewToggle ownerId={ownerId} currentGymId={id} />
+      )}
 
       {/* Header Row: Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

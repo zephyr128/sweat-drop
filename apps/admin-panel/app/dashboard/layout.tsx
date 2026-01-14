@@ -18,7 +18,12 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[#000000]">
-      <Sidebar role={profile.role} currentGymId={profile.admin_gym_id} />
+      <Sidebar 
+        role={profile.role} 
+        currentGymId={profile.assigned_gym_id || profile.owner_id}
+        username={profile.username}
+        email={profile.email}
+      />
       <div className="w-full p-4 md:pl-[17rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</div>
     </div>
   );
