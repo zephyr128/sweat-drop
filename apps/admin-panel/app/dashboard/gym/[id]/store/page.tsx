@@ -15,12 +15,29 @@ export default async function StorePage({
     notFound();
   }
 
-  // Verify access
-  if (profile.role === 'gym_admin' && profile.admin_gym_id !== id) {
-    notFound();
+  const supabase = createClient();
+  
+  // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
+  if (profile.role === 'gym_admin' || profile.role === 'gym_owner') {
+    const { data: gym } = await supabase
+      .from('gyms')
+      .select('owner_id')
+      .eq('id', id)
+      .single();
+    
+    if (!gym) {
+      notFound();
+    }
+    
+    // Check if user owns this gym OR it's their assigned gym
+    const ownsGym = gym.owner_id === profile.id;
+    const isAssignedGym = profile.assigned_gym_id === id;
+    
+    if (!ownsGym && !isAssignedGym) {
+      notFound();
+    }
   }
 
-  const supabase = createClient();
   const { data: items, error } = await supabase
     .from('rewards')
     .select('*')
