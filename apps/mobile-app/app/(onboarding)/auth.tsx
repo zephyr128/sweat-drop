@@ -41,10 +41,41 @@ export default function AuthScreen() {
 
   // Listen for OAuth redirects
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        // User signed in via OAuth
-        checkUsernameAndRedirect();
+        // MOBILE APP LOGIN GUARD: Check user role for OAuth sign-in
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError) {
+            console.error('Error fetching profile:', profileError);
+            await supabase.auth.signOut();
+            Alert.alert('Error', 'Failed to verify account. Please try again.');
+            return;
+          }
+
+          // If role is NOT 'member' (or 'user'), sign out immediately
+          if (profile?.role && profile.role !== 'member' && profile.role !== 'user') {
+            await supabase.auth.signOut();
+            Alert.alert(
+              'Access Denied',
+              'Admin accounts cannot be used for the mobile app. Please use a member account.',
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+
+          // Role is valid - proceed with username check
+          checkUsernameAndRedirect();
+        } catch (err: any) {
+          console.error('Error checking role:', err);
+          await supabase.auth.signOut();
+          Alert.alert('Error', 'Failed to verify account. Please try again.');
+        }
       }
     });
 
@@ -119,17 +150,58 @@ export default function AuthScreen() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
-    setLoading(false);
-
+    
     if (error) {
+      setLoading(false);
       Alert.alert('Error', error.message);
+      return;
+    }
+
+    // MOBILE APP LOGIN GUARD: Check user role
+    if (data?.session?.user) {
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.session.user.id)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching profile:', profileError);
+          setLoading(false);
+          Alert.alert('Error', 'Failed to verify account. Please try again.');
+          await supabase.auth.signOut();
+          return;
+        }
+
+        // If role is NOT 'member' (or 'user'), sign out immediately
+        if (profile?.role && profile.role !== 'member' && profile.role !== 'user') {
+          await supabase.auth.signOut();
+          setLoading(false);
+          Alert.alert(
+            'Access Denied',
+            'Admin accounts cannot be used for the mobile app. Please use a member account.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        // Role is valid (member/user) - proceed with username check
+        setLoading(false);
+        await checkUsernameAndRedirect();
+      } catch (err: any) {
+        console.error('Error checking role:', err);
+        await supabase.auth.signOut();
+        setLoading(false);
+        Alert.alert('Error', 'Failed to verify account. Please try again.');
+      }
     } else {
-      // Check if user needs to set username
-      await checkUsernameAndRedirect();
+      setLoading(false);
+      Alert.alert('Error', 'Login failed. Please try again.');
     }
   };
 

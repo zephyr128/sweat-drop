@@ -109,6 +109,29 @@ export default function WorkoutScreen() {
       return;
     }
 
+    // GYM SUSPEND CHECK: Verify gym is not suspended before creating session
+    const { data: gym, error: gymError } = await supabase
+      .from('gyms')
+      .select('id, name, status, is_suspended')
+      .eq('id', gymId)
+      .single();
+
+    if (gymError || !gym) {
+      console.error('Error fetching gym:', gymError);
+      Alert.alert('Error', 'Failed to verify gym status. Please try again.');
+      router.back();
+      return;
+    }
+
+    if (gym.status === 'suspended' || gym.is_suspended) {
+      Alert.alert(
+        'Gym Suspended',
+        'This gym\'s subscription has expired. Please contact the gym owner.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
+
     const { data, error } = await supabase
       .from('sessions')
       .insert({

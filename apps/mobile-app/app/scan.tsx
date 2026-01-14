@@ -68,6 +68,16 @@ export default function ScanScreen() {
       gymId = machine.gym_id;
       machineType = machine.type as 'treadmill' | 'bike';
       
+      // Check if gym is suspended
+      if (machine.gym && machine.gym.is_suspended) {
+        Alert.alert(
+          'Gym Suspended',
+          'This gym\'s subscription has expired. Please contact the gym owner.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
       // Check if machine is active
       if (!machine.is_active) {
         Alert.alert(

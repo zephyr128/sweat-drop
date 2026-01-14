@@ -1,15 +1,29 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-client';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams?.get('redirect') || null;
+  const emailParam = searchParams?.get('email') || '';
+  
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  
+  // Check for error query params (from middleware redirects)
+  useEffect(() => {
+    const errorParam = searchParams?.get('error');
+    if (errorParam === 'gym_suspended') {
+      setError('This gym\'s subscription has been suspended. Please contact support.');
+    } else if (errorParam === 'all_gyms_suspended') {
+      setError('All your gyms have been suspended. Please contact support.');
+    }
+  }, [searchParams]);
   const hasCheckedSession = useRef(false);
   const hasRedirected = useRef(false);
 
@@ -44,15 +58,26 @@ export default function LoginPage() {
           hasRedirected.current = true;
           
           // Get profile to determine redirect
-          const { data: profileData } = await supabase
+          const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('role, admin_gym_id')
+            .select('role, assigned_gym_id, owner_id')
             .eq('id', session.user.id)
             .single();
 
+          if (profileError || !profileData) {
+            console.error('Error fetching profile in auth state change:', profileError);
+            return;
+          }
+
           let redirectPath = '/dashboard';
-          if (profileData?.role === 'gym_admin' && profileData.admin_gym_id) {
-            redirectPath = `/dashboard/gym/${profileData.admin_gym_id}/dashboard`;
+          if (profileData.role === 'gym_admin' && profileData.assigned_gym_id) {
+            redirectPath = `/dashboard/gym/${profileData.assigned_gym_id}/dashboard`;
+          } else if (profileData.role === 'gym_owner') {
+            redirectPath = '/dashboard';
+          } else if (profileData.role === 'superadmin') {
+            redirectPath = '/dashboard/super';
+          } else if (profileData.role === 'receptionist' && profileData.assigned_gym_id) {
+            redirectPath = `/dashboard/gym/${profileData.assigned_gym_id}/redemptions`;
           }
 
           // Redirecting based on auth state change
@@ -128,7 +153,7 @@ export default function LoginPage() {
       // Get profile to determine redirect destination
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('role, admin_gym_id')
+        .select('role, assigned_gym_id, owner_id')
         .eq('id', verifySession.user.id)
         .single();
 
@@ -136,17 +161,35 @@ export default function LoginPage() {
 
       if (profileError || !profileData) {
         console.error('Error fetching profile:', profileError);
-        setError('Failed to load user profile. Please contact support.');
+        console.error('Profile error details:', {
+          code: profileError?.code,
+          message: profileError?.message,
+          details: profileError?.details,
+          hint: profileError?.hint
+        });
+        setError(`Failed to load user profile: ${profileError?.message || 'Unknown error'}. Please check console for details.`);
         setLoading(false);
+        return;
+      }
+
+      // Check if there's a redirect URL (e.g., from invitation acceptance)
+      if (redirectUrl) {
+        hasRedirected.current = true;
+        window.location.replace(redirectUrl);
         return;
       }
 
       // Determine redirect based on role
       let redirectPath = '/dashboard';
-      if (profileData.role === 'gym_admin' && profileData.admin_gym_id) {
-        redirectPath = `/dashboard/gym/${profileData.admin_gym_id}/dashboard`;
-      } else if (profileData.role === 'superadmin') {
+      if (profileData.role === 'gym_admin' && profileData.assigned_gym_id) {
+        redirectPath = `/dashboard/gym/${profileData.assigned_gym_id}/dashboard`;
+      } else if (profileData.role === 'gym_owner') {
+        // For gym_owner, middleware will handle redirect to first owned gym
         redirectPath = '/dashboard';
+      } else if (profileData.role === 'superadmin') {
+        redirectPath = '/dashboard/super';
+      } else if (profileData.role === 'receptionist' && profileData.assigned_gym_id) {
+        redirectPath = `/dashboard/gym/${profileData.assigned_gym_id}/redemptions`;
       }
 
       // Set flag to prevent multiple redirects
