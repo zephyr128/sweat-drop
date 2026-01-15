@@ -22,15 +22,25 @@ export default function Index() {
       }
 
       try {
-        const { data: profile } = await supabase
+        const { data: profile, error } = await supabase
           .from('profiles')
           .select('username')
           .eq('id', session.user.id)
           .single();
 
-        // Check if username is missing or is a temporary/random username (starts with 'user_')
-        const hasValidUsername = profile?.username && !profile.username.startsWith('user_');
-        setHasUsername(!!hasValidUsername);
+        if (error) {
+          console.error('Error checking username:', error);
+          // If RLS blocks the query, assume user needs to set username
+          setHasUsername(false);
+        } else if (!profile) {
+          console.log('No profile found for user');
+          setHasUsername(false);
+        } else {
+          // Check if username is missing or is a temporary/random username (starts with 'user_')
+          const hasValidUsername = profile.username && typeof profile.username === 'string' && !profile.username.startsWith('user_');
+          console.log('Username check:', { username: profile.username, hasValidUsername });
+          setHasUsername(hasValidUsername);
+        }
       } catch (error) {
         console.error('Error checking username:', error);
         setHasUsername(false);

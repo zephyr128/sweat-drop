@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,52 @@ import { theme } from '@/lib/theme';
 export default function UsernameScreen() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingExisting, setCheckingExisting] = useState(true);
   const router = useRouter();
+
+  // Check if user already has a valid username
+  useEffect(() => {
+    async function checkExistingUsername() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setCheckingExisting(false);
+          return;
+        }
+
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching profile:', error);
+          setCheckingExisting(false);
+          return;
+        }
+
+        // Check if username is valid (exists and doesn't start with 'user_')
+        const hasValidUsername = profile?.username && !profile.username.startsWith('user_');
+        
+        if (hasValidUsername) {
+          // User already has a valid username, redirect to home
+          router.replace('/home');
+        } else {
+          // Pre-fill the input with existing username if it exists
+          if (profile?.username) {
+            setUsername(profile.username);
+          }
+          setCheckingExisting(false);
+        }
+      } catch (error) {
+        console.error('Error checking username:', error);
+        setCheckingExisting(false);
+      }
+    }
+
+    checkExistingUsername();
+  }, [router]);
 
   const handleContinue = async () => {
     if (!username.trim()) {
@@ -27,6 +72,35 @@ export default function UsernameScreen() {
       return;
     }
 
+    // First, check if user already has this username
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single();
+
+    // If username is the same, just redirect
+    if (currentProfile?.username === username.trim()) {
+      setLoading(false);
+      router.push('/(onboarding)/home-gym');
+      return;
+    }
+
+    // Check if username is already taken by another user
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', username.trim())
+      .neq('id', user.id)
+      .single();
+
+    if (existingUser) {
+      setLoading(false);
+      Alert.alert('Error', 'This username is already taken. Please choose another one.');
+      return;
+    }
+
+    // Update username
     const { error } = await supabase
       .from('profiles')
       .update({ username: username.trim() })
@@ -35,11 +109,31 @@ export default function UsernameScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      if (error.code === '23505') {
+        Alert.alert('Error', 'This username is already taken. Please choose another one.');
+      } else {
+        Alert.alert('Error', error.message);
+      }
     } else {
       router.push('/(onboarding)/home-gym');
     }
   };
+
+  if (checkingExisting) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <LinearGradient
+          colors={['#000000', '#0A0E1A', '#000000']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -107,6 +201,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     flex: 1,
