@@ -5,8 +5,10 @@ module.exports = {
     version: '1.0.0',
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
+    icon: './assets/icon.png', // App icon (1024x1024)
     splash: {
-      backgroundColor: '#6366f1',
+      image: './assets/splash.png', // Splash screen image
+      backgroundColor: '#000000', // Pure black splash screen
       resizeMode: 'contain',
     },
     assetBundlePatterns: ['**/*'],
@@ -15,18 +17,37 @@ module.exports = {
       bundleIdentifier: 'com.sweatdrop.app',
       infoPlist: {
         NSCameraUsageDescription:
-          'We need access to your camera to scan QR codes on equipment.',
+          'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
+        NSBluetoothAlwaysUsageDescription:
+          'SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.',
+        NSBluetoothPeripheralUsageDescription:
+          'SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.',
       },
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: '#6366f1',
+        foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
+        backgroundColor: '#0A0E1A', // Dark navy background
       },
       package: 'com.sweatdrop.app',
-      permissions: ['CAMERA'],
+      permissions: [
+        'CAMERA',
+        'android.permission.BLUETOOTH',
+        'android.permission.BLUETOOTH_ADMIN',
+        'android.permission.BLUETOOTH_SCAN',
+        'android.permission.BLUETOOTH_CONNECT',
+        'android.permission.ACCESS_FINE_LOCATION',
+      ],
     },
     plugins: [
       'expo-router',
+      [
+        'react-native-vision-camera',
+        {
+          cameraPermissionText: 'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
+        },
+      ],
+      'expo-web-browser',
     ],
     scheme: 'sweatdrop',
     extra: {
