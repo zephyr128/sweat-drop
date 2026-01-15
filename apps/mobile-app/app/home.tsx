@@ -1,7 +1,8 @@
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, ImageBackground, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing } from 'react-native-reanimated';
@@ -34,6 +35,30 @@ export default function HomeScreen() {
   const { updateHomeGym } = useGymData();
   const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
+  
+  // Fade-in animation for smooth transition from splash
+  const fadeOpacity = useSharedValue(0);
+  const [hasAnimated, setHasAnimated] = useState(false);
+  
+  // Trigger fade-in animation when screen is focused (first time only)
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasAnimated) {
+        // Start fade-in animation
+        fadeOpacity.value = withTiming(1, {
+          duration: 400,
+          easing: Easing.out(Easing.ease),
+        });
+        setHasAnimated(true);
+      }
+    }, [hasAnimated, fadeOpacity])
+  );
+  
+  const fadeAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: fadeOpacity.value,
+    };
+  });
   
   const [profile, setProfile] = useState<any>(null);
   const [dailyChallenge, setDailyChallenge] = useState<any>(null);
@@ -170,82 +195,12 @@ export default function HomeScreen() {
   };
 
   const handleQRPress = async () => {
-    if (!isUnlocked) {
-      Alert.alert(
-        'Preview Mode',
-        'You need to scan a QR code in this gym to unlock its features.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
+    // Always navigate to scanner, regardless of unlock status or gym
+    router.push('/scan');
+    return;
 
-    if (!session?.user || !activeGymId) {
-      Alert.alert('Error', 'Please sign in and select a gym');
-      return;
-    }
-
-    // Find first available machine for this gym (preferred) or equipment (fallback)
-    let machine = null;
-    let equipment = null;
-    
-    // Try machines table first
-    let { data: machineData, error: machineError } = await supabase
-      .from('machines')
-      .select('id, type')
-      .eq('gym_id', activeGymId)
-      .eq('is_active', true)
-      .limit(1)
-      .single();
-
-    if (!machineError && machineData) {
-      machine = machineData;
-    } else {
-      // Fallback to equipment table
-      let { data: equipmentData, error: eqError } = await supabase
-        .from('equipment')
-        .select('id')
-        .eq('gym_id', activeGymId)
-        .eq('is_active', true)
-        .limit(1)
-        .single();
-
-      if (eqError || !equipmentData) {
-        console.error('Machine/Equipment lookup error:', machineError || eqError);
-        Alert.alert(
-          'No Machine Found',
-          'No machines found for this gym. Please add machines in the Admin Panel or scan a QR code to start a workout.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      equipment = equipmentData;
-    }
-
-    // GYM SUSPEND CHECK: Verify gym is not suspended before creating session
-    const { data: gym, error: gymError } = await supabase
-      .from('gyms')
-      .select('id, name, status, is_suspended')
-      .eq('id', activeGymId)
-      .single();
-
-    if (gymError || !gym) {
-      console.error('Error fetching gym:', gymError);
-      Alert.alert('Error', 'Failed to verify gym status. Please try again.');
-      return;
-    }
-
-    if (gym.status === 'suspended' || gym.is_suspended) {
-      Alert.alert(
-        'Gym Suspended',
-        'This gym\'s subscription has expired. Please contact the gym owner.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    // Create session before navigating
-    const sessionData: any = {
+    // OLD CODE - DISABLED
+    /* const sessionData: any = {
       user_id: session.user.id,
       gym_id: activeGymId,
       started_at: new Date().toISOString(),
@@ -277,6 +232,7 @@ export default function HomeScreen() {
         params: { sessionId: newSession.id },
       });
     }
+    */
   };
 
   const handleGymSelect = (gym: Gym) => {
@@ -327,7 +283,8 @@ export default function HomeScreen() {
   const totalDrops = profile?.total_drops || 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]}>
+      <SafeAreaView style={styles.container} edges={['top']}>
       {/* Dynamic background */}
       {activeGym?.background_url ? (
         <ImageBackground
@@ -707,7 +664,8 @@ export default function HomeScreen() {
         onClose={() => setSettingsSheetVisible(false)}
         profile={profile}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </Animated.View>
   );
 }
 

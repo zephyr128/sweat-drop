@@ -1,22 +1,27 @@
 import { useEffect, useState } from 'react';
-import { Redirect, usePathname } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '@/lib/contexts/ThemeContext';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Keep splash screen visible while we load
+SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
+  const router = useRouter();
   const { session, loading } = useSession();
-  const pathname = usePathname();
-  const { theme } = useTheme();
   const [checkingUsername, setCheckingUsername] = useState(true);
   const [hasUsername, setHasUsername] = useState(false);
+  const [hasNavigated, setHasNavigated] = useState(false);
 
   // Check if user has username after session is loaded
   useEffect(() => {
     async function checkUsername() {
-      if (loading || !session) {
+      if (loading) {
+        return;
+      }
+
+      if (!session) {
         setCheckingUsername(false);
         return;
       }
@@ -30,13 +35,11 @@ export default function Index() {
 
         if (error) {
           console.error('Error checking username:', error);
-          // If RLS blocks the query, assume user needs to set username
           setHasUsername(false);
         } else if (!profile) {
           console.log('No profile found for user');
           setHasUsername(false);
         } else {
-          // Check if username is missing or is a temporary/random username (starts with 'user_')
           const hasValidUsername = profile.username && typeof profile.username === 'string' && !profile.username.startsWith('user_');
           console.log('Username check:', { username: profile.username, hasValidUsername });
           setHasUsername(hasValidUsername);
@@ -52,43 +55,52 @@ export default function Index() {
     checkUsername();
   }, [session, loading]);
 
-  if (loading || checkingUsername) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={['#000000', '#0A0E1A', '#000000']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      </View>
-    );
-  }
+  // Handle navigation and splash screen hiding
+  useEffect(() => {
+    async function prepare() {
+      // Wait for all checks to complete
+      if (loading || checkingUsername) {
+        return;
+      }
 
-  if (!session) {
-    return <Redirect href="/(onboarding)/welcome" />;
-  }
+      try {
+        // Determine navigation target
+        let targetRoute: string;
+        if (!session) {
+          targetRoute = '/(onboarding)/welcome';
+        } else if (!hasUsername) {
+          targetRoute = '/(onboarding)/username';
+        } else {
+          targetRoute = '/home';
+        }
 
-  // If user doesn't have username, redirect to username screen
-  if (!hasUsername) {
-    return <Redirect href="/(onboarding)/username" />;
-  }
+        // Mark as navigated to prevent multiple navigations
+        setHasNavigated(true);
 
-  // User has username, redirect to home
-  return <Redirect href="/home" />;
+        // Hide splash screen first (while still showing black background)
+        await SplashScreen.hideAsync();
+        
+        // Small delay to ensure splash is hidden and smooth transition
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Navigate with replace (fade animation is handled by Stack.Screen options)
+        router.replace(targetRoute as any);
+      } catch (e) {
+        console.warn('Error during app initialization:', e);
+        setHasNavigated(true);
+        // Hide splash even on error
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    // Only prepare if we haven't navigated yet
+    if (!hasNavigated) {
+      prepare();
+    }
+  }, [loading, checkingUsername, session, hasUsername, router, hasNavigated]);
+
+  // Don't render anything - let native splash screen show
+  // Fade animation is handled by Stack.Screen options in _layout.tsx
+  return null;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
