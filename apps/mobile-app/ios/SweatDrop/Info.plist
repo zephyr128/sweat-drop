@@ -51,8 +51,12 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.</string>
     <key>NSCameraUsageDescription</key>
-    <string>We need access to your camera to scan QR codes on equipment.</string>
+    <string>SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSUserActivityTypes</key>
