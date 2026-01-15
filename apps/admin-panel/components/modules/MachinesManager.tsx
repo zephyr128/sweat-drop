@@ -5,10 +5,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine } from '@/lib/actions/machine-actions';
-import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save } from 'lucide-react';
+import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save, Eye } from 'lucide-react';
 import { UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase-client';
+import { MachineQRPrint } from '@/components/MachineQRPrint';
+import { QRCodeSVG } from 'qrcode.react';
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -24,6 +27,7 @@ interface Machine {
   name: string;
   type: 'treadmill' | 'bike';
   unique_qr_code: string;
+  qr_uuid?: string;
   is_active: boolean;
   is_under_maintenance?: boolean;
   maintenance_notes?: string;
@@ -62,6 +66,8 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   const [gyms, setGyms] = useState<Array<{ id: string; name: string; city: string | null; country: string | null }>>([]);
   const [selectedGymId, setSelectedGymId] = useState<string>(gymId || '');
   const [loadingGyms, setLoadingGyms] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [selectedMachineForQR, setSelectedMachineForQR] = useState<Machine | null>(null);
   
   const isSuperAdmin = userRole === 'superadmin';
   const canCreateMachines = isSuperAdmin;
@@ -217,6 +223,15 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
     toast.success('QR code copied to clipboard');
   };
 
+  const showQRCode = (machine: Machine) => {
+    if (!machine.qr_uuid) {
+      toast.error('QR code not available. Please ensure the machine has a QR UUID.');
+      return;
+    }
+    setSelectedMachineForQR(machine);
+    setQrModalOpen(true);
+  };
+
   const handleEdit = (machine: Machine) => {
     setEditingMachineId(machine.id);
     setEditingName(machine.name);
@@ -250,7 +265,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
   const handlePairSensor = async (machineId: string) => {
     if (!('bluetooth' in navigator)) {
-      toast.error('Web Bluetooth is not supported in this browser');
+      toast.error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
       return;
     }
 
@@ -258,29 +273,93 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
     setPairingMachineId(machineId);
 
     try {
-      // Request Bluetooth device
+      // Request Bluetooth device with Cycling Speed and Cadence service (0x1816)
+      // Magene Gemini 210 uses this service
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: ['battery_service'] }], // Adjust based on your BLE service
-        optionalServices: ['generic_access', 'device_information'],
+        filters: [
+          { services: [0x1816] }, // Cycling Speed and Cadence Service
+        ],
+        optionalServices: [
+          'battery_service',
+          'device_information',
+          'generic_access',
+        ],
       });
+
+      // IMPORTANT: Show warning about Cadence mode before pairing
+      const confirmCadenceMode = confirm(
+        '⚠️ VAŽNO: Magene S3+ Sensor\n\n' +
+        'Pre nego što nastavite, proverite da li je senzor u CADENCE MODU:\n\n' +
+        '✅ Senzor mora biti u Cadence modu (CRVENO SVETLO)\n' +
+        '✅ Ako je u Speed modu (plavo svetlo), pritisnite dugme na senzoru da prebacite u Cadence mod\n\n' +
+        'Da li je senzor u Cadence modu (crveno svetlo)?'
+      );
+
+      if (!confirmCadenceMode) {
+        toast.error('Pairing otkazan. Proverite da li je senzor u Cadence modu.');
+        setIsPairing(false);
+        setPairingMachineId(null);
+        return;
+      }
+
+      toast.info('Connecting to sensor...');
 
       // Connect to GATT server
       const server = await device.gatt.connect();
       
-      // Get the device name or ID (adjust based on your BLE device structure)
-      const sensorId = device.id || device.name || `BLE-${Date.now()}`;
+      // Get device identifier
+      // Use device.id (unique identifier) or device.name as sensor_id
+      // device.id is typically a MAC address or unique identifier
+      let sensorId = device.id;
+      
+      // If device.id is not available, try to get device name
+      if (!sensorId) {
+        try {
+          const nameService = await server.getPrimaryService('generic_access');
+          const nameCharacteristic = await nameService.getCharacteristic('gap.device_name');
+          const nameValue = await nameCharacteristic.readValue();
+          const decoder = new TextDecoder('utf-8');
+          sensorId = decoder.decode(nameValue);
+        } catch (e) {
+          console.warn('Could not read device name:', e);
+        }
+      }
+
+      // Fallback to device name or generate ID
+      if (!sensorId) {
+        sensorId = device.name || `MAGENE-S3+-${Date.now()}`;
+      }
+
+      toast.info(`Sensor found: ${sensorId}`);
 
       // Pair sensor to machine via server action
       const result = await pairSensorToMachine(machineId, sensorId);
 
       if (result.success) {
-        setMachines(
-          machines.map((m) =>
-            m.id === machineId
-              ? { ...m, sensor_id: sensorId, sensor_paired_at: new Date().toISOString() }
-              : m
-          )
-        );
+        // Refresh machines to get updated qr_uuid
+        const { data: updatedMachine } = await supabase
+          .from('machines')
+          .select('*')
+          .eq('id', machineId)
+          .single();
+
+        if (updatedMachine) {
+          setMachines(
+            machines.map((m) =>
+              m.id === machineId
+                ? { ...m, sensor_id: sensorId, sensor_paired_at: new Date().toISOString(), qr_uuid: updatedMachine.qr_uuid }
+                : m
+            )
+          );
+        } else {
+          setMachines(
+            machines.map((m) =>
+              m.id === machineId
+                ? { ...m, sensor_id: sensorId, sensor_paired_at: new Date().toISOString() }
+                : m
+            )
+          );
+        }
         toast.success('Sensor paired successfully');
       } else {
         toast.error(`Failed to pair sensor: ${result.error}`);
@@ -290,10 +369,15 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
       device.gatt.disconnect();
     } catch (error: any) {
       if (error.name === 'NotFoundError') {
-        toast.error('No Bluetooth device selected');
+        toast.error('No Bluetooth device selected or device not found');
+      } else if (error.name === 'SecurityError') {
+        toast.error('Bluetooth permission denied. Please allow Bluetooth access.');
+      } else if (error.name === 'NetworkError') {
+        toast.error('Failed to connect to device. Make sure the sensor is powered on and nearby.');
       } else {
         toast.error(`Bluetooth error: ${error.message}`);
       }
+      console.error('Bluetooth pairing error:', error);
     } finally {
       setIsPairing(false);
       setPairingMachineId(null);
@@ -369,7 +453,15 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                           />
                         ) : (
                           <div className="flex items-center gap-2">
-                            <div className="text-white font-medium">{machine.name}</div>
+                            <Link
+                              href={isGlobalView 
+                                ? `/dashboard/super/machines/${machine.id}`
+                                : `/dashboard/gym/${gymId}/machines/${machine.id}`
+                              }
+                              className="text-white font-medium hover:text-[#00E5FF] transition-colors"
+                            >
+                              {machine.name}
+                            </Link>
                             {reportCount > 0 && (
                               <div className="flex items-center gap-1" title={`${reportCount} pending report(s)`}>
                                 <AlertTriangle className="w-4 h-4 text-[#FF6B6B]" />
@@ -400,13 +492,40 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                           <code className="text-sm text-[#00E5FF] font-mono bg-[#1A1A1A] px-2 py-1 rounded">
                             {machine.unique_qr_code}
                           </code>
-                          <button
-                            onClick={() => copyQRCode(machine.unique_qr_code)}
-                            className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
-                            title="Copy QR code"
-                          >
-                            <QrCode className="w-4 h-4" />
-                          </button>
+                          {machine.qr_uuid ? (
+                            <>
+                              <button
+                                onClick={() => showQRCode(machine)}
+                                className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                                title="View QR code"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => copyQRCode(`sweatdrop://machine/${machine.qr_uuid}`)}
+                                className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                                title="Copy QR URL"
+                              >
+                                <QrCode className="w-4 h-4" />
+                              </button>
+                              {isSuperAdmin && (
+                                <MachineQRPrint
+                                  machineName={machine.name}
+                                  qrUuid={machine.qr_uuid}
+                                  machineType={machine.type}
+                                  gymName={machine.gyms?.name}
+                                />
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => copyQRCode(machine.unique_qr_code)}
+                              className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                              title="Copy QR code"
+                            >
+                              <QrCode className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                         {isSuperAdmin && machine.sensor_id && (
                           <div className="mt-2 text-xs text-[#808080]">
@@ -710,6 +829,106 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                   className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {qrModalOpen && selectedMachineForQR && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">QR Code</h3>
+              <button
+                onClick={() => {
+                  setQrModalOpen(false);
+                  setSelectedMachineForQR(null);
+                }}
+                className="text-[#808080] hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-[#808080] mb-2">Machine: {selectedMachineForQR.name}</p>
+                {selectedMachineForQR.gyms?.name && (
+                  <p className="text-sm text-[#808080] mb-4">Gym: {selectedMachineForQR.gyms.name}</p>
+                )}
+              </div>
+
+              <div className="flex justify-center bg-white p-4 rounded-lg">
+                <QRCodeSVG
+                  value={`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
+                  size={256}
+                  level="H"
+                  includeMargin={true}
+                  bgColor="#FFFFFF"
+                  fgColor="#000000"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <label className="text-xs text-[#808080] block mb-1">QR URL</label>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs text-[#00E5FF] font-mono bg-[#1A1A1A] px-3 py-2 rounded flex-1 break-all">
+                      {`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`);
+                        toast.success('QR URL copied to clipboard');
+                      }}
+                      className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                      title="Copy QR URL"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-[#808080] block mb-1">QR UUID</label>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs text-[#00E5FF] font-mono bg-[#1A1A1A] px-3 py-2 rounded flex-1 break-all">
+                      {selectedMachineForQR.qr_uuid}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedMachineForQR.qr_uuid);
+                        toast.success('QR UUID copied to clipboard');
+                      }}
+                      className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                      title="Copy UUID"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                {isSuperAdmin && (
+                  <MachineQRPrint
+                    machineName={selectedMachineForQR.name}
+                    qrUuid={selectedMachineForQR.qr_uuid}
+                    machineType={selectedMachineForQR.type}
+                    gymName={selectedMachineForQR.gyms?.name}
+                  />
+                )}
+                <button
+                  onClick={() => {
+                    setQrModalOpen(false);
+                    setSelectedMachineForQR(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-[#1A1A1A] text-white rounded-lg hover:bg-[#2A2A2A] transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>

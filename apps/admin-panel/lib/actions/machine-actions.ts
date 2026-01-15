@@ -66,7 +66,7 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
         unique_qr_code: qrCode,
         is_active: true,
       })
-      .select()
+      .select('*, qr_uuid')
       .single();
 
     if (error) throw error;
@@ -177,25 +177,86 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
       return { success: false, error: 'Only superadmins can pair sensors' };
     }
 
-    const { data, error } = await supabaseAdmin.rpc('pair_sensor_to_machine', {
+    // Update machine with sensor_id
+    const { data, error } = await supabaseAdmin
+      .from('machines')
+      .update({ 
+        sensor_id: sensorId,
+        sensor_paired_at: new Date().toISOString(),
+      })
+      .eq('id', machineId)
+      .select('gym_id, qr_uuid, name, type')
+      .single();
+
+    if (error) throw error;
+
+    if (data) {
+      revalidatePath(`/dashboard/gym/${data.gym_id}/machines`);
+      revalidatePath(`/dashboard/super/machines`);
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function lockMachine(machineId: string, userId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('lock_machine', {
       p_machine_id: machineId,
-      p_sensor_id: sensorId,
+      p_user_id: userId,
     });
 
     if (error) throw error;
 
-    // Get the machine to revalidate the correct path
-    const { data: machine } = await supabaseAdmin
-      .from('machines')
-      .select('gym_id')
-      .eq('id', machineId)
-      .single();
+    return { success: data === true, error: data === false ? 'Machine is already in use' : undefined };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
 
-    if (machine) {
-      revalidatePath(`/dashboard/gym/${machine.gym_id}/machines`);
-    }
+export async function unlockMachine(machineId: string, userId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('unlock_machine', {
+      p_machine_id: machineId,
+      p_user_id: userId,
+    });
+
+    if (error) throw error;
 
     return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateMachineHeartbeat(machineId: string, userId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('update_machine_heartbeat', {
+      p_machine_id: machineId,
+      p_user_id: userId,
+    });
+
+    if (error) throw error;
+
+    return { success: data === true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateMachineRPM(machineId: string, userId: string, rpm: number) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('update_machine_rpm', {
+      p_machine_id: machineId,
+      p_user_id: userId,
+      p_rpm: rpm,
+    });
+
+    if (error) throw error;
+
+    return { success: data === true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
