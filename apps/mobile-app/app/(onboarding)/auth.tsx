@@ -4,14 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { theme, getNumberStyle } from '@/lib/theme';
-
-// Complete OAuth session in browser
-WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -208,6 +204,18 @@ export default function AuthScreen() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
+      // Try to import WebBrowser dynamically
+      let WebBrowser: any = null;
+      try {
+        WebBrowser = require('expo-web-browser');
+        // Complete OAuth session in browser
+        if (WebBrowser?.maybeCompleteAuthSession) {
+          WebBrowser.maybeCompleteAuthSession();
+        }
+      } catch (e) {
+        console.warn('expo-web-browser not available, using Linking fallback');
+      }
+
       // Use the app scheme for redirect URL
       // This must match what's configured in Supabase URL Configuration
       // For development: exp://localhost:8081 or sweatdrop://
@@ -251,6 +259,18 @@ export default function AuthScreen() {
       }
 
       if (data?.url) {
+        if (!WebBrowser || !WebBrowser.openAuthSessionAsync) {
+          // Fallback: Use Linking to open the URL
+          Alert.alert(
+            'Google Sign In',
+            'Please complete sign in in your browser. The app will automatically detect when you return.',
+            [{ text: 'OK' }]
+          );
+          await Linking.openURL(data.url);
+          setLoading(false);
+          return;
+        }
+
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
           redirectTo

@@ -8,8 +8,15 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import { ReportIssueModal } from '@/components/ReportIssueModal';
+import { ScannerScreen } from '@/components/ScannerScreen';
 
 export default function ScanScreen() {
+  // Use new ScannerScreen component for QR scanning
+  return <ScannerScreen />;
+}
+
+// Legacy scan screen code below (kept for manual QR entry fallback)
+export function LegacyScanScreen() {
   const [manualQRCode, setManualQRCode] = useState('');
   const [activeSession, setActiveSession] = useState<any>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -47,6 +54,20 @@ export default function ScanScreen() {
       return;
     }
 
+    // Parse QR code - support both formats:
+    // 1. sweatdrop://machine/[qr_uuid] (new format)
+    // 2. [unique_qr_code] (legacy format)
+    let qrUuid: string | null = null;
+    let uniqueQrCode: string | null = null;
+
+    if (qrCode.trim().startsWith('sweatdrop://machine/')) {
+      // New format: extract UUID
+      qrUuid = qrCode.trim().replace('sweatdrop://machine/', '');
+    } else {
+      // Legacy format: use as-is
+      uniqueQrCode = qrCode.trim();
+    }
+
     // Find machine by QR code (preferred) or fallback to equipment
     let machine = null;
     let equipment = null;
@@ -54,12 +75,22 @@ export default function ScanScreen() {
     let machineType: 'treadmill' | 'bike' | null = null;
 
     // Try to find in machines table first
-    console.log('[Scan] Looking for machine with QR code:', qrCode.trim());
-    const { data: machineData, error: machineError } = await supabase
+    console.log('[Scan] Looking for machine with QR:', { qrUuid, uniqueQrCode });
+    
+    let machineQuery = supabase
       .from('machines')
-      .select('*, gym:gym_id(*)')
-      .eq('unique_qr_code', qrCode.trim())
-      .single();
+      .select('*, gym:gym_id(*)');
+
+    if (qrUuid) {
+      machineQuery = machineQuery.eq('qr_uuid', qrUuid);
+    } else if (uniqueQrCode) {
+      machineQuery = machineQuery.eq('unique_qr_code', uniqueQrCode);
+    } else {
+      Alert.alert('Error', 'Invalid QR code format');
+      return;
+    }
+
+    const { data: machineData, error: machineError } = await machineQuery.single();
 
     console.log('[Scan] Machine lookup result:', { machineData, machineError });
 
@@ -106,8 +137,18 @@ export default function ScanScreen() {
         );
         return;
       }
+
+      // Check if machine is busy (locked by another user)
+      if (machine.is_busy && machine.current_user_id !== session.user.id) {
+        Alert.alert(
+          'Machine Busy',
+          'Ova sprava je trenutno zauzeta. Molimo sačekajte ili koristite drugu spravu.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       
-      console.log('[Scan] Machine found:', { id: machine.id, name: machine.name, type: machineType, gymId });
+      console.log('[Scan] Machine found:', { id: machine.id, name: machine.name, type: machineType, gymId, sensor_id: machine.sensor_id });
     } else {
       // Fallback to equipment table for backward compatibility
       const { data: equipmentData, error: eqError } = await supabase
@@ -148,12 +189,31 @@ export default function ScanScreen() {
       return;
     }
 
+    // Lock machine if it's a machine (not equipment)
+    if (machine) {
+      const { data: lockResult, error: lockError } = await supabase.rpc('lock_machine', {
+        p_machine_id: machine.id,
+        p_user_id: session.user.id,
+      });
+
+      if (lockError || !lockResult) {
+        console.error('[Scan] Failed to lock machine:', lockError);
+        Alert.alert(
+          'Machine Busy',
+          'Ova sprava je trenutno zauzeta. Molimo sačekajte ili koristite drugu spravu.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
     console.log('Creating session:', {
       userId: session.user.id,
       gymId,
       machineId: machine?.id,
       equipmentId: equipment?.id,
       machineType,
+      sensorId: machine?.sensor_id,
     });
 
     // Start session
@@ -195,6 +255,8 @@ export default function ScanScreen() {
       machineType,
     });
 
+    // Navigate to workout with sensor_id if available
+    // Navigate to workout with sensor_id if available
     router.push({
       pathname: '/workout',
       params: { 
