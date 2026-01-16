@@ -1,7 +1,9 @@
 /**
- * Premium DropEmitter Component
+ * Premium DropEmitter Component - Zero-Lag Optimized
+ * Apple Fitness+ level visual effects
  * Completely decoupled from BLE data stream
  * Each drop is an independent animated entity that runs on UI thread
+ * OPTIMIZED: No Skia Canvas per drop - uses lightweight Animated.View
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -16,6 +18,7 @@ import {
   withSequence,
 } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { theme } from '@/lib/theme';
 
 interface Drop {
@@ -28,13 +31,15 @@ interface DropEmitterProps {
   drops: Drop[]; // Array of drops to animate
   containerSize: number; // Size of the circular container
   onDropComplete: (dropId: string) => void; // Callback when drop animation completes
+  onImpact?: (x: number, y: number) => void; // Callback when drop hits water (for triggerImpact)
 }
 
-export function DropEmitter({ drops, containerSize, onDropComplete }: DropEmitterProps) {
+export function DropEmitter({ drops, containerSize, onDropComplete, onImpact }: DropEmitterProps) {
   const completedDropsRef = useRef<Set<string>>(new Set());
 
   return (
     <View style={[styles.container, { width: containerSize, height: containerSize }]} pointerEvents="none">
+      {/* Drop Animations - Zero-Lag: Simple Animated.View (no Skia Canvas) */}
       {drops.map((drop) => {
         // Skip if already completed
         if (completedDropsRef.current.has(drop.id)) {
@@ -46,6 +51,12 @@ export function DropEmitter({ drops, containerSize, onDropComplete }: DropEmitte
             key={drop.id}
             drop={drop}
             containerSize={containerSize}
+            onImpact={(x, y) => {
+              // Impact Sync: Call onImpact callback for triggerImpact
+              if (onImpact) {
+                onImpact(x, y);
+              }
+            }}
             onComplete={() => {
               completedDropsRef.current.add(drop.id);
               onDropComplete(drop.id);
@@ -60,14 +71,16 @@ export function DropEmitter({ drops, containerSize, onDropComplete }: DropEmitte
 interface DropAnimationProps {
   drop: Drop;
   containerSize: number;
+  onImpact: (x: number, y: number) => void;
   onComplete: () => void;
 }
 
-function DropAnimation({ drop, containerSize, onComplete }: DropAnimationProps) {
+function DropAnimation({ drop, containerSize, onImpact, onComplete }: DropAnimationProps) {
   // Animation progress: 0 (top) to 1 (water level)
   const progress = useSharedValue(0);
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
+  const impactTriggered = useRef(false);
 
   useEffect(() => {
     // Start animation immediately
@@ -78,10 +91,24 @@ function DropAnimation({ drop, containerSize, onComplete }: DropAnimationProps) 
         easing: Easing.in(Easing.quad), // Gravity simulation
       },
       (finished) => {
-        if (finished) {
+        if (finished && !impactTriggered.current) {
+          impactTriggered.current = true;
+          
+          // Calculate impact position
+          const waterLevelFromBottom = drop.progress * containerSize;
+          const waterLevelFromTop = containerSize - waterLevelFromBottom;
+          const impactX = drop.startX;
+          const impactY = waterLevelFromTop;
+          
+          // Impact Sync: Trigger haptic feedback at exact impact moment
+          runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
+          
+          // Impact Sync: Trigger impact callback for LiquidGauge triggerImpact
+          runOnJS(onImpact)(impactX, impactY);
+          
           // Splash effect: quick scale up then fade out
           scale.value = withSequence(
-            withTiming(1.3, { duration: 100, easing: Easing.out(Easing.ease) }),
+            withTiming(1.5, { duration: 100, easing: Easing.out(Easing.ease) }),
             withTiming(1, { duration: 50, easing: Easing.in(Easing.ease) })
           );
           
@@ -91,6 +118,16 @@ function DropAnimation({ drop, containerSize, onComplete }: DropAnimationProps) 
         }
       }
     );
+  }, []);
+
+  // Motion blur trail (simple gradient opacity - no Skia)
+  const trailOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    // Trail appears as drop falls
+    if (progress.value > 0.1) {
+      trailOpacity.value = withTiming(0.6, { duration: 200 });
+    }
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -110,19 +147,47 @@ function DropAnimation({ drop, containerSize, onComplete }: DropAnimationProps) 
     };
   });
 
+  // Trail style (simple opacity gradient - no Skia)
+  const trailStyle = useAnimatedStyle(() => {
+    const waterLevelFromBottom = drop.progress * containerSize;
+    const waterLevelFromTop = containerSize - waterLevelFromBottom;
+    const currentY = progress.value * waterLevelFromTop;
+    const trailLength = 20;
+    const trailStartY = Math.max(0, currentY - trailLength);
+    
+    return {
+      position: 'absolute',
+      left: drop.startX - 2,
+      top: trailStartY,
+      width: 4,
+      height: trailLength,
+      opacity: trailOpacity.value * (1 - progress.value), // Fade as it falls
+      backgroundColor: theme.colors.primary,
+      borderRadius: 2,
+    };
+  });
+
   return (
-    <Animated.View
-      style={[
-        styles.drop,
-        {
-          left: drop.startX,
-          top: 0,
-        },
-        animatedStyle,
-      ]}
-    >
-      <Ionicons name="water" size={24} color={theme.colors.primary} />
-    </Animated.View>
+    <>
+      {/* Motion Blur Trail - Zero-Lag: Simple View (no Skia) */}
+      {progress.value > 0.1 && (
+        <Animated.View style={trailStyle} />
+      )}
+      
+      {/* Drop Icon - Zero-Lag: Simple Animated.View */}
+      <Animated.View
+        style={[
+          styles.drop,
+          {
+            left: drop.startX,
+            top: 0,
+          },
+          animatedStyle,
+        ]}
+      >
+        <Ionicons name="water" size={24} color={theme.colors.primary} />
+      </Animated.View>
+    </>
   );
 }
 
