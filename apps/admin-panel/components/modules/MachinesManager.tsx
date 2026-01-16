@@ -861,32 +861,36 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                 )}
               </div>
 
-              <div className="flex justify-center bg-white p-4 rounded-lg">
-                <QRCodeSVG
-                  value={`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
-                  size={256}
-                  level="H"
-                  includeMargin={true}
-                  bgColor="#FFFFFF"
-                  fgColor="#000000"
-                />
-              </div>
+              {selectedMachineForQR.qr_uuid && (
+                <>
+                  <div className="flex justify-center bg-white p-4 rounded-lg">
+                    <QRCodeSVG
+                      value={`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
+                      size={256}
+                      level="H"
+                      includeMargin={true}
+                      bgColor="#FFFFFF"
+                      fgColor="#000000"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <div>
-                  <label className="text-xs text-[#808080] block mb-1">QR URL</label>
-                  <div className="flex items-center gap-2">
-                    <code className="text-xs text-[#00E5FF] font-mono bg-[#1A1A1A] px-3 py-2 rounded flex-1 break-all">
-                      {`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
-                    </code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`);
-                        toast.success('QR URL copied to clipboard');
-                      }}
-                      className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
-                      title="Copy QR URL"
-                    >
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs text-[#808080] block mb-1">QR URL</label>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs text-[#00E5FF] font-mono bg-[#1A1A1A] px-3 py-2 rounded flex-1 break-all">
+                          {`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
+                        </code>
+                        <button
+                          onClick={() => {
+                            if (selectedMachineForQR.qr_uuid) {
+                              navigator.clipboard.writeText(`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`);
+                              toast.success('QR URL copied to clipboard');
+                            }
+                          }}
+                          className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                          title="Copy QR URL"
+                        >
                       <QrCode className="w-4 h-4" />
                     </button>
                   </div>
@@ -900,20 +904,25 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                     </code>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(selectedMachineForQR.qr_uuid);
-                        toast.success('QR UUID copied to clipboard');
+                        if (selectedMachineForQR.qr_uuid) {
+                          navigator.clipboard.writeText(selectedMachineForQR.qr_uuid);
+                          toast.success('QR UUID copied to clipboard');
+                        }
                       }}
                       className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
                       title="Copy UUID"
+                      disabled={!selectedMachineForQR.qr_uuid}
                     >
                       <QrCode className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
               </div>
+                </>
+              )}
 
               <div className="flex gap-3 pt-4">
-                {isSuperAdmin && (
+                {isSuperAdmin && selectedMachineForQR.qr_uuid && (
                   <MachineQRPrint
                     machineName={selectedMachineForQR.name}
                     qrUuid={selectedMachineForQR.qr_uuid}
