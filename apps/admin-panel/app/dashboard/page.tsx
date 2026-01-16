@@ -1,58 +1,179 @@
-import { getCurrentProfile, isSuperadmin } from '@/lib/auth';
-import { SuperadminDashboard } from '@/components/dashboards/SuperadminDashboard';
-import { redirect } from 'next/navigation';
+'use client';
 
-export default async function DashboardPage() {
-  // Middleware already handles authentication and role-based redirects
-  // If we reach here, user is authenticated
-  // Only superadmin should reach /dashboard (gym_admin and receptionist are redirected by middleware)
-  const profile = await getCurrentProfile();
-  
-  // If profile fetch fails, show error instead of redirecting (to avoid loops)
-  if (!profile) {
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+
+export default function DashboardPage() {
+  const [session, setSession] = useState<any>(null);
+  const [gymStaff, setGymStaff] = useState<any>(null);
+  const [stats, setStats] = useState({
+    activeUsers: 0,
+    totalDrops: 0,
+    redeems: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (gymStaff?.gym_id) {
+      loadStats();
+    }
+  }, [gymStaff]);
+
+  const loadSession = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push('/login');
+      return;
+    }
+
+    setSession(session);
+
+    // Get gym staff info
+    const { data: staffData } = await supabase
+      .from('gym_staff')
+      .select('*, gym:gym_id(*)')
+      .eq('user_id', session.user.id)
+      .single();
+
+    if (staffData) {
+      setGymStaff(staffData);
+    } else {
+      router.push('/login');
+    }
+
+    setLoading(false);
+  };
+
+  const loadStats = async () => {
+    if (!gymStaff?.gym_id) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Active users today (users with active sessions)
+    const { data: activeSessions } = await supabase
+      .from('sessions')
+      .select('user_id')
+      .eq('gym_id', gymStaff.gym_id)
+      .eq('is_active', true)
+      .gte('started_at', today.toISOString());
+
+    const uniqueUsers = new Set(activeSessions?.map((s) => s.user_id) || []);
+    setStats((prev) => ({ ...prev, activeUsers: uniqueUsers.size }));
+
+    // Total drops today
+    const { data: dropsData } = await supabase
+      .from('drops_transactions')
+      .select('amount')
+      .gte('created_at', today.toISOString())
+      .gt('amount', 0)
+      .in(
+        'user_id',
+        activeSessions?.map((s) => s.user_id) || []
+      );
+
+    const totalDrops =
+      dropsData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
+    setStats((prev) => ({ ...prev, totalDrops }));
+
+    // Redeems today
+    const { data: redeemsData } = await supabase
+      .from('redemptions')
+      .select('id')
+      .eq('gym_id', gymStaff.gym_id)
+      .eq('status', 'confirmed')
+      .gte('confirmed_at', today.toISOString());
+
+    setStats((prev) => ({ ...prev, redeems: redeemsData?.length || 0 }));
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-[#000000] flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white mb-4">Error Loading Profile</h1>
-          <p className="text-[#808080] mb-4">
-            Unable to fetch your profile. This might be a database permissions issue.
-          </p>
-          <p className="text-[#808080] text-sm mb-4">
-            Please check that the RLS migration has been applied correctly.
-          </p>
-          <a 
-            href="/login" 
-            className="text-[#00E5FF] hover:underline"
-          >
-            Go to Login
-          </a>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div>Loading...</div>
       </div>
     );
   }
 
-  const isSuper = await isSuperadmin();
-
-  // Only superadmin should see this page
-  // If gym_admin or receptionist reach here, middleware should have redirected them
-  // But handle it gracefully just in case
-  if (isSuper) {
-    redirect('/dashboard/super');
-  }
-
-  // If not superadmin, redirect based on role (middleware should have caught this, but fallback)
-  if (profile.assigned_gym_id) {
-    redirect(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`);
-  }
-
-  // If no assigned gym, show error
   return (
-    <div className="min-h-screen bg-[#000000] flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-white mb-4">No Gym Assigned</h1>
-        <p className="text-[#808080]">
-          Your account doesn't have a gym assigned. Please contact an administrator.
-        </p>
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-bold text-gray-900">SweatDrop Admin</h1>
+              {gymStaff?.gym && (
+                <span className="ml-4 text-gray-600">{gymStaff.gym.name}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-sm font-medium text-gray-500">Active Users Today</h3>
+            <p className="mt-2 text-3xl font-bold text-gray-900">{stats.activeUsers}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-sm font-medium text-gray-500">Total Drops Today</h3>
+            <p className="mt-2 text-3xl font-bold text-blue-600">💧 {stats.totalDrops}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-sm font-medium text-gray-500">Redeems Today</h3>
+            <p className="mt-2 text-3xl font-bold text-green-600">{stats.redeems}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Link
+            href="/dashboard/rewards"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+          >
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Rewards Manager</h2>
+            <p className="text-gray-600">Manage gym rewards and pricing</p>
+          </Link>
+
+          <Link
+            href="/dashboard/challenges"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+          >
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Challenges Manager</h2>
+            <p className="text-gray-600">Create and manage challenges</p>
+          </Link>
+
+          <Link
+            href="/dashboard/redeems"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+          >
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Redeem Validation</h2>
+            <p className="text-gray-600">Confirm reward redemptions</p>
+          </Link>
+        </div>
       </div>
     </div>
   );

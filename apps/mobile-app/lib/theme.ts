@@ -167,6 +167,7 @@ export const getNumberStyle = (fontSize: number) => ({
   fontSize,
   fontWeight: theme.typography.fontWeight.bold,
   color: theme.colors.text,
+  fontVariant: ['tabular-nums'], // Apple Fitness+ style: prevents number jumping
 });
 
 // Export individual color values for convenience
