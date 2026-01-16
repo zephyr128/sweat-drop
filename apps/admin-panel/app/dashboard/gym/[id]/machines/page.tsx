@@ -46,7 +46,7 @@ export default async function MachinesPage({
     .order('created_at', { ascending: false });
 
   // Fetch reports (with error handling)
-  let reportsResult = { data: [] as any[], error: null };
+  let reportsResult: { data: any[] | null; error: any } = { data: [], error: null };
   try {
     reportsResult = await supabase.rpc('get_machines_with_reports', { p_gym_id: id });
   } catch (rpcError) {
