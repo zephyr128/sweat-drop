@@ -77,6 +77,7 @@ export interface CSCMeasurement {
 
 export class BLEService {
   private device: Device | string | null = null; // Device for iOS, device ID string for Android
+  private deviceId: string | null = null; // Always store device ID as string for reconnect
   private isConnected: boolean = false;
   private measurementCallback: ((measurement: CSCMeasurement) => void) | null = null;
   private lastWheelRevolutions: number = 0;
@@ -84,15 +85,16 @@ export class BLEService {
   private lastWheelEventTime: number = 0;
   private lastCrankEventTime: number = 0;
   private lastMeasurementTime: number = 0;
+  // Magene S3+ Stale Data Detection: Track last processed values to detect echo packets
+  private lastProcessedCrankRevolutions: number = -1;
+  private lastProcessedCrankEventTime: number = -1;
+  private lastProcessedTimestamp: number = 0; // Track when last packet was processed
   private bleManagerIOS: BleManagerIOS | null = null;
   private notificationSubscription: any = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private onSleepCallback: (() => void) | null = null;
   private onReconnectCallback: (() => Promise<boolean>) | null = null;
   private onStatusCallback: ((status: string) => void) | null = null; // UI status callback
-  // Stale Data Filter: Track last processed crankEventTime to detect duplicates
-  private lastProcessedCrankEventTime: number = 0;
-  private lastCrankEventTimeChange: number = 0; // Timestamp when lastCrankEventTime changed
 
   constructor() {
     if (Platform.OS === 'ios') {
@@ -279,6 +281,7 @@ export class BLEService {
       console.error('[BLE] Connection error:', error);
       this.isConnected = false;
       this.device = null;
+      this.deviceId = null; // Clear device ID on error
       this.emitStatus('Connection failed');
       throw error; // Re-throw to allow caller to handle cleanup
     }
@@ -375,6 +378,7 @@ export class BLEService {
         this.emitStatus('Ready to monitor');
 
         this.device = device;
+        this.deviceId = device.id; // Store device ID for reconnect
         this.isConnected = true;
 
         console.log('[BLE] Connected to Magene S3+ successfully (iOS)');
@@ -454,6 +458,7 @@ export class BLEService {
         console.log(`[BLE] Characteristic properties: ${properties.join(', ')}, canNotify: ${canNotify}`);
         
         this.device = deviceId;
+        this.deviceId = deviceId; // Store device ID for reconnect
         this.isConnected = true;
 
         // Start notification immediately after connection if characteristic supports it (Android)
@@ -476,6 +481,7 @@ export class BLEService {
       console.error('[BLE] Connection error in connectToDeviceById:', error);
       this.isConnected = false;
       this.device = null;
+      this.deviceId = null; // Clear device ID on error
       throw error; // Re-throw to allow caller to handle cleanup
     }
   }
@@ -534,6 +540,7 @@ export class BLEService {
           (error, characteristic) => {
             if (error) {
               console.error('[BLE] Measurement error:', error);
+              console.log('[BLE] Device ID preserved for reconnect:', this.deviceId);
               this.handleConnectionLoss();
               return;
             }
@@ -547,11 +554,7 @@ export class BLEService {
                 bytes[i] = binaryString.charCodeAt(i);
               }
               
-              // Advanced debug: Log all bytes as array
-              const byteArray = Array.from(bytes);
-              console.log(`[BLE] iOS: Raw bytes received: [${byteArray.join(', ')}]`);
-              console.log(`[BLE] iOS: Byte count: ${byteArray.length}`);
-              
+              // Battery Optimization: No logging in measurement callback
               this.handleMeasurement(bytes.buffer);
             }
           }
@@ -578,17 +581,10 @@ export class BLEService {
         // Check if characteristic supports notifications
         const properties = measurementChar.properties || [];
         const canNotify = properties.includes('notify') || properties.includes('indicate');
-        console.log(`[BLE] Android: Characteristic properties: ${properties.join(', ')}, canNotify: ${canNotify}`);
         
-        if (!canNotify) {
-          console.warn('[BLE] Android: Characteristic does not support notifications, but will attempt anyway');
-        }
-        
-        // Focus exclusively on Service 0x1816 and Characteristic 0x2A5B
-        console.log(`[BLE] Android: Starting notifications for Service ${cscService.uuid}, Characteristic ${measurementChar.uuid}...`);
+        // Battery Optimization: Only log critical errors
         try {
           await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
-          console.log('[BLE] Android: Notification started successfully');
         } catch (notifError) {
           console.error('[BLE] Android: Failed to start notification:', notifError);
           throw notifError;
@@ -611,12 +607,7 @@ export class BLEService {
                   bytes[i] = binaryString.charCodeAt(i);
                 }
                 
-                // Advanced debug: Log all bytes as array
-                const byteArray = Array.from(bytes);
-                console.log(`[BLE] Android: Raw bytes received: [${byteArray.join(', ')}]`);
-                console.log(`[BLE] Android: Byte count: ${byteArray.length}`);
-                console.log(`[BLE] Android: Characteristic UUID: ${data.characteristic}`);
-                
+                // Battery Optimization: No logging in measurement callback
                 this.handleMeasurement(bytes.buffer);
               }
             }
@@ -674,9 +665,12 @@ export class BLEService {
 
   /**
    * Handle connection loss
+   * Preserves device ID for reconnect attempts
    */
   private handleConnectionLoss(): void {
+    console.log('[BLE] Connection loss detected, preserving device ID for reconnect');
     this.isConnected = false;
+    // Don't clear device or deviceId - keep them for reconnect
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
@@ -696,12 +690,15 @@ export class BLEService {
         await this.disconnect();
       }
       
-      // Wait a bit
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait a bit for cleanup
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Try to reconnect using stored device ID
-      if (this.device) {
-        const deviceId = typeof this.device === 'string' ? this.device : this.device.id;
+      // Try to reconnect using stored device ID (prefer deviceId over device)
+      const deviceId = this.deviceId || (this.device ? (typeof this.device === 'string' ? this.device : this.device.id) : null);
+      
+      console.log('[BLE] Reconnect - deviceId:', this.deviceId, 'device:', this.device ? (typeof this.device === 'string' ? this.device : this.device.id) : null);
+      
+      if (deviceId) {
         console.log('[BLE] Attempting to reconnect to device:', deviceId);
         
         try {
@@ -751,8 +748,9 @@ export class BLEService {
       const connected = await this.connectToDeviceById(targetDevice.id);
       
       if (connected) {
-        // Store device for future reconnects (use device ID string for both platforms)
+        // Store device and device ID for future reconnects (use device ID string for both platforms)
         this.device = targetDevice.id;
+        this.deviceId = targetDevice.id;
         
         // Restart monitoring
         if (this.measurementCallback) {
@@ -828,18 +826,17 @@ export class BLEService {
    * - Last Crank Event Time: 16-bit little-endian, 1/1024 seconds (bytes 3-4)
    * - RPM Formula: RPM = ((CrankRev_now - CrankRev_prev) × 1024 × 60) / (EventTime_now - EventTime_prev)
    */
+  /**
+   * Handle CSC measurement data for Magene S3+
+   * Battery Optimization: 'Dumb' service - only passes raw data, no RPM decay logic
+   * All RPM logic (watchdog timer, decay) handled in workout.tsx
+   */
   private handleMeasurement(data: ArrayBuffer): void {
     const view = new DataView(data);
     let offset = 0;
 
-    // Convert to byte array for detailed logging
-    const byteArray = new Uint8Array(data);
-    console.log(`[BLE] Processing measurement - Raw bytes: [${Array.from(byteArray).join(', ')}]`);
-    console.log(`[BLE] Byte length: ${view.byteLength}`);
-
     if (view.byteLength < 1) {
-      console.warn('[BLE] Invalid measurement data: too short');
-      return;
+      return; // Invalid data, silently ignore
     }
 
     // Update last measurement time (for signal indicator)
@@ -853,11 +850,6 @@ export class BLEService {
     const wheelRevolutionPresent = (flags & 0x01) !== 0;
     const crankRevolutionPresent = (flags & 0x02) !== 0;
 
-    // For Magene S3+ in Cadence mode, crank revolution should be present
-    if (!crankRevolutionPresent) {
-      console.warn('[BLE] Crank revolution not present. Ensure sensor is in Cadence mode (red light).');
-    }
-
     let wheelRevolutions = 0;
     let lastWheelEventTime = 0;
     let crankRevolutions = 0;
@@ -866,8 +858,7 @@ export class BLEService {
     // Parse wheel revolution data (if present)
     if (wheelRevolutionPresent) {
       if (view.byteLength < offset + 6) {
-        console.warn('[BLE] Invalid measurement data: missing wheel data');
-        return;
+        return; // Invalid data, silently ignore
       }
       // Wheel revolutions (32-bit, little-endian)
       wheelRevolutions = view.getUint32(offset, true);
@@ -880,51 +871,36 @@ export class BLEService {
     // Parse crank revolution data (if present) - REQUIRED for Magene S3+ Cadence mode
     if (crankRevolutionPresent) {
       if (view.byteLength < offset + 4) {
-        console.warn('[BLE] Invalid measurement data: missing crank data');
-        return;
+        return; // Invalid data, silently ignore
       }
       // Cumulative Crank Revolutions (16-bit, little-endian) - bytes 1-2
-      const crankRevBytes = [view.getUint8(offset), view.getUint8(offset + 1)];
       crankRevolutions = view.getUint16(offset, true);
       offset += 2;
-      console.log(`[BLE] Crank Revolutions bytes [${crankRevBytes.join(', ')}] = ${crankRevolutions}`);
       
       // Last Crank Event Time (16-bit, little-endian, 1/1024 seconds) - bytes 3-4
-      const eventTimeBytes = [view.getUint8(offset), view.getUint8(offset + 1)];
       lastCrankEventTime = view.getUint16(offset, true);
       offset += 2;
-      console.log(`[BLE] Last Crank Event Time bytes [${eventTimeBytes.join(', ')}] = ${lastCrankEventTime} (${(lastCrankEventTime / 1024).toFixed(3)}s)`);
       
-      // Stale Data Filter: Check if lastCrankEventTime is identical to previous (duplicate data)
-      if (this.lastProcessedCrankEventTime === lastCrankEventTime && this.lastProcessedCrankEventTime > 0) {
-        // Duplicate data detected - sensor is sending same measurement
-        console.log(`[BLE] Duplicate data detected: lastCrankEventTime unchanged (${lastCrankEventTime}). Setting RPM to 0.`);
-        
-        // Emit signal status only (to keep connection alive), but set RPM to 0
-        this.emitStatus('Signal OK');
-        
-        // Create measurement with RPM = 0 to indicate no movement
-        const staleMeasurement: CSCMeasurement = {
-          wheelRevolutions,
-          lastWheelEventTime,
-          crankRevolutions,
-          lastCrankEventTime,
-          rpm: 0, // Force RPM to 0 for duplicate data
-          timestamp: Date.now(),
-        };
-        
-        // Emit measurement with RPM = 0
-        if (this.measurementCallback) {
-          this.measurementCallback(staleMeasurement);
-        }
-        
-        // Don't update lastProcessedCrankEventTime - keep it the same to continue detecting duplicates
-        return; // Exit early, don't process further
+      // Magene S3+ Stale Data Detection: If same crankRevolutions AND same lastCrankEventTime, ignore (echo packet)
+      // BUT: Allow update if more than 100ms passed (timestamp must refresh for watchdog)
+      const now = Date.now();
+      const timeSinceLastProcessed = now - this.lastProcessedTimestamp;
+      
+      if (
+        this.lastProcessedCrankRevolutions === crankRevolutions &&
+        this.lastProcessedCrankEventTime === lastCrankEventTime &&
+        this.lastProcessedCrankRevolutions >= 0 &&
+        this.lastProcessedCrankEventTime >= 0 &&
+        timeSinceLastProcessed < 100 // Only block if less than 100ms passed
+      ) {
+        // Echo packet detected (same data within 100ms) - ignore silently
+        return;
       }
       
-      // New data detected - update tracking
+      // Update processed values for next check
+      this.lastProcessedCrankRevolutions = crankRevolutions;
       this.lastProcessedCrankEventTime = lastCrankEventTime;
-      this.lastCrankEventTimeChange = Date.now();
+      this.lastProcessedTimestamp = now;
     }
 
     // Calculate RPM using Magene S3+ formula
@@ -932,21 +908,40 @@ export class BLEService {
     let rpm = 0;
 
     if (crankRevolutionPresent && this.lastCrankEventTime > 0) {
-      // Handle time wrap-around (16-bit value wraps at 65535)
+      // CRITICAL: Handle time wrap-around (16-bit value wraps at 65535)
+      // EventTime is in 1/1024 seconds, so max value is 65535/1024 ≈ 64 seconds
       let timeDelta = lastCrankEventTime - this.lastCrankEventTime;
+      
+      // Check for wrap-around: if delta is negative and large, it's likely wrap-around
+      // Also check if delta is suspiciously large (> 60 seconds = 61440 units)
       if (timeDelta < 0) {
-        // Wrap-around occurred
-        timeDelta = (65535 - this.lastCrankEventTime) + lastCrankEventTime;
+        // Negative delta - check if it's wrap-around or stale data
+        const wrapAroundDelta = (65535 - this.lastCrankEventTime) + lastCrankEventTime;
+        if (wrapAroundDelta < 61440) { // Less than 60 seconds - likely wrap-around
+          timeDelta = wrapAroundDelta;
+        } else {
+          // Stale data - delta too large, ignore
+          return;
+        }
+      } else if (timeDelta > 61440) {
+        // Delta too large (> 60 seconds) - likely stale data
+        return;
       }
 
       // Convert to seconds (1/1024 seconds per unit)
       const timeDeltaSeconds = timeDelta / 1024.0;
 
-      // Calculate revolution delta
+      // Calculate revolution delta with wrap-around handling
       let revolutionDelta = crankRevolutions - this.lastCrankRevolutions;
       if (revolutionDelta < 0) {
-        // Handle wrap-around for 16-bit value
-        revolutionDelta = (65535 - this.lastCrankRevolutions) + crankRevolutions;
+        // Check if it's wrap-around or stale data
+        const wrapAroundDelta = (65535 - this.lastCrankRevolutions) + crankRevolutions;
+        if (wrapAroundDelta < 1000) { // Reasonable wrap-around (less than 1000 revolutions)
+          revolutionDelta = wrapAroundDelta;
+        } else {
+          // Stale data - ignore
+          return;
+        }
       }
 
       // Apply Magene S3+ RPM formula
@@ -959,8 +954,12 @@ export class BLEService {
         
         // Sanity check: RPM should be between 0 and 200 for cycling
         if (rpm > 200) {
-          console.warn(`[BLE] RPM value ${rpm} seems too high, setting to 0`);
           rpm = 0; // Likely measurement error
+        }
+        
+        // Minimum RPM threshold: If calculated RPM < 5, treat as 0
+        if (rpm > 0 && rpm < 5) {
+          rpm = 0;
         }
       } else if (timeDeltaSeconds === 0) {
         // Same timestamp, no movement
@@ -974,18 +973,27 @@ export class BLEService {
     this.lastWheelEventTime = lastWheelEventTime;
     this.lastCrankEventTime = lastCrankEventTime;
 
+    // Precision Fix: Use raw float RPM value (not rounded) for smooth transitions
+    // Rounding happens in UI layer if needed, but raw value allows for smoother animations
+    const rawRPM = rpm;
+
     const measurement: CSCMeasurement = {
       wheelRevolutions,
       lastWheelEventTime,
       crankRevolutions,
       lastCrankEventTime,
-      rpm: Math.round(rpm),
-      timestamp: Date.now(),
+      rpm: rawRPM, // Raw float value for precision and smooth transitions
+      timestamp: Date.now(), // High precision timestamp
     };
 
+    // Debug: Temporary log to diagnose stuck RPM issue
+    console.log('[BLE] handleMeasurement called, RPM:', measurement.rpm, 'Callback exists:', !!this.measurementCallback);
+    
     // Call callback
     if (this.measurementCallback) {
       this.measurementCallback(measurement);
+    } else {
+      console.warn('[BLE] measurementCallback is null!');
     }
   }
 
@@ -1009,10 +1017,7 @@ export class BLEService {
 
       this.isConnected = false;
       this.device = null;
-      
-      // Reset stale data filter tracking
-      this.lastProcessedCrankEventTime = 0;
-      this.lastCrankEventTimeChange = 0;
+      this.deviceId = null; // Clear device ID on disconnect
       
       console.log('[BLE] Disconnected from device');
     } catch (error) {

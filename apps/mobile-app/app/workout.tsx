@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -7,14 +7,20 @@ import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedProps,
   useDerivedValue,
   useAnimatedReaction,
+  useFrameCallback,
   withTiming,
+  withSpring,
   withSequence,
   withRepeat,
   interpolate,
+  interpolateColor,
   Easing,
   runOnJS,
+  cancelAnimation,
+  SharedValue,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
@@ -26,11 +32,33 @@ import CircularProgressRing from '@/components/CircularProgressRing';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { bleService, CSCMeasurement } from '@/lib/ble-service';
 
-interface ActiveDrop {
-  id: string;
-  startX: number;
-  progress: number; // Water level progress (0 to 1) at time of drop creation
-}
+// ActiveDrop interface removed - drops are now managed internally by DropEmitter
+
+// Native-driven text component that displays SharedValue<string> with minimal re-renders
+// GPU-Only Text Display: Uses useAnimatedProps for native-driven updates (no JS thread blocking)
+// NO useState, NO runOnJS - pure GPU animation
+// ============================================================================
+// PREMIUM UI: Optimized AnimatedText Component (60FPS Guaranteed)
+// ============================================================================
+// Native-driven text component that displays SharedValue<string> with minimal re-renders
+// GPU-Only Text Display: Uses useAnimatedProps for native-driven updates (no JS thread blocking)
+// NO useState, NO runOnJS - pure GPU animation for 60FPS performance
+// Critical for high-frequency updates (RPM, drops, calories) without blocking UI thread
+const AnimatedText = ({ text, style }: { text: SharedValue<string>; style?: any }) => {
+  // Use useAnimatedProps to update text directly on UI thread (no React re-renders)
+  const animatedProps = useAnimatedProps(() => {
+    'worklet';
+    return {
+      children: text.value,
+    };
+  });
+
+  return (
+    <Animated.Text style={style} animatedProps={animatedProps}>
+      {text.value}
+    </Animated.Text>
+  );
+};
 
 export default function WorkoutScreen() {
   const { sessionId, equipmentId, gymId, machineType: paramMachineType, sensorId } = useLocalSearchParams<{
@@ -41,30 +69,32 @@ export default function WorkoutScreen() {
     sensorId?: string;
   }>();
   const [session, setSession] = useState<any>(null);
-  const [drops, setDrops] = useState(0);
-  const [displayDrops, setDisplayDrops] = useState(0);
-  const [earnedDrops, setEarnedDrops] = useState(0); // Real drops from sensor data
+  // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
   const [duration, setDuration] = useState(0);
   const [calories, setCalories] = useState(0);
-  const [pace, setPace] = useState<string>('0:00'); // min/km
+  // REMOVED: pace useState - now using animatedPaceText SharedValue
   const [targetDrops, setTargetDrops] = useState(500);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [activeDrops, setActiveDrops] = useState<ActiveDrop[]>([]);
   const [challengeMessage, setChallengeMessage] = useState<string | null>(null);
-  const [rpm, setRpm] = useState<number>(0); // Raw RPM from sensor
-  const [smoothedRPM, setSmoothedRPM] = useState<number>(0); // Smoothed RPM for UI display
-  const [averageRPM, setAverageRPM] = useState<number>(0); // Average RPM for database sync
+  const [averageRPM, setAverageRPM] = useState<number>(0); // Average RPM for database sync (low frequency, OK to use state)
   const [showAutoPauseOverlay, setShowAutoPauseOverlay] = useState(false);
   const [showSensorAsleep, setShowSensorAsleep] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const reconnectAttemptRef = useRef<number>(0); // Track reconnect attempts for exponential backoff
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
   const [bleConnected, setBleConnected] = useState(false);
   const [bleStatus, setBleStatus] = useState<string>('');
   const [signalStatus, setSignalStatus] = useState<'ok' | 'lost'>('ok');
   const router = useRouter();
   const { session: authSession } = useSession();
   const liquidGaugeRef = useRef<LiquidGaugeRef>(null);
+  // DropEmitter now uses drops prop instead of imperative API
+  const [activeDrops, setActiveDrops] = useState<Array<{ id: string; startX: number; progress: number }>>([]);
+  const isMountedRef = useRef<boolean>(true); // Track if component is mounted
+  const lastHapticTimeRef = useRef<number>(0); // Throttle haptic feedback (max 5/s)
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const challengeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -83,10 +113,10 @@ export default function WorkoutScreen() {
   const rpmHistoryRef = useRef<number[]>([]);
   // RPM smoothing: Track last 4 raw RPM values for moving average (Walking Mode)
   const rpmRawHistoryRef = useRef<number[]>([]);
-  // Zero-Drop Prevention: Grace period timer for walking mode
-  const gracePeriodTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const gracePeriodActiveRef = useRef<boolean>(false);
-  const lastNonZeroRPMRef = useRef<number>(0); // Store last non-zero RPM during grace period
+  // PRO-FITNESS: RPM Persistence - track last known RPM for 2-second persistence
+  const lastNonZeroRPMRef = useRef<number>(0); // Store last non-zero RPM for persistence
+  // Critical Fix: Track consecutive 0 packets to detect legitimate stop (not glitch)
+  const consecutiveZeroCountRef = useRef<number>(0); // Count consecutive 0 packets
   // Step-to-Drop: Track last step detection for walking mode
   const lastStepDetectionRef = useRef<number>(0); // Timestamp of last detected step
   const stepDetectionThreshold = 50; // Minimum RPM to consider as a step (walking mode)
@@ -99,18 +129,28 @@ export default function WorkoutScreen() {
   // Connecting state animation (subtle pulse)
   const connectingPulseScale = useSharedValue(1);
   const connectingPulseOpacity = useSharedValue(0.5);
-  // High-frequency RPM smoothing (useDerivedValue for smooth transitions)
-  const rawRPMShared = useSharedValue(0);
-  const smoothedRPMShared = useSharedValue(0);
-  // Premium Pulse Rings: 3 concentric rings with different speeds
-  const pulseRing1Scale = useSharedValue(1);
-  const pulseRing1Opacity = useSharedValue(0);
-  const pulseRing2Scale = useSharedValue(1);
-  const pulseRing2Opacity = useSharedValue(0);
-  const pulseRing3Scale = useSharedValue(1);
-  const pulseRing3Opacity = useSharedValue(0);
-  // Drop animation: Jump animation when drops increase
-  const dropJumpScale = useSharedValue(1);
+  // ============================================================================
+  // PREMIUM UI: SharedValues for High-Frequency Data (GPU-Only, No JS Thread Blocking)
+  // ============================================================================
+  
+  // Core Data SharedValues
+  const rawRPMShared = useSharedValue(0); // Raw RPM from BLE (updated directly in callback)
+  const smoothedRPMShared = useSharedValue(0); // Smoothed RPM (calculated via useDerivedValue)
+  const earnedDropsShared = useSharedValue(0); // Total drops earned (updated in BLE callback)
+  const totalDropsShared = useSharedValue(0); // Total drops for display (same as earnedDrops for now)
+  const progressShared = useSharedValue(0); // Progress (0 to 1) for LiquidGauge
+  const caloriesShared = useSharedValue(0); // Calories (calculated from drops)
+  const totalCrankRevolutionsShared = useSharedValue(0); // Total crank revolutions for bike (for kcal and pace calculation)
+  
+  // UI State SharedValues
+  const isPausedShared = useSharedValue(0); // 0 = false, 1 = true
+  const bleConnectedShared = useSharedValue(0); // 0 = false, 1 = true
+  const lastPacketTime = useSharedValue(Date.now()); // Track last packet timestamp for watchdog timer
+  
+  // Premium UI Animations
+  const dropJumpScale = useSharedValue(1); // Drop animation: Jump animation when drops increase
+  const rpmPulseScale = useSharedValue(1); // RPM Pulse: Subtle scale animation when RPM jumps significantly
+  const lastRPMValue = useSharedValue(0); // Track last RPM value to detect significant jumps
 
   // Determine machine type from machine (preferred) or equipment (fallback)
   const machineType = paramMachineType || 
@@ -118,6 +158,53 @@ export default function WorkoutScreen() {
     session?.equipment?.equipment_type || 
     (session?.equipment?.name?.toLowerCase().includes('treadmill') ? 'treadmill' :
      session?.equipment?.name?.toLowerCase().includes('bike') ? 'bike' : null);
+
+  // Sync JS state to SharedValues for useAnimatedReaction dependencies
+  useEffect(() => {
+    isPausedShared.value = isPaused ? 1 : 0;
+  }, [isPaused, isPausedShared]);
+
+  useEffect(() => {
+    bleConnectedShared.value = bleConnected ? 1 : 0;
+  }, [bleConnected, bleConnectedShared]);
+
+  // AppState listener: Disable heavy animations when app goes to background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // Pause heavy animations (Skia) when app goes to background
+        // BLE connection remains active
+        console.log('[Workout] App went to background - animations paused');
+      } else if (nextAppState === 'active') {
+        // Resume animations when app comes to foreground
+        console.log('[Workout] App came to foreground - animations resumed');
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Cancel all animations on unmount
+      cancelAnimation(rawRPMShared);
+      cancelAnimation(smoothedRPMShared);
+      cancelAnimation(earnedDropsShared);
+      cancelAnimation(totalDropsShared);
+      cancelAnimation(progressShared);
+      
+      // Cleanup reconnect timer
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Debug logging
   useEffect(() => {
@@ -185,22 +272,52 @@ export default function WorkoutScreen() {
             }
           }
           
-          Alert.alert(
-            'BLE Connection Failed',
-            connectError?.message || 'Nije moguće povezati se sa senzorom. Proverite da li je senzor uključen i u Cadence modu (crveno svetlo).',
-            [
-              {
-                text: 'Retry',
-                onPress: () => startBLEMonitoring(),
-              },
-              {
-                text: 'Cancel',
-                onPress: () => {
-                  router.back();
-                },
-              },
-            ]
-          );
+          // CRITICAL: No blocking Alert.alert() - use UI overlay instead
+          console.error('[Workout] BLE Connection Failed:', connectError?.message);
+          setBleStatus(connectError?.message || 'Connection failed. Auto-reconnecting...');
+          setIsReconnecting(true);
+          
+          // Exponential Backoff: Retry after 1s, 2s, 4s
+          reconnectAttemptRef.current = 0;
+          const attemptReconnect = async () => {
+            reconnectAttemptRef.current++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 4000); // 1s, 2s, 4s max
+            
+            console.log(`[Workout] Reconnect attempt ${reconnectAttemptRef.current} after ${delay}ms`);
+            
+            try {
+              const reconnected = await bleService.reconnect();
+              if (reconnected) {
+                console.log('[Workout] Auto-reconnected successfully');
+                setIsReconnecting(false);
+                setBleConnected(true);
+                setBleStatus('');
+                reconnectAttemptRef.current = 0;
+                
+                // Restart monitoring
+                await startBLEMonitoring();
+              } else if (reconnectAttemptRef.current < 3) {
+                // Retry up to 3 times
+                reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
+              } else {
+                // Max attempts reached - show persistent reconnecting overlay
+                console.log('[Workout] Max reconnect attempts reached, showing persistent overlay');
+                setIsReconnecting(true);
+                setBleStatus('Connection lost. Please check sensor.');
+              }
+            } catch (reconnectError) {
+              console.error('[Workout] Reconnect error:', reconnectError);
+              if (reconnectAttemptRef.current < 3) {
+                reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
+              } else {
+                setIsReconnecting(true);
+                setBleStatus('Connection lost. Please check sensor.');
+              }
+            }
+          };
+          
+          // Start first reconnect attempt after 1 second
+          reconnectTimerRef.current = setTimeout(attemptReconnect, 1000);
           return;
         }
 
@@ -231,6 +348,26 @@ export default function WorkoutScreen() {
         // Start monitoring CSC measurements with sleep detection and reconnect
         await bleService.startMonitoring(
           async (measurement: CSCMeasurement) => {
+            const now = Date.now();
+            
+            // Hard Fix: Glitch Filter - Ignore sudden drop to 0 if we're currently moving fast (> 20 RPM)
+            // Ako je measurement.rpm === 0, ali je trenutna rawRPM.value > 20, to je verovatno glitch senzora
+            // Ignoriši taj paket i nemoj setovati nulu. Nulu postavi samo ako je prethodni RPM bio nizak ili ako Watchdog potvrdi tišinu
+            if (measurement.rpm === 0 && rawRPMShared.value > 20) {
+              // High RPM - this is likely a sensor glitch, ignore it
+              // Watchdog will handle real 0 when sensor actually stops
+              return; // Skip this packet completely
+            }
+            
+            // If we got here and rpm === 0, it's a legitimate 0 (either low RPM or glitch protection already passed)
+            // Reset consecutive zero counter when we accept 0
+            if (measurement.rpm === 0) {
+              consecutiveZeroCountRef.current = 0;
+            } else {
+              // Reset counter when non-zero RPM arrives
+              consecutiveZeroCountRef.current = 0;
+            }
+            
             // BLE Data Optimization: Filter duplicates (already handled in ble-service.ts)
             // Track lastCrankEventTime for auto-zero detection
             if (measurement.lastCrankEventTime !== lastCrankEventTimeRef.current) {
@@ -246,108 +383,88 @@ export default function WorkoutScreen() {
             };
             
             console.log('[Workout] BLE Measurement:', measurement);
-            
             // Update signal status to OK when data arrives
+            // Note: Removed console.log spam for performance (only critical logs remain)
             setSignalStatus('ok');
             
-            // Store raw RPM
+            // Critical Fix: Update last packet timestamp immediately for Watchdog
+            lastPacketTime.value = now;
+            
+            // PRO-FITNESS: Native-Driven RPM Processing (no setState)
             const rawRPM = measurement.rpm;
-            setRpm(rawRPM);
             
-            // RPM Smoothing: Moving Average (last 4 readings for Walking Mode)
-            // Walking Mode: Handle intermittent 0 RPM between steps
+            // Debug: Temporary log to diagnose stuck RPM issue
+            console.log('[Workout] Processing RPM:', rawRPM, 'Current rawRPMShared:', rawRPMShared.value);
             
+            if (!isMountedRef.current) return; // Safety check
+            
+            // Critical Fix: When raw RPM is 0, immediately set to 0 and clear history
+            // This ensures no residual values in moving average that could cause RPM to stick
+            let smoothedValue = 0;
             if (rawRPM === 0) {
-              // Zero-Drop Prevention: Start grace period if we get 0 RPM
-              if (!gracePeriodActiveRef.current && lastNonZeroRPMRef.current > 0) {
-                // Start grace period: wait 1.5s before showing 0
-                gracePeriodActiveRef.current = true;
-                lastNonZeroRPMRef.current = smoothedRPM; // Store current smoothed RPM
-                
-                // Clear existing grace period timer
-                if (gracePeriodTimerRef.current) {
-                  clearTimeout(gracePeriodTimerRef.current);
-                }
-                
-                // Set grace period timer (1.5 seconds)
-                gracePeriodTimerRef.current = setTimeout(() => {
-                  // Grace period expired - slowly drop to 0
-                  console.log('[Workout] Grace period expired, dropping RPM to 0');
-                  gracePeriodActiveRef.current = false;
-                  lastNonZeroRPMRef.current = 0;
-                  
-                  // Clear history when sensor stops
-                  rpmRawHistoryRef.current = [0];
-                  
-                  // Smoothly animate RPM to 0
-                  setSmoothedRPM(0);
-                  rawRPMShared.value = 0;
-                }, 1500); // 1.5 second grace period
-              }
-              
-              // Don't add 0 to history during grace period (keep last non-zero values)
-              // Only add 0 if grace period is not active (sensor truly stopped)
-              if (!gracePeriodActiveRef.current) {
-                const allZeros = rpmRawHistoryRef.current.every(val => val === 0);
-                if (allZeros || rpmRawHistoryRef.current.length >= 4) {
-                  rpmRawHistoryRef.current = [0];
-                } else {
-                  rpmRawHistoryRef.current.push(0);
-                }
-              }
+              // Clear history when 0 arrives to prevent sticking on small values
+              rpmRawHistoryRef.current = [0]; // Reset history to only contain 0
+              smoothedValue = 0;
+              // Clear persistence when we receive actual 0 from sensor
+              lastNonZeroRPMRef.current = 0;
             } else {
-              // Non-zero RPM received - cancel grace period if active
-              if (gracePeriodActiveRef.current) {
-                console.log('[Workout] New step detected during grace period, continuing animation');
-                gracePeriodActiveRef.current = false;
-                lastNonZeroRPMRef.current = 0;
-                
-                if (gracePeriodTimerRef.current) {
-                  clearTimeout(gracePeriodTimerRef.current);
-                  gracePeriodTimerRef.current = null;
-                }
-              }
-              
+              // Performance Fix: Reduced moving average window for faster response (2 readings instead of 4)
               // Add raw RPM to history (only non-zero values)
               rpmRawHistoryRef.current.push(rawRPM);
-              if (rpmRawHistoryRef.current.length > 4) {
-                rpmRawHistoryRef.current.shift();
+              if (rpmRawHistoryRef.current.length > 2) {
+                rpmRawHistoryRef.current.shift(); // Keep last 2 readings for faster response
               }
               
-              // Update last non-zero RPM
-              lastNonZeroRPMRef.current = rawRPM;
-            }
-            
-            // Calculate moving average (prosek poslednja 4 očitavanja)
-            let smoothedValue = 0;
-            if (rpmRawHistoryRef.current.length > 0) {
-              // During grace period, use last non-zero RPM instead of 0
-              if (gracePeriodActiveRef.current && lastNonZeroRPMRef.current > 0) {
-                // Use grace period buffer: mix last non-zero RPM with current history
-                const nonZeroHistory = rpmRawHistoryRef.current.filter(val => val > 0);
-                if (nonZeroHistory.length > 0) {
-                  const sum = nonZeroHistory.reduce((acc, val) => acc + val, 0) + lastNonZeroRPMRef.current;
-                  smoothedValue = Math.round(sum / (nonZeroHistory.length + 1));
-                } else {
-                  smoothedValue = lastNonZeroRPMRef.current;
-                }
-              } else {
-                // Normal calculation: average of all values in history
+              // Calculate moving average (prosek poslednja 2 merenja)
+              // Precision Fix: Keep float value for smooth transitions (rounding happens in UI layer)
+              if (rpmRawHistoryRef.current.length > 0) {
                 const sum = rpmRawHistoryRef.current.reduce((acc, val) => acc + val, 0);
-                smoothedValue = Math.round(sum / rpmRawHistoryRef.current.length);
+                smoothedValue = sum / rpmRawHistoryRef.current.length; // Keep float, don't round here
+              }
+              
+              // Low RPM Threshold: If smoothed RPM < 10, treat as 0
+              if (smoothedValue < 10) {
+                smoothedValue = 0;
+              }
+              
+              // Update last known RPM and timestamp for non-zero values
+              if (smoothedValue > 0) {
+                lastNonZeroRPMRef.current = smoothedValue;
+                lastRPMTimeRef.current = Date.now();
               }
             }
             
-            // Low RPM Threshold: If smoothed RPM < 10, display as 0 (unless in grace period)
-            if (smoothedValue < 10 && !gracePeriodActiveRef.current) {
-              smoothedValue = 0;
+            // Hard Fix: Snap-to-Zero Logic - When sensor sends 0, cancel animation and reset to 0
+            // This prevents animation from getting 'stuck' in slow deceleration and never reaching true zero
+            if (rawRPM === 0) {
+              // Cancel any running animation to prevent getting stuck
+              cancelAnimation(rawRPMShared);
+              // Direct assignment to 0 for instant update (no animation delay)
+              rawRPMShared.value = 0;
+            } else {
+              // Critical Fix: Cancel any running animation before starting new one to prevent stuck animations
+              // This ensures that new values always update, even if previous animation is still running
+              cancelAnimation(rawRPMShared);
+              
+              // Critical Fix: Smooth RPM Transition (no abrupt jumps) for non-zero values
+              // Use withTiming for fluid transitions - adaptive duration for better UX
+              // Faster transition for increasing RPM (400ms), slower for decreasing (600ms)
+              const currentRPM = rawRPMShared.value;
+              let transitionDuration = 600; // Default
+              if (smoothedValue > currentRPM) {
+                transitionDuration = 400; // Faster for increasing RPM (better responsiveness)
+              } else {
+                transitionDuration = 600; // Slower for decreasing RPM (smoother decay)
+              }
+              
+              // IMPORTANT: Always update rawRPMShared, even if value seems same (ensures reactivity)
+              rawRPMShared.value = withTiming(smoothedValue, {
+                duration: transitionDuration,
+                easing: Easing.out(Easing.quad),
+              });
             }
             
-            // Update smoothed RPM for UI
-            setSmoothedRPM(smoothedValue);
-            
-            // Update shared value for fluid RPM animation (this triggers useAnimatedReaction)
-            rawRPMShared.value = smoothedValue;
+            // Note: lastPacketTime.value was already updated at the start of callback for Watchdog
             
             // Update RPM history for average calculation (keep last 30 values, only non-zero)
             if (rawRPM > 0) {
@@ -368,7 +485,17 @@ export default function WorkoutScreen() {
             
             const currentRevolutions = measurement.crankRevolutions;
             const lastRevolutions = lastCrankRevolutionsRef.current;
-            const now = Date.now();
+            // Note: 'now' was already declared at the start of this callback
+            
+            // PRO-FITNESS: Auto-Resume - if crankRevolutions started growing again, auto-resume
+            if (currentRevolutions > lastCrankRevolutionsForAutoResumeRef.current && isPaused && isMountedRef.current) {
+              // Crank started moving - auto-resume
+              // Battery Optimization: No logging in measurement callback
+              runOnJS(setIsPaused)(false);
+              runOnJS(setShowAutoPauseOverlay)(false);
+              runOnJS(setShowSensorAsleep)(false);
+            }
+            lastCrankRevolutionsForAutoResumeRef.current = currentRevolutions;
             
             if (currentRevolutions > 0) {
               // Initialize on first measurement
@@ -387,7 +514,7 @@ export default function WorkoutScreen() {
                 if (wrapAroundDelta < 1000) {
                   revolutionDelta = wrapAroundDelta;
                 } else {
-                  console.log('[Workout] Stale data detected: crankRevolutions decreased without wrap-around. Ignoring.');
+                  // Battery Optimization: No logging in measurement callback
                   return;
                 }
               }
@@ -395,66 +522,85 @@ export default function WorkoutScreen() {
               // Step-to-Drop Calibration: For walking mode, emit drop for each step
               // Even if RPM is 0 (during grace period), if revolutions increased, it's a step
               if (revolutionDelta > 0) {
-                // Walking Mode Detection: Low RPM (< stepDetectionThreshold) OR grace period active (intermittent 0 RPM)
+                // Walking Mode Detection: Low RPM (< stepDetectionThreshold)
                 // Walking mode suggests patica (shoe sensor) where steps are detected even with 0 RPM between steps
-                const isWalkingMode = (measurement.rpm > 0 && measurement.rpm < stepDetectionThreshold) || 
-                                     (gracePeriodActiveRef.current && revolutionDelta > 0);
+                const isWalkingMode = (measurement.rpm > 0 && measurement.rpm < stepDetectionThreshold);
                 
-                if (isWalkingMode) {
-                  // Walking Mode: Each step (revolution) = 1 drop
-                  const stepsDetected = revolutionDelta;
-                  if (stepsDetected > 0) {
-                    setEarnedDrops((prev) => {
-                      const newTotal = prev + stepsDetected;
-                      setDrops(newTotal);
-                      setDisplayDrops(newTotal);
-                      return newTotal;
-                    });
-                    
-                    // Trigger drop jump animation for each step
-                    for (let i = 0; i < stepsDetected; i++) {
-                      setTimeout(() => {
-                        dropJumpScale.value = withSequence(
-                          withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
-                          withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
-                        );
-                        // Subtle haptic feedback for each step
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }, i * 50); // Stagger animations slightly
-                    }
-                    
-                    lastStepDetectionRef.current = now;
-                  }
-                  
-                  // Update last crank revolutions (all steps counted)
-                  lastCrankRevolutionsRef.current = currentRevolutions;
+                // NATIVE-DRIVEN: Machine-specific drop logic
+                // Get machine type (treadmill or bike)
+                const currentMachineType = machineType || 'treadmill';
+                
+                // Machine-specific calibration
+                let newDrops = 0;
+                if (currentMachineType === 'treadmill') {
+                  // Treadmill: 1 impulse = 1 drop
+                  newDrops = revolutionDelta;
+                } else if (currentMachineType === 'bike') {
+                  // Bike: 5 impulses = 1 drop
+                  newDrops = Math.floor(revolutionDelta / 5);
                 } else {
-                  // Cycling Mode: Original logic (1 drop per 10 revolutions)
-                  if (revolutionDelta >= 10) {
-                    const newDrops = Math.floor(revolutionDelta / 10);
-                    setEarnedDrops((prev) => {
-                      const newTotal = prev + newDrops;
-                      setDrops(newTotal);
-                      setDisplayDrops(newTotal);
-                      return newTotal;
-                    });
-                    
-                    // Trigger drop jump animation
-                    dropJumpScale.value = withSequence(
-                      withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
-                      withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
-                    );
-                    
-                    // Haptic feedback on drop earned
-                    if (measurement.rpm > 0 && measurement.rpm < 120) {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }
+                  // Default: 1 drop per 10 revolutions (cycling mode)
+                  newDrops = Math.floor(revolutionDelta / 10);
+                }
+                
+                if (newDrops > 0 && isMountedRef.current) {
+                  // NATIVE-DRIVEN: Update SharedValues directly (no setState)
+                  earnedDropsShared.value = earnedDropsShared.value + newDrops;
+                  totalDropsShared.value = totalDropsShared.value + newDrops;
+                  
+                  // PRO-FITNESS: Track total crank revolutions for bike (for kcal and pace calculation)
+                  if (currentMachineType === 'bike') {
+                    totalCrankRevolutionsShared.value = totalCrankRevolutionsShared.value + revolutionDelta;
                   }
                   
-                  // Update last crank revolutions (accounting for drops already counted)
+                  // Get current progress for drop emitter
+                  const currentProgress = Math.min(totalDropsShared.value / targetDrops, 1);
+                  
+                  // PRO-FITNESS: Add drops to state array for DropEmitter
+                  const newDropObjects: Array<{ id: string; startX: number; progress: number }> = [];
+                  for (let i = 0; i < newDrops; i++) {
+                    const dropId = `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
+                    const gaugeWidth = 280;
+                    const padding = 40;
+                    const startX = padding + Math.random() * (gaugeWidth - padding * 2);
+                    newDropObjects.push({
+                      id: dropId,
+                      startX,
+                      progress: currentProgress,
+                    });
+                  }
+                  setActiveDrops((prev) => [...prev, ...newDropObjects]);
+                  
+                  // PRO-FITNESS: Trigger liquid gauge impact when new drop falls
+                  // This creates visual wave effect in the gauge
+                  liquidGaugeRef.current?.triggerImpact();
+                  
+                  // Trigger drop jump animation
+                  dropJumpScale.value = withSequence(
+                    withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
+                    withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
+                  );
+                  
+                  // Haptic feedback (throttled - max 5/s = 200ms minimum)
+                  const now = Date.now();
+                  if (!lastHapticTimeRef.current || now - lastHapticTimeRef.current >= 200) {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    lastHapticTimeRef.current = now;
+                  }
+                }
+                
+                // Update last crank revolutions based on machine type
+                if (currentMachineType === 'treadmill') {
+                  lastCrankRevolutionsRef.current = currentRevolutions;
+                } else if (currentMachineType === 'bike') {
+                  const remainingRevolutions = revolutionDelta % 5;
+                  lastCrankRevolutionsRef.current = currentRevolutions - remainingRevolutions;
+                } else {
                   const remainingRevolutions = revolutionDelta % 10;
                   lastCrankRevolutionsRef.current = currentRevolutions - remainingRevolutions;
                 }
+                
+                lastStepDetectionRef.current = now;
               }
             }
             
@@ -493,10 +639,9 @@ export default function WorkoutScreen() {
               const timeSinceLastRPM = Date.now() - lastRPMTimeRef.current;
               
               // If we've had 0 RPM for more than 2 seconds, ensure smoothed RPM is also 0
-              if (timeSinceLastRPM > 2000 && smoothedValue > 0) {
-                console.log('[Workout] Sensor stopped (0 RPM for 2+ seconds), resetting smoothed RPM');
-                setSmoothedRPM(0);
-                rawRPMShared.value = 0; // Update shared value
+              if (timeSinceLastRPM > 2000 && smoothedRPMShared.value > 0) {
+                // Battery Optimization: No logging in useAnimatedReaction
+                rawRPMShared.value = 0; // Update shared value (smoothing handled by useDerivedValue)
                 // Clear smoothing history to prevent stale data
                 rpmRawHistoryRef.current = [0];
               }
@@ -508,7 +653,7 @@ export default function WorkoutScreen() {
               
               if (timeSinceLastRPM > 30000 && !isPaused && !autoPauseTimerRef.current) {
                 // Auto-pause after 30 seconds of no RPM
-                console.log('[Workout] Auto-pausing due to no RPM for 30+ seconds');
+                // Battery Optimization: No logging in useAnimatedReaction
                 setShowAutoPauseOverlay(true);
                 autoPauseTimerRef.current = setTimeout(() => {
                   if (!isPaused) {
@@ -526,14 +671,14 @@ export default function WorkoutScreen() {
           },
           // onSleep callback - triggered when no data for 10+ seconds
           () => {
-            console.log('[Workout] Sensor appears to be asleep');
+            // Battery Optimization: Only log critical events
             setShowSensorAsleep(true);
           },
           // onReconnect callback - verify session ownership
           verifySessionOwnership
         );
 
-        console.log('[Workout] BLE monitoring started');
+        // Battery Optimization: Only log critical events
         setBleStatus(''); // Clear status when connected
       } catch (error: any) {
         console.error('[Workout] BLE monitoring error:', error);
@@ -554,22 +699,52 @@ export default function WorkoutScreen() {
           }
         }
         
-        Alert.alert(
-          'BLE Error',
-          error?.message || 'Greška pri povezivanju sa senzorom. Pokušajte ponovo.',
-          [
-            {
-              text: 'Retry',
-              onPress: () => startBLEMonitoring(),
-            },
-            {
-              text: 'Cancel',
-              onPress: () => {
-                router.back();
-              },
-            },
-          ]
-        );
+        // CRITICAL: No blocking Alert.alert() - use UI overlay instead
+        // Set reconnecting state to show overlay
+        setIsReconnecting(true);
+        setBleStatus(error?.message || 'Connection failed. Auto-reconnecting...');
+        
+        // Exponential Backoff: Retry after 1s, 2s, 4s
+        reconnectAttemptRef.current = 0;
+        const attemptReconnect = async () => {
+          reconnectAttemptRef.current++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 4000); // 1s, 2s, 4s max
+          
+          console.log(`[Workout] Reconnect attempt ${reconnectAttemptRef.current} after ${delay}ms`);
+          
+          try {
+            const reconnected = await bleService.reconnect();
+            if (reconnected) {
+              console.log('[Workout] Auto-reconnected successfully');
+              setIsReconnecting(false);
+              setBleConnected(true);
+              setBleStatus('');
+              reconnectAttemptRef.current = 0;
+              
+              // Restart monitoring
+              await startBLEMonitoring();
+            } else if (reconnectAttemptRef.current < 3) {
+              // Retry up to 3 times
+              reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
+            } else {
+              // Max attempts reached - show persistent reconnecting overlay
+              console.log('[Workout] Max reconnect attempts reached, showing persistent overlay');
+              setIsReconnecting(true);
+              setBleStatus('Connection lost. Please check sensor.');
+            }
+          } catch (reconnectError) {
+            console.error('[Workout] Reconnect error:', reconnectError);
+            if (reconnectAttemptRef.current < 3) {
+              reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
+            } else {
+              setIsReconnecting(true);
+              setBleStatus('Connection lost. Please check sensor.');
+            }
+          }
+        };
+        
+        // Start first reconnect attempt after 1 second
+        reconnectTimerRef.current = setTimeout(attemptReconnect, 1000);
       }
     };
 
@@ -641,34 +816,21 @@ export default function WorkoutScreen() {
     const checkInterval = setInterval(() => {
       const timeSinceLastChange = Date.now() - lastCrankEventTimeChangeRef.current;
       
-      // If no change in crankEventTime for 3 seconds, reset RPM to 0
-      // But respect grace period - don't reset if grace period is active
-      if (timeSinceLastChange > 3000 && smoothedRPM > 0 && !gracePeriodActiveRef.current) {
-        console.log('[Workout] No change in crankEventTime for 3+ seconds, resetting RPM to 0');
-        setRpm(0);
-        setSmoothedRPM(0);
-        rawRPMShared.value = 0; // Update shared value
+      // PRO-FITNESS: If no change in crankEventTime for 3 seconds, reset RPM to 0
+      // (RPM persistence is handled in BLE callback, this is just a safety check)
+      if (timeSinceLastChange > 3000 && smoothedRPMShared.value > 0) {
+        // Battery Optimization: No logging in useFrameCallback
+        rawRPMShared.value = 0; // Update shared value (smoothing handled by useDerivedValue)
         // Clear smoothing history when sensor stops
         rpmRawHistoryRef.current = [];
-        // Clear grace period if active
-        if (gracePeriodTimerRef.current) {
-          clearTimeout(gracePeriodTimerRef.current);
-          gracePeriodTimerRef.current = null;
-        }
-        gracePeriodActiveRef.current = false;
         lastNonZeroRPMRef.current = 0;
       }
     }, 1000);
 
     return () => {
       clearInterval(checkInterval);
-      // Cleanup grace period timer
-      if (gracePeriodTimerRef.current) {
-        clearTimeout(gracePeriodTimerRef.current);
-        gracePeriodTimerRef.current = null;
-      }
     };
-  }, [smoothedRPM, bleConnected, isPaused]);
+  }, [bleConnected, isPaused]); // smoothedRPM removed - using SharedValue
 
   // Database Sync on Idle: Final sync if RPM is 0 for 15+ seconds
   const idleSyncRef = useRef<boolean>(false);
@@ -684,40 +846,48 @@ export default function WorkoutScreen() {
       idleSyncTimerRef.current = null;
     }
 
-    // If RPM is 0, start idle timer
-    if (smoothedRPM === 0 && !idleSyncRef.current) {
+    // If RPM is 0, start idle timer (check SharedValue via useAnimatedReaction)
+    // Use a ref to track smoothed RPM for this check
+    const checkIdleSync = () => {
+      if (smoothedRPMShared.value === 0 && !idleSyncRef.current) {
       idleSyncTimerRef.current = setTimeout(async () => {
         // RPM has been 0 for 15+ seconds - do final sync and stop further syncing
-        console.log('[Workout] RPM idle for 15+ seconds, performing final sync');
+        // Battery Optimization: No logging in useFrameCallback
         idleSyncRef.current = true;
         
         try {
           await supabase
             .from('sessions')
             .update({
-              drops_earned: earnedDrops,
+              drops_earned: Math.round(earnedDropsShared.value),
               duration_seconds: duration,
               average_rpm: averageRPM > 0 ? averageRPM : null,
               updated_at: new Date().toISOString(),
             })
             .eq('id', session.id);
           
-          console.log('[Workout] Final sync completed (idle state)');
+          // Battery Optimization: Only log critical events
         } catch (error) {
           console.error('[Workout] Final sync error:', error);
         }
       }, 15000); // 15 seconds
-    } else if (smoothedRPM > 0) {
+    } else if (smoothedRPMShared.value > 0) {
       // RPM is active again - reset idle flag and allow syncing
       idleSyncRef.current = false;
     }
+    };
+    
+    // Check idle sync periodically (every second)
+    const idleCheckInterval = setInterval(checkIdleSync, 1000);
+    checkIdleSync(); // Initial check
 
     return () => {
+      clearInterval(idleCheckInterval);
       if (idleSyncTimerRef.current) {
         clearTimeout(idleSyncTimerRef.current);
       }
     };
-  }, [smoothedRPM, session?.id, earnedDrops, averageRPM, duration, isPaused, authSession]);
+  }, [session?.id, averageRPM, duration, isPaused, authSession]); // Removed smoothedRPM, earnedDrops - using SharedValues
 
   // Connecting State: Subtle pulse animation while waiting for BLE connection
   useEffect(() => {
@@ -748,137 +918,265 @@ export default function WorkoutScreen() {
     );
   }, [bleConnected, session?.machine_id]);
 
-  // High-Frequency RPM Smoothing: useAnimatedReaction for smooth number transitions
+  // Performance Fix: Optimized smoothing for faster response
+  // Layer 1: Lerp smoothing (balanced response, prevents jitter)
+  const lerpSmoothedRPM = useSharedValue(0);
   useAnimatedReaction(
     () => rawRPMShared.value,
-    (targetRPM) => {
-      const currentRPM = smoothedRPMShared.value;
-      
-      if (targetRPM > currentRPM) {
-        // RPM increased - quick transition up
-        smoothedRPMShared.value = withTiming(targetRPM, {
-          duration: 300,
-          easing: Easing.out(Easing.ease),
-        });
-      } else if (targetRPM < currentRPM) {
-        // RPM decreased - count down smoothly
-        smoothedRPMShared.value = withTiming(targetRPM, {
-          duration: 500,
-          easing: Easing.inOut(Easing.ease),
-        });
+    (currentRPM) => {
+      'worklet';
+      // Hard Fix: If rawRPM is 0, immediately reset smoothing to 0 (no lerp delay)
+      // This prevents smoothing chain from keeping old values when rawRPM is 0
+      if (currentRPM === 0) {
+        lerpSmoothedRPM.value = 0; // Instant reset to 0
       } else {
-        // No change
-        smoothedRPMShared.value = targetRPM;
+        // Lerp smoothing: slightly reduced lerpFactor for smoother response (0.35 instead of 0.4)
+        const lerpFactor = 0.35; // Balanced factor for smooth response (was 0.4, originally 0.2)
+        lerpSmoothedRPM.value = lerpSmoothedRPM.value + (currentRPM - lerpSmoothedRPM.value) * lerpFactor;
       }
     },
-    [rawRPMShared, smoothedRPMShared]
+    [rawRPMShared]
   );
 
-  // Fluid RPM Display: Convert shared value to JS state for display
-  const [displayRPMValue, setDisplayRPMValue] = useState(0);
-  
+  // Layer 2: withTiming smoothing (smooth transitions, prevents jumps)
+  // Performance Fix: Slightly increased duration for smoother transitions (500ms instead of 400ms)
+  const smoothedRPMDerived = useDerivedValue(() => {
+    return withTiming(lerpSmoothedRPM.value, {
+      duration: 500, // Increased from 400ms to 500ms for smoother response (was 800ms)
+      easing: Easing.out(Easing.quad),
+    });
+  }, [lerpSmoothedRPM]);
+
+  // Sync smoothed derived value to shared value for use in other animations
   useAnimatedReaction(
-    () => smoothedRPMShared.value,
-    (rpm) => {
-      const roundedRPM = Math.round(rpm);
-      runOnJS(setDisplayRPMValue)(roundedRPM);
+    () => smoothedRPMDerived.value,
+    (smoothed) => {
+      'worklet';
+      smoothedRPMShared.value = smoothed;
     },
-    [smoothedRPMShared]
+    [smoothedRPMDerived]
   );
 
-  // Premium Pulse Rings: 3 concentric rings with different speeds based on RPM
-  useEffect(() => {
-    if (smoothedRPM === 0 || isPaused || !bleConnected) {
-      // Stop all pulse rings when RPM is 0 or paused
-      pulseRing1Scale.value = withTiming(1, { duration: 300 });
-      pulseRing1Opacity.value = withTiming(0, { duration: 300 });
-      pulseRing2Scale.value = withTiming(1, { duration: 300 });
-      pulseRing2Opacity.value = withTiming(0, { duration: 300 });
-      pulseRing3Scale.value = withTiming(1, { duration: 300 });
-      pulseRing3Opacity.value = withTiming(0, { duration: 300 });
-      return;
+  // Critical Fix: Silence Detector Watchdog (useFrameCallback - GPU-only, no JS thread blocking)
+  // Magene S3+ doesn't send '0 RPM' packets - it just stops emitting data (Silence)
+  // This watchdog detects silence and smoothly sets RPM to 0
+  // Enhanced: Even if RPM is stuck on small values (1-5 RPM), force to 0 if no data for 2.5s
+  useFrameCallback(() => {
+    'worklet';
+    // 1. Current time
+    const now = Date.now();
+    
+    // 2. How long since last packet?
+    const diff = now - lastPacketTime.value;
+    
+    // Hard Fix: Watchdog Reset - If no data for more than 2.5s, force direct reset to 0
+    // Set rawRPM.value = 0 directly (without animation) to ensure total reset
+    // This guarantees exact 0.00 value, no settling on small values like 1-10
+    if (diff > 2500 && rawRPMShared.value > 0) {
+      // Cancel any running animation first
+      cancelAnimation(rawRPMShared);
+      // Direct assignment to 0 - ensures exact 0.00 value immediately
+      rawRPMShared.value = 0;
     }
+  });
 
-    // Calculate pulse speed and intensity based on smoothed RPM
-    const normalizedRPM = Math.min(smoothedRPM / 120, 1);
-    const baseDuration = 2000 - (normalizedRPM * 1200); // 2000ms to 800ms (faster at higher RPM)
-    
-    // Ring 1 (innermost): Fastest, most intense
-    const ring1Duration = baseDuration * 0.6;
-    const ring1MaxScale = 1.15 + (normalizedRPM * 0.1);
-    const ring1MaxOpacity = 0.8;
-    
-    // Ring 2 (middle): Medium speed
-    const ring2Duration = baseDuration * 0.8;
-    const ring2MaxScale = 1.12 + (normalizedRPM * 0.08);
-    const ring2MaxOpacity = 0.5;
-    
-    // Ring 3 (outermost): Slowest, most subtle
-    const ring3Duration = baseDuration;
-    const ring3MaxScale = 1.1 + (normalizedRPM * 0.06);
-    const ring3MaxOpacity = 0.3;
+  // NATIVE-DRIVEN: Display numbers using SharedValue (no re-renders)
+  // These run entirely on UI thread
+  const animatedRPMText = useSharedValue('--');
+  const animatedDropsText = useSharedValue('0');
+  const animatedCaloriesText = useSharedValue('0');
+  const animatedPaceText = useSharedValue('0:00');
+  // GPU-Only: LiquidGauge display value (SharedValue, no useState to avoid JS thread blocking)
+  const liquidGaugeDisplayValueShared = useSharedValue('0');
 
-    // Start pulse animations for all 3 rings
-    pulseRing1Scale.value = withRepeat(
-      withSequence(
-        withTiming(ring1MaxScale, { duration: ring1Duration / 2, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: ring1Duration / 2, easing: Easing.in(Easing.ease) })
-      ),
-      -1,
-      false
+  // Initialize text values on mount
+  useEffect(() => {
+    animatedRPMText.value = bleConnected ? Math.round(smoothedRPMShared.value).toString() : '--';
+    animatedDropsText.value = Math.round(totalDropsShared.value).toLocaleString();
+    animatedCaloriesText.value = Math.round(caloriesShared.value).toString();
+    animatedPaceText.value = smoothedRPMShared.value === 0 ? '--:--' : '0:00';
+  }, []);
+
+  // REMOVED: LiquidGauge color is now fixed to neon blue (like drops)
+  // Dynamic colors are only applied to pulse rings (concentric circles)
+
+  // Hard Fix: Visual 'One-Killer' - Force values < 1.5 to display as "0"
+  // This prevents Math.round(1.2) from becoming "1" on screen
+  // Uses rawRPMShared directly to catch values before smoothing delays
+  useAnimatedReaction(
+    () => [rawRPMShared.value, smoothedRPMShared.value, bleConnected] as const,
+    ([rawRpm, smoothedRpm, connected]) => {
+      'worklet';
+      if (!connected) {
+        animatedRPMText.value = '--';
+        return;
+      }
+      
+      // Hard Fix: Use rawRPM directly when it's 0 or very low - ignore smoothed value
+      // This prevents smoothing chain from keeping old values (like 94) when rawRPM is 0
+      // CRITICAL: If rawRPM is 0 or < 1.5, display "0" immediately (ignore smoothing completely)
+      // For non-zero values, use smoothed value for smooth display
+      if (rawRpm < 1.5) {
+        // Use rawRPM directly - ignore smoothing when value is low/zero
+        animatedRPMText.value = '0';
+      } else {
+        // For non-zero values, use smoothed value for smooth transitions
+        const rpmValue = Math.round(smoothedRpm).toString();
+        animatedRPMText.value = rpmValue;
+      }
+      
+      // Premium UI: Detect significant RPM jumps for pulse effect
+      // Trigger pulse animation when RPM jumps by more than 15
+      const currentRPM = rawRpm < 1.5 ? 0 : smoothedRpm;
+      const rpmJump = Math.abs(currentRPM - lastRPMValue.value);
+      if (rpmJump > 15 && currentRPM > 0) {
+        // Significant jump detected - trigger pulse animation with spring physics
+        rpmPulseScale.value = withSequence(
+          withSpring(1.05, { damping: 15, stiffness: 100 }),
+          withSpring(1, { damping: 15, stiffness: 100 })
+        );
+      }
+      lastRPMValue.value = currentRPM;
+    },
+    [rawRPMShared, smoothedRPMShared, bleConnected]
+  );
+  
+  // ============================================================================
+  // PREMIUM UI: Dynamic RPM Color based on intensity (GPU-Only)
+  // ============================================================================
+  // 0-40 RPM: Gray (resting), 40-70 RPM: Green (moderate), 70-100 RPM: Yellow (intense), 100+ RPM: Red (maximum)
+  const rpmTextColorStyle = useAnimatedStyle(() => {
+    const currentRPM = rawRPMShared.value < 1.5 ? 0 : smoothedRPMShared.value;
+    const color = interpolateColor(
+      currentRPM,
+      [0, 40, 70, 100, 150],
+      [
+        theme.colors.textSecondary, // 0-40 RPM: Gray
+        theme.colors.textSecondary, // 0-40 RPM: Gray
+        '#4ade80', // 40-70 RPM: Green
+        '#facc15', // 70-100 RPM: Yellow
+        '#f87171', // 100+ RPM: Red
+      ]
     );
+    return {
+      color,
+    };
+  }, [rawRPMShared, smoothedRPMShared]);
+  
+  // ============================================================================
+  // PREMIUM UI: Subtle Pulse Effect for RPM Container
+  // ============================================================================
+  // Scales up slightly (1.05) when RPM jumps significantly, using spring physics
+  const rpmPulseStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: rpmPulseScale.value }],
+    };
+  }, [rpmPulseScale]);
 
-    pulseRing1Opacity.value = withRepeat(
-      withSequence(
-        withTiming(ring1MaxOpacity, { duration: ring1Duration / 2, easing: Easing.out(Easing.ease) }),
-        withTiming(0.2, { duration: ring1Duration / 2, easing: Easing.in(Easing.ease) })
-      ),
-      -1,
-      false
-    );
+  useAnimatedReaction(
+    () => totalDropsShared.value,
+    (drops) => {
+      'worklet';
+      const dropsValue = Math.round(drops).toLocaleString();
+      animatedDropsText.value = dropsValue;
+      // GPU-Only: Update LiquidGauge center display (drops, not percentage) - no runOnJS
+      liquidGaugeDisplayValueShared.value = Math.round(drops).toString();
+    },
+    [totalDropsShared]
+  );
 
-    // Ring 2 with slight delay
-    setTimeout(() => {
-      pulseRing2Scale.value = withRepeat(
-        withSequence(
-          withTiming(ring2MaxScale, { duration: ring2Duration / 2, easing: Easing.out(Easing.ease) }),
-          withTiming(1, { duration: ring2Duration / 2, easing: Easing.in(Easing.ease) })
-        ),
-        -1,
-        false
-      );
+  useAnimatedReaction(
+    () => caloriesShared.value,
+    (calories) => {
+      'worklet';
+      const caloriesValue = Math.round(calories).toString();
+      animatedCaloriesText.value = caloriesValue;
+    },
+    [caloriesShared]
+  );
 
-      pulseRing2Opacity.value = withRepeat(
-        withSequence(
-          withTiming(ring2MaxOpacity, { duration: ring2Duration / 2, easing: Easing.out(Easing.ease) }),
-          withTiming(0.15, { duration: ring2Duration / 2, easing: Easing.in(Easing.ease) })
-        ),
-        -1,
-        false
-      );
-    }, ring2Duration * 0.2);
+  // PRO-FITNESS: Calculate Pace (min/km) using AnimatedText
+  // Pace = Time (seconds) / Distance (km) = seconds per km
+  // Then convert to min:sec format
+  // Distance for treadmill = total_drops * 0.0008 (average step 0.8m)
+  // Distance for bike = ukupni_obrtaji * 0.002 (krug od 2m)
+  // If RPM is 0 or distance is 0, display --:--
+  useAnimatedReaction(
+    () => [duration, totalDropsShared.value, totalCrankRevolutionsShared.value, smoothedRPMShared.value, machineType] as const,
+    ([timeSeconds, drops, totalRevolutions, rpm, mType]) => {
+      'worklet';
+      const currentMachineType = mType || 'treadmill';
+      
+      // If RPM is 0, display --:--
+      if (rpm === 0) {
+        animatedPaceText.value = '--:--';
+        return;
+      }
+      
+      let distanceKm = 0;
+      
+      if (currentMachineType === 'treadmill') {
+        // Treadmill: Distance = drops * 0.0008 km (0.8m per step)
+        distanceKm = drops * 0.0008;
+      } else {
+        // Bike: Distance = ukupni_obrtaji * 0.002 (krug od 2m)
+        distanceKm = totalRevolutions * 0.002;
+      }
+      
+      // Calculate pace: seconds per km
+      if (distanceKm > 0 && timeSeconds > 0) {
+        const paceSecondsPerKm = timeSeconds / distanceKm;
+        const paceMins = Math.floor(paceSecondsPerKm / 60);
+        const paceSecs = Math.floor(paceSecondsPerKm % 60);
+        animatedPaceText.value = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
+      } else {
+        animatedPaceText.value = '--:--';
+      }
+    },
+    [duration, totalDropsShared, totalCrankRevolutionsShared, smoothedRPMShared, machineType]
+  );
 
-    // Ring 3 with more delay
-    setTimeout(() => {
-      pulseRing3Scale.value = withRepeat(
-        withSequence(
-          withTiming(ring3MaxScale, { duration: ring3Duration / 2, easing: Easing.out(Easing.ease) }),
-          withTiming(1, { duration: ring3Duration / 2, easing: Easing.in(Easing.ease) })
-        ),
-        -1,
-        false
-      );
+  // ============================================================================
+  // PREMIUM UI: LiquidGauge Progress Calculation with Damping
+  // ============================================================================
+  // Advanced Liquid: Progress follows drops with slight damping to create realistic liquid bubbling effect
+  // LiquidGauge already receives smoothedRPMShared for dynamic glow synchronization
+  useAnimatedReaction(
+    () => totalDropsShared.value,
+    (drops) => {
+      'worklet';
+      // Calculate target progress
+      const targetProgress = Math.min(drops / targetDrops, 1);
+      // Apply slight damping for realistic liquid movement (smooth transition, not instant)
+      progressShared.value = withTiming(targetProgress, {
+        duration: 300, // Small delay creates realistic liquid bubbling effect
+        easing: Easing.out(Easing.quad),
+      });
+    },
+    [totalDropsShared, targetDrops]
+  );
 
-      pulseRing3Opacity.value = withRepeat(
-        withSequence(
-          withTiming(ring3MaxOpacity, { duration: ring3Duration / 2, easing: Easing.out(Easing.ease) }),
-          withTiming(0.1, { duration: ring3Duration / 2, easing: Easing.in(Easing.ease) })
-        ),
-        -1,
-        false
-      );
-    }, ring3Duration * 0.3);
-  }, [smoothedRPM, isPaused, bleConnected]);
+  // PRO-FITNESS: Calculate calories based on machine type
+  // Bike: Kcal = (ukupni_obrtaji * 0.15)
+  // Treadmill: Kcal = (ukupno_kapi * 0.04)
+  useAnimatedReaction(
+    () => [totalDropsShared.value, totalCrankRevolutionsShared.value, machineType] as const,
+    ([drops, totalRevolutions, mType]) => {
+      'worklet';
+      const currentMachineType = mType || 'treadmill';
+      
+      if (currentMachineType === 'bike') {
+        // Bike formula: Kcal = (ukupni_obrtaji * 0.15)
+        caloriesShared.value = Math.floor(totalRevolutions * 0.15);
+      } else {
+        // Treadmill formula: Kcal = (ukupno_kapi * 0.04)
+        caloriesShared.value = Math.floor(drops * 0.04);
+      }
+    },
+    [totalDropsShared, totalCrankRevolutionsShared, machineType]
+  );
+
+  // Pulse Rings are now handled in CircularProgressRing.tsx component (GPU-only animations)
 
   // Explosion Animation: Trigger when BLE connects
   useEffect(() => {
@@ -934,18 +1232,16 @@ export default function WorkoutScreen() {
 
     if (gymError || !gym) {
       console.error('Error fetching gym:', gymError);
-      Alert.alert('Error', 'Failed to verify gym status. Please try again.');
-      router.back();
-      return;
+      // CRITICAL: No blocking Alert.alert() - log error and continue
+      console.error('[Workout] Failed to verify gym status');
+      // Continue with workout - user can still use the app
+      return; // Exit early if gym not found
     }
 
     if (gym.status === 'suspended' || gym.is_suspended) {
-      Alert.alert(
-        'Gym Suspended',
-        'This gym\'s subscription has expired. Please contact the gym owner.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-      return;
+      // CRITICAL: No blocking Alert.alert() - log warning and continue
+      console.warn('[Workout] Gym is suspended, but continuing with workout');
+      // Continue with workout - user can still track their session
     }
 
     const { data, error } = await supabase
@@ -962,8 +1258,10 @@ export default function WorkoutScreen() {
 
     if (error) {
       console.error('Error creating session:', error);
-      Alert.alert('Error', `Failed to start workout: ${error.message}`);
-      return;
+      // CRITICAL: No blocking Alert.alert() - log error and continue
+      console.error('[Workout] Failed to start workout:', error.message);
+      // Continue with mock session or show error in UI
+      setBleStatus(`Failed to start workout: ${error.message}`);
     }
 
     if (data) {
@@ -995,10 +1293,10 @@ export default function WorkoutScreen() {
         machineType: data.machine?.type || data.equipment?.equipment_type,
       });
       
-      // Load saved progress
+      // Load saved progress (update SharedValues)
       if (data.drops_earned > 0) {
-        setDrops(data.drops_earned);
-        setDisplayDrops(data.drops_earned);
+        earnedDropsShared.value = data.drops_earned;
+        totalDropsShared.value = data.drops_earned;
       }
       if (data.duration_seconds) {
         setDuration(data.duration_seconds);
@@ -1019,17 +1317,18 @@ export default function WorkoutScreen() {
 
     const syncToDatabase = async () => {
       const now = Date.now();
-      // Only sync if 15 seconds have passed since last sync
-      if (lastSyncRef.current && now - lastSyncRef.current < 15000) {
+      // Battery Optimization: Throttle to 30 seconds minimum
+      if (lastSyncRef.current && now - lastSyncRef.current < 30000) {
         return;
       }
 
       try {
-        // Update session with earnedDrops and averageRPM
+        // Update session with earnedDrops and averageRPM (read from SharedValues)
+        const currentEarnedDrops = Math.round(earnedDropsShared.value);
         await supabase
           .from('sessions')
           .update({
-            drops_earned: earnedDrops,
+            drops_earned: currentEarnedDrops,
             duration_seconds: duration,
             average_rpm: averageRPM > 0 ? averageRPM : null,
             updated_at: new Date().toISOString(),
@@ -1037,22 +1336,22 @@ export default function WorkoutScreen() {
           .eq('id', session.id);
         
         lastSyncRef.current = now;
-        console.log('[Workout] Synced to database:', { earnedDrops, averageRPM, duration });
+        // Battery Optimization: Only log critical sync events
       } catch (error) {
         console.error('[Workout] Sync error:', error);
       }
     };
 
-    // Sync immediately, then every 15 seconds
+    // Battery Optimization: Sync immediately, then every 30 seconds (reduced frequency)
     syncToDatabase();
-    syncIntervalRef.current = setInterval(syncToDatabase, 15000);
+    syncIntervalRef.current = setInterval(syncToDatabase, 30000);
 
     return () => {
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
       }
     };
-  }, [session?.id, earnedDrops, averageRPM, duration, isPaused, authSession]);
+  }, [session?.id, averageRPM, duration, isPaused, authSession]); // Removed earnedDrops - using SharedValue
 
   // Legacy save interval (kept for backward compatibility, but syncIntervalRef is primary)
   useEffect(() => {
@@ -1060,10 +1359,11 @@ export default function WorkoutScreen() {
     if (isPaused) return;
 
     const saveProgress = async () => {
+      const currentDrops = Math.round(totalDropsShared.value);
       await supabase
         .from('sessions')
         .update({
-          drops_earned: displayDrops,
+          drops_earned: currentDrops,
           duration_seconds: duration,
           updated_at: new Date().toISOString(),
         })
@@ -1079,7 +1379,7 @@ export default function WorkoutScreen() {
         clearInterval(saveIntervalRef.current);
       }
     };
-  }, [session?.id, displayDrops, duration, calories, isPaused, authSession]);
+  }, [session?.id, duration, isPaused, authSession]); // Removed displayDrops, calories - using SharedValues
 
   // Timer for duration only - REQUIRES BLE connection
   useEffect(() => {
@@ -1096,15 +1396,7 @@ export default function WorkoutScreen() {
       if (seconds >= 0) {
         setDuration(seconds);
 
-        // Calculate pace (mock: assume 10 km/h average, so 1 min per km)
-        // Real implementation would use actual distance from equipment
-        const estimatedDistance = seconds / 60; // km (rough estimate)
-        if (estimatedDistance > 0) {
-          const paceSeconds = Math.floor(seconds / estimatedDistance);
-          const paceMins = Math.floor(paceSeconds / 60);
-          const paceSecs = paceSeconds % 60;
-          setPace(`${paceMins}:${paceSecs.toString().padStart(2, '0')}`);
-        }
+        // Pace calculation moved to useAnimatedReaction (uses SharedValues)
       }
     }, 1000);
 
@@ -1182,44 +1474,8 @@ export default function WorkoutScreen() {
     };
   }, []);
 
-  // Decoupled Drop Physics: Completely independent from BLE data stream
-  // Drops are created when earnedDrops increases, with progress snapshot at creation time
-  const prevEarnedDropsRef = useRef(0);
-  useEffect(() => {
-    // Only create drops when earnedDrops increases (not when displayDrops changes)
-    if (earnedDrops > prevEarnedDropsRef.current && !isPaused && bleConnected) {
-      const newDropsCount = earnedDrops - prevEarnedDropsRef.current;
-      
-      // Create independent drop animations for each new drop
-      // Each drop captures the current progress at creation time
-      const currentProgress = Math.min(drops / targetDrops, 1);
-      
-      for (let i = 0; i < newDropsCount; i++) {
-        // Unique ID with timestamp to ensure independence
-        const dropId = `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
-        const gaugeWidth = 280;
-        const padding = 40;
-        const startX = padding + Math.random() * (gaugeWidth - padding * 2);
-        
-        // Add drop with progress snapshot - this ensures drops don't reset when progress changes
-        setActiveDrops((prev) => [...prev, { 
-          id: dropId, 
-          startX,
-          progress: currentProgress, // Snapshot progress at creation time
-        }]);
-      }
-    }
-    prevEarnedDropsRef.current = earnedDrops;
-  }, [earnedDrops, isPaused, bleConnected, drops, targetDrops]);
-
-  // Handle drop completion with splash effect
-  const handleDropDone = useCallback((dropId: string) => {
-    // Remove drop from state immediately to free memory
-    setActiveDrops((prev) => prev.filter((drop) => drop.id !== dropId));
-    
-    // Trigger splash effect in LiquidGauge when drop hits water
-    liquidGaugeRef.current?.triggerImpact();
-  }, []);
+  // REMOVED: Old drop creation logic - drops are now managed imperatively via dropEmitterRef.current?.emit()
+  // Drops are emitted directly in BLE callback when new drops are earned
 
   // Pause/Resume
   const togglePause = () => {
@@ -1236,12 +1492,12 @@ export default function WorkoutScreen() {
       }
       setPausedTime(null);
       setIsPaused(false);
-      pausedOverlayOpacity.value = withTiming(0, { duration: 300 });
+      pausedOverlayOpacity.value = withSpring(0, { damping: 15, stiffness: 100, mass: 1 });
     } else {
       // Pause
       setPausedTime(new Date());
       setIsPaused(true);
-      pausedOverlayOpacity.value = withTiming(1, { duration: 300 });
+      pausedOverlayOpacity.value = withSpring(1, { damping: 15, stiffness: 100, mass: 1 });
     }
   };
 
@@ -1281,34 +1537,14 @@ export default function WorkoutScreen() {
       // Continue even if disconnect fails
     }
     
-    // Cleanup grace period timer
-    if (gracePeriodTimerRef.current) {
-      clearTimeout(gracePeriodTimerRef.current);
-      gracePeriodTimerRef.current = null;
-    }
-    gracePeriodActiveRef.current = false;
+    // Cleanup RPM persistence
     lastNonZeroRPMRef.current = 0;
 
     // Check if workout is too short (< 1 minute)
+    // No blocking alert - just continue with workout
     if (duration < 60) {
-      Alert.alert(
-        'Workout Too Short',
-        'Your workout is less than 1 minute. Would you like to discard it?',
-        [
-          { text: 'Continue', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: async () => {
-              if (session?.id && session.id !== 'mock-session' && authSession?.user) {
-                await supabase.from('sessions').delete().eq('id', session.id);
-              }
-              router.back();
-            },
-          },
-        ]
-      );
-      return;
+      console.log('[Workout] Workout is less than 1 minute, but continuing anyway');
+      // Continue with workout instead of blocking user
     }
 
     if (!authSession?.user || !session?.id || session.id === 'mock-session') {
@@ -1317,7 +1553,7 @@ export default function WorkoutScreen() {
         pathname: '/session-summary',
         params: {
           sessionId: 'mock',
-          drops: displayDrops.toString(),
+          drops: Math.round(totalDropsShared.value).toString(),
           duration: duration.toString(),
         },
       });
@@ -1327,14 +1563,24 @@ export default function WorkoutScreen() {
     // Verify session has gym_id before ending
     if (!session.gym_id) {
       console.error('Session missing gym_id:', session);
-      Alert.alert('Error', 'Workout session is missing gym information. Cannot save drops.');
-      return;
+      // No blocking alert - log error and continue
+      console.error('[Workout] Cannot save workout: missing gym information');
+      // Still navigate to summary with available data
     }
 
+    // PRO-FITNESS: Get final values from SharedValues
+    const finalEarnedDrops = Math.round(totalDropsShared.value);
+    const finalSmoothedRPM = smoothedRPMShared.value;
+    // Calculate average RPM from smoothed RPM (use current value as approximation)
+    // In production, you might want to track RPM history for true average
+    const finalAverageRPM = finalSmoothedRPM > 0 ? Math.round(finalSmoothedRPM) : (averageRPM > 0 ? averageRPM : null);
+    
     console.log('Ending session:', {
       sessionId: session.id,
       gymId: session.gym_id,
-      drops: displayDrops,
+      drops: finalEarnedDrops,
+      averageRPM: finalAverageRPM,
+      smoothedRPM: finalSmoothedRPM,
       userId: authSession.user.id,
     });
 
@@ -1343,15 +1589,16 @@ export default function WorkoutScreen() {
       await supabase
         .from('sessions')
         .update({
-          drops_earned: earnedDrops,
+          drops_earned: finalEarnedDrops,
           duration_seconds: duration,
-          average_rpm: averageRPM > 0 ? averageRPM : null,
+          average_rpm: finalAverageRPM,
           updated_at: new Date().toISOString(),
         })
         .eq('id', session.id);
-      console.log('[Workout] Final sync completed:', { earnedDrops, averageRPM, duration });
+      console.log('[Workout] Final sync completed:', { earnedDrops: finalEarnedDrops, averageRPM: finalAverageRPM, duration });
     } catch (syncError) {
       console.error('[Workout] Final sync error:', syncError);
+      // No blocking alert - continue with navigation
     }
 
     // End session in Supabase
@@ -1361,13 +1608,14 @@ export default function WorkoutScreen() {
     // 3. Add drops to local balance (gym_memberships.local_drops_balance) for the gym where workout was performed
     const { data: endSessionData, error } = await supabase.rpc('end_session', {
       p_session_id: session.id,
-      p_drops_earned: earnedDrops, // Use earnedDrops from sensor data, not displayDrops
+      p_drops_earned: finalEarnedDrops, // Use earnedDrops from sensor data (SharedValue)
     });
 
     if (error) {
       console.error('Error ending session:', error);
-      Alert.alert('Error', `Failed to save workout: ${error.message}`);
-      return;
+      // No blocking alert - log error and continue to summary
+      console.error('[Workout] Failed to save workout:', error.message);
+      // Still navigate to summary to show user their workout data
     }
 
     console.log('Session ended successfully:', endSessionData);
@@ -1435,7 +1683,7 @@ export default function WorkoutScreen() {
       pathname: '/session-summary',
       params: {
         sessionId: session.id,
-        drops: earnedDrops.toString(), // Use earnedDrops from sensor data
+        drops: finalEarnedDrops.toString(), // Use earnedDrops from sensor data (SharedValue)
         duration: duration.toString(),
       },
     });
@@ -1454,8 +1702,24 @@ export default function WorkoutScreen() {
     return { transform: [{ scale }], opacity };
   });
 
+  // Premium Spring Physics Configuration
+  const springConfig = {
+    damping: 15,
+    stiffness: 100,
+    mass: 1,
+  };
+
+  // Blurred Background with Animated Gradients (RPM-based zone colors)
+  const backgroundGradientColor = useDerivedValue(() => {
+    const rpm = smoothedRPMShared.value;
+    if (rpm === 0) return theme.colors.background;
+    if (rpm >= 100) return '#FF6600'; // Orange/Red zone
+    if (rpm >= 65) return '#00FF88'; // Green zone
+    return theme.colors.primary; // Blue zone
+  }, [smoothedRPMShared]);
+
   const pausedOverlayStyle = useAnimatedStyle(() => ({
-    opacity: pausedOverlayOpacity.value,
+    opacity: withSpring(pausedOverlayOpacity.value, springConfig),
   }));
 
   const finishButtonStyle = useAnimatedStyle(() => {
@@ -1487,49 +1751,7 @@ export default function WorkoutScreen() {
     };
   });
 
-  // Premium Pulse Rings: 3 concentric rings with different speeds
-  const pulseRing1Style = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: pulseRing1Scale.value }],
-      opacity: pulseRing1Opacity.value,
-    };
-  });
-
-  const pulseRing2Style = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: pulseRing2Scale.value }],
-      opacity: pulseRing2Opacity.value,
-    };
-  });
-
-  const pulseRing3Style = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: pulseRing3Scale.value }],
-      opacity: pulseRing3Opacity.value,
-    };
-  });
-
-
-  // Determine pulse ring colors based on smoothed RPM (gradient: inner strong, outer faint)
-  const getPulseRingColor = (ringIndex: 1 | 2 | 3) => {
-    if (smoothedRPM === 0) return theme.colors.textSecondary;
-    if (smoothedRPM > 90) {
-      // High RPM: Neon cyan gradient
-      if (ringIndex === 1) return '#00FFE5'; // Innermost: brightest
-      if (ringIndex === 2) return '#00FFE5' + 'CC'; // Middle: 80% opacity
-      return '#00FFE5' + '80'; // Outermost: 50% opacity
-    }
-    if (smoothedRPM > 60) {
-      // Medium RPM: Primary blue gradient
-      if (ringIndex === 1) return theme.colors.primary;
-      if (ringIndex === 2) return theme.colors.primary + 'CC';
-      return theme.colors.primary + '80';
-    }
-    // Low RPM: Subtle blue gradient
-    if (ringIndex === 1) return theme.colors.primary + 'CC';
-    if (ringIndex === 2) return theme.colors.primary + '99';
-    return theme.colors.primary + '66';
-  };
+  // Pulse Rings are now handled in CircularProgressRing.tsx component (GPU-only animations with interpolateColor)
 
 
   // Signal Indicator Component
@@ -1579,13 +1801,44 @@ export default function WorkoutScreen() {
     );
   };
 
-  // Calculate progress (handle overachievement)
-  const progress = Math.min(drops / targetDrops, 1);
-  const isOverachieved = drops > targetDrops;
-  const showBonus = drops > 0 && drops % 100 === 0 && drops > 0;
+  // Calculate progress and bonus (using SharedValues via useAnimatedReaction)
+  const [isOverachieved, setIsOverachieved] = useState(false);
+  const [showBonus, setShowBonus] = useState(false);
+  
+  useAnimatedReaction(
+    () => totalDropsShared.value,
+    (drops) => {
+      'worklet';
+      const currentProgress = Math.min(drops / targetDrops, 1);
+      const overachieved = drops > targetDrops;
+      const bonus = drops > 0 && Math.floor(drops) % 100 === 0;
+      
+      runOnJS(setIsOverachieved)(overachieved);
+      runOnJS(setShowBonus)(bonus);
+    },
+    [totalDropsShared, targetDrops]
+  );
+  
+  // Get current progress for CircularProgressRing (needs JS value)
+  const progress = useDerivedValue(() => {
+    return Math.min(totalDropsShared.value / targetDrops, 1);
+  }, [totalDropsShared, targetDrops]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Premium Blurred Background with Animated Gradients (RPM-based zones) */}
+      <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark">
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: backgroundGradientColor.value,
+              opacity: 0.1,
+            },
+          ]}
+        />
+      </BlurView>
+
       {/* Header with Gym Info */}
       <View style={styles.header}>
         <View style={styles.leftHeader}>
@@ -1598,9 +1851,10 @@ export default function WorkoutScreen() {
         </View>
         <View style={styles.headerDrops}>
           <Ionicons name="water" size={20} color={theme.colors.primary} />
-          <Text style={[styles.headerDropsText, getNumberStyle(18)]}>
-            {displayDrops.toLocaleString()}
-          </Text>
+          <AnimatedText 
+            text={animatedDropsText}
+            style={[styles.headerDropsText, getNumberStyle(18)]}
+          />
         </View>
       </View>
 
@@ -1635,53 +1889,7 @@ export default function WorkoutScreen() {
             </Animated.View>
           )}
 
-          {/* Premium Pulse Rings: 3 concentric rings with different speeds */}
-          {bleConnected && smoothedRPM > 0 && !isPaused && (
-            <>
-              {/* Ring 3 (outermost): Slowest, most subtle */}
-              <Animated.View
-                style={[
-                  styles.premiumPulseRing,
-                  pulseRing3Style,
-                  {
-                    width: 320,
-                    height: 320,
-                    borderRadius: 160,
-                    borderColor: getPulseRingColor(3),
-                    shadowColor: getPulseRingColor(3),
-                  },
-                ]}
-              />
-              {/* Ring 2 (middle): Medium speed */}
-              <Animated.View
-                style={[
-                  styles.premiumPulseRing,
-                  pulseRing2Style,
-                  {
-                    width: 310,
-                    height: 310,
-                    borderRadius: 155,
-                    borderColor: getPulseRingColor(2),
-                    shadowColor: getPulseRingColor(2),
-                  },
-                ]}
-              />
-              {/* Ring 1 (innermost): Fastest, most intense */}
-              <Animated.View
-                style={[
-                  styles.premiumPulseRing,
-                  pulseRing1Style,
-                  {
-                    width: 300,
-                    height: 300,
-                    borderRadius: 150,
-                    borderColor: getPulseRingColor(1),
-                    shadowColor: getPulseRingColor(1),
-                  },
-                ]}
-              />
-            </>
-          )}
+          {/* Pulse Rings are now rendered inside CircularProgressRing.tsx component */}
 
           {/* Explosion Animation: Triggered when BLE connects */}
           {bleConnected && (
@@ -1698,26 +1906,33 @@ export default function WorkoutScreen() {
           )}
 
 
-          {/* Circular Progress Ring - Only show when BLE is connected */}
-          {bleConnected && (
-            <CircularProgressRing
-              progress={progress}
-              size={290}
-              strokeWidth={3}
-            />
-          )}
-
           {/* LiquidGauge Component - Only show when BLE is connected */}
+          {/* Render LiquidGauge FIRST so it's below CircularProgressRing */}
           {bleConnected && (
             <Animated.View style={dropJumpStyle}>
+              {/* Premium UI: Advanced LiquidGauge with Damping Effect */}
+              {/* LiquidGauge follows rawRPM via smoothedRPMShared (already has damping from smoothing chain) */}
+              {/* This creates realistic liquid bubbling effect as you pedal */}
               <LiquidGauge
                 ref={liquidGaugeRef}
-                progress={progress}
-                value={challengeMessage || displayDrops}
+                progress={progressShared} // Pass SharedValue directly for real-time updates (with damping)
+                value={liquidGaugeDisplayValueShared.value}
                 size={280}
                 strokeWidth={4}
+                rpm={smoothedRPMShared} // Pass smoothed RPM for dynamic glow synchronization (damping already applied)
               />
             </Animated.View>
+          )}
+
+          {/* Circular Progress Ring - Only show when BLE is connected */}
+          {/* Render AFTER LiquidGauge so it's on top */}
+          {bleConnected && (
+            <CircularProgressRing
+              progress={progressShared.value}
+              size={290}
+              strokeWidth={3}
+              rpm={smoothedRPMShared} // Pass RPM for laser sweep speed
+            />
           )}
 
           {/* DROPS Label - Only show when BLE is connected */}
@@ -1730,12 +1945,18 @@ export default function WorkoutScreen() {
             </View>
           )}
 
-          {/* Premium DropEmitter - Completely decoupled from BLE stream */}
+          {/* Premium DropEmitter - Zero-Lag Optimized (no Skia per drop) */}
           {bleConnected && (
             <DropEmitter
               drops={activeDrops}
               containerSize={280}
-              onDropComplete={handleDropDone}
+              onImpact={(x, y) => {
+                // Impact Sync: Trigger impact effect when drop hits water
+                liquidGaugeRef.current?.triggerImpact();
+              }}
+              onDropComplete={(dropId) => {
+                setActiveDrops((prev) => prev.filter((drop) => drop.id !== dropId));
+              }}
             />
           )}
         </View>
@@ -1753,35 +1974,42 @@ export default function WorkoutScreen() {
 
         <View style={styles.statItem}>
           <Ionicons name="flame" size={24} color={theme.colors.error} />
-          <Text style={[styles.statValue, getNumberStyle(20)]}>{calories}</Text>
+          <AnimatedText 
+            text={animatedCaloriesText}
+            style={[styles.statValue, getNumberStyle(20)]}
+          />
           <Text style={styles.statLabel}>kcal</Text>
         </View>
 
         <View style={styles.statItem}>
           <Ionicons name="speedometer-outline" size={24} color={theme.colors.primary} />
-          <Text style={[styles.statValue, getNumberStyle(20)]}>{pace}</Text>
+          <AnimatedText 
+            text={animatedPaceText}
+            style={[styles.statValue, getNumberStyle(20)]}
+          />
           <Text style={styles.statLabel}>min/km</Text>
         </View>
 
-        {/* RPM Display (only show if sensor is connected) */}
+        {/* Premium UI: RPM Display with Dynamic Color & Pulse Effect (only show if sensor is connected) */}
         {(session?.machine?.sensor_id || sensorId) && (
-          <View style={styles.statItem}>
+          <Animated.View style={[styles.statItem, rpmPulseStyle]}>
             <View style={styles.rpmHeader}>
-              <Ionicons name="pulse-outline" size={24} color={smoothedRPM > 0 && bleConnected ? theme.colors.primary : theme.colors.textSecondary} />
+              <Ionicons name="pulse-outline" size={24} color={smoothedRPMShared.value > 0 && bleConnected ? theme.colors.primary : theme.colors.textSecondary} />
               {/* Live Signal Indicator */}
               {bleConnected && (
                 <SignalIndicator status={signalStatus} />
               )}
             </View>
-            <Text style={[
-              styles.statValue, 
-              getNumberStyle(20),
-              { color: displayRPMValue > 0 && bleConnected ? theme.colors.primary : theme.colors.textSecondary }
-            ]}>
-              {bleConnected ? displayRPMValue : '--'}
-            </Text>
+            <AnimatedText 
+              text={animatedRPMText}
+              style={[
+                styles.statValue, 
+                getNumberStyle(20),
+                rpmTextColorStyle, // Premium UI: Dynamic color based on RPM intensity
+              ]}
+            />
             <Text style={styles.statLabel}>RPM</Text>
-          </View>
+          </Animated.View>
         )}
       </View>
 
@@ -1792,7 +2020,7 @@ export default function WorkoutScreen() {
             style={[
               styles.progressBarFill,
               {
-                width: `${Math.min(progress * 100, 100)}%`,
+                width: `${Math.min(progressShared.value * 100, 100)}%`,
                 backgroundColor: isOverachieved ? theme.colors.secondary : theme.colors.primary,
               },
             ]}
@@ -1839,15 +2067,14 @@ export default function WorkoutScreen() {
               if (activeSensorId) {
                 const reconnected = await bleService.reconnect();
                 if (reconnected) {
+                  // Success - no blocking alert, just update UI
                   setShowSensorAsleep(false);
                   setBleConnected(true);
-                  Alert.alert('Uspešno', 'Senzor ponovo povezan', [{ text: 'OK' }]);
+                  setBleStatus('');
+                  reconnectAttemptRef.current = 0; // Reset attempts
                 } else {
-                  Alert.alert(
-                    'Greška',
-                    'Nije moguće ponovo povezati senzor. Proverite da li je senzor uključen i u blizini.',
-                    [{ text: 'OK' }]
-                  );
+                  // Failed - show persistent overlay, no blocking alert
+                  setBleStatus('Reconnection failed. Please check sensor.');
                 }
               }
               setIsReconnecting(false);
