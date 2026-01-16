@@ -109,9 +109,6 @@ export default function LoginPage() {
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
-      }, {
-        // Ensure cookies are set for middleware
-        shouldCreateUser: false,
       });
 
       // Login response received
