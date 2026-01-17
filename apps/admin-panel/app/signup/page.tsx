@@ -6,6 +6,9 @@ import { supabase } from '@/lib/supabase-client';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
