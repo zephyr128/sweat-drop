@@ -1,47 +1,121 @@
+// Force dynamic rendering for Next.js build
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export default async function GymDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const supabase = createClient();
-  const { data: gym, error } = await supabase
-    .from('gyms')
-    .select('*')
-    .eq('id', id)
-    .single();
+interface GymDetailPageProps {
+  params: Promise<{ id: string }>;
+}
 
-  if (error || !gym) {
+interface GymData {
+  id: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  address: string | null;
+  primary_color: string | null;
+}
+
+interface AdminData {
+  username: string | null;
+  email: string | null;
+}
+
+export default async function GymDetailPage({ params }: GymDetailPageProps) {
+  const { id } = await params;
+  
+  // Initialize Supabase client
+  const supabase = createClient();
+  
+  // 1. Check authentication first
+  let user;
+  try {
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !authUser) {
+      redirect('/login');
+    }
+    
+    user = authUser;
+  } catch (error) {
+    console.error('[GymDetailPage] Auth check failed:', error);
+    redirect('/login');
+  }
+
+  // 2. Fetch gym data with error handling
+  let gym: GymData;
+  try {
+    const { data: gymData, error: gymError } = await supabase
+      .from('gyms')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (gymError || !gymData) {
+      console.error('[GymDetailPage] Gym fetch failed:', gymError);
+      notFound();
+    }
+
+    gym = gymData as GymData;
+  } catch (error) {
+    console.error('[GymDetailPage] Unexpected error fetching gym:', error);
     notFound();
   }
 
-  // Get gym admin (if any)
-  const { data: admin } = await supabase
-    .from('profiles')
-    .select('username, email')
-    .eq('assigned_gym_id', gym.id)
-    .eq('role', 'gym_admin')
-    .single();
+  // 3. Get gym admin (if any) with error handling
+  let admin: AdminData | null = null;
+  try {
+    const { data: adminData, error: adminError } = await supabase
+      .from('profiles')
+      .select('username, email')
+      .eq('assigned_gym_id', gym.id)
+      .eq('role', 'gym_admin')
+      .single();
 
-  // Get stats
-  const [
-    { count: members },
-    { count: challenges },
-    { count: storeItems },
-  ] = await Promise.all([
-    supabase
-      .from('gym_memberships')
-      .select('*', { count: 'exact', head: true })
-      .eq('gym_id', gym.id),
-    supabase
-      .from('challenges')
-      .select('*', { count: 'exact', head: true })
-      .eq('gym_id', gym.id),
-    supabase
-      .from('rewards')
-      .select('*', { count: 'exact', head: true })
-      .eq('gym_id', gym.id),
-  ]);
+    if (!adminError && adminData) {
+      admin = adminData as AdminData;
+    }
+  } catch (error) {
+    console.warn('[GymDetailPage] Error fetching admin (may not exist):', error);
+    // Continue without admin - it's optional
+  }
+
+  // 4. Get stats with error handling
+  let members = 0;
+  let challenges = 0;
+  let storeItems = 0;
+
+  try {
+    const [
+      membersResult,
+      challengesResult,
+      storeItemsResult,
+    ] = await Promise.all([
+      supabase
+        .from('gym_memberships')
+        .select('*', { count: 'exact', head: true })
+        .eq('gym_id', gym.id),
+      supabase
+        .from('challenges')
+        .select('*', { count: 'exact', head: true })
+        .eq('gym_id', gym.id),
+      supabase
+        .from('rewards')
+        .select('*', { count: 'exact', head: true })
+        .eq('gym_id', gym.id),
+    ]);
+
+    members = membersResult.count || 0;
+    challenges = challengesResult.count || 0;
+    storeItems = storeItemsResult.count || 0;
+  } catch (error) {
+    console.error('[GymDetailPage] Error fetching stats:', error);
+    // Continue with default values
+  }
 
   return (
     <div>
@@ -62,15 +136,15 @@ export default async function GymDetailPage({ params }: { params: Promise<{ id: 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
           <h3 className="text-sm text-[#808080] mb-2">Members</h3>
-          <p className="text-3xl font-bold text-white">{members || 0}</p>
+          <p className="text-3xl font-bold text-white">{members}</p>
         </div>
         <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
           <h3 className="text-sm text-[#808080] mb-2">Active Challenges</h3>
-          <p className="text-3xl font-bold text-white">{challenges || 0}</p>
+          <p className="text-3xl font-bold text-white">{challenges}</p>
         </div>
         <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
           <h3 className="text-sm text-[#808080] mb-2">Store Items</h3>
-          <p className="text-3xl font-bold text-white">{storeItems || 0}</p>
+          <p className="text-3xl font-bold text-white">{storeItems}</p>
         </div>
       </div>
 
