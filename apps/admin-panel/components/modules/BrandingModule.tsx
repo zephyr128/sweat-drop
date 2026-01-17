@@ -103,12 +103,20 @@ export function BrandingModule({ ownerId, initialData }: BrandingModuleProps) {
       setUploading(true);
       try {
         const file = acceptedFiles[0];
-        const result = await uploadFile(file, 'gym-assets', 'logos');
+        const result = await uploadFile(file, 'images', 'logos');
         setValue('logoUrl', result.url);
         setLogoPreview(result.url);
         toast.success('Logo uploaded successfully');
       } catch (error: any) {
-        toast.error(`Failed to upload logo: ${error.message}`);
+        console.error('Logo upload error:', error);
+        const errorMessage = error.message || 'Unknown error';
+        if (errorMessage.includes('Bucket') && errorMessage.includes('does not exist')) {
+          toast.error('Bucket "images" not found. Please ensure it exists in Supabase Dashboard > Storage and is set to Public.');
+        } else if (errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
+          toast.error('Permission denied. Please check RLS policies for the "images" bucket.');
+        } else {
+          toast.error(`Failed to upload logo: ${errorMessage}`);
+        }
       } finally {
         setUploading(false);
       }
@@ -126,12 +134,20 @@ export function BrandingModule({ ownerId, initialData }: BrandingModuleProps) {
       setUploading(true);
       try {
         const file = acceptedFiles[0];
-        const result = await uploadFile(file, 'gym-assets', 'backgrounds');
+        const result = await uploadFile(file, 'images', 'backgrounds');
         setValue('backgroundUrl', result.url);
         setBackgroundPreview(result.url);
         toast.success('Background uploaded successfully');
       } catch (error: any) {
-        toast.error(`Failed to upload background: ${error.message}`);
+        console.error('Background upload error:', error);
+        const errorMessage = error.message || 'Unknown error';
+        if (errorMessage.includes('Bucket') && errorMessage.includes('does not exist')) {
+          toast.error('Bucket "images" not found. Please ensure it exists in Supabase Dashboard > Storage and is set to Public.');
+        } else if (errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
+          toast.error('Permission denied. Please check RLS policies for the "images" bucket.');
+        } else {
+          toast.error(`Failed to upload background: ${errorMessage}`);
+        }
       } finally {
         setUploading(false);
       }
