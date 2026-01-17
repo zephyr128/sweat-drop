@@ -23,6 +23,7 @@ export async function createOwner(input: CreateOwnerInput) {
       return { success: false, error: 'Only superadmins can create owners' };
     }
 
+    const supabaseAdmin = getAdminClient();
     // Check if user already exists
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
@@ -31,8 +32,9 @@ export async function createOwner(input: CreateOwnerInput) {
       .single();
 
     if (existingProfile) {
+      const profileData = existingProfile as { id: string; email: string; role: string };
       // If user exists, check if they're already an owner
-      if (existingProfile.role === 'gym_owner') {
+      if (profileData.role === 'gym_owner') {
         return { success: false, error: 'User is already a gym owner' };
       }
       // If user exists with different role, we can still send invitation
@@ -117,6 +119,7 @@ export async function deleteOwner(ownerId: string, reassignToOwnerId?: string) {
       return { success: false, error: 'Only superadmins can delete owners' };
     }
 
+    const supabaseAdmin = getAdminClient();
     // Check if owner has gyms
     const { data: gyms, error: gymsError } = await supabaseAdmin
       .from('gyms')
@@ -177,6 +180,7 @@ export async function getOwnersWithGyms() {
       return { success: false, error: 'Only superadmins can view owners', data: [] };
     }
 
+    const supabaseAdmin = getAdminClient();
     // Fetch all gym owners
     const { data: ownersData, error: ownersError } = await supabaseAdmin
       .from('profiles')
@@ -186,8 +190,10 @@ export async function getOwnersWithGyms() {
 
     if (ownersError) throw ownersError;
 
+    const ownersDataTyped = (ownersData || []) as Array<{ id: string; email: string; username: string; full_name: string | null; created_at: string }>;
+
     // Fetch all gyms for these owners
-    const ownerIds = ownersData?.map(o => o.id) || [];
+    const ownerIds = ownersDataTyped.map(o => o.id);
     const { data: gymsData, error: gymsError } = ownerIds.length > 0
       ? await supabaseAdmin
           .from('gyms')
@@ -199,11 +205,13 @@ export async function getOwnersWithGyms() {
       console.error('Error fetching gyms:', gymsError);
     }
 
+    const gymsDataTyped = (gymsData || []) as Array<{ id: string; name: string; city: string | null; country: string | null; status: string | null; subscription_type: string; created_at: string; owner_id: string | null }>;
+
     // Combine owners with their gyms
-    const owners = ownersData?.map(owner => ({
+    const owners = ownersDataTyped.map(owner => ({
       ...owner,
-      gyms: gymsData?.filter(g => g.owner_id === owner.id) || []
-    })) || [];
+      gyms: gymsDataTyped.filter(g => g.owner_id === owner.id)
+    }));
 
     return { success: true, data: owners };
   } catch (error: any) {
@@ -216,6 +224,7 @@ export async function getOwnersWithGyms() {
  */
 export async function getPotentialOwners() {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('id, email, username, full_name, role')
@@ -239,6 +248,7 @@ export async function getPendingOwnerInvitations() {
       return { success: false, error: 'Only superadmins can view invitations', data: [] };
     }
 
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('staff_invitations')
       .select(`
@@ -276,6 +286,7 @@ export async function resendOwnerInvitation(invitationId: string) {
       return { success: false, error: 'Only superadmins can resend invitations' };
     }
 
+    const supabaseAdmin = getAdminClient();
     // Fetch invitation details
     const { data: invitation, error: fetchError } = await supabaseAdmin
       .from('staff_invitations')
@@ -297,14 +308,16 @@ export async function resendOwnerInvitation(invitationId: string) {
       return { success: false, error: 'Invitation not found or already accepted' };
     }
 
+    const invitationData = invitation as { expires_at: string; gyms?: { name: string } | null; [key: string]: any };
+
     // Check if invitation is expired
-    if (new Date(invitation.expires_at) < new Date()) {
+    if (new Date(invitationData.expires_at) < new Date()) {
       return { success: false, error: 'Invitation has expired. Please create a new invitation.' };
     }
 
     // Send invitation email
     try {
-      await sendOwnerInvitationEmail(invitation, invitation.gyms?.name);
+      await sendOwnerInvitationEmail(invitationData, invitationData.gyms?.name);
       revalidatePath('/dashboard/super/owners');
       return { success: true };
     } catch (emailError) {

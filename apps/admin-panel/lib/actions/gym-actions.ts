@@ -69,13 +69,14 @@ export async function createGym(input: CreateGymInput) {
 
     // If creating new owner, create invitation
     if (!ownerId && input.owner_email && data) {
+      const gymData = data as { id: string; name: string; [key: string]: any };
       const { data: invitation, error: invitationError } = await supabaseAdmin
         .from('staff_invitations')
         .insert({
           email: input.owner_email.toLowerCase().trim(),
           role: 'gym_owner',
           invited_by: (await getCurrentProfile())?.id,
-          gym_id: data.id, // Link invitation to this gym
+          gym_id: gymData.id, // Link invitation to this gym
         })
         .select()
         .single();
@@ -88,7 +89,7 @@ export async function createGym(input: CreateGymInput) {
         
         // Send invitation email
         try {
-          await sendOwnerInvitationEmail(invitation, data.name);
+          await sendOwnerInvitationEmail(invitation, gymData.name);
         } catch (emailError) {
           console.error('Failed to send owner invitation email:', emailError);
           // Don't fail if email fails
@@ -267,6 +268,7 @@ export async function activateGym(gymId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin.rpc('activate_gym', {
       p_gym_id: gymId,
       p_activated_by: user.id,
@@ -303,8 +305,10 @@ export async function getGymsWithOwnerInfo() {
 
     if (gymsError) throw gymsError;
 
+    const gymsData = (gyms || []) as Array<{ id: string; name: string; city: string | null; country: string | null; owner_id: string | null; is_suspended: boolean; subscription_type: string }>;
+
     // Get owner profiles
-    const ownerIds = gyms?.filter(g => g.owner_id).map(g => g.owner_id) || [];
+    const ownerIds = gymsData.filter(g => g.owner_id).map(g => g.owner_id).filter((id): id is string => id !== null);
     const { data: profiles } = ownerIds.length > 0 
       ? await supabaseAdmin
           .from('profiles')
@@ -312,8 +316,10 @@ export async function getGymsWithOwnerInfo() {
           .in('id', ownerIds)
       : { data: [] };
 
+    const profilesData = (profiles || []) as Array<{ id: string; email: string | null; full_name: string | null }>;
+
     // Get machine counts
-    const gymIds = gyms?.map(g => g.id) || [];
+    const gymIds = gymsData.map(g => g.id);
     const { data: machines } = gymIds.length > 0
       ? await supabaseAdmin
           .from('machines')
@@ -322,9 +328,11 @@ export async function getGymsWithOwnerInfo() {
           .eq('is_under_maintenance', false)
       : { data: [] };
 
+    const machinesData = (machines || []) as Array<{ gym_id: string; id: string }>;
+
     // Transform data to match RPC format
-    const transformed = gyms?.map(gym => {
-      const ownerProfile = profiles?.find(p => p.id === gym.owner_id);
+    const transformed = gymsData.map(gym => {
+      const ownerProfile = profilesData.find(p => p.id === gym.owner_id);
       return {
         gym_id: gym.id,
         gym_name: gym.name,
@@ -335,7 +343,7 @@ export async function getGymsWithOwnerInfo() {
         owner_name: ownerProfile?.full_name || null,
         is_suspended: gym.is_suspended || false,
         subscription_type: gym.subscription_type || 'Basic',
-        active_machines: machines?.filter(m => m.gym_id === gym.id).length || 0,
+        active_machines: machinesData.filter(m => m.gym_id === gym.id).length || 0,
       };
     }) || [];
 
@@ -367,6 +375,7 @@ export async function getNetworkOverviewStats(ownerId: string) {
  */
 export async function getPotentialGymOwners() {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('id, email, username, full_name, role')
@@ -402,6 +411,7 @@ export async function deleteGym(gymId: string) {
     }
 
     // Delete gym (CASCADE will handle related data)
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('gyms')
       .delete()

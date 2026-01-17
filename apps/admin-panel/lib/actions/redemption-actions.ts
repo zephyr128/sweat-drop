@@ -13,6 +13,7 @@ export async function confirmRedemption(redemptionId: string, gymId: string) {
 
     // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
     if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
+      const supabaseAdmin = getAdminClient();
       const { data: gym } = await supabaseAdmin
         .from('gyms')
         .select('owner_id')
@@ -23,7 +24,8 @@ export async function confirmRedemption(redemptionId: string, gymId: string) {
         return { success: false, error: 'Gym not found' };
       }
       
-      const ownsGym = gym.owner_id === profile.id;
+      const gymData = gym as { owner_id: string | null; [key: string]: any };
+      const ownsGym = gymData.owner_id === profile.id;
       const isAssignedGym = profile.assigned_gym_id === gymId;
       
       if (!ownsGym && !isAssignedGym) {
@@ -43,8 +45,9 @@ export async function confirmRedemption(redemptionId: string, gymId: string) {
 
     if (error) throw error;
 
-    if (!data || data.length === 0 || !data[0].success) {
-      return { success: false, error: data?.[0]?.error_message || 'Failed to confirm redemption' };
+    const rpcResult = (data as any)?.[0] as { success?: boolean; error_message?: string } | null;
+    if (!rpcResult || !rpcResult.success) {
+      return { success: false, error: rpcResult?.error_message || 'Failed to confirm redemption' };
     }
 
     revalidatePath(`/dashboard/gym/${gymId}/redemptions`);
@@ -64,6 +67,7 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
 
     // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
     if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
+      const supabaseAdmin = getAdminClient();
       const { data: gym } = await supabaseAdmin
         .from('gyms')
         .select('owner_id')
@@ -74,7 +78,8 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
         return { success: false, error: 'Gym not found' };
       }
       
-      const ownsGym = gym.owner_id === profile.id;
+      const gymData = gym as { owner_id: string | null; [key: string]: any };
+      const ownsGym = gymData.owner_id === profile.id;
       const isAssignedGym = profile.assigned_gym_id === gymId;
       
       if (!ownsGym && !isAssignedGym) {
@@ -95,8 +100,9 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
 
     if (error) throw error;
 
-    if (!data || data.length === 0 || !data[0].success) {
-      return { success: false, error: data?.[0]?.error_message || 'Failed to cancel redemption' };
+    const rpcResult = (data as any)?.[0] as { success?: boolean; error_message?: string } | null;
+    if (!rpcResult || !rpcResult.success) {
+      return { success: false, error: rpcResult?.error_message || 'Failed to cancel redemption' };
     }
 
     revalidatePath(`/dashboard/gym/${gymId}/redemptions`);
@@ -116,6 +122,7 @@ export async function validateRedemptionCode(code: string, gymId: string) {
 
     // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
     if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
+      const supabaseAdmin = getAdminClient();
       const { data: gym } = await supabaseAdmin
         .from('gyms')
         .select('owner_id')
@@ -126,7 +133,8 @@ export async function validateRedemptionCode(code: string, gymId: string) {
         return { success: false, error: 'Gym not found' };
       }
       
-      const ownsGym = gym.owner_id === profile.id;
+      const gymData = gym as { owner_id: string | null; [key: string]: any };
+      const ownsGym = gymData.owner_id === profile.id;
       const isAssignedGym = profile.assigned_gym_id === gymId;
       
       if (!ownsGym && !isAssignedGym) {
@@ -145,11 +153,12 @@ export async function validateRedemptionCode(code: string, gymId: string) {
 
     if (error) throw error;
 
-    if (!data || data.length === 0) {
+    const rpcData = data as any;
+    if (!rpcData || !Array.isArray(rpcData) || rpcData.length === 0) {
       return { success: false, error: 'Redemption not found' };
     }
 
-    const redemption = data[0];
+    const redemption = data[0] as { redemption_id: string; gym_id: string; [key: string]: any };
 
     // Verify it belongs to this gym
     if (redemption.gym_id !== gymId) {

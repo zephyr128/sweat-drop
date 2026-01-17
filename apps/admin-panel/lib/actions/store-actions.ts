@@ -17,6 +17,7 @@ const createStoreItemSchema = z.object({
 export async function createStoreItem(input: z.infer<typeof createStoreItemSchema>) {
   try {
     const validated = createStoreItemSchema.parse(input);
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('rewards')
@@ -59,6 +60,7 @@ export async function updateStoreItem(
     if (input.priceDrops !== undefined) updateData.price_drops = input.priceDrops;
     if (input.stock !== undefined) updateData.stock = input.stock;
     if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl;
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('rewards')
@@ -80,6 +82,7 @@ export async function updateStoreItem(
 
 export async function deleteStoreItem(itemId: string, gymId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('rewards')
       .delete()

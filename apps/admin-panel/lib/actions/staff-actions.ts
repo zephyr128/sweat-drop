@@ -213,13 +213,15 @@ export async function removeStaffRole(userId: string, gymId: string) {
 async function sendInvitationEmail(invitation: any) {
   try {
     // Get gym details
+    const supabaseAdmin = getAdminClient();
     const { data: gym } = await supabaseAdmin
       .from('gyms')
       .select('name, city, country')
       .eq('id', invitation.gym_id)
       .single();
 
-    const gymName = gym?.name || 'the gym';
+    const gymData = gym as { name: string; city: string | null; country: string | null } | null;
+    const gymName = gymData?.name || 'the gym';
     const roleName = invitation.role === 'gym_admin' ? 'Gym Admin' : 'Receptionist';
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;

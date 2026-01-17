@@ -128,7 +128,11 @@ export function RedemptionsManager({
 
     setIsSearching(true);
     try {
-      const result = await validateRedemptionCode(searchCode.trim(), gymId);
+      const result = await validateRedemptionCode(searchCode.trim(), gymId) as {
+        success: boolean;
+        redemption?: Redemption;
+        error?: string;
+      };
       if (result.success && result.redemption) {
         setSearchResult(result.redemption as Redemption);
         setActiveTab('search');

@@ -25,7 +25,18 @@ export function NetworkOverviewToggle({ ownerId, currentGymId }: NetworkOverview
     if (!showNetwork && !networkStats) {
       // Load network stats
       setLoading(true);
-      const result = await getNetworkOverviewStats(ownerId);
+      const result = await getNetworkOverviewStats(ownerId) as {
+        success: boolean;
+        data?: {
+          total_gyms: number;
+          active_gyms: number;
+          suspended_gyms: number;
+          total_members: number;
+          total_drops_earned: number;
+          total_machines: number;
+        } | null;
+        error?: string;
+      };
       if (result.success && result.data) {
         setNetworkStats(result.data);
       }

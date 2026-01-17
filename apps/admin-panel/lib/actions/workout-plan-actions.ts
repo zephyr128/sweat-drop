@@ -46,6 +46,7 @@ export async function createWorkoutPlan(input: z.infer<typeof createWorkoutPlanS
       is_active: true,
       is_featured: false,
     };
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('workout_plans')
@@ -80,6 +81,7 @@ export async function createWorkoutPlanItem(input: z.infer<typeof createWorkoutP
       sets: validated.sets || 1,
       target_machine_id: validated.target_machine_id || null,
     };
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('workout_plan_items')
@@ -110,6 +112,7 @@ export async function createWorkoutPlanItem(input: z.infer<typeof createWorkoutP
 export async function deleteWorkoutPlan(planId: string, gymId: string) {
   try {
     // Soft delete by setting is_active to false
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('workout_plans')
       .update({ is_active: false })
@@ -127,6 +130,7 @@ export async function deleteWorkoutPlan(planId: string, gymId: string) {
 
 export async function deleteWorkoutPlanItem(itemId: string, gymId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('workout_plan_items')
       .delete()
@@ -144,6 +148,7 @@ export async function deleteWorkoutPlanItem(itemId: string, gymId: string) {
 
 export async function toggleWorkoutPlanStatus(planId: string, gymId: string, isActive: boolean) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('workout_plans')
       .update({ is_active: isActive })
@@ -187,6 +192,7 @@ export async function updateWorkoutPlanItem(input: z.infer<typeof updateWorkoutP
       sets: validated.sets || 1,
       target_machine_id: validated.target_machine_id || null,
     };
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('workout_plan_items')

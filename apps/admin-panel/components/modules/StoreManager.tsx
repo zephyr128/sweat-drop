@@ -100,7 +100,11 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
   const onSubmit = async (data: StoreItemFormData) => {
     try {
       if (editingItem) {
-        const result = await updateStoreItem(editingItem.id, gymId, data);
+        const result = await updateStoreItem(editingItem.id, gymId, data) as {
+          success: boolean;
+          data?: StoreItem;
+          error?: string;
+        };
         if (result.success && result.data) {
           setItems(items.map((i) => (i.id === editingItem.id ? result.data as StoreItem : i)));
           toast.success('Item updated successfully');
@@ -113,7 +117,11 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           ...data,
           gymId,
           rewardType: 'physical', // Default reward type
-        });
+        }) as {
+          success: boolean;
+          data?: StoreItem;
+          error?: string;
+        };
         if (result.success && result.data) {
           setItems([result.data as StoreItem, ...items]);
           toast.success('Item created successfully');

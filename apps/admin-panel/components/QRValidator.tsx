@@ -30,7 +30,11 @@ export function QRValidator({ gymId, onRedemptionConfirmed }: QRValidatorProps) 
     setResult(null);
 
     try {
-      const validationResult = await validateRedemptionCode(redemptionCode.trim().toUpperCase(), gymId);
+      const validationResult = await validateRedemptionCode(redemptionCode.trim().toUpperCase(), gymId) as {
+        success: boolean;
+        redemption?: any;
+        error?: string;
+      };
 
       if (!validationResult.success || !validationResult.redemption) {
         setResult({

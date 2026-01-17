@@ -21,11 +21,11 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
     }
 
     const validated = createMachineSchema.parse(input);
+    const supabaseAdmin = getAdminClient();
 
     // Generate QR code if not provided
     let qrCode = validated.uniqueQrCode;
     if (!qrCode) {
-      const supabaseAdmin = getAdminClient();
       const { data: generatedCode, error: genError } = await supabaseAdmin.rpc(
         'generate_machine_qr_code'
       );
@@ -33,7 +33,7 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
         // Fallback: generate manually
         qrCode = `MACHINE-${validated.gymId.substring(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
       } else {
-        qrCode = generatedCode;
+        qrCode = generatedCode as string;
       }
     }
 
@@ -81,6 +81,7 @@ export async function deleteMachine(machineId: string, gymId: string) {
       return { success: false, error: 'Only superadmins can delete machines' };
     }
 
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('machines')
       .delete()
@@ -109,6 +110,7 @@ export async function toggleMachineStatus(
       return { success: false, error: 'Only superadmins can toggle machine status' };
     }
 
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('machines')
       .update({ is_active: isActive })
@@ -142,6 +144,7 @@ export async function updateMachine(
       if (input.name !== undefined) updateData.name = input.name;
       if (input.type !== undefined) updateData.type = input.type;
 
+      const supabaseAdmin = getAdminClient();
       const { error } = await supabaseAdmin
         .from('machines')
         .update(updateData)
@@ -169,6 +172,7 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
     }
 
     // Update machine with sensor_id
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('machines')
       .update({ 
@@ -182,7 +186,8 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
     if (error) throw error;
 
     if (data) {
-      revalidatePath(`/dashboard/gym/${data.gym_id}/machines`);
+      const machineData = data as { gym_id: string; [key: string]: any };
+      revalidatePath(`/dashboard/gym/${machineData.gym_id}/machines`);
       revalidatePath(`/dashboard/super/machines`);
     }
 
@@ -278,6 +283,7 @@ export async function toggleMaintenance(
       updateData.maintenance_notes = null;
     }
 
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('machines')
       .update(updateData)

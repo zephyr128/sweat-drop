@@ -21,6 +21,7 @@ export async function updateLeaderboardRewards(
       rank2: validated.rank2,
       rank3: validated.rank3,
     };
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('gyms')

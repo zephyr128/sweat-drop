@@ -90,7 +90,11 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         }
       }
 
-      const result = await createChallenge(submitData);
+      const result = await createChallenge(submitData) as {
+        success: boolean;
+        data?: Challenge;
+        error?: string;
+      };
 
       if (result.success && result.data) {
         setChallenges([result.data as Challenge, ...challenges]);

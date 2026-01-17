@@ -124,7 +124,11 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
         gymId: effectiveGymId,
       };
 
-      const result = await createMachine(submitData);
+      const result = await createMachine(submitData) as {
+        success: boolean;
+        data?: Machine;
+        error?: string;
+      };
 
       if (result.success && result.data) {
         setMachines([result.data as Machine, ...machines]);
