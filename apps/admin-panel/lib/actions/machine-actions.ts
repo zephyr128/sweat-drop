@@ -1,19 +1,9 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentProfile } from '../auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 const createMachineSchema = z.object({
   gymId: z.string().uuid(),
@@ -35,6 +25,7 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
     // Generate QR code if not provided
     let qrCode = validated.uniqueQrCode;
     if (!qrCode) {
+      const supabaseAdmin = getAdminClient();
       const { data: generatedCode, error: genError } = await supabaseAdmin.rpc(
         'generate_machine_qr_code'
       );
@@ -203,6 +194,7 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
 
 export async function lockMachine(machineId: string, userId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('lock_machine', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -218,6 +210,7 @@ export async function lockMachine(machineId: string, userId: string) {
 
 export async function unlockMachine(machineId: string, userId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('unlock_machine', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -233,6 +226,7 @@ export async function unlockMachine(machineId: string, userId: string) {
 
 export async function updateMachineHeartbeat(machineId: string, userId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('update_machine_heartbeat', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -248,6 +242,7 @@ export async function updateMachineHeartbeat(machineId: string, userId: string) 
 
 export async function updateMachineRPM(machineId: string, userId: string, rpm: number) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('update_machine_rpm', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -300,6 +295,7 @@ export async function toggleMaintenance(
 
 export async function getMachineReports(gymId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('get_machines_with_reports', {
       p_gym_id: gymId,
     });

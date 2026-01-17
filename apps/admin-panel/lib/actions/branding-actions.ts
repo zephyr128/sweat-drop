@@ -1,17 +1,7 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 interface UpdateBrandingInput {
   ownerId: string; // Now uses owner_id instead of gym_id for global branding
@@ -22,6 +12,7 @@ interface UpdateBrandingInput {
 
 export async function updateBranding(input: UpdateBrandingInput) {
   try {
+    const supabaseAdmin = getAdminClient();
     const updateData: any = {
       updated_at: new Date().toISOString(),
     };
@@ -61,6 +52,7 @@ export async function updateBranding(input: UpdateBrandingInput) {
 
 export async function getOwnerBranding(ownerId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('owner_branding')
       .select('*')

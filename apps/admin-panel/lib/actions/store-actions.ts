@@ -1,18 +1,8 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 const createStoreItemSchema = z.object({
   gymId: z.string().uuid(),

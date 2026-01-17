@@ -1,21 +1,10 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/lib/supabase-server';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { getCurrentProfile } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { logger } from '@/lib/utils/logger';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-// Service role client for admin operations
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 interface CreateGymInput {
   name: string;
@@ -59,6 +48,7 @@ export async function createGym(input: CreateGymInput) {
     }
 
     // Create gym (owner_id will be null if creating new owner - will be set when invitation is accepted)
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('gyms')
       .insert({
@@ -121,14 +111,10 @@ export async function createGym(input: CreateGymInput) {
  */
 export async function createGymAdmin(input: CreateGymAdminInput) {
   try {
-    // Validate environment variables
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing Supabase environment variables. SUPABASE_SERVICE_ROLE_KEY is required.');
-    }
-
     console.log('[createGymAdmin] Creating auth user for:', input.email);
     
-    // 1. Create auth user
+    // 1. Create auth user (getAdminClient will throw if env vars are missing)
+    const supabaseAdmin = getAdminClient();
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: input.email,
       password: input.password,
@@ -157,7 +143,7 @@ export async function createGymAdmin(input: CreateGymAdminInput) {
         username: input.username,
         role: 'gym_admin',
         assigned_gym_id: input.gymId,
-      }, {
+      } as any, {
         onConflict: 'id',
       })
       .select()
@@ -196,6 +182,7 @@ export async function createGymAdmin(input: CreateGymAdminInput) {
  */
 export async function assignGymAdmin(userId: string, gymId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .update({
@@ -221,6 +208,7 @@ export async function assignGymAdmin(userId: string, gymId: string) {
  */
 export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('gyms')
       .update({
@@ -254,6 +242,7 @@ export async function suspendGym(gymId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin.rpc('suspend_gym', {
       p_gym_id: gymId,
       p_suspended_by: user.id,
@@ -299,6 +288,7 @@ export async function activateGym(gymId: string) {
 export async function getGymsWithOwnerInfo() {
   try {
     // Try RPC first, fallback to direct query if RPC doesn't exist yet
+    const supabaseAdmin = getAdminClient();
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('get_gyms_with_owner_info');
     
     if (!rpcError && rpcData) {
@@ -360,6 +350,7 @@ export async function getGymsWithOwnerInfo() {
  */
 export async function getNetworkOverviewStats(ownerId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('get_network_overview_stats', {
       p_owner_id: ownerId,
     });

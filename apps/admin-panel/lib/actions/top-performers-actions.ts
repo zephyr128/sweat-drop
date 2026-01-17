@@ -1,20 +1,8 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { logger } from '@/lib/utils/logger';
-
-// Service role client to bypass RLS for fetching profiles
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = supabaseServiceKey 
-  ? createAdminClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-  : null;
 
 export interface TopPerformer {
   id: string;
@@ -27,7 +15,13 @@ export async function getTopPerformers(gymId: string): Promise<TopPerformer[]> {
   try {
     const supabase = createClient();
     // Use service role client to fetch profiles (bypasses RLS)
-    const clientToUse = supabaseAdmin || supabase;
+    let clientToUse = supabase;
+    try {
+      clientToUse = getAdminClient();
+    } catch (error) {
+      // Fallback to regular client if admin client unavailable
+      logger.warn('Admin client unavailable, using regular client', { error });
+    }
 
     // Get top 3 users by local_drops_balance for this gym
     const { data: memberships, error } = await supabase

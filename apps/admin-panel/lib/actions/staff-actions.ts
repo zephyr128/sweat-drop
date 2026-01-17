@@ -1,19 +1,9 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { logger } from '@/lib/utils/logger';
 import { revalidatePath } from 'next/cache';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createAdminClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 export interface StaffInvitation {
   id: string;
@@ -247,6 +237,7 @@ async function sendInvitationEmail(invitation: any) {
     // Option 1: Use Supabase Edge Function (if configured)
     // Uncomment when Edge Function is set up:
     /*
+    const supabaseAdmin = getAdminClient();
     const { error: functionError } = await supabaseAdmin.functions.invoke('send-staff-invitation', {
       body: {
         email: invitation.email,

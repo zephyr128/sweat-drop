@@ -1,18 +1,8 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 const createChallengeSchema = z.object({
   gymId: z.string().uuid(),
@@ -87,6 +77,7 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       reward_drops: validated.dropsBounty,
     };
 
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('challenges')
       .insert(insertData)
@@ -108,6 +99,7 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
 
 export async function deleteChallenge(challengeId: string, gymId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('challenges')
       .delete()
@@ -126,6 +118,7 @@ export async function deleteChallenge(challengeId: string, gymId: string) {
 
 export async function toggleChallengeStatus(challengeId: string, gymId: string, isActive: boolean) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('challenges')
       .update({ is_active: isActive })
@@ -145,6 +138,7 @@ export async function toggleChallengeStatus(challengeId: string, gymId: string, 
 // Get challenge completion stats for admin dashboard
 export async function getChallengeCompletionStats(challengeId: string, gymId: string) {
   try {
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('get_challenge_completion_stats', {
       p_challenge_id: challengeId,
     });

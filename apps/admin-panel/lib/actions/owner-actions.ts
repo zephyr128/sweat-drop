@@ -1,19 +1,9 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/lib/supabase-server';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '../auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 interface CreateOwnerInput {
   email: string;

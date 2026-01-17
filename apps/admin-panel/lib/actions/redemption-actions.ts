@@ -1,18 +1,8 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '../auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 export async function confirmRedemption(redemptionId: string, gymId: string) {
   try {
@@ -45,6 +35,7 @@ export async function confirmRedemption(redemptionId: string, gymId: string) {
       return { success: false, error: 'Unauthorized' };
     }
 
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('confirm_redemption', {
       p_redemption_id: redemptionId,
       p_confirmed_by: profile.id,
@@ -95,6 +86,7 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
       return { success: false, error: 'Unauthorized' };
     }
 
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('cancel_redemption', {
       p_redemption_id: redemptionId,
       p_cancelled_by: profile.id,
@@ -146,6 +138,7 @@ export async function validateRedemptionCode(code: string, gymId: string) {
       return { success: false, error: 'Unauthorized' };
     }
 
+    const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('find_redemption_by_code', {
       p_code: code,
     });

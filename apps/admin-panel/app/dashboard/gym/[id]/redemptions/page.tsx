@@ -40,17 +40,22 @@ interface RedemptionData {
   } | null;
 }
 
-// Service role client to bypass RLS for fetching profiles
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = supabaseServiceKey 
-  ? createAdminClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-  : null;
+// Helper function to create admin client inside request scope
+function getAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+  
+  return createAdminClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 export default async function RedemptionsPage({ params }: RedemptionsPageProps) {
   const { id } = await params;
@@ -133,6 +138,8 @@ export default async function RedemptionsPage({ params }: RedemptionsPageProps) 
   
   // 4. Use service role client to fetch redemptions with profiles (bypasses RLS)
   // This avoids infinite recursion issues with profiles RLS policies
+  // Create admin client inside request scope (not at module level)
+  const supabaseAdmin = getAdminClient();
   const clientToUse = supabaseAdmin || supabase;
   
   // 5. Load pending redemptions with error handling
