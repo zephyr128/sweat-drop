@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Platform, Linking, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -57,6 +57,12 @@ export function ScannerScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    planId?: string;
+    subscriptionId?: string;
+    planItemId?: string;
+    exerciseIndex?: string;
+  }>();
   const { session } = useSession();
   const { updateHomeGym } = useGymData();
   const { homeGymId } = useGymStore();
@@ -435,6 +441,17 @@ export function ScannerScreen() {
         }
       }
 
+      // SmartCoach: Check if plan parameters are passed via route params (from plan-detail screen)
+      // Only use plan if explicitly passed - don't automatically check for active plans
+      const planParams = params.planId && params.subscriptionId && params.planItemId && params.exerciseIndex
+        ? {
+            planId: params.planId,
+            subscriptionId: params.subscriptionId,
+            planItemId: params.planItemId,
+            exerciseIndex: params.exerciseIndex,
+          }
+        : null;
+
       // Create session
       const { data: newSession, error: sessionError } = await supabase
         .from('sessions')
@@ -461,7 +478,7 @@ export function ScannerScreen() {
       // Success haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Navigate to workout
+      // Navigate to workout with plan parameters if available (from route params)
       router.replace({
         pathname: '/workout',
         params: {
@@ -470,6 +487,12 @@ export function ScannerScreen() {
           gymId: machine.gym_id,
           machineType: machine.machine_type,
           sensorId: machine.sensor_id || '',
+          ...(planParams ? {
+            planId: planParams.planId,
+            subscriptionId: planParams.subscriptionId,
+            planItemId: planParams.planItemId,
+            exerciseIndex: planParams.exerciseIndex,
+          } : {}),
         },
       });
     } catch (error: any) {
