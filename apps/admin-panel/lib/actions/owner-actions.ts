@@ -94,7 +94,7 @@ export async function createOwner(input: CreateOwnerInput) {
 /**
  * Send owner invitation email
  */
-async function sendOwnerInvitationEmail(invitation: any) {
+async function sendOwnerInvitationEmail(invitation: any, gymName?: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;

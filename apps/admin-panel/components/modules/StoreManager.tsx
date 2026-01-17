@@ -112,6 +112,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
         const result = await createStoreItem({
           ...data,
           gymId,
+          rewardType: 'physical', // Default reward type
         });
         if (result.success && result.data) {
           setItems([result.data as StoreItem, ...items]);

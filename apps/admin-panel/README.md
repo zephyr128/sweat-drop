@@ -11,9 +11,13 @@ Create a `.env.local` file in the `apps/admin-panel` directory:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # Optional, but recommended for server actions
+NEXT_PUBLIC_APP_URL=http://localhost:3000  # For production, use your Vercel URL
 ```
 
 You can find these values in your Supabase project settings under API.
+
+**For Vercel Deployment**: See `VERCEL_DEPLOY.md` for detailed deployment instructions.
 
 ### 2. Install Dependencies
 
