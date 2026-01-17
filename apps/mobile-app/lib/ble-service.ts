@@ -215,6 +215,13 @@ export class BLEService {
   }
 
   /**
+   * Set measurement callback (for cleanup)
+   */
+  setMeasurementCallback(callback: ((measurement: CSCMeasurement) => void) | null): void {
+    this.measurementCallback = callback;
+  }
+
+  /**
    * Emit status update
    */
   private emitStatus(status: string): void {
