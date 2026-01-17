@@ -13,12 +13,14 @@ import {
 import { useDerivedValue, useSharedValue, useFrameCallback, withRepeat, withTiming, withSequence, Easing, SharedValue } from 'react-native-reanimated';
 import Animated, { useAnimatedStyle, interpolateColor } from 'react-native-reanimated';
 import { theme } from '@/lib/theme';
+import { useBranding } from '@/lib/hooks/useBranding';
 
 interface CircularProgressRingProps {
   progress: number; // 0 to 1
   size?: number; // Diameter of the ring
   strokeWidth?: number; // Width of the ring
   rpm?: SharedValue<number>; // RPM for laser sweep speed
+  primaryColor?: string; // Dynamic primary color from branding
 }
 
 // Premium Pulse Rings Component: GPU-only animations with interpolateColor
@@ -118,7 +120,7 @@ const PulseRings = ({ rpm }: { rpm?: SharedValue<number> }) => {
     return normalizedRPM * 0.6; // Least intense
   }, [rpm]);
 
-  // GPU-Only: Color interpolation using interpolateColor (no JS calculations)
+  // GPU-Only: Color interpolation using interpolateColor with dynamic primary color
   const ring1Color = useDerivedValue(() => {
     if (!rpm || rpm.value <= 0) {
       return theme.colors.textSecondary;
@@ -128,13 +130,13 @@ const PulseRings = ({ rpm }: { rpm?: SharedValue<number> }) => {
       [0, 65, 80, 100, 120],
       [
         theme.colors.textSecondary, // 0 RPM: Gray
-        theme.colors.primary, // 65 RPM: Blue
+        dynamicPrimaryColor, // 65 RPM: Dynamic primary color
         '#00FF88', // 80 RPM: Green
         '#FF6600', // 100 RPM: Orange
         '#FF3300', // 120 RPM: Red
       ]
     );
-  }, [rpm]);
+  }, [rpm, dynamicPrimaryColor]);
 
   const ring2Color = useDerivedValue(() => {
     if (!rpm || rpm.value <= 0) {
@@ -145,14 +147,14 @@ const PulseRings = ({ rpm }: { rpm?: SharedValue<number> }) => {
       [0, 65, 80, 100, 120],
       [
         theme.colors.textSecondary, // 0 RPM: Gray
-        theme.colors.primary, // 65 RPM: Blue
+        dynamicPrimaryColor, // 65 RPM: Dynamic primary color
         '#00FF88', // 80 RPM: Green
         '#FF6600', // 100 RPM: Orange
         '#FF3300', // 120 RPM: Red
       ]
     );
     return baseColor + 'CC'; // 80% opacity
-  }, [rpm]);
+  }, [rpm, dynamicPrimaryColor]);
 
   const ring3Color = useDerivedValue(() => {
     if (!rpm || rpm.value <= 0) {
@@ -163,14 +165,14 @@ const PulseRings = ({ rpm }: { rpm?: SharedValue<number> }) => {
       [0, 65, 80, 100, 120],
       [
         theme.colors.textSecondary, // 0 RPM: Gray
-        theme.colors.primary, // 65 RPM: Blue
+        dynamicPrimaryColor, // 65 RPM: Dynamic primary color
         '#00FF88', // 80 RPM: Green
         '#FF6600', // 100 RPM: Orange
         '#FF3300', // 120 RPM: Red
       ]
     );
     return baseColor + '80'; // 50% opacity
-  }, [rpm]);
+  }, [rpm, dynamicPrimaryColor]);
 
   // GPU-Only: Animated styles with interpolateColor (no JS thread blocking)
   const ring1Style = useAnimatedStyle(() => {
@@ -277,7 +279,11 @@ export default function CircularProgressRing({
   size = 290,
   strokeWidth = 3,
   rpm,
+  primaryColor,
 }: CircularProgressRingProps) {
+  const branding = useBranding();
+  const dynamicPrimaryColor = primaryColor || branding.primary;
+  
   const radius = size / 2;
   const center = { x: radius, y: radius };
   const trackRadius = radius - strokeWidth / 2;
@@ -487,32 +493,32 @@ export default function CircularProgressRing({
             {/* Performance: Reduced blur from 16 to 4 (blur is CPU-intensive) */}
             <Path
               path={progressPath}
-              color={theme.colors.secondary}
+              color={dynamicPrimaryColor}
               style="stroke"
               strokeWidth={strokeWidth + 8}
               strokeCap="round"
               opacity={finalGlowIntensity.value * 0.4}
             >
-              <Shadow dx={0} dy={0} blur={4} color={theme.colors.secondary} />
+              <Shadow dx={0} dy={0} blur={4} color={dynamicPrimaryColor} />
             </Path>
             
             {/* Middle glow layer */}
             {/* Performance: Reduced blur from 8 to 4 (blur is CPU-intensive) */}
             <Path
               path={progressPath}
-              color={theme.colors.secondary}
+              color={dynamicPrimaryColor}
               style="stroke"
               strokeWidth={strokeWidth + 4}
               strokeCap="round"
               opacity={finalGlowIntensity.value * 0.6}
             >
-              <Shadow dx={0} dy={0} blur={4} color={theme.colors.secondary} />
+              <Shadow dx={0} dy={0} blur={4} color={dynamicPrimaryColor} />
             </Path>
             
             {/* Main progress stroke (solid) */}
             <Path
               path={progressPath}
-              color={theme.colors.secondary}
+              color={dynamicPrimaryColor}
               style="stroke"
               strokeWidth={strokeWidth}
               strokeCap="round"
@@ -533,10 +539,10 @@ export default function CircularProgressRing({
                 start={laserGradientStart}
                 end={laserGradientEnd}
                 colors={[
-                  theme.colors.primary + 'FF', // Bright head (full opacity)
-                  theme.colors.primary + 'CC', // High opacity
-                  theme.colors.primary + '66', // Medium opacity
-                  theme.colors.primary + '00', // Fading tail (transparent)
+                  dynamicPrimaryColor + 'FF', // Bright head (full opacity)
+                  dynamicPrimaryColor + 'CC', // High opacity
+                  dynamicPrimaryColor + '66', // Medium opacity
+                  dynamicPrimaryColor + '00', // Fading tail (transparent)
                 ]}
                 positions={[0, 0.3, 0.7, 1]} // Gradient positions for smooth fade
               />

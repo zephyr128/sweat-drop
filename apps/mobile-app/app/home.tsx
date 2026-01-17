@@ -10,7 +10,7 @@ import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { useTheme } from '@/lib/contexts/ThemeContext';
+import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
@@ -23,7 +23,22 @@ import { Gym } from '@/lib/stores/useGymStore';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 12;
 const CARD_PADDING = 16; // Horizontal padding of ScrollView
-const CHALLENGE_CARD_WIDTH = SCREEN_WIDTH - (CARD_PADDING * 2) - (CARD_MARGIN * 2); // Full width minus padding and margins
+
+// Helper function to add alpha to hex color
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return hex;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+// Bottom cards row: two cards with gap between them
+const BOTTOM_CARDS_GAP = 16;
+const BOTTOM_CARD_WIDTH = (SCREEN_WIDTH - (CARD_PADDING * 2) - BOTTOM_CARDS_GAP) / 2; // Each card takes half of available width minus gap
+const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP; // Width of both bottom cards plus gap between them
+// Challenge cards use same width as SmartCoach card
+const CHALLENGE_CARD_WIDTH = SMARTCOACH_CARD_WIDTH;
 const CHALLENGE_CARD_HEIGHT = 200; // Fixed height for cards
 const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN; // Width + margin for snap
 
@@ -31,6 +46,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { session } = useSession();
   const { theme, activeGym, isUnlocked } = useTheme();
+  const branding = useBranding();
   const { getActiveGymId, setPreviewGymId, setActiveGym, homeGymId, previewGymId } = useGymStore();
   const { updateHomeGym } = useGymData();
   const activeGymId = getActiveGymId();
@@ -346,13 +362,13 @@ export default function HomeScreen() {
 
             {/* Wallet Widget */}
             <TouchableOpacity
-              style={styles.walletWidget}
+              style={[styles.walletWidget, { borderColor: hexToRgba(theme.colors.primary, 0.3) }]}
               onPress={() => router.push('/wallet')}
               activeOpacity={0.8}
             >
-              <View style={[styles.walletBlur, { borderColor: theme.colors.primary + '30' }]}>
-                <Ionicons name="water" size={16} color={theme.colors.primary} />
-                <Text style={[styles.walletAmount, getNumberStyle(16), { color: theme.colors.primary }]}>
+              <View style={[styles.walletBlur, { borderColor: hexToRgba(theme.colors.primary, 0.3) }]}>
+                <Ionicons name="water" size={16} color="#00E5FF" />
+                <Text style={[styles.walletAmount, getNumberStyle(16), { color: theme.colors.text }]}>
                   {totalDrops.toLocaleString()}
                 </Text>
               </View>
@@ -418,7 +434,7 @@ export default function HomeScreen() {
                       >
                         <View style={styles.horizontalChallengeContent}>
                           <View style={styles.horizontalChallengeHeader}>
-                            <Text style={styles.horizontalChallengeType}>
+                            <Text style={[styles.horizontalChallengeType, { color: branding.primary }]}>
                               {challenge.frequency === 'daily' ? 'Daily' : challenge.frequency === 'weekly' ? 'Weekly' : 'Challenge'}
                             </Text>
                             <Text style={styles.horizontalChallengeName} numberOfLines={2}>
@@ -427,7 +443,10 @@ export default function HomeScreen() {
                           </View>
 
                           <View style={styles.horizontalChallengeProgress}>
-                            <View style={styles.horizontalProgressBar}>
+                            <View style={[
+                              styles.horizontalProgressBar,
+                              { backgroundColor: branding.primaryLight }
+                            ]}>
                               <View
                                 style={[
                                   styles.horizontalProgressBarFill,
@@ -435,17 +454,17 @@ export default function HomeScreen() {
                                     width: `${progressRatio * 100}%`,
                                     backgroundColor: challenge.is_completed
                                       ? theme.colors.secondary
-                                      : theme.colors.primary,
+                                      : branding.primary,
                                   },
                                 ]}
                               />
                             </View>
                             <Text style={styles.horizontalProgressText}>
-                              <Text style={[getNumberStyle(12), { color: theme.colors.primary }]}>
+                              <Text style={[getNumberStyle(12), { color: branding.primary }]}>
                                 {challenge.current_minutes}
                               </Text>
                               {' / '}
-                              <Text style={[getNumberStyle(12), { color: theme.colors.primary }]}>
+                              <Text style={[getNumberStyle(12), { color: branding.primary }]}>
                                 {challenge.required_minutes}
                               </Text>
                               {' min'}
@@ -453,8 +472,8 @@ export default function HomeScreen() {
                           </View>
 
                           <View style={styles.horizontalChallengeReward}>
-                            <Ionicons name="water" size={14} color={theme.colors.primary} />
-                            <Text style={styles.horizontalChallengeRewardText}>
+                            <Ionicons name="water" size={14} color="#00E5FF" />
+                            <Text style={[styles.horizontalChallengeRewardText, { color: branding.primary }]}>
                               {challenge.drops_bounty} drops
                             </Text>
                           </View>
@@ -477,18 +496,18 @@ export default function HomeScreen() {
                     disabled={!isUnlocked}
                   >
                     <LinearGradient
-                      colors={['#1A1A2E', '#0A1A2E', '#1A1A2E']}
+                      colors={[branding.primary, branding.primaryDark, branding.primary]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.viewAllGradient}
                     >
                       <View style={styles.viewAllContent}>
-                        <View style={styles.viewAllIconContainer}>
-                          <Ionicons name="list" size={40} color={theme.colors.primary} />
+                        <View style={[styles.viewAllIconContainer, { backgroundColor: branding.primary }]}>
+                          <Ionicons name="list" size={40} color={branding.onPrimary} />
                         </View>
-                        <Text style={styles.viewAllText}>View All</Text>
-                        <Text style={styles.viewAllSubtext}>See all challenges</Text>
-                        <Ionicons name="arrow-forward-circle" size={24} color={theme.colors.primary} style={styles.viewAllArrow} />
+                        <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>View All</Text>
+                        <Text style={[styles.viewAllSubtext, { color: branding.onPrimary + 'CC' }]}>See all challenges</Text>
+                        <Ionicons name="arrow-forward-circle" size={24} color={branding.onPrimary} style={styles.viewAllArrow} />
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
@@ -545,18 +564,18 @@ export default function HomeScreen() {
                     disabled={!isUnlocked}
                   >
                     <LinearGradient
-                      colors={['#1A1A2E', '#0A1A2E', '#1A1A2E']}
+                      colors={[branding.primary, branding.primaryDark, branding.primary]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.viewAllGradient}
                     >
                       <View style={styles.viewAllContent}>
-                        <View style={styles.viewAllIconContainer}>
-                          <Ionicons name="list" size={40} color={theme.colors.primary} />
+                        <View style={[styles.viewAllIconContainer, { backgroundColor: branding.primary }]}>
+                          <Ionicons name="list" size={40} color={branding.onPrimary} />
                         </View>
-                        <Text style={styles.viewAllText}>View All</Text>
-                        <Text style={styles.viewAllSubtext}>See all challenges</Text>
-                        <Ionicons name="arrow-forward-circle" size={24} color={theme.colors.primary} style={styles.viewAllArrow} />
+                        <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>View All</Text>
+                        <Text style={[styles.viewAllSubtext, { color: branding.onPrimary + 'CC' }]}>See all challenges</Text>
+                        <Ionicons name="arrow-forward-circle" size={24} color={branding.onPrimary} style={styles.viewAllArrow} />
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
@@ -565,8 +584,59 @@ export default function HomeScreen() {
             </View>
           )}
 
-        {/* Bottom Cards Row */}
-        <View style={styles.bottomCardsRow}>
+          {/* SmartCoach Card - Same width as both bottom cards plus gap */}
+          <View style={styles.smartCoachSection}>
+            <TouchableOpacity
+              style={[
+                styles.smartCoachCard, 
+                { 
+                  width: SMARTCOACH_CARD_WIDTH,
+                  borderColor: hexToRgba(branding.primary, 0.3), // rgba(primaryColor, 0.3)
+                }
+              ]}
+              onPress={() => {
+                if (!isUnlocked) return;
+                router.push('/smartcoach');
+              }}
+              activeOpacity={isUnlocked ? 0.9 : 1}
+              disabled={!isUnlocked}
+            >
+              <LinearGradient
+                colors={[branding.primaryLight, branding.primaryLight, branding.primaryLight]} // Use primaryLight for subtle background
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.smartCoachGradient}
+              >
+                <View style={styles.smartCoachContent}>
+                  <View style={styles.smartCoachHeader}>
+                    <View style={styles.smartCoachIconContainer}>
+                      <Ionicons name="fitness" size={32} color={branding.primary} />
+                    </View>
+                    <View style={styles.smartCoachTextContainer}>
+                      <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
+                      <Text style={[styles.smartCoachSubtitle, { color: branding.primary + 'CC' }]} numberOfLines={2}>
+                        Follow workout plans from your gym
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        {
+                          backgroundColor: branding.primary,
+                          borderRadius: 20,
+                          padding: 4,
+                        }
+                      ]}
+                    >
+                      <Ionicons name="arrow-forward-circle" size={28} color={branding.onPrimary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom Cards Row */}
+          <View style={styles.bottomCardsRow}>
           {/* Rewards Store Card */}
           <View style={styles.featureCardWrapper}>
             <TouchableOpacity
@@ -628,6 +698,7 @@ export default function HomeScreen() {
               </View>
             </TouchableOpacity>
           </View>
+
         </View>
         </View>
       </ScrollView>
@@ -758,6 +829,7 @@ const styles = StyleSheet.create({
   walletWidget: {
     borderRadius: 9999,
     overflow: 'hidden',
+    borderWidth: 1,
   },
   walletBlur: {
     flexDirection: 'row',
@@ -1161,5 +1233,56 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
     paddingHorizontal: 8,
+  },
+  smartCoachSection: {
+    marginBottom: 24,
+    paddingHorizontal: CARD_PADDING,
+    alignItems: 'center', // Center the card
+  },
+  smartCoachCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(147, 51, 234, 0.3)',
+    height: 120,
+  },
+  smartCoachGradient: {
+    borderRadius: 16,
+    height: '100%',
+    width: '100%',
+  },
+  smartCoachContent: {
+    padding: 16,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  smartCoachHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  smartCoachIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  smartCoachTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  smartCoachTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  smartCoachSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    letterSpacing: 0.3,
+    lineHeight: 18,
   },
 });

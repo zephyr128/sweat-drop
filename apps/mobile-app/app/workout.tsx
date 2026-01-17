@@ -31,6 +31,8 @@ import { DropEmitter } from '@/components/DropEmitter';
 import CircularProgressRing from '@/components/CircularProgressRing';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { bleService, CSCMeasurement } from '@/lib/ble-service';
+import { useBranding } from '@/lib/hooks/useBranding';
+import { useTheme } from '@/lib/contexts/ThemeContext';
 
 // ActiveDrop interface removed - drops are now managed internally by DropEmitter
 
@@ -68,6 +70,8 @@ export default function WorkoutScreen() {
     machineType?: string;
     sensorId?: string;
   }>();
+  const { branding } = useTheme();
+  const brandingHook = useBranding();
   const [session, setSession] = useState<any>(null);
   // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
   const [duration, setDuration] = useState(0);
@@ -141,6 +145,14 @@ export default function WorkoutScreen() {
   const progressShared = useSharedValue(0); // Progress (0 to 1) for LiquidGauge
   const caloriesShared = useSharedValue(0); // Calories (calculated from drops)
   const totalCrankRevolutionsShared = useSharedValue(0); // Total crank revolutions for bike (for kcal and pace calculation)
+  
+  // Dynamic Branding: Primary color as SharedValue for Reanimated interpolateColor
+  const primaryColorShared = useSharedValue(branding.primary);
+  
+  // Update primaryColorShared when branding changes
+  useEffect(() => {
+    primaryColorShared.value = branding.primary;
+  }, [branding.primary, primaryColorShared]);
   
   // UI State SharedValues
   const isPausedShared = useSharedValue(0); // 0 = false, 1 = true
@@ -1044,16 +1056,17 @@ export default function WorkoutScreen() {
   // ============================================================================
   // PREMIUM UI: Dynamic RPM Color based on intensity (GPU-Only)
   // ============================================================================
-  // 0-40 RPM: Gray (resting), 40-70 RPM: Green (moderate), 70-100 RPM: Yellow (intense), 100+ RPM: Red (maximum)
+  // 0-40 RPM: Gray (resting), 40-70 RPM: Dynamic Primary (moderate), 70-100 RPM: Yellow (intense), 100+ RPM: Red (maximum)
   const rpmTextColorStyle = useAnimatedStyle(() => {
     const currentRPM = rawRPMShared.value < 1.5 ? 0 : smoothedRPMShared.value;
+    const primaryColor = primaryColorShared.value;
     const color = interpolateColor(
       currentRPM,
       [0, 40, 70, 100, 150],
       [
         theme.colors.textSecondary, // 0-40 RPM: Gray
         theme.colors.textSecondary, // 0-40 RPM: Gray
-        '#4ade80', // 40-70 RPM: Green
+        primaryColor, // 40-70 RPM: Dynamic primary color
         '#facc15', // 70-100 RPM: Yellow
         '#f87171', // 100+ RPM: Red
       ]
@@ -1061,7 +1074,7 @@ export default function WorkoutScreen() {
     return {
       color,
     };
-  }, [rawRPMShared, smoothedRPMShared]);
+  }, [rawRPMShared, smoothedRPMShared, primaryColorShared]);
   
   // ============================================================================
   // PREMIUM UI: Subtle Pulse Effect for RPM Container
@@ -1710,13 +1723,15 @@ export default function WorkoutScreen() {
   };
 
   // Blurred Background with Animated Gradients (RPM-based zone colors)
+  // Use dynamic primary color with interpolateColor for smooth transitions
   const backgroundGradientColor = useDerivedValue(() => {
     const rpm = smoothedRPMShared.value;
+    const primaryColor = primaryColorShared.value;
     if (rpm === 0) return theme.colors.background;
     if (rpm >= 100) return '#FF6600'; // Orange/Red zone
     if (rpm >= 65) return '#00FF88'; // Green zone
-    return theme.colors.primary; // Blue zone
-  }, [smoothedRPMShared]);
+    return primaryColor; // Dynamic primary color zone
+  }, [smoothedRPMShared, primaryColorShared]);
 
   const pausedOverlayStyle = useAnimatedStyle(() => ({
     opacity: withSpring(pausedOverlayOpacity.value, springConfig),
@@ -1795,7 +1810,7 @@ export default function WorkoutScreen() {
         <Ionicons
           name="radio"
           size={12}
-          color={status === 'ok' ? theme.colors.primary : theme.colors.textSecondary}
+          color={status === 'ok' ? branding.primary : theme.colors.textSecondary}
         />
       </Animated.View>
     );
@@ -1850,19 +1865,26 @@ export default function WorkoutScreen() {
           )}
         </View>
         <View style={styles.headerDrops}>
-          <Ionicons name="water" size={20} color={theme.colors.primary} />
+          <Ionicons name="water" size={20} color={branding.primary} />
           <AnimatedText 
             text={animatedDropsText}
-            style={[styles.headerDropsText, getNumberStyle(18)]}
+            style={[styles.headerDropsText, getNumberStyle(18), { color: branding.primary }]}
           />
         </View>
       </View>
 
       {/* Bonus Banner */}
       {showBonus && (
-        <Animated.View style={[styles.bonusBanner, splashStyle]}>
+        <Animated.View style={[
+          styles.bonusBanner, 
+          splashStyle,
+          {
+            backgroundColor: branding.primaryLight,
+            borderColor: branding.primary,
+          }
+        ]}>
           <Text style={styles.bonusText}>
-            +100 <Ionicons name="water" size={16} color={theme.colors.primary} /> DROPS BONUS
+            +100 <Ionicons name="water" size={16} color={branding.primary} /> DROPS BONUS
           </Text>
         </Animated.View>
       )}
@@ -1898,8 +1920,8 @@ export default function WorkoutScreen() {
                 styles.explosionCircle,
                 explosionStyle,
                 {
-                  borderColor: theme.colors.primary,
-                  shadowColor: theme.colors.primary,
+                  borderColor: branding.primary,
+                  shadowColor: branding.primary,
                 },
               ]}
             />
@@ -1932,6 +1954,7 @@ export default function WorkoutScreen() {
               size={290}
               strokeWidth={3}
               rpm={smoothedRPMShared} // Pass RPM for laser sweep speed
+              primaryColor={branding.primary} // Dynamic primary color from branding
             />
           )}
 
@@ -1982,7 +2005,7 @@ export default function WorkoutScreen() {
         </View>
 
         <View style={styles.statItem}>
-          <Ionicons name="speedometer-outline" size={24} color={theme.colors.primary} />
+          <Ionicons name="speedometer-outline" size={24} color={branding.primary} />
           <AnimatedText 
             text={animatedPaceText}
             style={[styles.statValue, getNumberStyle(20)]}
@@ -1994,7 +2017,7 @@ export default function WorkoutScreen() {
         {(session?.machine?.sensor_id || sensorId) && (
           <Animated.View style={[styles.statItem, rpmPulseStyle]}>
             <View style={styles.rpmHeader}>
-              <Ionicons name="pulse-outline" size={24} color={smoothedRPMShared.value > 0 && bleConnected ? theme.colors.primary : theme.colors.textSecondary} />
+              <Ionicons name="pulse-outline" size={24} color={smoothedRPMShared.value > 0 && bleConnected ? branding.primary : theme.colors.textSecondary} />
               {/* Live Signal Indicator */}
               {bleConnected && (
                 <SignalIndicator status={signalStatus} />
@@ -2017,19 +2040,19 @@ export default function WorkoutScreen() {
       <View style={styles.progressBarContainer}>
         <View style={styles.progressBar}>
           <View
-            style={[
-              styles.progressBarFill,
-              {
-                width: `${Math.min(progressShared.value * 100, 100)}%`,
-                backgroundColor: isOverachieved ? theme.colors.secondary : theme.colors.primary,
-              },
-            ]}
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${Math.min(progressShared.value * 100, 100)}%`,
+                  backgroundColor: isOverachieved ? theme.colors.secondary : branding.primary,
+                },
+              ]}
           />
         </View>
         <View style={styles.targetContainer}>
           <Text style={styles.targetText}>Target: </Text>
           <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
-          <Ionicons name="water" size={16} color={theme.colors.primary} />
+          <Ionicons name="water" size={16} color={branding.primary} />
         </View>
       </View>
 
@@ -2096,7 +2119,7 @@ export default function WorkoutScreen() {
       {/* BLE Connection Required Overlay */}
       {!bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
         <Animated.View style={[styles.bleConnectionOverlay, pausedOverlayStyle]}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
           <Text style={styles.bleConnectionTitle}>Povezivanje sa senzorom...</Text>
           <Text style={styles.bleConnectionText}>
             {bleStatus || 'Molimo sačekajte dok se aplikacija povezuje sa Magene S3+ senzorom.'}

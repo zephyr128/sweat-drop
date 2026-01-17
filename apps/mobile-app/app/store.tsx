@@ -287,6 +287,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
@@ -294,8 +295,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    pointerEvents: 'none', // Don't block touch events
   },
   headerButton: {
     width: 40,

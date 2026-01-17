@@ -8,12 +8,24 @@ import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
+import { useBranding } from '@/lib/contexts/ThemeContext';
+
+// Helper function to add alpha to hex color
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return hex;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 type Period = 'daily' | 'weekly' | 'monthly';
 type LeaderboardType = 'local' | 'global';
 
 export default function LeaderboardScreen() {
   const { session } = useSession();
+  const branding = useBranding();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
   const [period, setPeriod] = useState<Period>('daily');
@@ -142,14 +154,23 @@ export default function LeaderboardScreen() {
                 key={type}
                 style={[
                   styles.typeTab,
-                  leaderboardType === type && styles.typeTabActive,
+                  leaderboardType === type && [
+                    styles.typeTabActive,
+                    {
+                      backgroundColor: branding.primaryLight,
+                      borderColor: hexToRgba(branding.primary, 0.4),
+                    }
+                  ],
                 ]}
                 onPress={() => setLeaderboardType(type)}
               >
                 <Text
                   style={[
                     styles.typeTabText,
-                    leaderboardType === type && styles.typeTabTextActive,
+                    leaderboardType === type && [
+                      styles.typeTabTextActive,
+                      { color: branding.primary }
+                    ],
                   ]}
                 >
                   {type === 'local' ? 'Local' : 'Global'}
@@ -165,13 +186,25 @@ export default function LeaderboardScreen() {
               {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
                 <TouchableOpacity
                   key={p}
-                  style={[styles.filterButton, period === p && styles.filterButtonActive]}
+                  style={[
+                    styles.filterButton, 
+                    period === p && [
+                      styles.filterButtonActive,
+                      {
+                        backgroundColor: branding.primary,
+                        borderColor: branding.primary,
+                      }
+                    ]
+                  ]}
                   onPress={() => setPeriod(p)}
                 >
                   <Text
                     style={[
                       styles.filterButtonText,
-                      period === p && styles.filterButtonTextActive,
+                      period === p && [
+                        styles.filterButtonTextActive,
+                        { color: branding.onPrimary }
+                      ],
                     ]}
                   >
                     {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -184,7 +217,7 @@ export default function LeaderboardScreen() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <ActivityIndicator size="large" color={branding.primary} />
           </View>
         ) : leaderboard.length === 0 ? (
           <View style={styles.emptyState}>
@@ -198,7 +231,13 @@ export default function LeaderboardScreen() {
                   key={entry.user_id}
                   style={[
                     styles.leaderboardItem,
-                    isCurrentUser(entry.user_id) && styles.leaderboardItemCurrent,
+                    isCurrentUser(entry.user_id) && [
+                      styles.leaderboardItemCurrent,
+                      {
+                        backgroundColor: branding.primaryLight,
+                        borderLeftColor: branding.primary,
+                      }
+                    ],
                   ]}
                 >
                   <Text style={styles.rank}>{getRankEmoji(index)}</Text>
@@ -209,8 +248,8 @@ export default function LeaderboardScreen() {
                     </Text>
                   </View>
                   <View style={styles.dropsContainer}>
-                    <Ionicons name="water" size={16} color={theme.colors.primary} />
-                    <Text style={[styles.drops, getNumberStyle(16)]}>
+                    <Ionicons name="water" size={16} color="#00E5FF" />
+                    <Text style={[styles.drops, getNumberStyle(16), { color: '#00E5FF' }]}>
                       {entry.drops}
                     </Text>
                   </View>
@@ -220,12 +259,12 @@ export default function LeaderboardScreen() {
 
             {/* Sticky Footer - Current User Position */}
             {currentUserEntry && currentUserRank !== null && currentUserRank > 100 && (
-              <View style={styles.stickyFooter}>
-                <Text style={styles.stickyFooterText}>
-                  Rank {currentUserRank} - {currentUserEntry.username} -{' '}
-                  <Text style={[getNumberStyle(16)]}>{currentUserEntry.drops}</Text>{' '}
-                  <Ionicons name="water" size={16} color={theme.colors.primary} />
-                </Text>
+              <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.5) }]}>
+                  <Text style={styles.stickyFooterText}>
+                    Rank {currentUserRank} - {currentUserEntry.username} -{' '}
+                    <Text style={[getNumberStyle(16), { color: '#00E5FF' }]}>{currentUserEntry.drops}</Text>{' '}
+                    <Ionicons name="water" size={16} color="#00E5FF" />
+                  </Text>
               </View>
             )}
           </>
@@ -243,6 +282,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
@@ -250,8 +290,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    pointerEvents: 'none', // Don't block touch events
   },
   headerSpacer: {
     width: 40,
@@ -361,9 +405,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   leaderboardItemCurrent: {
-    backgroundColor: theme.colors.primary + '15',
     borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary,
   },
   rank: {
     fontSize: theme.typography.fontSize.xl,
@@ -397,7 +439,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.xl,
     marginTop: theme.spacing.md,
     borderWidth: 1,
-    borderColor: theme.colors.primary + '50',
   },
   stickyFooterText: {
     fontSize: theme.typography.fontSize.base,

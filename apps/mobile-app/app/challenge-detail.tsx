@@ -9,6 +9,17 @@ import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
+import { useBranding } from '@/lib/contexts/ThemeContext';
+
+// Helper function to add alpha to hex color
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return hex;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function ChallengeDetailScreen() {
   const router = useRouter();
@@ -17,6 +28,7 @@ export default function ChallengeDetailScreen() {
     gymId?: string;
   }>();
   const { session } = useSession();
+  const branding = useBranding();
   const [challenge, setChallenge] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -117,7 +129,7 @@ export default function ChallengeDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
         </View>
       </SafeAreaView>
     );
@@ -173,8 +185,14 @@ export default function ChallengeDetailScreen() {
           >
             <View style={styles.challengeContent}>
               {/* Challenge Type Badge */}
-              <View style={styles.challengeTypeBadge}>
-                <Text style={styles.challengeTypeText}>
+              <View style={[
+                styles.challengeTypeBadge,
+                {
+                  backgroundColor: branding.primaryLight,
+                  borderColor: hexToRgba(branding.primary, 0.3),
+                }
+              ]}>
+                <Text style={[styles.challengeTypeText, { color: branding.primary }]}>
                   {getFrequencyLabel(challenge.frequency || 'one-time')}
                 </Text>
               </View>
@@ -190,26 +208,26 @@ export default function ChallengeDetailScreen() {
               {/* Challenge Info */}
               <View style={styles.challengeInfo}>
                 <View style={styles.infoRow}>
-                  <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
+                  <Ionicons name="time-outline" size={18} color={branding.primary} />
                   <Text style={styles.infoText}>
                     {requiredMinutes} minutes required
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Ionicons name="bicycle-outline" size={18} color={theme.colors.primary} />
+                  <Ionicons name="bicycle-outline" size={18} color={branding.primary} />
                   <Text style={styles.infoText}>
                     {getMachineTypeLabel(challenge.machine_type || 'any')}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Ionicons name="water" size={18} color={theme.colors.primary} />
+                  <Ionicons name="water" size={18} color="#00E5FF" />
                   <Text style={styles.infoText}>
                     {dropsBounty} drops reward
                   </Text>
                 </View>
                 {challenge.end_date && (
                   <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
+                    <Ionicons name="calendar-outline" size={18} color={branding.primary} />
                     <Text style={styles.infoText}>
                       {getTimeRemaining(challenge.end_date)}
                     </Text>
@@ -221,13 +239,13 @@ export default function ChallengeDetailScreen() {
               <View style={styles.progressSection}>
                 <View style={styles.progressHeader}>
                   <Text style={styles.progressTitle}>Your Progress</Text>
-                  <Text style={styles.progressPercentage}>
+                  <Text style={[styles.progressPercentage, { color: branding.primary }]}>
                     {Math.round(progressRatio * 100)}%
                   </Text>
                 </View>
 
                 {/* Progress Bar */}
-                <View style={styles.progressBar}>
+                <View style={[styles.progressBar, { backgroundColor: branding.primaryLight }]}>
                   <View
                     style={[
                       styles.progressFill,
@@ -235,7 +253,7 @@ export default function ChallengeDetailScreen() {
                         width: `${progressRatio * 100}%`,
                         backgroundColor: isCompleted
                           ? theme.colors.secondary
-                          : theme.colors.primary,
+                          : branding.primary,
                       },
                     ]}
                   />
@@ -244,11 +262,11 @@ export default function ChallengeDetailScreen() {
                 {/* Progress Text */}
                 <View style={styles.progressTextContainer}>
                   <Text style={styles.progressText}>
-                    <Text style={[getNumberStyle(24), { color: theme.colors.primary }]}>
+                    <Text style={[getNumberStyle(24), { color: branding.primary }]}>
                       {currentMinutes}
                     </Text>
                     {' / '}
-                    <Text style={[getNumberStyle(24), { color: theme.colors.primary }]}>
+                    <Text style={[getNumberStyle(24), { color: branding.primary }]}>
                       {requiredMinutes}
                     </Text>
                     {' minutes'}
@@ -284,24 +302,42 @@ export default function ChallengeDetailScreen() {
           <Text style={styles.howToTitle}>How to Participate</Text>
           <View style={styles.howToSteps}>
             <View style={styles.step}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>1</Text>
+              <View style={[
+                styles.stepNumber,
+                {
+                  backgroundColor: branding.primaryLight,
+                  borderColor: hexToRgba(branding.primary, 0.3),
+                }
+              ]}>
+                <Text style={[styles.stepNumberText, { color: branding.primary }]}>1</Text>
               </View>
               <Text style={styles.stepText}>
                 Scan a QR code on a {getMachineTypeLabel(challenge.machine_type || 'any').toLowerCase()} machine
               </Text>
             </View>
             <View style={styles.step}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>2</Text>
+              <View style={[
+                styles.stepNumber,
+                {
+                  backgroundColor: branding.primaryLight,
+                  borderColor: hexToRgba(branding.primary, 0.3),
+                }
+              ]}>
+                <Text style={[styles.stepNumberText, { color: branding.primary }]}>2</Text>
               </View>
               <Text style={styles.stepText}>
                 Start your workout and exercise for the required time
               </Text>
             </View>
             <View style={styles.step}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>3</Text>
+              <View style={[
+                styles.stepNumber,
+                {
+                  backgroundColor: branding.primaryLight,
+                  borderColor: hexToRgba(branding.primary, 0.3),
+                }
+              ]}>
+                <Text style={[styles.stepNumberText, { color: branding.primary }]}>3</Text>
               </View>
               <Text style={styles.stepText}>
                 Complete the challenge to earn {dropsBounty} drops
@@ -322,6 +358,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
@@ -329,8 +366,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    pointerEvents: 'none', // Don't block touch events
   },
   headerSpacer: {
     width: 40,

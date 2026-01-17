@@ -9,10 +9,12 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 export default function RedemptionsScreen() {
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
+  const branding = useBranding();
   const activeGymId = getActiveGymId();
   const [redemptions, setRedemptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,7 @@ export default function RedemptionsScreen() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return theme.colors.warning || '#FF9100';
-      case 'confirmed': return theme.colors.primary;
+      case 'confirmed': return branding.primary;
       case 'cancelled': return theme.colors.textSecondary;
       default: return theme.colors.textSecondary;
     }
@@ -83,7 +85,7 @@ export default function RedemptionsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
         </View>
       </SafeAreaView>
     );
@@ -154,17 +156,17 @@ export default function RedemptionsScreen() {
                       }}
                       disabled={!redemption.redemption_code}
                     >
-                      <Text style={styles.redemptionCode}>{redemption.redemption_code || 'N/A'}</Text>
+                      <Text style={[styles.redemptionCode, { color: branding.primary }]}>{redemption.redemption_code || 'N/A'}</Text>
                       {redemption.status === 'pending' && redemption.redemption_code && (
-                        <Ionicons name="copy-outline" size={16} color={theme.colors.primary} />
+                        <Ionicons name="copy-outline" size={16} color={branding.primary} />
                       )}
                     </TouchableOpacity>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Drops Spent</Text>
                     <View style={styles.dropsContainer}>
-                      <Ionicons name="water" size={16} color={theme.colors.primary} />
-                      <Text style={[styles.dropsAmount, getNumberStyle(16), { color: theme.colors.primary }]}>
+                      <Ionicons name="water" size={16} color="#00E5FF" />
+                      <Text style={[styles.dropsAmount, getNumberStyle(16), { color: '#00E5FF' }]}>
                         {redemption.drops_spent}
                       </Text>
                     </View>
@@ -215,6 +217,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
@@ -222,8 +225,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    pointerEvents: 'none', // Don't block touch events
   },
   headerSpacer: {
     width: 40,
@@ -338,7 +345,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontFamily: 'Courier',
     fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.primary,
     letterSpacing: 1,
   },
   dropsContainer: {

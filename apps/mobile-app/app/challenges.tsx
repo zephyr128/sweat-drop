@@ -8,10 +8,12 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 export default function ChallengesScreen() {
   const router = useRouter();
   const { session } = useSession();
+  const branding = useBranding();
   const [challenges, setChallenges] = useState<any[]>([]);
   const [progress, setProgress] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -141,7 +143,7 @@ export default function ChallengesScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
         </View>
       </SafeAreaView>
     );
@@ -201,7 +203,7 @@ export default function ChallengesScreen() {
               >
                 <View style={styles.challengeHeader}>
                   <View>
-                    <Text style={styles.challengeType}>
+                    <Text style={[styles.challengeType, { color: branding.primary }]}>
                       {challengeTypeLabel}
                     </Text>
                     <Text style={styles.challengeName}>{challenge.name}</Text>
@@ -220,27 +222,29 @@ export default function ChallengesScreen() {
                 )}
 
                 <View style={styles.progressContainer}>
-                  <View style={styles.progressBar}>
+                  <View style={[styles.progressBar, { backgroundColor: branding.primaryLight }]}>
                     <View
                       style={[
                         styles.progressFill,
-                        { width: `${progressPercent}%` },
-                        isCompleted && styles.progressFillCompleted,
+                        { 
+                          width: `${progressPercent}%`,
+                          backgroundColor: isCompleted ? theme.colors.secondary : branding.primary,
+                        },
                       ]}
                     />
                   </View>
                   <Text style={styles.progressText}>
-                    <Text style={[getNumberStyle(14)]}>{currentMinutes}</Text>
+                    <Text style={[getNumberStyle(14), { color: branding.primary }]}>{currentMinutes}</Text>
                     {' / '}
-                    <Text style={[getNumberStyle(14)]}>{requiredMinutes}</Text>
+                    <Text style={[getNumberStyle(14), { color: branding.primary }]}>{requiredMinutes}</Text>
                     {' min'}
                   </Text>
                 </View>
 
                 {challenge.drops_bounty > 0 && (
                   <View style={styles.rewardInfo}>
-                    <Ionicons name="water" size={14} color={theme.colors.primary} />
-                    <Text style={styles.rewardText}>
+                    <Ionicons name="water" size={14} color="#00E5FF" />
+                    <Text style={[styles.rewardText, { color: branding.primary }]}>
                       {challenge.drops_bounty} drops reward
                     </Text>
                   </View>
@@ -270,6 +274,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
@@ -277,8 +282,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    pointerEvents: 'none', // Don't block touch events
   },
   headerSpacer: {
     width: 40,
