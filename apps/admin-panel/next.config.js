@@ -1,11 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone', // Vercel: minimal server output, avoids static export issues
   typescript: {
-    ignoreBuildErrors: false, // TypeScript errors will fail the build
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true, // Ignore ESLint during builds (lint separately)
+    ignoreDuringBuilds: true,
   },
 }
 
