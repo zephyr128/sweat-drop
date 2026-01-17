@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useGymStore, Gym } from '@/lib/stores/useGymStore';
 import { useSession } from './useSession';
@@ -26,6 +26,7 @@ export const useGymData = () => {
   }, [session]);
 
   // Load active gym when homeGymId or previewGymId changes
+  // Also reload when screen comes into focus to get fresh branding
   useEffect(() => {
     const activeGymId = getActiveGymId();
     if (activeGymId) {
@@ -54,32 +55,79 @@ export const useGymData = () => {
     }
   };
 
-  const loadActiveGym = async (gymId: string) => {
+  const loadActiveGym = useCallback(async (gymId: string) => {
     setLoading(true);
     try {
-      // First check if gym is already in store
-      const cachedGym = gyms.find((g) => g.id === gymId);
-      if (cachedGym) {
-        setActiveGym(cachedGym);
-        setLoading(false);
-        return;
-      }
-
-      // Otherwise fetch from database
-      const { data, error } = await supabase
+      // Always fetch fresh data from database to get latest branding
+      // Don't use cache for activeGym to ensure branding updates are reflected immediately
+      
+      // Fetch gym data
+      const { data: gymData, error: gymError } = await supabase
         .from('gyms')
         .select('*')
         .eq('id', gymId)
         .single();
 
-      if (error) throw error;
+      if (gymError) throw gymError;
+      if (!gymData) {
+        setActiveGym(null);
+        setLoading(false);
+        return;
+      }
 
-      if (data) {
-        setActiveGym(data);
-        // Add to gyms cache if not already there
-        if (!gyms.find((g) => g.id === data.id)) {
-          setGyms([...gyms, data]);
+      // Fetch branding from owner_branding (unified branding system)
+      // Default branding if no owner_branding exists
+      let branding = {
+        primary_color: '#00E5FF', // Default cyan
+        logo_url: null as string | null,
+        background_url: null as string | null,
+      };
+
+      // Get owner_branding (global branding per owner)
+      console.log('[useGymData] Gym owner_id:', gymData.owner_id);
+      if (gymData.owner_id) {
+        const { data: ownerBranding, error: brandingError } = await supabase
+          .from('owner_branding')
+          .select('primary_color, logo_url, background_url')
+          .eq('owner_id', gymData.owner_id)
+          .single();
+
+        console.log('[useGymData] Owner branding query result:', { ownerBranding, brandingError });
+        
+        if (ownerBranding) {
+          branding = {
+            primary_color: ownerBranding.primary_color || branding.primary_color,
+            logo_url: ownerBranding.logo_url || branding.logo_url,
+            background_url: ownerBranding.background_url || branding.background_url,
+          };
+          console.log('[useGymData] Final branding:', branding);
+        } else {
+          console.warn('[useGymData] No owner_branding found for owner_id:', gymData.owner_id);
         }
+      } else {
+        console.warn('[useGymData] Gym has no owner_id:', gymData.id);
+      }
+
+      // Merge gym data with branding
+      const gymWithBranding: Gym = {
+        ...gymData,
+        primary_color: branding.primary_color,
+        logo_url: branding.logo_url,
+        background_url: branding.background_url,
+      };
+
+      setActiveGym(gymWithBranding);
+      
+      // Update cache with fresh data (replace if exists, add if new)
+      const existingIndex = gyms.findIndex((g) => g.id === gymWithBranding.id);
+      if (existingIndex >= 0) {
+        // Update existing gym in cache
+        const updatedGyms = [...gyms];
+        updatedGyms[existingIndex] = gymWithBranding;
+        setGyms(updatedGyms);
+      } else {
+        // Add new gym to cache
+        setGyms([...gyms, gymWithBranding]);
       }
     } catch (error) {
       console.error('Error loading active gym:', error);
@@ -87,7 +135,7 @@ export const useGymData = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setLoading, setActiveGym, setGyms, gyms]);
 
   const updateHomeGym = async (gymId: string) => {
     if (!session?.user) return;

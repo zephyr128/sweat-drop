@@ -44,15 +44,55 @@ export const GymSelectorModal: React.FC<GymSelectorModalProps> = ({
   const loadGyms = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: gymsData, error } = await supabase
         .from('gyms')
         .select('*')
         .order('name', { ascending: true });
 
       if (error) throw error;
-      if (data) {
-        setGyms(data);
+      if (!gymsData) {
+        setGyms([]);
+        setLoading(false);
+        return;
       }
+
+      // Load branding for each gym from owner_branding (unified branding system)
+      const gymsWithBranding = await Promise.all(
+        gymsData.map(async (gym) => {
+          // Default branding
+          let branding = {
+            primary_color: '#00E5FF', // Default cyan
+            logo_url: null as string | null,
+            background_url: null as string | null,
+          };
+
+          // Get owner_branding (global branding per owner)
+          if (gym.owner_id) {
+            const { data: ownerBranding } = await supabase
+              .from('owner_branding')
+              .select('primary_color, logo_url, background_url')
+              .eq('owner_id', gym.owner_id)
+              .single();
+
+            if (ownerBranding) {
+              branding = {
+                primary_color: ownerBranding.primary_color || branding.primary_color,
+                logo_url: ownerBranding.logo_url || branding.logo_url,
+                background_url: ownerBranding.background_url || branding.background_url,
+              };
+            }
+          }
+
+          return {
+            ...gym,
+            primary_color: branding.primary_color,
+            logo_url: branding.logo_url,
+            background_url: branding.background_url,
+          };
+        })
+      );
+
+      setGyms(gymsWithBranding);
     } catch (error) {
       console.error('Error loading gyms:', error);
     } finally {
