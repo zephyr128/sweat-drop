@@ -18,7 +18,10 @@ interface Owner {
     name: string;
     city: string | null;
     country: string | null;
-    status: string;
+    status: string | null;
+    subscription_type?: string;
+    created_at?: string;
+    owner_id?: string | null;
   }>;
 }
 

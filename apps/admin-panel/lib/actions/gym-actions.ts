@@ -49,7 +49,7 @@ export async function createGym(input: CreateGymInput) {
 
     // Create gym (owner_id will be null if creating new owner - will be set when invitation is accepted)
     const supabaseAdmin = getAdminClient();
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await (supabaseAdmin
       .from('gyms')
       .insert({
         name: input.name,
@@ -59,7 +59,7 @@ export async function createGym(input: CreateGymInput) {
         owner_id: ownerId || null, // Will be null for new owners, set when invitation accepted
         subscription_type: input.subscription_type || 'Basic',
         is_suspended: false,
-      })
+      } as any) as any)
       .select()
       .single();
 
@@ -70,16 +70,16 @@ export async function createGym(input: CreateGymInput) {
     // If creating new owner, create invitation
     if (!ownerId && input.owner_email && data) {
       const gymData = data as { id: string; name: string; [key: string]: any };
-      const { data: invitation, error: invitationError } = await supabaseAdmin
+      const { data: invitation, error: invitationError } = await ((supabaseAdmin
         .from('staff_invitations')
         .insert({
           email: input.owner_email.toLowerCase().trim(),
           role: 'gym_owner',
           invited_by: (await getCurrentProfile())?.id,
           gym_id: gymData.id, // Link invitation to this gym
-        })
+        } as any) as any)
         .select()
-        .single();
+        .single() as any);
 
       if (invitationError) {
         console.error('Failed to create owner invitation:', invitationError);
@@ -186,10 +186,11 @@ export async function assignGymAdmin(userId: string, gymId: string) {
     const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('profiles')
+      // @ts-expect-error - Supabase type inference issue
       .update({
         role: 'gym_admin',
         assigned_gym_id: gymId,
-      })
+      } as any)
       .eq('id', userId)
       .select()
       .single();
@@ -212,13 +213,14 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
     const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin
       .from('gyms')
+      // @ts-expect-error - Supabase type inference issue
       .update({
         name: input.name,
         city: input.city || null,
         country: input.country || null,
         address: input.address || null,
         updated_at: new Date().toISOString(),
-      })
+      } as any)
       .eq('id', gymId)
       .select()
       .single();
@@ -247,7 +249,7 @@ export async function suspendGym(gymId: string) {
     const { error } = await supabaseAdmin.rpc('suspend_gym', {
       p_gym_id: gymId,
       p_suspended_by: user.id,
-    });
+    } as any);
 
     if (error) throw error;
 
@@ -272,7 +274,7 @@ export async function activateGym(gymId: string) {
     const { error } = await supabaseAdmin.rpc('activate_gym', {
       p_gym_id: gymId,
       p_activated_by: user.id,
-    });
+    } as any);
 
     if (error) throw error;
 
@@ -361,7 +363,7 @@ export async function getNetworkOverviewStats(ownerId: string) {
     const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('get_network_overview_stats', {
       p_owner_id: ownerId,
-    });
+    } as any);
 
     if (error) throw error;
     return { success: true, data: data?.[0] || null };

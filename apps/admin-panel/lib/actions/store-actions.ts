@@ -19,7 +19,7 @@ export async function createStoreItem(input: z.infer<typeof createStoreItemSchem
     const validated = createStoreItemSchema.parse(input);
     const supabaseAdmin = getAdminClient();
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await (supabaseAdmin
       .from('rewards')
       .insert({
         gym_id: validated.gymId,
@@ -30,7 +30,7 @@ export async function createStoreItem(input: z.infer<typeof createStoreItemSchem
         image_url: validated.imageUrl || null,
         reward_type: validated.rewardType,
         is_active: true,
-      })
+      } as any) as any)
       .select()
       .single();
 
@@ -64,7 +64,8 @@ export async function updateStoreItem(
 
     const { data, error } = await supabaseAdmin
       .from('rewards')
-      .update(updateData)
+      // @ts-expect-error - Supabase type inference issue
+      .update(updateData as any)
       .eq('id', itemId)
       .eq('gym_id', gymId) // Security: ensure it belongs to the gym
       .select()

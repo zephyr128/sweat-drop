@@ -55,14 +55,14 @@ export async function createOwner(input: CreateOwnerInput) {
     }
 
     // Create invitation (no gym_id for general owner invitations)
-    const { data: invitation, error: invitationError } = await supabaseAdmin
+    const { data: invitation, error: invitationError } = await (supabaseAdmin
       .from('staff_invitations')
       .insert({
         email: input.email.toLowerCase().trim(),
         role: 'gym_owner',
         invited_by: profile.id,
         gym_id: input.gym_id || null, // If gym_id provided, assign gym on acceptance
-      })
+      } as any) as any)
       .select()
       .single();
 
@@ -134,7 +134,8 @@ export async function deleteOwner(ownerId: string, reassignToOwnerId?: string) {
         // Reassign all gyms to another owner
         const { error: reassignError } = await supabaseAdmin
           .from('gyms')
-          .update({ owner_id: reassignToOwnerId })
+          // @ts-expect-error - Supabase type inference issue
+          .update({ owner_id: reassignToOwnerId } as any)
           .eq('owner_id', ownerId);
 
         if (reassignError) throw reassignError;
@@ -142,7 +143,8 @@ export async function deleteOwner(ownerId: string, reassignToOwnerId?: string) {
         // Set owner_id to null (gyms will be unassigned)
         const { error: unassignError } = await supabaseAdmin
           .from('gyms')
-          .update({ owner_id: null })
+          // @ts-expect-error - Supabase type inference issue
+          .update({ owner_id: null } as any)
           .eq('owner_id', ownerId);
 
         if (unassignError) throw unassignError;
@@ -152,10 +154,11 @@ export async function deleteOwner(ownerId: string, reassignToOwnerId?: string) {
     // Update profile role to 'user' instead of deleting (to preserve auth user)
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
+      // @ts-expect-error - Supabase type inference issue
       .update({
         role: 'user',
         owner_id: null,
-      })
+      } as any)
       .eq('id', ownerId);
 
     if (updateError) throw updateError;
@@ -210,7 +213,16 @@ export async function getOwnersWithGyms() {
     // Combine owners with their gyms
     const owners = ownersDataTyped.map(owner => ({
       ...owner,
-      gyms: gymsDataTyped.filter(g => g.owner_id === owner.id)
+      gyms: gymsDataTyped.filter(g => g.owner_id === owner.id).map(g => ({
+        id: g.id,
+        name: g.name,
+        city: g.city,
+        country: g.country,
+        status: g.status,
+        subscription_type: g.subscription_type,
+        created_at: g.created_at,
+        owner_id: g.owner_id,
+      }))
     }));
 
     return { success: true, data: owners };

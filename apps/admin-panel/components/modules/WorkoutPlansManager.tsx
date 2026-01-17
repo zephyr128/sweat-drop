@@ -147,7 +147,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
               ? { 
                   ...p, 
                   items: (p.items || []).map(item => 
-                    item.id === editingItem.id ? result.data as WorkoutPlanItem : item
+                    item.id === editingItem.id ? (result as { success: boolean; data?: WorkoutPlanItem; error?: string }).data as WorkoutPlanItem : item
                   )
                 }
               : p

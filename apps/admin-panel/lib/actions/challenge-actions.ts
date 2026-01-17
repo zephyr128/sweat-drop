@@ -121,7 +121,8 @@ export async function toggleChallengeStatus(challengeId: string, gymId: string, 
     const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('challenges')
-      .update({ is_active: isActive })
+      // @ts-expect-error - Supabase type inference issue
+      .update({ is_active: isActive } as any)
       .eq('id', challengeId)
       .eq('gym_id', gymId);
 
@@ -141,7 +142,7 @@ export async function getChallengeCompletionStats(challengeId: string, gymId: st
     const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('get_challenge_completion_stats', {
       p_challenge_id: challengeId,
-    });
+    } as any);
 
     if (error) throw error;
 

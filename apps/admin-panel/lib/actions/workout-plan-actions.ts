@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 
 const createWorkoutPlanSchema = z.object({
   gymId: z.string().uuid(),
@@ -48,9 +49,9 @@ export async function createWorkoutPlan(input: z.infer<typeof createWorkoutPlanS
     };
     const supabaseAdmin = getAdminClient();
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await (supabaseAdmin
       .from('workout_plans')
-      .insert(insertData)
+      .insert(insertData as any) as any)
       .select()
       .single();
 
@@ -83,9 +84,9 @@ export async function createWorkoutPlanItem(input: z.infer<typeof createWorkoutP
     };
     const supabaseAdmin = getAdminClient();
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await (supabaseAdmin
       .from('workout_plan_items')
-      .insert(insertData)
+      .insert(insertData as any) as any)
       .select()
       .single();
 
@@ -98,8 +99,9 @@ export async function createWorkoutPlanItem(input: z.infer<typeof createWorkoutP
       .eq('id', validated.plan_id)
       .single();
 
-    if (plan?.gym_id) {
-      revalidatePath(`/dashboard/gym/${plan.gym_id}/workout-plans`);
+    const planData = plan as { gym_id: string } | null;
+    if (planData?.gym_id) {
+      revalidatePath(`/dashboard/gym/${planData.gym_id}/workout-plans`);
     }
 
     return { success: true, data };
@@ -115,7 +117,8 @@ export async function deleteWorkoutPlan(planId: string, gymId: string) {
     const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('workout_plans')
-      .update({ is_active: false })
+      // @ts-expect-error - Supabase type inference issue
+      .update({ is_active: false } as any)
       .eq('id', planId);
 
     if (error) throw error;
@@ -151,7 +154,8 @@ export async function toggleWorkoutPlanStatus(planId: string, gymId: string, isA
     const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('workout_plans')
-      .update({ is_active: isActive })
+      // @ts-expect-error - Supabase type inference issue
+      .update({ is_active: isActive } as any)
       .eq('id', planId);
 
     if (error) throw error;
@@ -196,7 +200,8 @@ export async function updateWorkoutPlanItem(input: z.infer<typeof updateWorkoutP
 
     const { data, error } = await supabaseAdmin
       .from('workout_plan_items')
-      .update(updateData)
+      // @ts-expect-error - Supabase type inference issue
+      .update(updateData as any)
       .eq('id', validated.id)
       .select()
       .single();
@@ -204,14 +209,16 @@ export async function updateWorkoutPlanItem(input: z.infer<typeof updateWorkoutP
     if (error) throw error;
 
     // Get gym_id from plan to revalidate correct path
+    const itemData = data as { plan_id: string; [key: string]: any };
     const { data: plan } = await supabaseAdmin
       .from('workout_plans')
       .select('gym_id')
-      .eq('id', data.plan_id)
+      .eq('id', itemData.plan_id)
       .single();
 
-    if (plan?.gym_id) {
-      revalidatePath(`/dashboard/gym/${plan.gym_id}/workout-plans`);
+    const planData = plan as { gym_id: string } | null;
+    if (planData?.gym_id) {
+      revalidatePath(`/dashboard/gym/${planData.gym_id}/workout-plans`);
     }
 
     return { success: true, data };

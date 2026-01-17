@@ -38,10 +38,10 @@ export async function confirmRedemption(redemptionId: string, gymId: string) {
     }
 
     const supabaseAdmin = getAdminClient();
-    const { data, error } = await supabaseAdmin.rpc('confirm_redemption', {
+    const { data, error } = await (supabaseAdmin.rpc('confirm_redemption', {
       p_redemption_id: redemptionId,
       p_confirmed_by: profile.id,
-    });
+    } as any) as any);
 
     if (error) throw error;
 
@@ -92,11 +92,11 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
     }
 
     const supabaseAdmin = getAdminClient();
-    const { data, error } = await supabaseAdmin.rpc('cancel_redemption', {
+    const { data, error } = await (supabaseAdmin.rpc('cancel_redemption', {
       p_redemption_id: redemptionId,
       p_cancelled_by: profile.id,
       p_reason: reason || null,
-    });
+    } as any) as any);
 
     if (error) throw error;
 
@@ -147,9 +147,9 @@ export async function validateRedemptionCode(code: string, gymId: string) {
     }
 
     const supabaseAdmin = getAdminClient();
-    const { data, error } = await supabaseAdmin.rpc('find_redemption_by_code', {
+    const { data, error } = await (supabaseAdmin.rpc('find_redemption_by_code', {
       p_code: code,
-    });
+    } as any) as any);
 
     if (error) throw error;
 

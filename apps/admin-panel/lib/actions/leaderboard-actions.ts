@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 
 const leaderboardRewardsSchema = z.object({
   gymId: z.string().uuid(),
@@ -25,9 +26,10 @@ export async function updateLeaderboardRewards(
 
     const { data, error } = await supabaseAdmin
       .from('gyms')
+      // @ts-expect-error - Supabase type inference issue
       .update({
         leaderboard_config: leaderboardConfig,
-      })
+      } as any)
       .eq('id', validated.gymId)
       .select()
       .single();
