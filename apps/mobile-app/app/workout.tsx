@@ -1059,7 +1059,7 @@ export default function WorkoutScreen() {
   // 0-40 RPM: Gray (resting), 40-70 RPM: Dynamic Primary (moderate), 70-100 RPM: Yellow (intense), 100+ RPM: Red (maximum)
   const rpmTextColorStyle = useAnimatedStyle(() => {
     const currentRPM = rawRPMShared.value < 1.5 ? 0 : smoothedRPMShared.value;
-    const primaryColor = primaryColorShared.value;
+    const primaryColor = primaryColorShared.value; // Dynamic primary color from branding
     const color = interpolateColor(
       currentRPM,
       [0, 40, 70, 100, 150],
@@ -1865,10 +1865,10 @@ export default function WorkoutScreen() {
           )}
         </View>
         <View style={styles.headerDrops}>
-          <Ionicons name="water" size={20} color={branding.primary} />
+          <Ionicons name="water" size={20} color={theme.colors.primary} />
           <AnimatedText 
             text={animatedDropsText}
-            style={[styles.headerDropsText, getNumberStyle(18), { color: branding.primary }]}
+            style={[styles.headerDropsText, getNumberStyle(18), { color: theme.colors.primary }]}
           />
         </View>
       </View>
@@ -1884,7 +1884,7 @@ export default function WorkoutScreen() {
           }
         ]}>
           <Text style={styles.bonusText}>
-            +100 <Ionicons name="water" size={16} color={branding.primary} /> DROPS BONUS
+            +100 <Ionicons name="water" size={16} color={theme.colors.primary} /> DROPS BONUS
           </Text>
         </Animated.View>
       )}
@@ -2052,7 +2052,7 @@ export default function WorkoutScreen() {
         <View style={styles.targetContainer}>
           <Text style={styles.targetText}>Target: </Text>
           <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
-          <Ionicons name="water" size={16} color={branding.primary} />
+          <Ionicons name="water" size={16} color={theme.colors.primary} />
         </View>
       </View>
 

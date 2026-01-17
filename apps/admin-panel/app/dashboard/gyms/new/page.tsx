@@ -34,7 +34,7 @@ export default function NewGymPage() {
         city: formData.city || undefined,
         country: formData.country || undefined,
         address: formData.address || undefined,
-      });
+      }) as { success: boolean; data?: { id: string; name: string; [key: string]: any } | null; error?: string };
 
       if (!gymResult.success || !gymResult.data) {
         throw new Error(gymResult.error || 'Failed to create gym');
