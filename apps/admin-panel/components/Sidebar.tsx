@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { UserRole } from '@/lib/auth';
@@ -18,6 +18,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [gymIdFromStorage, setGymIdFromStorage] = useState<string | null>(null);
   
   // Extract gym ID from URL if present
   const gymIdFromUrl = useMemo(() => {
@@ -25,8 +26,24 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     return match ? match[1] : null;
   }, [pathname]);
   
-  // Use gymId from URL if available, otherwise fall back to prop
-  const effectiveGymId = gymIdFromUrl || currentGymId;
+  // Read gym ID from sessionStorage (set by GymSwitcher)
+  // Also save gym ID to sessionStorage when it's in the URL
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // If gym ID is in URL, save it to sessionStorage
+      if (gymIdFromUrl) {
+        sessionStorage.setItem('selectedGymId', gymIdFromUrl);
+        setGymIdFromStorage(gymIdFromUrl);
+      } else {
+        // Otherwise, read from sessionStorage
+        const stored = sessionStorage.getItem('selectedGymId');
+        setGymIdFromStorage(stored);
+      }
+    }
+  }, [pathname, gymIdFromUrl]); // Re-read when pathname or gymIdFromUrl changes
+  
+  // Use gymId from URL if available, then from sessionStorage, then fall back to prop
+  const effectiveGymId = gymIdFromUrl || gymIdFromStorage || currentGymId;
 
   const handleLogout = async () => {
     try {
@@ -60,6 +77,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     return [
       { href: `${base}/dashboard`, label: 'Dashboard', icon: '📊' },
       { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
+      { href: `${base}/workout-plans`, label: 'Workout Plans', icon: '💪' },
       { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
       { href: `${base}/machines`, label: 'Machines', icon: '⚙️' },
       { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
@@ -80,6 +98,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     return [
       { href: `${base}/dashboard`, label: 'Dashboard', icon: '📊' },
       { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
+      { href: `${base}/workout-plans`, label: 'Workout Plans', icon: '💪' },
       { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
       { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
     ];
