@@ -88,8 +88,8 @@ export const useBranding = (): BrandingColors => {
     // Get primary color from active gym or fallback to default
     const primaryColor = activeGym?.primary_color || baseTheme.colors.primary;
     
-    // Validate hex color format
-    if (!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(primaryColor)) {
+    // Validate hex color format - ensure primaryColor is a valid string
+    if (!primaryColor || typeof primaryColor !== 'string' || !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(primaryColor)) {
       console.warn('[useBranding] Invalid primary color format, using default:', primaryColor);
       const defaultPrimary = baseTheme.colors.primary;
       return {
@@ -118,5 +118,6 @@ export const useBranding = (): BrandingColors => {
     };
   }, [activeGym?.primary_color]);
   
+  // Always return a valid branding object
   return branding;
 };

@@ -45,23 +45,40 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     ...baseTheme,
     colors: {
       ...baseTheme.colors,
-      primary: branding.primary,
-      primaryDark: branding.primaryDark,
-      primaryLight: branding.primaryLight,
-      onPrimary: branding.onPrimary,
+      primary: branding?.primary || baseTheme.colors.primary,
+      primaryDark: branding?.primaryDark || '#00B8CC',
+      primaryLight: branding?.primaryLight || 'rgba(0, 229, 255, 0.15)',
+      onPrimary: branding?.onPrimary || '#000000',
     },
-  }), [branding.primary, branding.primaryDark, branding.primaryLight, branding.onPrimary]);
+  }), [branding?.primary, branding?.primaryDark, branding?.primaryLight, branding?.onPrimary]);
 
   // Calculate isUnlocked value - if no preview, it's unlocked (using home gym)
   // If preview matches home, it's unlocked
   const unlocked = !previewGymId || previewGymId === homeGymId;
 
+  // Ensure branding is always defined and has all required properties
+  // useBranding() should always return a valid object, but add safety check
+  const safeBranding: ReturnType<typeof useBranding> = (branding && 
+                                                         typeof branding === 'object' && 
+                                                         branding !== null &&
+                                                         'primary' in branding &&
+                                                         'primaryLight' in branding &&
+                                                         'primaryDark' in branding &&
+                                                         'onPrimary' in branding) 
+    ? branding 
+    : {
+        primary: baseTheme.colors.primary,
+        primaryLight: 'rgba(0, 229, 255, 0.15)',
+        primaryDark: '#00B8CC',
+        onPrimary: '#000000',
+      };
+
   const value: ThemeContextType = useMemo(() => ({
     theme: animatedTheme,
     activeGym,
     isUnlocked: unlocked,
-    branding,
-  }), [animatedTheme, activeGym, unlocked, branding]);
+    branding: safeBranding,
+  }), [animatedTheme, activeGym, unlocked, safeBranding]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };

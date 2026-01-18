@@ -25,7 +25,9 @@ interface CircularProgressRingProps {
 
 // Premium Pulse Rings Component: GPU-only animations with interpolateColor
 // Animations run once in useEffect (infinite loop), intensity modified by RPM via useDerivedValue
-const PulseRings = ({ rpm }: { rpm?: SharedValue<number> }) => {
+const PulseRings = ({ rpm, primaryColor }: { rpm?: SharedValue<number>, primaryColor?: string }) => {
+  const branding = useBranding();
+  const dynamicPrimaryColor = useMemo(() => primaryColor || branding.primary, [primaryColor, branding.primary]);
   // Base pulse animations (run once, infinite loop)
   const pulseRing1Scale = useSharedValue(1);
   const pulseRing1Opacity = useSharedValue(0.2);
@@ -125,54 +127,57 @@ const PulseRings = ({ rpm }: { rpm?: SharedValue<number> }) => {
     if (!rpm || rpm.value <= 0) {
       return theme.colors.textSecondary;
     }
+    const currentPrimaryColor = dynamicPrimaryColor;
     return interpolateColor(
       rpm.value,
       [0, 65, 80, 100, 120],
       [
         theme.colors.textSecondary, // 0 RPM: Gray
-        dynamicPrimaryColor, // 65 RPM: Dynamic primary color
+        currentPrimaryColor, // 65 RPM: Dynamic primary color
         '#00FF88', // 80 RPM: Green
         '#FF6600', // 100 RPM: Orange
         '#FF3300', // 120 RPM: Red
       ]
     );
-  }, [rpm, dynamicPrimaryColor]);
+  }, [rpm, dynamicPrimaryColor, primaryColor, branding.primary]);
 
   const ring2Color = useDerivedValue(() => {
     if (!rpm || rpm.value <= 0) {
       return theme.colors.textSecondary + 'CC';
     }
+    const currentPrimaryColor = dynamicPrimaryColor;
     const baseColor = interpolateColor(
       rpm.value,
       [0, 65, 80, 100, 120],
       [
         theme.colors.textSecondary, // 0 RPM: Gray
-        dynamicPrimaryColor, // 65 RPM: Dynamic primary color
+        currentPrimaryColor, // 65 RPM: Dynamic primary color
         '#00FF88', // 80 RPM: Green
         '#FF6600', // 100 RPM: Orange
         '#FF3300', // 120 RPM: Red
       ]
     );
     return baseColor + 'CC'; // 80% opacity
-  }, [rpm, dynamicPrimaryColor]);
+  }, [rpm, dynamicPrimaryColor, primaryColor, branding.primary]);
 
   const ring3Color = useDerivedValue(() => {
     if (!rpm || rpm.value <= 0) {
       return theme.colors.textSecondary + '80';
     }
+    const currentPrimaryColor = dynamicPrimaryColor;
     const baseColor = interpolateColor(
       rpm.value,
       [0, 65, 80, 100, 120],
       [
         theme.colors.textSecondary, // 0 RPM: Gray
-        dynamicPrimaryColor, // 65 RPM: Dynamic primary color
+        currentPrimaryColor, // 65 RPM: Dynamic primary color
         '#00FF88', // 80 RPM: Green
         '#FF6600', // 100 RPM: Orange
         '#FF3300', // 120 RPM: Red
       ]
     );
     return baseColor + '80'; // 50% opacity
-  }, [rpm, dynamicPrimaryColor]);
+  }, [rpm, dynamicPrimaryColor, primaryColor, branding.primary]);
 
   // GPU-Only: Animated styles with interpolateColor (no JS thread blocking)
   const ring1Style = useAnimatedStyle(() => {
@@ -463,7 +468,7 @@ export default function CircularProgressRing({
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       {/* Premium Pulse Rings: GPU-only animations with interpolateColor */}
-      <PulseRings rpm={rpm} />
+      <PulseRings rpm={rpm} primaryColor={primaryColor} />
       
       <Canvas style={{ width: size, height: size }}>
         {/* Background track (faint, semi-transparent) */}

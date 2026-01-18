@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -20,15 +20,21 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
   const [challenges, setChallenges] = useState<ChallengeProgress[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const loadChallenges = useCallback(async () => {
     if (!session?.user?.id || !gymId) {
-      setChallenges([]);
+      if (isMountedRef.current) setChallenges([]);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (isMountedRef.current) setLoading(true);
+    if (isMountedRef.current) setError(null);
 
     try {
       const { data, error: rpcError } = await supabase.rpc('get_active_challenges_for_user', {
@@ -39,16 +45,16 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
 
       if (rpcError) {
         console.error('Error loading challenges:', rpcError);
-        setError(rpcError.message);
+        if (isMountedRef.current) setError(rpcError.message);
         return;
       }
 
-      setChallenges(data || []);
+      if (isMountedRef.current) setChallenges(data || []);
     } catch (err: any) {
       console.error('Error in loadChallenges:', err);
-      setError(err.message);
+      if (isMountedRef.current) setError(err.message);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   }, [session?.user?.id, gymId, machineType]);
 
