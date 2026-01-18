@@ -42,10 +42,17 @@ export async function getCurrentUser(): Promise<User | null> {
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const user = await getCurrentUser();
-  if (!user) return null;
+  if (!user) {
+    console.warn('[getCurrentProfile] No user found');
+    return null;
+  }
 
   try {
     const supabase = await createClient();
+    
+    // Debug: Log user ID to help diagnose
+    console.log('[getCurrentProfile] Fetching profile for user:', user.id, 'email:', user.email);
+    
     const { data, error } = await supabase
       .from('profiles')
       .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
@@ -53,14 +60,26 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       .single();
 
     if (error) {
-      console.error('Error fetching profile:', error);
+      console.error('[getCurrentProfile] Error fetching profile:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        user_id: user.id,
+      });
       return null;
     }
 
     if (!data) {
-      console.warn('Profile not found for user:', user.id);
+      console.warn('[getCurrentProfile] Profile not found for user:', user.id);
       return null;
     }
+    
+    console.log('[getCurrentProfile] Profile found:', {
+      id: data.id,
+      username: data.username,
+      role: data.role,
+    });
 
     return {
       id: data.id,

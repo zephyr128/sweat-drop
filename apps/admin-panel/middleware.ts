@@ -57,8 +57,13 @@ export async function middleware(req: NextRequest) {
 
     if (profileError || !profile) {
       console.error('Error fetching profile in middleware:', profileError);
+      // CRITICAL: If user is authenticated but has no profile, redirect to login
+      // This prevents access to dashboard without profile and avoids redirect loops
       if (pathname.startsWith('/dashboard')) {
-        return res; // Let page handle the error
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = '/login';
+        redirectUrl.searchParams.set('error', 'profile_not_found');
+        return NextResponse.redirect(redirectUrl);
       }
       return res;
     }
@@ -101,8 +106,9 @@ export async function middleware(req: NextRequest) {
       }
     }
 
-    // 4. REDIRECT FROM LOGIN PAGE (if already logged in)
-    if (pathname === '/login') {
+    // 4. REDIRECT FROM LOGIN PAGE (if already logged in AND has profile)
+    // CRITICAL: Only redirect from /login if profile exists (avoid loop if profile fetch failed)
+    if (pathname === '/login' && profile) {
       const redirectUrl = req.nextUrl.clone();
       
       if (profile.role === 'superadmin') {

@@ -2,38 +2,31 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function createClient() {
-  let cookieStore;
-  
-  try {
-    // Koristimo 'as any' da sprečimo TS error, a 'await' jer Next.js 15 to zahteva u runtime-u
-    cookieStore = await (cookies() as any);
-  } catch (e) {
-    // Tokom build-a (statička generacija), cookies() bacaju grešku
-    cookieStore = null;
-  }
+  // CRITICAL: Next.js 15 requires await cookies() and uses get()/set() instead of getAll()/setAll()
+  // This matches how middleware.ts reads cookies and ensures consistent session handling
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          if (!cookieStore) return [];
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
           try {
-            return cookieStore.getAll();
-          } catch {
-            return [];
+            cookieStore.set(name, value, options);
+          } catch (error) {
+            // Cannot set cookies in Server Components - this is normal
+            // Cookies are set by middleware or client components
           }
         },
-        // Eksplicitni tipovi su obavezni za Vercel deploy
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          if (!cookieStore) return;
+        remove(name: string, options: CookieOptions) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookieStore.set(name, '', { ...options, maxAge: 0 });
           } catch (error) {
-            // Normalno ponašanje u Server Components
+            // Cannot remove cookies in Server Components - this is normal
           }
         },
       },
