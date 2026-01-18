@@ -1,26 +1,25 @@
+// app/global-error.tsx
 'use client';
 
-import { useEffect } from 'react';
+// Note: Client Components cannot export route segment config
+// global-error.tsx is always dynamic in Next.js App Router
+// CRITICAL: This must return full HTML document - no layout, no styled-jsx, no context
 
-export default function Error({
+export default function GlobalError({
   error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    console.error('Application error:', error);
-  }, [error]);
-
   return (
     <html lang="en">
       <body style={{ margin: 0, padding: 0, backgroundColor: '#000000', color: '#FFFFFF', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <div style={{ padding: '2rem', textAlign: 'center', maxWidth: '28rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0 0 0.5rem 0' }}>Something went wrong</h1>
-          <p style={{ margin: '0 0 1.5rem 0', color: '#808080' }}>An unexpected error occurred. Please try again.</p>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0 0 0.5rem 0' }}>Something went wrong</h2>
+          <p style={{ margin: '0 0 1.5rem 0', color: '#808080' }}>{error.message || 'An unexpected error occurred.'}</p>
           <button
-            onClick={reset}
+            onClick={() => reset()}
             style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#00E5FF',

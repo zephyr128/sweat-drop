@@ -1,22 +1,31 @@
-import Link from 'next/link';
+'use client';
 
-// Prevent static generation - 404 pages must be dynamic
-export const dynamic = 'force-dynamic';
-export const dynamicParams = true;
+import Link from 'next/link';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-[#000000] flex items-center justify-center px-4">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-white mb-2">404</h1>
-        <p className="text-[#808080] mb-6">This page could not be found.</p>
-        <Link
-          href="/"
-          className="inline-block px-6 py-3 bg-[#00E5FF] text-black font-medium rounded-lg hover:bg-[#00B8CC] transition-colors"
-        >
-          Go home
-        </Link>
-      </div>
-    </div>
+    <html lang="en">
+      <body style={{ margin: 0, padding: 0, backgroundColor: '#000000', color: '#FFFFFF', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        <div style={{ padding: '5rem 2rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '4rem', margin: '0 0 1rem 0' }}>404</h1>
+          <p style={{ fontSize: '1.25rem', margin: '0 0 2rem 0', color: '#808080' }}>Page Not Found</p>
+          <p style={{ margin: '0 0 2rem 0', color: '#808080' }}>The requested page could not be found.</p>
+          <Link
+            href="/"
+            style={{
+              display: 'inline-block',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#00E5FF',
+              color: '#000000',
+              fontWeight: '500',
+              borderRadius: '0.5rem',
+              textDecoration: 'none',
+            }}
+          >
+            Go Home
+          </Link>
+        </div>
+      </body>
+    </html>
   );
 }

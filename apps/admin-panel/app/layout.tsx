@@ -17,12 +17,9 @@ export const metadata: Metadata = {
   description: 'Admin panel for SweatDrop gym management',
 };
 
-// CRITICAL: Force dynamic rendering to prevent static generation of error pages
-// Without this, Next.js attempts to statically generate /_error: /404 and /_error: /500
-// which causes build failures when cookies() are accessed during build
+// CRITICAL: Force dynamic rendering to prevent static generation errors with Supabase
+// This ensures the layout is never statically prerendered, avoiding context/auth issues
 export const dynamic = 'force-dynamic';
-export const dynamicParams = true;
-export const revalidate = 0;
 
 export default function RootLayout({
   children,
