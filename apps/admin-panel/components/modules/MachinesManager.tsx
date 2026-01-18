@@ -53,7 +53,7 @@ interface MachinesManagerProps {
 
 export function MachinesManager({ gymId, initialMachines, initialReports = new Map(), userRole, isGlobalView = false }: MachinesManagerProps) {
   const [machines, setMachines] = useState<Machine[]>(initialMachines);
-  const [reportsMap, setReportsMap] = useState<Map<string, number>>(initialReports);
+  const [reportsMap, _setReportsMap] = useState<Map<string, number>>(initialReports);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [maintenanceMachineId, setMaintenanceMachineId] = useState<string | null>(null);
@@ -95,6 +95,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
           setLoadingGyms(false);
         });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGlobalView, isSuperAdmin]);
 
   const {

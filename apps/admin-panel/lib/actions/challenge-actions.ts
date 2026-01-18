@@ -137,7 +137,7 @@ export async function toggleChallengeStatus(challengeId: string, gymId: string, 
 }
 
 // Get challenge completion stats for admin dashboard
-export async function getChallengeCompletionStats(challengeId: string, gymId: string) {
+export async function getChallengeCompletionStats(challengeId: string, _gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
     const { data, error } = await supabaseAdmin.rpc('get_challenge_completion_stats', {

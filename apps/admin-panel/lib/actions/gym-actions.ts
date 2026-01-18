@@ -32,12 +32,10 @@ interface CreateGymAdminInput {
  */
 export async function createGym(input: CreateGymInput) {
   try {
-    let ownerId = input.owner_id;
-    let createdOwnerId: string | null = null;
+    const ownerId = input.owner_id;
 
     // If no owner_id provided, we'll create the gym first, then send invitation
     // The owner will be assigned when they accept the invitation
-    let pendingOwnerInvitation: any = null;
     
     if (!ownerId) {
       if (!input.owner_email || !input.owner_username) {
@@ -85,8 +83,6 @@ export async function createGym(input: CreateGymInput) {
         console.error('Failed to create owner invitation:', invitationError);
         // Don't fail gym creation if invitation fails
       } else {
-        pendingOwnerInvitation = invitation;
-        
         // Send invitation email
         try {
           await sendOwnerInvitationEmail(invitation, gymData.name);

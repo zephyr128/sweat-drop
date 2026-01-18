@@ -66,7 +66,7 @@ export function BrandingModule({ ownerId, initialData }: BrandingModuleProps) {
   const normalizedInitialColor = normalizeColor(initialData.primary_color);
 
   const {
-    register,
+    register: _register,
     handleSubmit,
     watch,
     setValue,

@@ -1,8 +1,6 @@
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import { GymSwitcher } from '@/components/GymSwitcher';
-import { GymAdminDashboard } from '@/components/dashboards/GymAdminDashboard';
 
 export default async function OwnerDashboardPage() {
   const profile = await getCurrentProfile();

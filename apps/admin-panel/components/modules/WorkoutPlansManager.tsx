@@ -79,13 +79,13 @@ interface WorkoutPlansManagerProps {
   machines: Machine[];
 }
 
-export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPlansManagerProps) {
+export function WorkoutPlansManager({ gymId, initialPlans, machines: _machines }: WorkoutPlansManagerProps) {
   const [plans, setPlans] = useState<WorkoutPlan[]>(initialPlans);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WorkoutPlanItem | null>(null);
-  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+  const [_expandedPlanId, _setExpandedPlanId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 

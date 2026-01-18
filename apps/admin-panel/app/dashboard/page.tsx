@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
 
 export default function DashboardPage() {
-  const [session, setSession] = useState<any>(null);
+  const [_session, setSession] = useState<any>(null);
   const [gymStaff, setGymStaff] = useState<any>(null);
   const [stats, setStats] = useState({
     activeUsers: 0,
@@ -18,12 +18,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (gymStaff?.gym_id) {
       loadStats();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gymStaff]);
 
   const loadSession = async () => {

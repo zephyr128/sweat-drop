@@ -219,7 +219,7 @@ export async function lockMachine(machineId: string, userId: string) {
 export async function unlockMachine(machineId: string, userId: string) {
   try {
     const supabaseAdmin = getAdminClient();
-    const { data, error } = await supabaseAdmin.rpc('unlock_machine', {
+    const { data: _data, error } = await supabaseAdmin.rpc('unlock_machine', {
       p_machine_id: machineId,
       p_user_id: userId,
     } as any);

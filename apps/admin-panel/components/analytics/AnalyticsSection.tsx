@@ -14,7 +14,7 @@ interface AnalyticsSectionProps {
 
 type TimeFilter = 'today' | '7days' | '30days';
 
-export function AnalyticsSection({ gymId, pendingRedemptions }: AnalyticsSectionProps) {
+export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemptions }: AnalyticsSectionProps) {
   const [analytics, setAnalytics] = useState<GymAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30days');

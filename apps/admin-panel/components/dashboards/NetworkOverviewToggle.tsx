@@ -9,7 +9,7 @@ interface NetworkOverviewToggleProps {
   currentGymId: string;
 }
 
-export function NetworkOverviewToggle({ ownerId, currentGymId }: NetworkOverviewToggleProps) {
+export function NetworkOverviewToggle({ ownerId, currentGymId: _currentGymId }: NetworkOverviewToggleProps) {
   const [showNetwork, setShowNetwork] = useState(false);
   const [loading, setLoading] = useState(false);
   const [networkStats, setNetworkStats] = useState<{

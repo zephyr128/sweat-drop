@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 type TimeFilter = 'today' | '7days' | '30days';
 
@@ -15,7 +15,7 @@ interface MachineHeatmapWidgetProps {
   maxValue?: number;
 }
 
-export function MachineHeatmapWidget({ machineUsage, timeFilter = '30days', maxValue }: MachineHeatmapWidgetProps) {
+export function MachineHeatmapWidget({ machineUsage, timeFilter: _timeFilter = '30days', maxValue }: MachineHeatmapWidgetProps) {
   // Aggregate by machine type
   const typeData = machineUsage.reduce(
     (acc, machine) => {

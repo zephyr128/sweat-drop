@@ -32,7 +32,7 @@ interface TeamManagerProps {
 
 export function TeamManager({ gymId, initialInvitations, initialStaff, isGymOwner = false }: TeamManagerProps) {
   const [invitations, setInvitations] = useState<StaffInvitation[]>(initialInvitations);
-  const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
+  const [staff, _setStaff] = useState<StaffMember[]>(initialStaff);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 

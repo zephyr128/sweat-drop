@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { confirmRedemption, cancelRedemption, validateRedemptionCode } from '@/lib/actions/redemption-actions';
-import { CheckCircle2, XCircle, Search, QrCode, Clock, CheckCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CheckCircle } from 'lucide-react';
 import { QRValidator } from '@/components/QRValidator';
 import { supabase } from '@/lib/supabase-client';
 import { formatDateTime } from '@/lib/utils/date';
@@ -50,10 +50,10 @@ export function RedemptionsManager({
   const [confirmedRedemptions, setConfirmedRedemptions] = useState<Redemption[]>(initialConfirmedRedemptions);
   const [searchCode, setSearchCode] = useState('');
   const [searchResult, setSearchResult] = useState<Redemption | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
+  const [_isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'confirmed' | 'search'>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [_refreshing, setRefreshing] = useState(false);
 
   const handleConfirm = async (redemptionId: string) => {
     setProcessingId(redemptionId);
@@ -120,7 +120,7 @@ export function RedemptionsManager({
     }
   };
 
-  const handleSearch = async () => {
+  const _handleSearch = async () => {
     if (!searchCode.trim()) {
       toast.error('Please enter a redemption code');
       return;

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function GymsPage() {
-  const router = useRouter();
+  const _router = useRouter();
   const [gyms, setGyms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

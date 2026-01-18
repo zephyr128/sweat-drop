@@ -52,6 +52,7 @@ export default function SuperAdminControlTower() {
 
   useEffect(() => {
     checkRole();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkRole = async () => {
@@ -141,7 +142,7 @@ export default function SuperAdminControlTower() {
     }
   };
 
-  const handleDeleteClick = (gymId: string, gymName: string) => {
+  const handleDeleteClick = (gymId: string, _gymName: string) => {
     setShowDeleteConfirm(gymId);
   };
 

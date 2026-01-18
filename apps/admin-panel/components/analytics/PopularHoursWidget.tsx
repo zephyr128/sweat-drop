@@ -1,6 +1,6 @@
 'use client';
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 type TimeFilter = 'today' | '7days' | '30days';
 
@@ -13,7 +13,7 @@ interface PopularHoursWidgetProps {
   maxValue?: number;
 }
 
-export function PopularHoursWidget({ hourlyTraffic, timeFilter = '30days', maxValue }: PopularHoursWidgetProps) {
+export function PopularHoursWidget({ hourlyTraffic, timeFilter: _timeFilter = '30days', maxValue }: PopularHoursWidgetProps) {
   const chartData = hourlyTraffic.map((item) => ({
     hour: `${String(item.hour).padStart(2, '0')}:00`,
     scans: item.scan_count,

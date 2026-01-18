@@ -24,7 +24,7 @@ export function GymSwitcher({ currentGymId, onGymChange, role }: GymSwitcherProp
   const [loading, setLoading] = useState(true);
   const [selectedGymId, setSelectedGymId] = useState<string | null>(currentGymId || null);
   const [isOpen, setIsOpen] = useState(false);
-  const router = useRouter();
+  const _router = useRouter();
 
   const loadGyms = useCallback(async () => {
     try {

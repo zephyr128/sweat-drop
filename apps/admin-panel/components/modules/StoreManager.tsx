@@ -48,7 +48,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
     handleSubmit,
     reset,
     setValue,
-    watch,
+    watch: _watch,
     formState: { errors, isSubmitting },
   } = useForm<StoreItemFormData>({
     resolver: zodResolver(storeItemSchema),

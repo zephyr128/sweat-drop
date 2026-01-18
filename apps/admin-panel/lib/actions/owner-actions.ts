@@ -1,6 +1,5 @@
 'use server';
 
-import { createClient as createServerClient } from '@/lib/supabase-server';
 import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '../auth';
@@ -86,7 +85,7 @@ export async function createOwner(input: CreateOwnerInput) {
 /**
  * Send owner invitation email
  */
-async function sendOwnerInvitationEmail(invitation: any, gymName?: string) {
+async function sendOwnerInvitationEmail(invitation: any, _gymName?: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
