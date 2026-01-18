@@ -13,7 +13,7 @@ export default async function SystemHealthPage() {
     notFound();
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Fetch system health metrics
   const [

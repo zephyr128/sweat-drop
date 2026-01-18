@@ -15,7 +15,7 @@ export default async function GlobalBrandingPage() {
     notFound();
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Get owner branding (global branding per owner)
   const { data: ownerBranding } = await supabase

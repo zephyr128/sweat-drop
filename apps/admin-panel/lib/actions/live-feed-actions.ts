@@ -15,7 +15,7 @@ export interface LiveFeedItem {
 
 export async function getLiveFeed(gymId: string): Promise<LiveFeedItem[]> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     // Use service role client to fetch profiles (bypasses RLS)
     let clientToUse = supabase;
     try {

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { StatsCard } from '../StatsCard';
 
 export async function SuperadminDashboard() {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Fetch global stats
   const [

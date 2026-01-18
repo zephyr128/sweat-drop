@@ -1,36 +1,20 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export function createClient() {
-  // CRITICAL FIX: Safe cookie access for build-time (error page generation)
-  // During static generation of error pages, cookies() may throw
-  let cookieStore;
+/**
+ * Build-safe Supabase server client
+ * Handles cookie access gracefully during static generation of error pages
+ */
+export async function createClient() {
+  // 1. Handle cookieStore safely (await is required in Next 15, safe in Next 14)
+  let cookieStore: any;
   try {
-    cookieStore = cookies();
+    cookieStore = await cookies();
   } catch (error) {
-    // During build-time static generation (e.g., error pages), cookies() is not available
-    // Return a client with dummy cookie handlers to prevent crashes
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-    
-    // Return a minimal client that won't crash during build
-    return createServerClient(
-      supabaseUrl || 'https://placeholder.supabase.co',
-      supabaseAnonKey || 'placeholder',
-      {
-        cookies: {
-          get() {
-            return undefined; // No cookies during build
-          },
-          set() {
-            // No-op during build
-          },
-          remove() {
-            // No-op during build
-          },
-        },
-      }
-    );
+    // If cookies() fails (during static build), we continue without it
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[Supabase] Cookies not available (static build context)');
+    }
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -45,25 +29,24 @@ export function createClient() {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: any) {
+        getAll() {
+          // If no cookieStore (build time), return empty array
+          if (!cookieStore) return [];
           try {
-            cookieStore.set(name, value, options);
-          } catch (error) {
-            // Na serveru (Server Components) set ne radi direktno,
-            // to se rešava u middleware-u.
-            // Ovo je normalno i može se ignorisati.
+            return cookieStore.getAll();
+          } catch (e) {
+            return [];
           }
         },
-        remove(name: string, options: any) {
+        setAll(cookiesToSet) {
+          if (!cookieStore) return;
           try {
-            cookieStore.set(name, '', { ...options, maxAge: 0 });
-          } catch (error) {
-            // Na serveru (Server Components) remove ne radi direktno,
-            // to se rešava u middleware-u.
-            // Ovo je normalno i može se ignorisati.
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing user sessions.
           }
         },
       },

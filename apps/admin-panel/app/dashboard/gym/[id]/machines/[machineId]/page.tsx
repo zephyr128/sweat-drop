@@ -42,7 +42,7 @@ export default async function MachineDetailPage({ params }: MachineDetailPagePro
   const { id: gymId, machineId } = await params;
   
   // Initialize Supabase client
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // 1. Check authentication first
   let user;

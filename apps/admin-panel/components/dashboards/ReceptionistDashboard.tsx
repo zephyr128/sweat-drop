@@ -6,7 +6,7 @@ interface ReceptionistDashboardProps {
 }
 
 export async function ReceptionistDashboard({ gymId }: ReceptionistDashboardProps) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Fetch pending redemptions
   const { data: pendingRedemptions } = await supabase

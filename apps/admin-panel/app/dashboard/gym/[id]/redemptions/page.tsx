@@ -61,7 +61,7 @@ export default async function RedemptionsPage({ params }: RedemptionsPageProps) 
   const { id } = await params;
   
   // Initialize Supabase client
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // 1. Check authentication first
   let user;

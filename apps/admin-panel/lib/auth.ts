@@ -15,7 +15,7 @@ export interface UserProfile {
 
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // VAŽNO: getUser() je jedini siguran način za Server Komponente
     // On automatski verifikuje JWT i osvežava sesiju ako je potrebno
@@ -45,7 +45,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   if (!user) return null;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('profiles')
       .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')

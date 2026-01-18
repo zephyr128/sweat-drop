@@ -11,7 +11,7 @@ export default async function OwnerDashboardPage() {
     redirect('/dashboard');
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Get first active owned gym
   const { data: ownedGyms } = await supabase

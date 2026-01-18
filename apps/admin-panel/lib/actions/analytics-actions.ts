@@ -24,7 +24,7 @@ export interface GymAnalytics {
 
 export async function getGymAnalytics(gymId: string): Promise<GymAnalytics | null> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     const { data, error } = await supabase.rpc('get_gym_analytics', {
       p_gym_id: gymId,

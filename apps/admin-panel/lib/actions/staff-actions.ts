@@ -21,7 +21,7 @@ export async function createStaffInvitation(
   role: 'gym_admin' | 'receptionist'
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Check if user already has a profile with this email
     const { data: existingProfile } = await supabase
@@ -82,7 +82,7 @@ export async function createStaffInvitation(
 
 export async function getStaffInvitations(gymId: string) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data, error } = await supabase
       .from('staff_invitations')
@@ -101,7 +101,7 @@ export async function getStaffInvitations(gymId: string) {
 
 export async function cancelInvitation(invitationId: string, gymId: string) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { error } = await supabase
       .from('staff_invitations')
@@ -121,7 +121,7 @@ export async function cancelInvitation(invitationId: string, gymId: string) {
 
 export async function getStaffMembers(gymId: string) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Try new gym_staff table first, fallback to profiles
     const { data: staffData, error: staffError } = await supabase
@@ -159,7 +159,7 @@ export async function assignStaffRole(
   role: 'gym_admin' | 'receptionist'
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -185,7 +185,7 @@ export async function assignStaffRole(
  */
 export async function removeStaffRole(userId: string, gymId: string) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 

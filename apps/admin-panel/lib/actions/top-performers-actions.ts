@@ -13,7 +13,7 @@ export interface TopPerformer {
 
 export async function getTopPerformers(gymId: string): Promise<TopPerformer[]> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     // Use service role client to fetch profiles (bypasses RLS)
     let clientToUse = supabase;
     try {

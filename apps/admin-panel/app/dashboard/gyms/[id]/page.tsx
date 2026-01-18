@@ -29,7 +29,7 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
   const { id } = await params;
   
   // Initialize Supabase client
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // 1. Check authentication first
   let user;

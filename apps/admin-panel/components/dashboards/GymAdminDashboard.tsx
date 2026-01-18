@@ -6,7 +6,7 @@ interface GymAdminDashboardProps {
 }
 
 export async function GymAdminDashboard({ gymId }: GymAdminDashboardProps) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Fetch gym-specific stats
   const [

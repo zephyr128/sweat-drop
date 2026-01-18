@@ -38,7 +38,7 @@ export default async function SuperAdminMachineDetailPage({ params }: SuperAdmin
   const { machineId } = await params;
   
   // Initialize Supabase client
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // 1. Check authentication first
   let user;

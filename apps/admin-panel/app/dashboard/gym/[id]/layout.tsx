@@ -23,7 +23,7 @@ export default async function GymLayout({
   }
 
   // Check if gym exists (middleware validates access)
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: gym } = await supabase
     .from('gyms')
     .select('id, name')

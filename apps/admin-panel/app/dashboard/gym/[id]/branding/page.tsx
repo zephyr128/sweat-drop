@@ -27,7 +27,7 @@ export default async function BrandingPage({ params }: BrandingPageProps) {
   const { id } = await params;
   
   // Initialize Supabase client
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // 1. Check authentication first
   let user;

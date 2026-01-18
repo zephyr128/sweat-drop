@@ -14,7 +14,7 @@ export default async function SuperAdminMachinesPage() {
     notFound();
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Fetch all machines across all gyms
   const { data: machinesData, error } = await supabase

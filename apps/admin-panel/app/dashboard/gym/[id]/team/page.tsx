@@ -20,7 +20,7 @@ export default async function TeamPage({ params }: TeamPageProps) {
   const { id } = await params;
   
   // Initialize Supabase client
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // 1. Check authentication first
   let user;
