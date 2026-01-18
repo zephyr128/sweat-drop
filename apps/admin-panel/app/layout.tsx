@@ -1,9 +1,16 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { ToasterProvider } from '@/components/ToasterProvider';
+import dynamicImport from 'next/dynamic';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
+
+// CRITICAL: Dynamically import ToasterProvider with ssr: false to prevent build errors
+// This ensures it's never evaluated during static generation of error pages
+const ToasterProvider = dynamicImport(
+  () => import('@/components/ToasterProvider').then((mod) => ({ default: mod.ToasterProvider })),
+  { ssr: false }
+);
 
 export const metadata: Metadata = {
   title: 'SweatDrop Admin',
