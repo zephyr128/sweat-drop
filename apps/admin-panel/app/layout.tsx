@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   description: 'Admin panel for SweatDrop gym management',
 };
 
+// Force dynamic rendering to prevent static generation issues with error pages
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+
 export default function RootLayout({
   children,
 }: {
