@@ -86,6 +86,28 @@ export default function LoginForm({ redirectUrl, emailParam, errorParam }: Login
     e.preventDefault();
     if (loading || hasRedirected.current) return;
 
+    // Check environment variables before attempting login
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+    
+    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'undefined' || supabaseAnonKey === 'undefined') {
+      const missing = [];
+      if (!supabaseUrl || supabaseUrl === 'undefined') missing.push('NEXT_PUBLIC_SUPABASE_URL');
+      if (!supabaseAnonKey || supabaseAnonKey === 'undefined') missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+      
+      console.error('❌ ==========================================');
+      console.error('❌ MISSING ENVIRONMENT VARIABLES!');
+      console.error('❌ ==========================================');
+      console.error(`Missing: ${missing.join(', ')}`);
+      console.error('💡 SOLUTION:');
+      console.error('1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables');
+      console.error('2. Add these variables and redeploy');
+      console.error('❌ ==========================================');
+      
+      setError(`Configuration error: Missing environment variables (${missing.join(', ')}). Please check console for details.`);
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
