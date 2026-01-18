@@ -1,6 +1,5 @@
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
-import { Sidebar } from '@/components/Sidebar';
 import { notFound } from 'next/navigation';
 
 export default async function GymLayout({

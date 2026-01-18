@@ -32,7 +32,6 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
   const supabase = await createClient();
   
   // 1. Check authentication first
-  let user;
   try {
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
     
@@ -40,7 +39,7 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
       redirect('/login');
     }
     
-    user = authUser;
+    // User is authenticated - no need to store it
   } catch (error) {
     console.error('[GymDetailPage] Auth check failed:', error);
     redirect('/login');

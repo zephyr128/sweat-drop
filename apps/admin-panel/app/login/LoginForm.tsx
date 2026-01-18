@@ -110,7 +110,7 @@ export default function LoginForm({ redirectUrl, emailParam, errorParam }: Login
       await supabase.auth.refreshSession();
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      const { data: { session: verifySession }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session: verifySession }, error: _sessionError } = await supabase.auth.getSession();
       if (!verifySession) {
         setError('Session not persisted. Please try again.');
         setLoading(false);

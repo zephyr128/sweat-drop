@@ -65,6 +65,7 @@ export default function OwnersPage() {
 
   useEffect(() => {
     checkRole();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkRole = async () => {
@@ -455,7 +456,7 @@ export default function OwnersPage() {
               Are you sure you want to remove this owner? This will:
             </p>
             <ul className="list-disc list-inside text-[#808080] mb-6 space-y-1 text-sm">
-              <li>Change their role from 'gym_owner' to 'user'</li>
+              <li>Change their role from &apos;gym_owner&apos; to &apos;user&apos;</li>
               <li>Unassign all their gyms (gyms will have no owner)</li>
               <li>They will lose access to the admin panel</li>
             </ul>
