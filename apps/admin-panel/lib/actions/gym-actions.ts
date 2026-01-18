@@ -241,7 +241,7 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
  */
 export async function suspendGym(gymId: string) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -266,7 +266,7 @@ export async function suspendGym(gymId: string) {
  */
 export async function activateGym(gymId: string) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -397,7 +397,7 @@ export async function getPotentialGymOwners() {
  */
 export async function deleteGym(gymId: string) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
