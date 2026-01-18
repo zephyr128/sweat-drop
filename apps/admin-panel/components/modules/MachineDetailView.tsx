@@ -278,7 +278,7 @@ export function MachineDetailView({ machine, userRole }: MachineDetailViewProps)
               </div>
 
               <p className="text-xs text-[#808080] text-center">
-                Click "Print Sticker" to print a label for this machine
+                Click &quot;Print Sticker&quot; to print a label for this machine
               </p>
             </div>
           </div>

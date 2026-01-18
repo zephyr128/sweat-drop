@@ -149,7 +149,7 @@ export function QRValidator({ gymId, onRedemptionConfirmed }: QRValidatorProps) 
           </button>
         </div>
         <p className="text-xs text-[#808080] mt-2">
-          Scan the QR code from the user's mobile app or enter the redemption code manually
+          Scan the QR code from the user&apos;s mobile app or enter the redemption code manually
         </p>
       </div>
 
