@@ -2,7 +2,36 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export function createClient() {
-  const cookieStore = cookies();
+  // CRITICAL FIX: Safe cookie access for build-time (error page generation)
+  // During static generation of error pages, cookies() may throw
+  let cookieStore;
+  try {
+    cookieStore = cookies();
+  } catch (error) {
+    // During build-time static generation (e.g., error pages), cookies() is not available
+    // Return a client with dummy cookie handlers to prevent crashes
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    
+    // Return a minimal client that won't crash during build
+    return createServerClient(
+      supabaseUrl || 'https://placeholder.supabase.co',
+      supabaseAnonKey || 'placeholder',
+      {
+        cookies: {
+          get() {
+            return undefined; // No cookies during build
+          },
+          set() {
+            // No-op during build
+          },
+          remove() {
+            // No-op during build
+          },
+        },
+      }
+    );
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
