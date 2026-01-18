@@ -3,7 +3,8 @@
 import { createBrowserClient } from '@supabase/ssr';
 
 // CRITICAL: Validate environment variables at build/runtime
-// Empty strings or undefined will cause "Failed to execute 'fetch' on 'Window': Invalid value" errors
+// undefined or empty strings will cause "Failed to execute 'fetch' on 'Window': Invalid value" errors
+// MUST use || '' fallback to prevent undefined, but then validate before creating client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || '';
 
@@ -44,18 +45,19 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// Create browser client - will fail with "Invalid value" if env vars are missing
-// This is intentional - user must set environment variables on Vercel
-let supabase;
-try {
-  supabase = createBrowserClient(
-    hasValidUrl ? supabaseUrl : 'https://MISSING-ENV-VAR.supabase.co',
-    hasValidKey ? supabaseAnonKey : 'MISSING-ANON-KEY'
+// CRITICAL: Only create client if both URL and key are valid
+// Empty strings will cause "Invalid value" fetch errors - must have actual values
+if (!hasValidUrl || !hasValidKey) {
+  // Don't create client with invalid values - will cause fetch errors
+  // Log error is already done above, so just export a dummy client that will fail gracefully
+  throw new Error(
+    `Cannot create Supabase client: Missing environment variables. ` +
+    `NEXT_PUBLIC_SUPABASE_URL: ${supabaseUrl ? 'set' : 'MISSING'}, ` +
+    `NEXT_PUBLIC_SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'set' : 'MISSING'}. ` +
+    `Please set these variables in Vercel Settings → Environment Variables and redeploy.`
   );
-} catch (error) {
-  // This shouldn't happen, but catch just in case
-  console.error('Failed to create Supabase client:', error);
-  throw error;
 }
 
-export { supabase };
+// Create browser client with validated values
+// Both URL and key are guaranteed to be valid non-empty strings at this point
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
