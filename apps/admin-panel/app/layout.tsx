@@ -15,6 +15,10 @@ const ToasterProvider = dynamicImport(
 export const metadata: Metadata = {
   title: 'SweatDrop Admin',
   description: 'Admin panel for SweatDrop gym management',
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
 };
 
 // CRITICAL: Force dynamic rendering to prevent static generation errors with Supabase
