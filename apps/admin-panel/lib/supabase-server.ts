@@ -1,52 +1,36 @@
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-/**
- * Build-safe Supabase server client
- * Handles cookie access gracefully during static generation of error pages
- */
 export async function createClient() {
-  // 1. Handle cookieStore safely (await is required in Next 15, safe in Next 14)
   let cookieStore: any;
+  
   try {
+    // Next.js 15 zahteva await za cookies()
     cookieStore = await cookies();
-  } catch (error) {
-    // If cookies() fails (during static build), we continue without it
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[Supabase] Cookies not available (static build context)');
-    }
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase environment variables. NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set.');
+  } catch (e) {
+    // Tokom build-a na Vercelu, cookies() baca error. 
+    // Hvatanje ovog errora sprečava "Export encountered errors" pad.
+    cookieStore = null;
   }
 
   return createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          // If no cookieStore (build time), return empty array
           if (!cookieStore) return [];
-          try {
-            return cookieStore.getAll();
-          } catch (e) {
-            return [];
-          }
+          return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
+        // DODAT TIP: { name: string; value: string; options: CookieOptions }[]
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           if (!cookieStore) return;
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             );
-          } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing user sessions.
+          } catch (error) {
+            // Server Components ne dozvoljavaju setovanje kolačića, što je normalno
           }
         },
       },
