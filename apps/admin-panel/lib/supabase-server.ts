@@ -2,9 +2,15 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function createClient() {
-  // Next.js 15 zahteva await za cookies()
-  // Koristimo anonimnu funkciju da izbegnemo pucanje tokom statičke generacije
-  const cookieStore = await cookies().catch(() => null);
+  let cookieStore;
+  
+  try {
+    // Koristimo 'as any' da sprečimo TS error, a 'await' jer Next.js 15 to zahteva u runtime-u
+    cookieStore = await (cookies() as any);
+  } catch (e) {
+    // Tokom build-a (statička generacija), cookies() bacaju grešku
+    cookieStore = null;
+  }
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,8 +19,13 @@ export async function createClient() {
       cookies: {
         getAll() {
           if (!cookieStore) return [];
-          return cookieStore.getAll();
+          try {
+            return cookieStore.getAll();
+          } catch {
+            return [];
+          }
         },
+        // Eksplicitni tipovi su obavezni za Vercel deploy
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           if (!cookieStore) return;
           try {
@@ -22,7 +33,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch (error) {
-            // Server Components ne dozvoljavaju setovanje kolačića - ovo je normalno
+            // Normalno ponašanje u Server Components
           }
         },
       },

@@ -1244,53 +1244,16 @@ export default function WorkoutScreen() {
       });
 
       // CRITICAL: If error or no data, plan is complete - do NOT set currentPlanItem to null
-      // Instead, immediately set completion flags and call handleFinishWorkout
+      // Instead, immediately set completion flags and show completion overlay
       if (error || !data || data.length === 0) {
         console.log('[SmartCoach] Plan completed! No more exercises found at index:', nextIndex);
         
-        // KRAJ PLANA: Set completion flags FIRST before cleanup
-        setIsPlanCompleted(true);
-        setIsSmartCoachMode(false);
-        // CRITICAL: Do NOT set currentPlanItem to null here - let handleFinishWorkout handle cleanup
+        // KRAJ PLANA: Set completion flags FIRST - do NOT set currentPlanItem to null
         // This prevents render crashes while intervals are still accessing currentPlanItem
-        
-        // Cleanup all timers/intervals BEFORE finishing
-        if (saveIntervalRef.current) {
-          clearInterval(saveIntervalRef.current);
-          saveIntervalRef.current = null;
-        }
-        if (syncIntervalRef.current) {
-          clearInterval(syncIntervalRef.current);
-          syncIntervalRef.current = null;
-        }
-        if (heartbeatIntervalRef.current) {
-          clearInterval(heartbeatIntervalRef.current);
-          heartbeatIntervalRef.current = null;
-        }
-        if (challengeUpdateIntervalRef.current) {
-          clearInterval(challengeUpdateIntervalRef.current);
-          challengeUpdateIntervalRef.current = null;
-        }
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-        if (challengeMessageTimerRef.current) {
-          clearTimeout(challengeMessageTimerRef.current);
-          challengeMessageTimerRef.current = null;
-        }
-        if (autoPauseTimerRef.current) {
-          clearTimeout(autoPauseTimerRef.current);
-          autoPauseTimerRef.current = null;
-        }
-        if (timeProgressIntervalRef.current) {
-          clearInterval(timeProgressIntervalRef.current);
-          timeProgressIntervalRef.current = null;
-        }
-        
-        // CRITICAL: Call handleFinishWorkout immediately - it will handle navigation to Summary
-        // Do NOT set currentPlanItem to null - handleFinishWorkout will do that safely
-        handleFinishWorkout();
+        setIsPlanCompleted(true);
+        setShowPlanCompleted(true);
+        // CRITICAL: Do NOT set currentPlanItem to null here - let overlay handle cleanup
+        // This prevents render crashes while intervals are still accessing currentPlanItem
         return;
       }
 
