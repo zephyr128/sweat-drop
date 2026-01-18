@@ -2,6 +2,9 @@
 
 import { useEffect } from 'react';
 
+// Note: Client Components cannot export route segment config
+// error.tsx is always dynamic in Next.js App Router
+
 export default function Error({
   error,
   reset,
