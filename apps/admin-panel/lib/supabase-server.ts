@@ -3,13 +3,12 @@ import { cookies } from 'next/headers';
 
 export async function createClient() {
   let cookieStore: any;
-  
+
   try {
-    // Next.js 15 zahteva await za cookies()
+    // Ovo je ključ: Next.js 15 zahteva await, ali puca tokom builda ako nije u try-catch
     cookieStore = await cookies();
   } catch (e) {
-    // Tokom build-a na Vercelu, cookies() baca error. 
-    // Hvatanje ovog errora sprečava "Export encountered errors" pad.
+    // Ako smo u build procesu, cookies() ne postoje. Vraćamo null.
     cookieStore = null;
   }
 
@@ -20,9 +19,12 @@ export async function createClient() {
       cookies: {
         getAll() {
           if (!cookieStore) return [];
-          return cookieStore.getAll();
+          try {
+            return cookieStore.getAll();
+          } catch (e) {
+            return [];
+          }
         },
-        // DODAT TIP: { name: string; value: string; options: CookieOptions }[]
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           if (!cookieStore) return;
           try {
@@ -30,7 +32,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch (error) {
-            // Server Components ne dozvoljavaju setovanje kolačića, što je normalno
+            // Ignorišemo greške setovanja tokom builda ili u Server Components
           }
         },
       },
