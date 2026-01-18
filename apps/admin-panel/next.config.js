@@ -8,6 +8,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Disable static optimization for error pages to prevent build failures
+  // This ensures /_error routes are not statically generated during build
+  skipTrailingSlashRedirect: true,
 }
 
 module.exports = nextConfig

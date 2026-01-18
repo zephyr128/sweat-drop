@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { Toaster } from 'sonner';
+import { ToasterProvider } from '@/components/ToasterProvider';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 // Force dynamic rendering to prevent static generation issues with error pages
+// This ensures error pages (404, 500) are not statically generated during build
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
 
@@ -23,7 +24,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${inter.className} bg-[#000000] text-white`}>
         {children}
-        <Toaster position="top-right" theme="dark" />
+        <ToasterProvider />
       </body>
     </html>
   );
