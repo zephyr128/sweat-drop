@@ -28,6 +28,54 @@ export default function LoginForm({ redirectUrl, emailParam, errorParam }: Login
     }
   }, [errorParam]);
 
+  // Check environment variables on mount and log to console
+  useEffect(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+    
+    const hasValidUrl = supabaseUrl && supabaseUrl.length > 0 && supabaseUrl !== 'undefined' && supabaseUrl.startsWith('http');
+    const hasValidKey = supabaseAnonKey && supabaseAnonKey.length > 0 && supabaseAnonKey !== 'undefined';
+    
+    console.log('🔍 ==========================================');
+    console.log('🔍 ENVIRONMENT VARIABLES CHECK');
+    console.log('🔍 ==========================================');
+    console.log('NEXT_PUBLIC_SUPABASE_URL:', {
+      exists: !!supabaseUrl,
+      length: supabaseUrl?.length || 0,
+      value: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : '(not set)',
+      isValid: hasValidUrl,
+    });
+    console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', {
+      exists: !!supabaseAnonKey,
+      length: supabaseAnonKey?.length || 0,
+      value: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 10)}...` : '(not set)',
+      isValid: hasValidKey,
+    });
+    
+    if (!hasValidUrl || !hasValidKey) {
+      const missing = [];
+      if (!hasValidUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
+      if (!hasValidKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+      
+      console.error('❌ ==========================================');
+      console.error('❌ MISSING ENVIRONMENT VARIABLES!');
+      console.error('❌ ==========================================');
+      console.error(`Missing: ${missing.join(', ')}`);
+      console.error('');
+      console.error('💡 SOLUTION:');
+      console.error('1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables');
+      console.error('2. Add these variables:');
+      console.error('   - NEXT_PUBLIC_SUPABASE_URL=your_supabase_url');
+      console.error('   - NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key');
+      console.error('3. Redeploy your project (WITHOUT build cache)');
+      console.error('4. For local dev: Create .env.local in apps/admin-panel/ with these variables');
+      console.error('❌ ==========================================');
+    } else {
+      console.log('✅ All environment variables are set correctly');
+    }
+    console.log('🔍 ==========================================');
+  }, []);
+
   useEffect(() => {
     if (hasCheckedSession.current) return;
     hasCheckedSession.current = true;
