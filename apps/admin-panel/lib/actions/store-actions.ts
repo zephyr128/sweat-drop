@@ -18,6 +18,9 @@ export async function createStoreItem(input: z.infer<typeof createStoreItemSchem
   try {
     const validated = createStoreItemSchema.parse(input);
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     const { data, error } = await (supabaseAdmin
       .from('rewards')
@@ -84,6 +87,9 @@ export async function updateStoreItem(
 export async function deleteStoreItem(itemId: string, gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('rewards')
       .delete()

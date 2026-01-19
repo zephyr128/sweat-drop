@@ -214,6 +214,10 @@ async function sendInvitationEmail(invitation: any) {
   try {
     // Get gym details
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      logger.error('Admin client not available for sending invitation email');
+      return;
+    }
     const { data: gym } = await supabaseAdmin
       .from('gyms')
       .select('name, city, country')

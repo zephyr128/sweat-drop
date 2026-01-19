@@ -16,11 +16,12 @@ export async function getTopPerformers(gymId: string): Promise<TopPerformer[]> {
     const supabase = await createClient();
     // Use service role client to fetch profiles (bypasses RLS)
     let clientToUse = supabase;
-    try {
-      clientToUse = getAdminClient();
-    } catch (error) {
+    const adminClient = getAdminClient();
+    if (adminClient) {
+      clientToUse = adminClient;
+    } else {
       // Fallback to regular client if admin client unavailable
-      logger.warn('Admin client unavailable, using regular client', { error });
+      logger.warn('Admin client unavailable, using regular client');
     }
 
     // Get top 3 users by local_drops_balance for this gym

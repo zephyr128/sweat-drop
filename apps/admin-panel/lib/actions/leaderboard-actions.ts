@@ -23,6 +23,9 @@ export async function updateLeaderboardRewards(
       rank3: validated.rank3,
     };
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     const { data, error } = await supabaseAdmin
       .from('gyms')

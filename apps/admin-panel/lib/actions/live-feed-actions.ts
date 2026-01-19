@@ -18,11 +18,12 @@ export async function getLiveFeed(gymId: string): Promise<LiveFeedItem[]> {
     const supabase = await createClient();
     // Use service role client to fetch profiles (bypasses RLS)
     let clientToUse = supabase;
-    try {
-      clientToUse = getAdminClient();
-    } catch (error) {
+    const adminClient = getAdminClient();
+    if (adminClient) {
+      clientToUse = adminClient;
+    } else {
       // Fallback to regular client if admin client unavailable
-      logger.warn('Admin client unavailable, using regular client', { error });
+      logger.warn('Admin client unavailable, using regular client');
     }
 
     // Fetch recent sessions (scans) - include both active and completed

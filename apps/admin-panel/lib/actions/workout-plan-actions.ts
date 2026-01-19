@@ -48,6 +48,9 @@ export async function createWorkoutPlan(input: z.infer<typeof createWorkoutPlanS
       is_featured: false,
     };
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     const { data, error } = await (supabaseAdmin
       .from('workout_plans')
@@ -83,6 +86,9 @@ export async function createWorkoutPlanItem(input: z.infer<typeof createWorkoutP
       target_machine_id: validated.target_machine_id || null,
     };
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     const { data, error } = await (supabaseAdmin
       .from('workout_plan_items')
@@ -115,6 +121,9 @@ export async function deleteWorkoutPlan(planId: string, gymId: string) {
   try {
     // Soft delete by setting is_active to false
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('workout_plans')
       // @ts-expect-error - Supabase type inference issue
@@ -134,6 +143,9 @@ export async function deleteWorkoutPlan(planId: string, gymId: string) {
 export async function deleteWorkoutPlanItem(itemId: string, gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('workout_plan_items')
       .delete()
@@ -152,6 +164,9 @@ export async function deleteWorkoutPlanItem(itemId: string, gymId: string) {
 export async function toggleWorkoutPlanStatus(planId: string, gymId: string, isActive: boolean) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('workout_plans')
       // @ts-expect-error - Supabase type inference issue
