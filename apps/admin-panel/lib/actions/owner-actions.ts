@@ -23,6 +23,9 @@ export async function createOwner(input: CreateOwnerInput) {
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     // Check if user already exists
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
@@ -119,6 +122,9 @@ export async function deleteOwner(ownerId: string, reassignToOwnerId?: string) {
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     // Check if owner has gyms
     const { data: gyms, error: gymsError } = await supabaseAdmin
       .from('gyms')
@@ -183,6 +189,9 @@ export async function getOwnersWithGyms() {
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+    }
     // Fetch all gym owners
     const { data: ownersData, error: ownersError } = await supabaseAdmin
       .from('profiles')
@@ -236,6 +245,9 @@ export async function getOwnersWithGyms() {
 export async function getPotentialOwners() {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+    }
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('id, email, username, full_name, role')
@@ -260,6 +272,10 @@ export async function getPendingOwnerInvitations() {
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+    }
+
     const { data, error } = await supabaseAdmin
       .from('staff_invitations')
       .select(`
@@ -298,6 +314,9 @@ export async function resendOwnerInvitation(invitationId: string) {
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     // Fetch invitation details
     const { data: invitation, error: fetchError } = await supabaseAdmin
       .from('staff_invitations')
