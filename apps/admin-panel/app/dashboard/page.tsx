@@ -1,5 +1,8 @@
 'use client';
 
+// CRITICAL: Client components don't need dynamic flag, but we keep it for consistency
+// Next.js will handle client components differently during build
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';

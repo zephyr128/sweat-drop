@@ -1,43 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+export const dynamic = 'force-dynamic';
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  useEffect(() => {
-    console.error('Application error:', error);
-  }, [error]);
-
+export default function Error({ error, reset }: { error: Error; reset: () => void }) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, padding: 0, backgroundColor: '#000000', color: '#FFFFFF', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-        <div style={{ padding: '2rem', textAlign: 'center', maxWidth: '28rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0 0 0.5rem 0' }}>Something went wrong</h1>
-          <p style={{ margin: '0 0 1.5rem 0', color: '#808080' }}>An unexpected error occurred. Please try again.</p>
-          <button
-            onClick={reset}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: '#00E5FF',
-              color: '#000000',
-              fontWeight: '500',
-              borderRadius: '0.5rem',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1rem',
-            }}
-            onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#00B8CC'; }}
-            onMouseOut={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#00E5FF'; }}
-          >
-            Try again
-          </button>
-        </div>
-      </body>
-    </html>
+    <div style={{ padding: '5rem 2rem', textAlign: 'center' }}>
+      <h2>Something went wrong!</h2>
+      <p>{error.message}</p>
+      <button onClick={reset}>Try again</button>
+    </div>
   );
 }

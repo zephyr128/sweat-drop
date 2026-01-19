@@ -5,6 +5,7 @@ module.exports = {
     version: '1.0.0',
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
+    platforms: ['ios', 'android'],
     icon: './assets/icon.png', // App icon (1024x1024)
     splash: {
       image: './assets/splash.png', // Splash screen image
@@ -47,7 +48,9 @@ module.exports = {
           cameraPermissionText: 'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
         },
       ],
-      'expo-web-browser',
+      // NOTE: expo-web-browser does NOT require a config plugin in Expo SDK 54
+      // It can be used directly without adding it to plugins array
+      // Adding it here causes ESM/TypeScript loading errors with pnpm isolated linker
     ],
     scheme: 'sweatdrop',
     extra: {

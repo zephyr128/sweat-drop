@@ -1,11 +1,19 @@
-// Force dynamic rendering for Next.js build
+// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
 export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+// CRITICAL: Prevent static generation by returning empty array
+export function generateStaticParams() {
+  return [];
+}
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
 import { WorkoutPlansManager } from '@/components/modules/WorkoutPlansManager';
+import { SmartCoachOverview } from '@/components/modules/SmartCoachOverview';
 
 interface WorkoutPlansPageProps {
   params: Promise<{ id: string }>;
@@ -29,6 +37,8 @@ interface WorkoutPlanItem {
   target_unit: string | null;
   rest_seconds: number;
   sets: number;
+  instruction_video_url: string | null;
+  target_machine_id: string | null;
 }
 
 interface WorkoutPlan {
@@ -36,7 +46,9 @@ interface WorkoutPlan {
   name: string;
   description: string | null;
   access_level: string;
+  access_type: string;
   price: number;
+  currency: string;
   difficulty_level: string | null;
   estimated_duration_minutes: number | null;
   category: string | null;
@@ -179,15 +191,27 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
   return (
     <div>
       <div className="mb-8 pt-16 md:pt-0">
-        <h1 className="text-4xl font-bold text-white mb-2">Workout Plans Manager</h1>
-        <p className="text-[#808080]">Create and manage workout plans for your gym members</p>
+        <h1 className="text-4xl font-bold text-white mb-2">SmartCoach Dashboard</h1>
+        <p className="text-[#808080]">Monitor workout plans, active sessions, and revenue</p>
       </div>
 
-      <WorkoutPlansManager 
-        gymId={id} 
-        initialPlans={plans} 
-        machines={machines}
-      />
+      {/* Overview with Statistics */}
+      <div className="mb-8">
+        <SmartCoachOverview gymId={id} />
+      </div>
+
+      {/* Plans Manager */}
+      <div className="mt-12">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-white mb-2">Workout Plans Manager</h2>
+          <p className="text-[#808080]">Create and manage workout plans for your gym members</p>
+        </div>
+        <WorkoutPlansManager 
+          gymId={id} 
+          initialPlans={plans} 
+          machines={machines}
+        />
+      </div>
     </div>
   );
 }

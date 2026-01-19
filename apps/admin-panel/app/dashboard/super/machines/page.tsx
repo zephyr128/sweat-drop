@@ -1,3 +1,7 @@
+// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';

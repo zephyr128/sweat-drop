@@ -3,42 +3,26 @@
   "version": "1.0.0",
   "private": true,
   "description": "SweatDrop - Fitness tracking platform",
-  "workspaces": [
-    "apps/*"
-  ],
   "scripts": {
-    "dev:mobile": "npm run start --workspace=apps/mobile-app",
-    "dev:admin": "npm run dev --workspace=apps/admin-panel",
-    "build:mobile": "npm run build --workspace=apps/mobile-app",
-    "build:admin": "npm run build --workspace=apps/admin-panel",
-    "lint": "npm run lint --workspaces",
-    "type-check": "npm run type-check --workspaces"
+    "dev:mobile": "pnpm --filter sweatdrop-mobile-app start",
+    "dev:admin": "pnpm --filter sweatdrop-admin-panel dev",
+    "build:mobile": "pnpm --filter sweatdrop-mobile-app build",
+    "build:admin": "pnpm --filter sweatdrop-admin-panel build",
+    "lint": "pnpm --recursive lint",
+    "type-check": "pnpm --recursive type-check"
   },
   "devDependencies": {
     "prettier": "^3.1.1"
   },
-  "overrides": {
-    "sweatdrop-admin-panel": {
-      "react": "18.2.0",
-      "react-dom": "18.2.0"
-    },
-    "sweatdrop-mobile": {
-      "react": "19.2.3",
-      "react-dom": "19.2.3"
-    }
-  },
-  "resolutions": {
-    "sweatdrop-admin-panel": {
-      "react": "18.2.0",
-      "react-dom": "18.2.0"
-    },
-    "sweatdrop-mobile": {
-      "react": "19.2.3",
-      "react-dom": "19.2.3"
-    }
-  },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "pnpm": {
+  "overrides": {
+    "sweatdrop-admin-panel>react": "18.3.1",
+    "sweatdrop-admin-panel>react-dom": "18.3.1",
+    "sweatdrop-admin-panel>styled-jsx": "5.1.1"
   }
+}
 }
