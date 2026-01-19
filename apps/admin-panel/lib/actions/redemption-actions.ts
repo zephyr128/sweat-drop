@@ -70,8 +70,11 @@ export async function cancelRedemption(redemptionId: string, gymId: string, reas
 
     // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
     if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
-      const supabaseAdmin = getAdminClient();
-      const { data: gym } = await supabaseAdmin
+      const supabaseAdminCheck = getAdminClient();
+      if (!supabaseAdminCheck) {
+        return { success: false, error: 'Admin client not available. Check server environment variables.' };
+      }
+      const { data: gym } = await supabaseAdminCheck
         .from('gyms')
         .select('owner_id')
         .eq('id', gymId)
@@ -128,8 +131,11 @@ export async function validateRedemptionCode(code: string, gymId: string) {
 
     // Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
     if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'receptionist') {
-      const supabaseAdmin = getAdminClient();
-      const { data: gym } = await supabaseAdmin
+      const supabaseAdminCheck = getAdminClient();
+      if (!supabaseAdminCheck) {
+        return { success: false, error: 'Admin client not available. Check server environment variables.', data: null };
+      }
+      const { data: gym } = await supabaseAdminCheck
         .from('gyms')
         .select('owner_id')
         .eq('id', gymId)
