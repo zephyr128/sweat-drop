@@ -9,8 +9,10 @@ import { createBrowserClient } from '@supabase/ssr';
 function getEnvString(name: string): string {
   const value = process.env[name];
   
+  // Return empty string if missing (validation happens later)
+  // Don't throw here to prevent app crash during build/runtime
   if (!value) {
-    throw new Error(`Missing env var: ${name}`);
+    return '';
   }
   
   // CRITICAL: Always trim to remove newlines/whitespace from Vercel UI
