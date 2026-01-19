@@ -212,6 +212,9 @@ export async function updateWorkoutPlanItem(input: z.infer<typeof updateWorkoutP
       target_machine_id: validated.target_machine_id || null,
     };
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     const { data, error } = await supabaseAdmin
       .from('workout_plan_items')

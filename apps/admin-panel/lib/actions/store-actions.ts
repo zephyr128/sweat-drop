@@ -64,6 +64,9 @@ export async function updateStoreItem(
     if (input.stock !== undefined) updateData.stock = input.stock;
     if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl;
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     const { data, error } = await supabaseAdmin
       .from('rewards')
