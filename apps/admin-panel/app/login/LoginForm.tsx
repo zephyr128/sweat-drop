@@ -29,51 +29,30 @@ export default function LoginForm({ redirectUrl, emailParam, errorParam }: Login
   }, [errorParam]);
 
   // Check environment variables on mount and log to console
+  // NOTE: This is just for debugging - actual validation happens in supabase-client.ts
   useEffect(() => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+    const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
-    const hasValidUrl = supabaseUrl && supabaseUrl.length > 0 && supabaseUrl !== 'undefined' && supabaseUrl.startsWith('http');
-    const hasValidKey = supabaseAnonKey && supabaseAnonKey.length > 0 && supabaseAnonKey !== 'undefined';
+    // Extract as strings (don't wrap in objects)
+    const supabaseUrl = typeof rawUrl === 'string' ? rawUrl.trim() : String(rawUrl || '').trim();
+    const supabaseAnonKey = typeof rawKey === 'string' ? rawKey.trim() : String(rawKey || '').trim();
     
-    console.log('🔍 ==========================================');
-    console.log('🔍 ENVIRONMENT VARIABLES CHECK');
-    console.log('🔍 ==========================================');
-    console.log('NEXT_PUBLIC_SUPABASE_URL:', {
-      exists: !!supabaseUrl,
-      length: supabaseUrl?.length || 0,
-      value: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : '(not set)',
-      isValid: hasValidUrl,
-    });
-    console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', {
-      exists: !!supabaseAnonKey,
-      length: supabaseAnonKey?.length || 0,
-      value: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 10)}...` : '(not set)',
-      isValid: hasValidKey,
-    });
+    const hasValidUrl = supabaseUrl.length > 0 && supabaseUrl !== 'undefined' && supabaseUrl.startsWith('http');
+    const hasValidKey = supabaseAnonKey.length > 0 && supabaseAnonKey !== 'undefined';
+    
+    // Log raw types to debug object wrapping
+    console.log('🔍 Environment Variables Check (LoginForm):');
+    console.log('URL type:', typeof rawUrl, '| Key type:', typeof rawKey);
+    console.log('URL is string:', typeof rawUrl === 'string', '| Key is string:', typeof rawKey === 'string');
+    console.log('URL length:', supabaseUrl.length, '| Key length:', supabaseAnonKey.length);
+    console.log('URL valid:', hasValidUrl, '| Key valid:', hasValidKey);
     
     if (!hasValidUrl || !hasValidKey) {
-      const missing = [];
-      if (!hasValidUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-      if (!hasValidKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-      
-      console.error('❌ ==========================================');
-      console.error('❌ MISSING ENVIRONMENT VARIABLES!');
-      console.error('❌ ==========================================');
-      console.error(`Missing: ${missing.join(', ')}`);
-      console.error('');
-      console.error('💡 SOLUTION:');
-      console.error('1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables');
-      console.error('2. Add these variables:');
-      console.error('   - NEXT_PUBLIC_SUPABASE_URL=your_supabase_url');
-      console.error('   - NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key');
-      console.error('3. Redeploy your project (WITHOUT build cache)');
-      console.error('4. For local dev: Create .env.local in apps/admin-panel/ with these variables');
-      console.error('❌ ==========================================');
+      console.error('❌ Missing environment variables - check supabase-client.ts logs for details');
     } else {
-      console.log('✅ All environment variables are set correctly');
+      console.log('✅ Environment variables validated in LoginForm');
     }
-    console.log('🔍 ==========================================');
   }, []);
 
   useEffect(() => {

@@ -10,9 +10,10 @@ const nextConfig = {
   
   // CRITICAL: Explicitly expose environment variables for monorepo setup
   // This ensures Vercel environment variables are available at build and runtime
+  // Convert to strings explicitly to prevent object wrapping
   env: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_SUPABASE_URL: String(process.env.NEXT_PUBLIC_SUPABASE_URL || ''),
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
   },
 };
 
