@@ -13,6 +13,9 @@ interface UpdateBrandingInput {
 export async function updateBranding(input: UpdateBrandingInput) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const updateData: any = {
       updated_at: new Date().toISOString(),
     };
@@ -53,6 +56,9 @@ export async function updateBranding(input: UpdateBrandingInput) {
 export async function getOwnerBranding(ownerId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: null };
+    }
     const { data, error } = await supabaseAdmin
       .from('owner_branding')
       .select('*')

@@ -78,6 +78,9 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
     };
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin
       .from('challenges')
       .insert(insertData)
@@ -100,6 +103,9 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
 export async function deleteChallenge(challengeId: string, gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('challenges')
       .delete()
@@ -119,6 +125,9 @@ export async function deleteChallenge(challengeId: string, gymId: string) {
 export async function toggleChallengeStatus(challengeId: string, gymId: string, isActive: boolean) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('challenges')
       // @ts-expect-error - Supabase type inference issue
@@ -140,6 +149,9 @@ export async function toggleChallengeStatus(challengeId: string, gymId: string, 
 export async function getChallengeCompletionStats(challengeId: string, _gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: { total_users: 0, completed_users: 0, completion_percentage: 0 } };
+    }
     const { data, error } = await supabaseAdmin.rpc('get_challenge_completion_stats', {
       p_challenge_id: challengeId,
     } as any);

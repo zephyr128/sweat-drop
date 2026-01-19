@@ -22,6 +22,9 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
 
     const validated = createMachineSchema.parse(input);
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
 
     // Generate QR code if not provided
     let qrCode = validated.uniqueQrCode;
@@ -82,6 +85,9 @@ export async function deleteMachine(machineId: string, gymId: string) {
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('machines')
       .delete()
@@ -111,6 +117,9 @@ export async function toggleMachineStatus(
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('machines')
       // @ts-expect-error - Supabase type inference issue
@@ -146,6 +155,9 @@ export async function updateMachine(
       if (input.type !== undefined) updateData.type = input.type;
 
       const supabaseAdmin = getAdminClient();
+      if (!supabaseAdmin) {
+        return { success: false, error: 'Admin client not available. Check server environment variables.' };
+      }
       const { error } = await supabaseAdmin
         .from('machines')
         // @ts-expect-error - Supabase type inference issue
@@ -175,6 +187,9 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
 
     // Update machine with sensor_id
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin
       .from('machines')
       // @ts-expect-error - Supabase type inference issue
@@ -203,6 +218,9 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
 export async function lockMachine(machineId: string, userId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin.rpc('lock_machine', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -219,6 +237,9 @@ export async function lockMachine(machineId: string, userId: string) {
 export async function unlockMachine(machineId: string, userId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data: _data, error } = await supabaseAdmin.rpc('unlock_machine', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -235,6 +256,9 @@ export async function unlockMachine(machineId: string, userId: string) {
 export async function updateMachineHeartbeat(machineId: string, userId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin.rpc('update_machine_heartbeat', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -251,6 +275,9 @@ export async function updateMachineHeartbeat(machineId: string, userId: string) 
 export async function updateMachineRPM(machineId: string, userId: string, rpm: number) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin.rpc('update_machine_rpm', {
       p_machine_id: machineId,
       p_user_id: userId,
@@ -287,6 +314,9 @@ export async function toggleMaintenance(
     }
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('machines')
       // @ts-expect-error - Supabase type inference issue
@@ -306,6 +336,9 @@ export async function toggleMaintenance(
 export async function getMachineReports(gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+    }
     const { data, error } = await (supabaseAdmin.rpc('get_machines_with_reports', {
       p_gym_id: gymId,
     } as any) as any);

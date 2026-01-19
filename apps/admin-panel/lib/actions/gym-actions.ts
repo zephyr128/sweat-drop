@@ -47,6 +47,9 @@ export async function createGym(input: CreateGymInput) {
 
     // Create gym (owner_id will be null if creating new owner - will be set when invitation is accepted)
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await (supabaseAdmin
       .from('gyms')
       .insert({
@@ -110,8 +113,11 @@ export async function createGymAdmin(input: CreateGymAdminInput) {
   try {
     console.log('[createGymAdmin] Creating auth user for:', input.email);
     
-    // 1. Create auth user (getAdminClient will throw if env vars are missing)
+    // 1. Create auth user
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: input.email,
       password: input.password,
@@ -180,6 +186,9 @@ export async function createGymAdmin(input: CreateGymAdminInput) {
 export async function assignGymAdmin(userId: string, gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin
       .from('profiles')
       // @ts-expect-error - Supabase type inference issue
@@ -207,6 +216,9 @@ export async function assignGymAdmin(userId: string, gymId: string) {
 export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { data, error } = await supabaseAdmin
       .from('gyms')
       // @ts-expect-error - Supabase type inference issue
@@ -242,6 +254,9 @@ export async function suspendGym(gymId: string) {
     if (!user) throw new Error('Not authenticated');
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin.rpc('suspend_gym', {
       p_gym_id: gymId,
       p_suspended_by: user.id,
@@ -267,6 +282,9 @@ export async function activateGym(gymId: string) {
     if (!user) throw new Error('Not authenticated');
 
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin.rpc('activate_gym', {
       p_gym_id: gymId,
       p_activated_by: user.id,
@@ -289,6 +307,9 @@ export async function getGymsWithOwnerInfo() {
   try {
     // Try RPC first, fallback to direct query if RPC doesn't exist yet
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+    }
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('get_gyms_with_owner_info');
     
     if (!rpcError && rpcData) {
@@ -357,6 +378,9 @@ export async function getGymsWithOwnerInfo() {
 export async function getNetworkOverviewStats(ownerId: string) {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: null };
+    }
     const { data, error } = await supabaseAdmin.rpc('get_network_overview_stats', {
       p_owner_id: ownerId,
     } as any);
@@ -374,6 +398,9 @@ export async function getNetworkOverviewStats(ownerId: string) {
 export async function getPotentialGymOwners() {
   try {
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+    }
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('id, email, username, full_name, role')
@@ -410,6 +437,9 @@ export async function deleteGym(gymId: string) {
 
     // Delete gym (CASCADE will handle related data)
     const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
     const { error } = await supabaseAdmin
       .from('gyms')
       .delete()
