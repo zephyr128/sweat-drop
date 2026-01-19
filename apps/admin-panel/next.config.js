@@ -8,13 +8,13 @@ const nextConfig = {
   // Next.js will automatically use React 18.2.0 from apps/admin-panel/node_modules
   // No webpack alias needed - the overrides in root package.json ensure correct version
   
-  // CRITICAL: Explicitly expose environment variables for monorepo setup
-  // This ensures Vercel environment variables are available at build and runtime
-  // Convert to strings explicitly to prevent object wrapping
-  env: {
-    NEXT_PUBLIC_SUPABASE_URL: String(process.env.NEXT_PUBLIC_SUPABASE_URL || ''),
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
-  },
+  // NOTE: Next.js automatically exposes NEXT_PUBLIC_* variables
+  // The `env` section is NOT needed and might cause object wrapping issues
+  // Removing it to let Next.js handle env vars natively
+  // env: {
+  //   NEXT_PUBLIC_SUPABASE_URL: String(process.env.NEXT_PUBLIC_SUPABASE_URL || ''),
+  //   NEXT_PUBLIC_SUPABASE_ANON_KEY: String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
+  // },
 };
 
 module.exports = nextConfig

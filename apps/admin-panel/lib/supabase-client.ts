@@ -8,11 +8,46 @@ import { createBrowserClient } from '@supabase/ssr';
 const getEnvString = (value: any): string => {
   if (typeof value === 'string') return value.trim();
   if (value == null) return '';
-  // If it's an object, try to extract string value
+  
+  // If it's an object, try to extract string value properly
   if (typeof value === 'object') {
-    console.warn('Environment variable is an object, attempting to extract string value');
-    return String(value).trim();
+    console.warn('⚠️ Environment variable is an object, attempting to extract string value');
+    
+    // Try common object properties that might contain the string
+    if ('value' in value && typeof value.value === 'string') {
+      return value.value.trim();
+    }
+    if ('default' in value && typeof value.default === 'string') {
+      return value.default.trim();
+    }
+    if ('toString' in value && typeof value.toString === 'function') {
+      const str = value.toString();
+      // If toString returns [object Object], it's not useful
+      if (str && str !== '[object Object]' && str.startsWith('http')) {
+        return str.trim();
+      }
+    }
+    
+    // Last resort: try JSON.stringify if it's a simple object
+    try {
+      const json = JSON.stringify(value);
+      // If it's a JSON string (starts with "), parse it
+      if (json.startsWith('"') && json.endsWith('"')) {
+        return JSON.parse(json).trim();
+      }
+    } catch (e) {
+      // Ignore JSON errors
+    }
+    
+    // Final fallback: String() conversion (might give [object Object])
+    const str = String(value).trim();
+    if (str === '[object Object]' || str.length < 10) {
+      console.error('❌ Failed to extract string from object:', value);
+      return '';
+    }
+    return str;
   }
+  
   return String(value).trim();
 };
 
@@ -29,14 +64,11 @@ if (typeof window !== 'undefined') {
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
-  console.log('🔍 Raw env values:', {
-    urlType: typeof rawUrl,
-    urlIsString: typeof rawUrl === 'string',
-    urlIsObject: typeof rawUrl === 'object',
-    keyType: typeof rawKey,
-    keyIsString: typeof rawKey === 'string',
-    keyIsObject: typeof rawKey === 'object',
-  });
+  console.log('🔍 Raw env values (supabase-client.ts):');
+  console.log('  rawUrl type:', typeof rawUrl, '| value:', rawUrl);
+  console.log('  rawKey type:', typeof rawKey, '| length:', typeof rawKey === 'string' ? rawKey.length : 'N/A');
+  console.log('  After getEnvString - supabaseUrl type:', typeof supabaseUrl, '| length:', supabaseUrl.length);
+  console.log('  After getEnvString - supabaseAnonKey type:', typeof supabaseAnonKey, '| length:', supabaseAnonKey.length);
   
   if (!hasValidUrl || !hasValidKey) {
     const missing = [];
@@ -88,13 +120,37 @@ if (!hasValidUrl || !hasValidKey) {
 // Create browser client with validated values
 // Both URL and key are guaranteed to be valid non-empty strings at this point
 // CRITICAL: Ensure we pass raw strings, not objects
-// Double-check types before passing to createBrowserClient
+// Double-check types and values before passing to createBrowserClient
 if (typeof supabaseUrl !== 'string' || typeof supabaseAnonKey !== 'string') {
   throw new Error(
     `Invalid environment variable types. ` +
     `URL type: ${typeof supabaseUrl}, Key type: ${typeof supabaseAnonKey}. ` +
     `Both must be strings.`
   );
+}
+
+// Final validation: Ensure URL looks like a valid Supabase URL
+if (!supabaseUrl.startsWith('https://') || supabaseUrl.length < 20) {
+  console.error('❌ Invalid Supabase URL:', {
+    url: supabaseUrl,
+    length: supabaseUrl.length,
+    startsWithHttps: supabaseUrl.startsWith('https://'),
+  });
+  throw new Error(
+    `Invalid Supabase URL format. URL length: ${supabaseUrl.length}, ` +
+    `Expected: https://*.supabase.co (usually 40+ characters)`
+  );
+}
+
+// Log final values being passed to createBrowserClient
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('✅ Creating Supabase client with:', {
+    urlLength: supabaseUrl.length,
+    urlPreview: `${supabaseUrl.substring(0, 30)}...`,
+    keyLength: supabaseAnonKey.length,
+    urlType: typeof supabaseUrl,
+    keyType: typeof supabaseAnonKey,
+  });
 }
 
 export const supabase = createBrowserClient(
