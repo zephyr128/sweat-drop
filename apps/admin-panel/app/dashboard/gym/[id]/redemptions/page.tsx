@@ -41,11 +41,14 @@ interface RedemptionData {
 }
 
 // Helper function to create admin client inside request scope
+// CRITICAL: This is a Server Component, so process.env is safe here
+// Service role key is NEVER exposed to the browser
 function getAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('[RedemptionsPage] Missing Supabase admin credentials. NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.');
     return null;
   }
   
