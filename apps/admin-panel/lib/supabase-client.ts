@@ -2,57 +2,24 @@
 
 import { createBrowserClient } from '@supabase/ssr';
 
-// CRITICAL: Extract raw string values from environment variables
-// Ensure we get actual strings, not objects or wrapped values
-// Convert to string explicitly to prevent any object wrapping issues
-const getEnvString = (value: any): string => {
-  if (typeof value === 'string') return value.trim();
-  if (value == null) return '';
+// CRITICAL: Extract and trim environment variables
+// Vercel UI doesn't auto-trim values when copy-pasted from Supabase
+// Newlines/whitespace in keys cause "Invalid value" fetch errors
+// .trim() is MANDATORY for both local and production
+function getEnvString(name: string): string {
+  const value = process.env[name];
   
-  // If it's an object, try to extract string value properly
-  if (typeof value === 'object') {
-    console.warn('⚠️ Environment variable is an object, attempting to extract string value');
-    
-    // Try common object properties that might contain the string
-    if ('value' in value && typeof value.value === 'string') {
-      return value.value.trim();
-    }
-    if ('default' in value && typeof value.default === 'string') {
-      return value.default.trim();
-    }
-    if ('toString' in value && typeof value.toString === 'function') {
-      const str = value.toString();
-      // If toString returns [object Object], it's not useful
-      if (str && str !== '[object Object]' && str.startsWith('http')) {
-        return str.trim();
-      }
-    }
-    
-    // Last resort: try JSON.stringify if it's a simple object
-    try {
-      const json = JSON.stringify(value);
-      // If it's a JSON string (starts with "), parse it
-      if (json.startsWith('"') && json.endsWith('"')) {
-        return JSON.parse(json).trim();
-      }
-    } catch (e) {
-      // Ignore JSON errors
-    }
-    
-    // Final fallback: String() conversion (might give [object Object])
-    const str = String(value).trim();
-    if (str === '[object Object]' || str.length < 10) {
-      console.error('❌ Failed to extract string from object:', value);
-      return '';
-    }
-    return str;
+  if (!value) {
+    throw new Error(`Missing env var: ${name}`);
   }
   
+  // CRITICAL: Always trim to remove newlines/whitespace from Vercel UI
+  // Supabase anon keys are usually 400-420 chars, but can be 454+ with whitespace
   return String(value).trim();
-};
+}
 
-const supabaseUrl = getEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL);
-const supabaseAnonKey = getEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const supabaseUrl = getEnvString('NEXT_PUBLIC_SUPABASE_URL');
+const supabaseAnonKey = getEnvString('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
 // Validate that both are non-empty strings
 const hasValidUrl = supabaseUrl.length > 0 && supabaseUrl !== 'undefined' && supabaseUrl.startsWith('http');
@@ -60,15 +27,22 @@ const hasValidKey = supabaseAnonKey.length > 0 && supabaseAnonKey !== 'undefined
 
 // Log validation status on client-side for debugging
 if (typeof window !== 'undefined') {
-  // Log raw values to debug object wrapping issues
+  // Log raw values to debug whitespace issues
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
-  console.log('🔍 Raw env values (supabase-client.ts):');
-  console.log('  rawUrl type:', typeof rawUrl, '| value:', rawUrl);
-  console.log('  rawKey type:', typeof rawKey, '| length:', typeof rawKey === 'string' ? rawKey.length : 'N/A');
-  console.log('  After getEnvString - supabaseUrl type:', typeof supabaseUrl, '| length:', supabaseUrl.length);
-  console.log('  After getEnvString - supabaseAnonKey type:', typeof supabaseAnonKey, '| length:', supabaseAnonKey.length);
+  console.log('🔍 Environment Variables Check:');
+  console.log('  Raw URL length:', typeof rawUrl === 'string' ? rawUrl.length : 'N/A');
+  console.log('  Raw Key length:', typeof rawKey === 'string' ? rawKey.length : 'N/A');
+  console.log('  Trimmed URL length:', supabaseUrl.length);
+  console.log('  Trimmed Key length:', supabaseAnonKey.length);
+  
+  // Warn if key has extra whitespace (Supabase keys are usually 400-420 chars)
+  if (typeof rawKey === 'string' && rawKey.length > 420) {
+    const trimmedDiff = rawKey.length - supabaseAnonKey.length;
+    console.warn(`⚠️ Key has ${trimmedDiff} extra characters (whitespace/newlines). Trimmed length: ${supabaseAnonKey.length}`);
+    console.warn('⚠️ This is a common Vercel issue when copy-pasting from Supabase UI');
+  }
   
   if (!hasValidUrl || !hasValidKey) {
     const missing = [];
