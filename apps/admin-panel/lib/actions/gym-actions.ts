@@ -86,6 +86,19 @@ export async function createGym(input: CreateGymInput) {
         console.error('Failed to create owner invitation:', invitationError);
         // Don't fail gym creation if invitation fails
       } else {
+        // Generate invitation URL
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
+
+        // Log invitation URL clearly for manual sharing (visible in Vercel logs)
+        console.log('\n========================================');
+        console.log('🚀 OWNER INVITATION LINK GENERATED 🚀');
+        console.log('========================================');
+        console.log('Email:', invitation.email);
+        console.log('Gym:', gymData.name);
+        console.log('Verification Link:', acceptUrl);
+        console.log('========================================\n');
+
         // Send invitation email
         try {
           await sendOwnerInvitationEmail(invitation, gymData.name);

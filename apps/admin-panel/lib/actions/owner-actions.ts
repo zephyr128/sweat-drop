@@ -70,6 +70,10 @@ export async function createOwner(input: CreateOwnerInput) {
 
     if (invitationError) throw invitationError;
 
+    // Generate invitation URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
+
     // Send invitation email
     try {
       await sendOwnerInvitationEmail(invitation);
@@ -78,8 +82,16 @@ export async function createOwner(input: CreateOwnerInput) {
       // Don't fail the invitation creation if email fails
     }
 
+    // Log invitation URL clearly for manual sharing (visible in Vercel logs)
+    console.log('\n========================================');
+    console.log('🚀 OWNER INVITATION LINK GENERATED 🚀');
+    console.log('========================================');
+    console.log('Email:', invitation.email);
+    console.log('Verification Link:', acceptUrl);
+    console.log('========================================\n');
+
     revalidatePath('/dashboard/super/owners');
-    return { success: true, data: invitation };
+    return { success: true, data: invitation, invitationUrl: acceptUrl };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -95,6 +107,7 @@ async function sendOwnerInvitationEmail(invitation: any, _gymName?: string) {
 
     // TODO: Integrate with email service (Resend, SendGrid, etc.)
     // For now, log the invitation URL for manual sharing
+    // This will appear in Vercel server logs
     console.log('Owner Invitation Created', {
       email: invitation.email,
       acceptUrl,

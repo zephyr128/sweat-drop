@@ -158,10 +158,28 @@ export default function OwnersPage() {
       email: formData.email,
       username: formData.username,
       full_name: formData.full_name || undefined,
-    });
+    }) as { success: boolean; data?: any; invitationUrl?: string; error?: string };
 
     if (result.success) {
-      toast.success('Owner invitation sent successfully');
+      // Show invitation URL in console and toast
+      if (result.invitationUrl) {
+        console.log('\n========================================');
+        console.log('🚀 OWNER INVITATION LINK 🚀');
+        console.log('========================================');
+        console.log('Email:', formData.email);
+        console.log('Verification Link:', result.invitationUrl);
+        console.log('========================================\n');
+        
+        toast.success(
+          `Owner invitation created! Check browser console for the verification link.`,
+          {
+            duration: 10000,
+            description: `Link: ${result.invitationUrl}`,
+          }
+        );
+      } else {
+        toast.success('Owner invitation sent successfully');
+      }
       setShowCreateForm(false);
       setFormData({
         email: '',
