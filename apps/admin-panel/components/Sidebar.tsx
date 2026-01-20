@@ -76,8 +76,8 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [
       { href: `${base}/dashboard`, label: 'Dashboard', icon: '📊' },
-      { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
       { href: `${base}/workout-plans`, label: 'Workout Plans', icon: '💪' },
+      { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
       { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
       { href: `${base}/machines`, label: 'Machines', icon: '⚙️' },
       { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
@@ -97,8 +97,8 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [
       { href: `${base}/dashboard`, label: 'Dashboard', icon: '📊' },
-      { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
       { href: `${base}/workout-plans`, label: 'Workout Plans', icon: '💪' },
+      { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
       { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
       { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
     ];
