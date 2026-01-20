@@ -9,6 +9,13 @@
     "dev:admin": "pnpm --filter sweatdrop-admin-panel dev",
     "build:mobile": "pnpm --filter sweatdrop-mobile-app build",
     "build:admin": "pnpm --filter sweatdrop-admin-panel build",
+    "ios:prebuild": "expo prebuild apps/mobile-app --platform ios",
+    "ios:setup": "cd apps/mobile-app/ios && rm -rf Pods Podfile.lock && export LANG=en_US.UTF-8 && arch -arm64 pod install",
+    "ios:clean": "cd apps/mobile-app/ios && rm -rf Pods Podfile.lock ~/Library/Developer/Xcode/DerivedData/SweatDrop-* && echo 'Cleaned iOS build artifacts'",
+    "ios:xcode": "open apps/mobile-app/ios/SweatDrop.xcworkspace",
+    "ios:build": "pnpm ios:prebuild && pnpm ios:setup && pnpm ios:xcode",
+    "admin:build": "cd apps/admin-panel && pnpm build",
+    "admin:dev": "cd apps/admin-panel && pnpm dev",
     "lint": "pnpm --recursive lint",
     "type-check": "pnpm --recursive type-check"
   },
