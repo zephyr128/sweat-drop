@@ -2283,7 +2283,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNWorklets (0.7.1):
+  - RNWorklets (0.7.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2305,9 +2305,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNWorklets/worklets (= 0.7.1)
+    - RNWorklets/worklets (= 0.7.2)
     - Yoga
-  - RNWorklets/worklets (0.7.1):
+  - RNWorklets/worklets (0.7.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2329,9 +2329,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNWorklets/worklets/apple (= 0.7.1)
+    - RNWorklets/worklets/apple (= 0.7.2)
     - Yoga
-  - RNWorklets/worklets/apple (0.7.1):
+  - RNWorklets/worklets/apple (0.7.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2814,7 +2814,7 @@ SPEC CHECKSUMS:
   RNReanimated: 6d4435edde343bb7ccff654adfad56ec79ec1bce
   RNScreens: dd61bc3a3e6f6901ad833efa411917d44827cf51
   RNSVG: 2825ee146e0f6a16221e852299943e4cceef4528
-  RNWorklets: 2178532d06638290db8077e7b23f73eaa757d6e0
+  RNWorklets: 15716b1b791d530dbe0ca8392b971310fb6ab9f0
   SDWebImage: e9c98383c7572d713c1a0d7dd2783b10599b9838
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
@@ -2822,6 +2822,6 @@ SPEC CHECKSUMS:
   VisionCamera: 47f10351a1b6a8d251b90986ae72ca5f52331954
   Yoga: 3fd22c2cae22d7a2b0f0b538f55f7c2a17dc94d5
 
-PODFILE CHECKSUM: bf185e3fc256c21a8b6628fc7701282aac7ccaa7
+PODFILE CHECKSUM: 562532e71529326a63bf582822d8b2b36e933035
 
 COCOAPODS: 1.16.2
