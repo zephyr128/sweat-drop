@@ -58,5 +58,10 @@ module.exports = {
         origin: false,
       },
     },
+    experiments: {
+      // Alpha feature: Force autolinking to match Metro resolution (SDK 54+)
+      // Helps with duplicate native modules in monorepos
+      autolinkingModuleResolution: true,
+    },
   },
 };
