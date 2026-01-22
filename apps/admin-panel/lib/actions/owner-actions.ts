@@ -57,13 +57,14 @@ export async function createOwner(input: CreateOwnerInput) {
     }
 
     // Create invitation (no gym_id for general owner invitations)
+    // Note: gym_id can be NULL for gym_owner role invitations (see migration 20240101000038)
     const { data: invitation, error: invitationError } = await (supabaseAdmin
       .from('staff_invitations')
       .insert({
         email: input.email.toLowerCase().trim(),
         role: 'gym_owner',
         invited_by: profile.id,
-        gym_id: input.gym_id || null, // If gym_id provided, assign gym on acceptance
+        gym_id: input.gym_id || null, // Can be null for general owner invitations
       } as any) as any)
       .select()
       .single();
