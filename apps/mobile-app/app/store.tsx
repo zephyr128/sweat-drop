@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
@@ -241,9 +241,17 @@ export default function StoreScreen() {
                 activeOpacity={affordable ? 0.7 : 1}
               >
                 <View style={styles.rewardContent}>
-                  <Text style={styles.rewardEmoji}>
-                    {getRewardEmoji(reward.reward_type)}
-                  </Text>
+                  {reward.image_url ? (
+                    <Image
+                      source={{ uri: reward.image_url }}
+                      style={styles.rewardImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.rewardEmoji}>
+                      {getRewardEmoji(reward.reward_type)}
+                    </Text>
+                  )}
                   <View style={styles.rewardInfo}>
                     <Text style={styles.rewardName}>{reward.name}</Text>
                     {reward.description && (
@@ -365,6 +373,12 @@ const styles = StyleSheet.create({
   },
   rewardEmoji: {
     fontSize: 48,
+  },
+  rewardImage: {
+    width: 64,
+    height: 64,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   rewardInfo: {
     flex: 1,

@@ -88,14 +88,15 @@ export default function HomeScreen() {
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading } = useChallengeProgress(activeGymId, null);
   
-  // Get active challenges (not completed)
-  const activeChallenges = allChallenges.filter((c) => !c.is_completed);
+  // RPC function already filters by is_active = true and date range
+  // Show all challenges returned by RPC (they are all active)
+  const activeChallenges = allChallenges;
   
   // Show all challenges in horizontal scroll, plus "View All" button to see all challenges screen
   const displayedChallenges = activeChallenges;
   
   // For backward compatibility with existing code, keep primaryWeeklyChallenge
-  const weeklyChallenges = allChallenges.filter((c) => c.frequency === 'weekly' && !c.is_completed);
+  const weeklyChallenges = allChallenges.filter((c) => c.frequency === 'weekly');
   const primaryWeeklyChallenge = weeklyChallenges[0] || null;
 
   // Glow animation for QR button
