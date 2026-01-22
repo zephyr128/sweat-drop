@@ -65,7 +65,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
       setUploading(true);
       try {
         const file = acceptedFiles[0];
-        const result = await uploadFile(file, 'store-items', gymId);
+        const result = await uploadFile(file, 'images', gymId);
         setValue('imageUrl', result.url);
         setImagePreview(result.url);
         toast.success('Image uploaded successfully');
