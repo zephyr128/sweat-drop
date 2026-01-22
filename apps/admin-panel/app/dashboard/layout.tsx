@@ -1,5 +1,6 @@
 import { getCurrentProfile, getCurrentUser } from '@/lib/auth';
 import { Sidebar } from '@/components/Sidebar';
+import { Header } from '@/components/Header';
 
 // CRITICAL: Force dynamic rendering to avoid React.cache issues during build
 export const dynamic = 'force-dynamic';
@@ -70,14 +71,19 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#000000]">
+    <div className="min-h-screen bg-black">
       <Sidebar 
         role={profile.role} 
         currentGymId={profile.assigned_gym_id || profile.owner_id}
         username={profile.username}
         email={profile.email}
       />
-      <div className="w-full p-4 md:pl-[17rem] md:pr-8 md:pt-8 md:pb-8 transition-all min-h-screen">{children}</div>
+      <Header
+        role={profile.role}
+        username={profile.username}
+        email={profile.email}
+      />
+      <div className="w-full p-4 md:pl-[17rem] md:pr-8 md:pt-24 md:pb-8 transition-all min-h-screen">{children}</div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase-client';
 import { useRouter } from 'next/navigation';
 import { UserRole } from '@/lib/auth';
+import { MapPin, ChevronDown } from 'lucide-react';
 
 interface Gym {
   id: string;
@@ -132,17 +133,14 @@ export function GymSwitcher({ currentGymId, onGymChange, role }: GymSwitcherProp
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-left px-4 py-2 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white hover:bg-[#2A2A2A] transition-colors flex items-center justify-between"
+        className="w-full text-left px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white hover:bg-zinc-800 transition-colors flex items-center gap-2"
       >
-        <span className="text-sm truncate">{displayText}</span>
-        <svg
-          className={`w-4 h-4 text-[#808080] transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <MapPin className="w-4 h-4 text-zinc-500 flex-shrink-0" strokeWidth={1.5} />
+        <span className="text-sm truncate flex-1">{displayText}</span>
+        <ChevronDown
+          className={`w-4 h-4 text-zinc-500 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+          strokeWidth={1.5}
+        />
       </button>
 
       {isOpen && (
@@ -151,27 +149,30 @@ export function GymSwitcher({ currentGymId, onGymChange, role }: GymSwitcherProp
             className="fixed inset-0 z-10" 
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute top-full left-0 right-0 mt-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg shadow-lg z-20 max-h-64 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-950 border border-zinc-900 rounded-lg shadow-lg z-20 max-h-64 overflow-y-auto">
             {loading ? (
-              <div className="px-4 py-2 text-sm text-[#808080]">Loading...</div>
+              <div className="px-4 py-3 text-sm text-zinc-500">Loading...</div>
             ) : gyms.length === 0 ? (
-              <div className="px-4 py-2 text-sm text-[#808080]">No gyms available</div>
+              <div className="px-4 py-3 text-sm text-zinc-500">No gyms available</div>
             ) : (
               gyms.map((gym) => (
                 <button
                   key={gym.id}
                   onClick={() => handleGymSelect(gym.id)}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#1A1A1A] transition-colors ${
-                    selectedGymId === gym.id ? 'text-[#00E5FF] bg-[#00E5FF]/10' : 'text-white'
+                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-900 transition-colors ${
+                    selectedGymId === gym.id ? 'text-white bg-zinc-900' : 'text-zinc-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span>
-                      {gym.name}
-                      {gym.city && <span className="text-[#808080] ml-2">({gym.city})</span>}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-zinc-500" strokeWidth={1.5} />
+                      <span>
+                        {gym.name}
+                        {gym.city && <span className="text-zinc-500 ml-2">({gym.city})</span>}
+                      </span>
+                    </div>
                     {gym.is_suspended && role === 'superadmin' && (
-                      <span className="text-xs text-[#FF5252]">Suspended</span>
+                      <span className="text-xs text-red-400">Suspended</span>
                     )}
                   </div>
                 </button>

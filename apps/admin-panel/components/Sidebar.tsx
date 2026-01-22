@@ -2,10 +2,22 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { UserRole } from '@/lib/auth';
 import { GymSwitcher } from './GymSwitcher';
-import { supabase } from '@/lib/supabase-client';
+import {
+  Palette,
+  LayoutDashboard,
+  Dumbbell,
+  Trophy,
+  ShoppingBag,
+  Cpu,
+  Ticket,
+  Users,
+  Building2,
+  Settings,
+  Activity,
+} from 'lucide-react';
 
 interface SidebarProps {
   role: UserRole;
@@ -16,7 +28,6 @@ interface SidebarProps {
 
 export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [gymIdFromStorage, setGymIdFromStorage] = useState<string | null>(null);
   
@@ -45,89 +56,114 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
   // Use gymId from URL if available, then from sessionStorage, then fall back to prop
   const effectiveGymId = gymIdFromUrl || gymIdFromStorage || currentGymId;
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      // Clear session storage
-      if (typeof window !== 'undefined') {
-        sessionStorage.clear();
-      }
-      // Redirect to login
-      router.push('/login');
-      // Force hard reload to clear all state
-      window.location.href = '/login';
-    } catch (error) {
-      // Logout error - user will be redirected anyway
+  const isActive = (path: string) => {
+    if (!pathname) return false;
+    // Exact match
+    if (pathname === path) return true;
+    
+    // For superadmin, only use exact match to prevent parent links from being active
+    // when child routes are active
+    if (role === 'superadmin') {
+      return pathname === path;
     }
+    
+    // For other roles, allow parent path matching (e.g., /dashboard/gym/123 matches /dashboard/gym/123/dashboard)
+    return pathname.startsWith(path + '/');
   };
 
-  const isActive = (path: string) => pathname === path || pathname?.startsWith(path + '/');
+  // Icon component helper
+  const Icon = ({ icon: IconComponent, isActive: active }: { icon: any; isActive: boolean }) => (
+    <IconComponent
+      className={active ? 'text-[#00E5FF]' : 'text-zinc-500'}
+      size={18}
+      strokeWidth={1.5}
+    />
+  );
 
   // SuperAdmin navigation
   const superadminLinks = [
-    { href: '/dashboard/super', label: 'Gyms', icon: '🏋️' },
-    { href: '/dashboard/super/owners', label: 'Owners', icon: '👥' },
-    { href: '/dashboard/super/machines', label: 'Global Machines', icon: '⚙️' },
-    { href: '/dashboard/super/health', label: 'System Health', icon: '💚' },
+    { href: '/dashboard/super', label: 'Gyms', icon: Building2 },
+    { href: '/dashboard/super/owners', label: 'Owners', icon: Users },
+    { href: '/dashboard/super/machines', label: 'Global Machines', icon: Cpu },
+    { href: '/dashboard/super/health', label: 'System Health', icon: Activity },
   ];
 
-  // Gym Owner navigation (multi-gym access)
+  // Gym Owner navigation (multi-gym access) - organized in groups
   const gymOwnerLinks = (gymId?: string | null) => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
-    return [
-      { href: `${base}/dashboard`, label: 'Dashboard', icon: '📊' },
-      { href: `${base}/workout-plans`, label: 'Workout Plans', icon: '💪' },
-      { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
-      { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
-      { href: `${base}/machines`, label: 'Machines', icon: '⚙️' },
-      { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
-      { href: `${base}/team`, label: 'Team', icon: '👥' },
-    ];
+    return {
+      core: [
+        { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: Dumbbell },
+      ],
+      management: [
+        { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
+        { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
+        { href: `${base}/machines`, label: 'Machines', icon: Cpu },
+      ],
+      operations: [
+        { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
+        { href: `${base}/team`, label: 'Team', icon: Users },
+      ],
+    };
   };
 
   // Global links for gym owner (appear above gym switcher)
   const gymOwnerGlobalLinks = () => {
     return [
-      { href: '/dashboard/branding', label: 'Branding', icon: '🎨' },
+      { href: '/dashboard/branding', label: 'Branding', icon: Palette },
     ];
   };
 
-  // Gym Admin navigation (single gym access)
+  // Gym Admin navigation (single gym access) - organized in groups
   const gymAdminLinks = (gymId?: string | null) => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
-    return [
-      { href: `${base}/dashboard`, label: 'Dashboard', icon: '📊' },
-      { href: `${base}/workout-plans`, label: 'Workout Plans', icon: '💪' },
-      { href: `${base}/challenges`, label: 'Challenges', icon: '🏆' },
-      { href: `${base}/store`, label: 'Store Manager', icon: '🛒' },
-      { href: `${base}/redemptions`, label: 'Redemptions', icon: '🎫' },
-    ];
+    return {
+      core: [
+        { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: Dumbbell },
+      ],
+      management: [
+        { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
+        { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
+      ],
+      operations: [
+        { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
+      ],
+    };
   };
 
   // Receptionist navigation (redemption terminal only)
   const receptionistLinks = (gymId?: string | null) => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
-    return [
-      { href: `${base}/redemptions`, label: 'Redemption Terminal', icon: '🎫' },
-      { href: `${base}/dashboard`, label: 'Live Feed', icon: '📡' },
-    ];
+    return {
+      operations: [
+        { href: `${base}/redemptions`, label: 'Redemption Terminal', icon: Ticket },
+        { href: `${base}/dashboard`, label: 'Live Feed', icon: LayoutDashboard },
+      ],
+    };
   };
 
-  const links =
-    role === 'superadmin'
-      ? superadminLinks
-      : role === 'gym_owner'
-      ? gymOwnerLinks(effectiveGymId)
-      : role === 'gym_admin'
-      ? gymAdminLinks(effectiveGymId)
-      : receptionistLinks(effectiveGymId);
+  const getLinks = () => {
+    if (role === 'superadmin') {
+      return { core: superadminLinks };
+    } else if (role === 'gym_owner') {
+      return gymOwnerLinks(effectiveGymId);
+    } else if (role === 'gym_admin') {
+      return gymAdminLinks(effectiveGymId);
+    } else {
+      return receptionistLinks(effectiveGymId);
+    }
+  };
+
+  const links = getLinks();
 
   return (
     <>
       {/* Mobile menu button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg text-white hover:bg-[#1A1A1A] transition-colors"
+        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-white hover:bg-zinc-900 transition-colors"
         aria-label="Toggle menu"
       >
         <span className="text-2xl">{isOpen ? '✕' : '☰'}</span>
@@ -143,106 +179,132 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
-        className={`w-64 bg-[#0A0A0A] border-r border-[#1A1A1A] h-screen fixed left-0 top-0 overflow-y-auto z-50 transition-transform duration-300 ${
+        className={`w-64 bg-zinc-950 border-r border-zinc-900 h-screen fixed left-0 top-0 overflow-y-auto z-50 transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
-      <div className="p-6 border-b border-[#1A1A1A]">
+      <div className="p-6 border-b border-zinc-900">
         <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#00E5FF] to-[#00B8CC]">
           SweatDrop
         </h1>
-        <p className="text-xs text-[#808080] mt-1">Admin Panel</p>
+        <p className="text-xs text-zinc-500 mt-1">Admin Panel</p>
       </div>
 
       {/* Global links for gym owner (above gym switcher) */}
       {role === 'gym_owner' && (
-        <nav className="p-4 border-b border-[#1A1A1A] space-y-2">
-          <p className="text-xs text-[#808080] mb-2 uppercase tracking-wide">Global Settings</p>
-          {gymOwnerGlobalLinks().map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setIsOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                isActive(link.href)
-                  ? 'bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30'
-                  : 'text-[#B0B0B0] hover:bg-[#1A1A1A] hover:text-white'
-              }`}
-            >
-              <span className="text-xl">{link.icon}</span>
-              <span className="font-medium">{link.label}</span>
-            </Link>
-          ))}
+        <nav className="p-4 border-b border-zinc-900 space-y-2">
+          <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">GLOBAL</p>
+          {gymOwnerGlobalLinks().map((link) => {
+            const active = isActive(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                  active
+                    ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                    : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
+                }`}
+              >
+                <Icon icon={link.icon} isActive={active} />
+                <span className="text-sm font-medium">{link.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       )}
 
       {/* Gym Switcher at the top (only for gym owners) */}
       {role === 'gym_owner' && (
-        <div className="p-4 border-b border-[#1A1A1A]">
-          <p className="text-xs text-[#808080] mb-2 uppercase tracking-wide">Switch Location</p>
+        <div className="p-4 border-b border-zinc-900">
+          <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">LOCATION</p>
           <GymSwitcher currentGymId={effectiveGymId} role={role} />
         </div>
       )}
 
-      <nav className="p-4 space-y-2">
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            onClick={() => setIsOpen(false)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-              isActive(link.href)
-                ? 'bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30'
-                : 'text-[#B0B0B0] hover:bg-[#1A1A1A] hover:text-white'
-            }`}
-          >
-            <span className="text-xl">{link.icon}</span>
-            <span className="font-medium">{link.label}</span>
-          </Link>
-        ))}
-      </nav>
+      {/* Navigation Groups */}
+      <nav className="p-4 space-y-6">
+        {links.core && (
+          <div>
+            {role !== 'superadmin' && (
+              <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">CORE</p>
+            )}
+            <div className="space-y-1">
+              {links.core.map((link) => {
+                const active = isActive(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                      active
+                        ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                        : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
+                    }`}
+                  >
+                    <Icon icon={link.icon} isActive={active} />
+                    <span className="text-sm font-medium">{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-      {/* User Info Section */}
-      <div className="p-4 border-t border-[#1A1A1A] mt-auto">
-        <div className="mb-4 pb-4 border-b border-[#1A1A1A]">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-full bg-[#00E5FF]/20 flex items-center justify-center">
-              <span className="text-lg">👤</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white font-medium text-sm truncate">
-                {username || 'User'}
-              </p>
-              <p className="text-[#808080] text-xs truncate">
-                {email || 'No email'}
-              </p>
+        {links.management && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">MANAGEMENT</p>
+            <div className="space-y-1">
+              {links.management.map((link) => {
+                const active = isActive(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                      active
+                        ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                        : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
+                    }`}
+                  >
+                    <Icon icon={link.icon} isActive={active} />
+                    <span className="text-sm font-medium">{link.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           </div>
-          <div className="mt-2">
-            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-              role === 'superadmin' 
-                ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
-                : role === 'gym_owner'
-                ? 'bg-[#00B8CC]/20 text-[#00B8CC]'
-                : role === 'gym_admin'
-                ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
-                : 'bg-[#FF9100]/20 text-[#FF9100]'
-            }`}>
-              {role === 'superadmin' ? 'Super Admin' :
-               role === 'gym_owner' ? 'Gym Owner' :
-               role === 'gym_admin' ? 'Gym Admin' :
-               role === 'receptionist' ? 'Receptionist' : 'User'}
-            </span>
+        )}
+
+        {links.operations && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">OPERATIONS</p>
+            <div className="space-y-1">
+              {links.operations.map((link) => {
+                const active = isActive(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                      active
+                        ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                        : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
+                    }`}
+                  >
+                    <Icon icon={link.icon} isActive={active} />
+                    <span className="text-sm font-medium">{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[#FF5252] hover:bg-[#FF5252]/10 hover:border border-transparent hover:border-[#FF5252]/30 transition-all"
-        >
-          <span className="text-xl">🚪</span>
-          <span className="font-medium">Logout</span>
-        </button>
-      </div>
+        )}
+      </nav>
     </aside>
     </>
   );
