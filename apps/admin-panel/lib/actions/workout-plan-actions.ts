@@ -268,6 +268,11 @@ interface SaveWorkoutPlanInput {
   access_type: 'free' | 'membership_required' | 'paid_one_time';
   price: number;
   currency: string;
+  template_goal?: string;
+  template_structure?: string;
+  template_equipment?: string;
+  difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  estimated_duration_minutes?: number;
   items: Array<{
     order_index: number;
     exercise_name: string;
@@ -328,6 +333,11 @@ export async function saveWorkoutPlan(input: SaveWorkoutPlanInput): Promise<Save
       access_level: 'gym_members_only', // Default
       price: input.access_type === 'paid_one_time' ? input.price : 0,
       currency: input.access_type === 'paid_one_time' ? input.currency : 'USD',
+      template_goal: input.template_goal || null,
+      template_structure: input.template_structure || null,
+      template_equipment: input.template_equipment || null,
+      difficulty_level: input.difficulty_level || null,
+      estimated_duration_minutes: input.estimated_duration_minutes || null,
       is_active: true,
     };
 
