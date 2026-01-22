@@ -9,7 +9,10 @@ import {
   applyWorkoutTemplate
 } from '@/lib/actions/workout-plan-actions';
 import { WORKOUT_TEMPLATES, filterTemplates, type TemplateGoal, type TemplateStructure, type TemplateEquipment } from '@/lib/utils/workout-templates';
-import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles } from 'lucide-react';
+import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles, GripVertical } from 'lucide-react';
+import { MachineLibrary } from './MachineLibrary';
+import { WorkoutConstructor } from './WorkoutConstructor';
+import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors, rectIntersection } from '@dnd-kit/core';
 
 interface WorkoutPlan {
   id: string;
@@ -62,6 +65,11 @@ interface PlanFormData {
   access_type: 'free' | 'membership_required' | 'paid_one_time';
   price: number;
   currency: string;
+  template_goal?: TemplateGoal | null;
+  template_structure?: TemplateStructure | null;
+  template_equipment?: TemplateEquipment | null;
+  difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | 'expert' | null;
+  estimated_duration_minutes?: number | null;
   items: Omit<WorkoutPlanItem, 'id' | 'plan_id'>[];
 }
 
@@ -81,6 +89,18 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
     equipment?: TemplateEquipment;
   }>({});
 
+  // Drag & Drop state
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [draggedMachine, setDraggedMachine] = useState<Machine | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag starts
+      },
+    })
+  );
+
   // Form state
   const [formData, setFormData] = useState<PlanFormData>({
     name: '',
@@ -88,6 +108,11 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
     access_type: 'free',
     price: 0,
     currency: 'USD',
+    template_goal: null,
+    template_structure: null,
+    template_equipment: null,
+    difficulty_level: null,
+    estimated_duration_minutes: null,
     items: [],
   });
 
@@ -99,6 +124,11 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
       access_type: 'free',
       price: 0,
       currency: 'USD',
+      template_goal: null,
+      template_structure: null,
+      template_equipment: null,
+      difficulty_level: null,
+      estimated_duration_minutes: null,
       items: [],
     });
     setIsDialogOpen(true);
@@ -113,6 +143,11 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
       access_type: plan.access_type as 'free' | 'membership_required' | 'paid_one_time',
       price: plan.price || 0,
       currency: plan.currency || 'USD',
+      template_goal: (plan as any).template_goal as TemplateGoal | null || null,
+      template_structure: (plan as any).template_structure as TemplateStructure | null || null,
+      template_equipment: (plan as any).template_equipment as TemplateEquipment | null || null,
+      difficulty_level: plan.difficulty_level as 'beginner' | 'intermediate' | 'advanced' | 'expert' | null || null,
+      estimated_duration_minutes: plan.estimated_duration_minutes || null,
       items: (plan.items || []).sort((a, b) => a.order_index - b.order_index).map(item => ({
         order_index: item.order_index,
         exercise_name: item.exercise_name,
@@ -256,6 +291,108 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
       ...formData,
       items: newItems,
     });
+  };
+
+  // Drag & Drop handlers
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    setActiveId(active.id as string);
+
+    // Check if dragging a machine
+    if (active.data.current?.type === 'machine') {
+      setDraggedMachine(active.data.current.machine as Machine);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    setDraggedMachine(null);
+
+    if (!over) return;
+
+    // Case 1: Dropping a machine into the constructor
+    if (active.data.current?.type === 'machine' && over.id === 'workout-constructor') {
+      const machine = active.data.current.machine as Machine;
+      
+      // Create new item from machine
+      const newItem: Omit<WorkoutPlanItem, 'id' | 'plan_id'> = {
+        order_index: formData.items.length,
+        exercise_name: machine.name,
+        exercise_description: null,
+        target_machine_type: machine.type === 'Smart' || machine.name.toLowerCase().includes('smart') ? 'Smart' : machine.type,
+        target_metric: 'reps',
+        target_value: 10,
+        target_unit: 'reps',
+        rest_seconds: 60,
+        sets: 3,
+        instruction_video_url: null,
+        target_machine_id: machine.type === 'Smart' || machine.name.toLowerCase().includes('smart') ? machine.id : null,
+        smart_progression_enabled: machine.type === 'Smart' || machine.name.toLowerCase().includes('smart'),
+      };
+
+      setFormData({
+        ...formData,
+        items: [...formData.items, newItem],
+      });
+      return;
+    }
+
+    // Case 2: Reordering items within constructor
+    // Check if both are items (either by ID pattern or data type)
+    const activeIdStr = active.id.toString();
+    const overIdStr = over.id.toString();
+    const activeData = active.data.current;
+    const overData = over.data.current;
+    
+    // Try to get index from data first, then fall back to parsing ID
+    let oldIndex: number | null = null;
+    let newIndex: number | null = null;
+    
+    if (activeData?.type === 'item' && activeData?.index !== undefined) {
+      oldIndex = activeData.index as number;
+    } else if (activeIdStr.startsWith('item-')) {
+      oldIndex = parseInt(activeIdStr.replace('item-', ''), 10);
+    }
+    
+    if (overData?.type === 'item' && overData?.index !== undefined) {
+      newIndex = overData.index as number;
+    } else if (overIdStr.startsWith('item-')) {
+      newIndex = parseInt(overIdStr.replace('item-', ''), 10);
+    }
+    
+    if (oldIndex !== null && newIndex !== null) {
+      if (
+        !isNaN(oldIndex) && 
+        !isNaN(newIndex) && 
+        oldIndex >= 0 && 
+        newIndex >= 0 && 
+        oldIndex < formData.items.length && 
+        newIndex < formData.items.length &&
+        oldIndex !== newIndex
+      ) {
+        // Manual array move implementation (in case arrayMove is not available)
+        const newItems = [...formData.items];
+        const [movedItem] = newItems.splice(oldIndex, 1);
+        newItems.splice(newIndex, 0, movedItem);
+        
+        // Recalculate order_index
+        const reorderedItems = newItems.map((item, index) => ({
+          ...item,
+          order_index: index,
+        }));
+        
+        setFormData({
+          ...formData,
+          items: reorderedItems,
+        });
+      }
+    }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setDraggedMachine(null);
   };
 
   const handleSave = async () => {
@@ -620,8 +757,140 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                 )}
               </div>
 
-              {/* Exercises Sequencer */}
+              {/* Template Categorization */}
               <div className="border-t border-[#1A1A1A] pt-6">
+                <h3 className="text-lg font-bold text-white mb-4">Template Categorization</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Goal</label>
+                    <select
+                      value={formData.template_goal || ''}
+                      onChange={(e) => setFormData({ ...formData, template_goal: e.target.value as TemplateGoal || null })}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    >
+                      <option value="">Select Goal</option>
+                      <option value="Strength">Strength</option>
+                      <option value="Hypertrophy">Hypertrophy</option>
+                      <option value="Fat loss">Fat loss</option>
+                      <option value="Conditioning">Conditioning</option>
+                      <option value="Rehab">Rehab</option>
+                      <option value="Beginner">Beginner</option>
+                      <option value="Advanced">Advanced</option>
+                      <option value="Powerlifting">Powerlifting</option>
+                      <option value="Functional">Functional</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Structure</label>
+                    <select
+                      value={formData.template_structure || ''}
+                      onChange={(e) => setFormData({ ...formData, template_structure: e.target.value as TemplateStructure || null })}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    >
+                      <option value="">Select Structure</option>
+                      <option value="Full body">Full body</option>
+                      <option value="Upper/Lower">Upper/Lower</option>
+                      <option value="Push Pull Legs">Push Pull Legs</option>
+                      <option value="4-day split">4-day split</option>
+                      <option value="5-day split">5-day split</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Equipment</label>
+                    <select
+                      value={formData.template_equipment || ''}
+                      onChange={(e) => setFormData({ ...formData, template_equipment: e.target.value as TemplateEquipment || null })}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    >
+                      <option value="">Select Equipment</option>
+                      <option value="Machines only (Smart machines)">Machines only (Smart machines)</option>
+                      <option value="Free weights">Free weights</option>
+                      <option value="Mixed">Mixed</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Difficulty Level</label>
+                    <select
+                      value={formData.difficulty_level || ''}
+                      onChange={(e) => setFormData({ ...formData, difficulty_level: e.target.value as 'beginner' | 'intermediate' | 'advanced' | 'expert' || null })}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    >
+                      <option value="">Select Difficulty</option>
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                      <option value="expert">Expert</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Estimated Duration (minutes)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={formData.estimated_duration_minutes || ''}
+                      onChange={(e) => setFormData({ ...formData, estimated_duration_minutes: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                      placeholder="e.g., 45"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Exercises - Drag & Drop Constructor */}
+              <div className="border-t border-[#1A1A1A] pt-6">
+                <h3 className="text-lg font-bold text-white mb-4">Workout Plan Builder</h3>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={rectIntersection}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                >
+                  <div className="grid grid-cols-2 gap-6" style={{ minHeight: '500px' }}>
+                    {/* Machine Library */}
+                    <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg p-4">
+                      <MachineLibrary machines={machines} />
+                    </div>
+
+                    {/* Workout Constructor */}
+                    <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg p-4">
+                      <WorkoutConstructor
+                        items={formData.items}
+                        machines={machines}
+                        onItemsChange={(newItems) => setFormData({ ...formData, items: newItems })}
+                        onItemUpdate={updateItem}
+                        onItemRemove={removeItem}
+                      />
+                    </div>
+                  </div>
+
+                  <DragOverlay>
+                    {activeId && draggedMachine ? (
+                      <div className="bg-[#1A1A1A] border border-[#00E5FF] rounded-lg p-3 opacity-90 shadow-lg">
+                        <div className="flex items-center gap-3">
+                          <GripVertical className="w-4 h-4 text-[#00E5FF]" />
+                          <div>
+                            <div className="text-sm font-medium text-white">{draggedMachine.name}</div>
+                            <div className="text-xs text-[#808080]">{draggedMachine.type}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : activeId ? (
+                      <div className="bg-[#1A1A1A] border border-[#00E5FF] rounded-lg p-4 opacity-90 shadow-lg">
+                        <div className="flex items-center gap-3">
+                          <GripVertical className="w-5 h-5 text-[#00E5FF]" />
+                          <div className="text-sm text-white">Moving exercise...</div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              </div>
+
+              {/* Legacy Exercises Sequencer (Hidden, kept for reference) */}
+              <div className="hidden border-t border-[#1A1A1A] pt-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-white">Exercises</h3>
                   <button
