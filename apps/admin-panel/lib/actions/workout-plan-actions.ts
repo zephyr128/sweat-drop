@@ -272,16 +272,17 @@ interface SaveWorkoutPlanInput {
     order_index: number;
     exercise_name: string;
     exercise_description?: string;
-    target_machine_type: 'treadmill' | 'bike';
+      target_machine_type: 'treadmill' | 'bike' | 'Smart';
     target_metric: string;
     target_value: number;
     target_unit?: string;
     rest_seconds?: number;
     sets?: number;
     instruction_video_url?: string;
-    target_machine_id?: string | null;
-  }>;
-}
+      target_machine_id?: string | null;
+      smart_progression_enabled?: boolean;
+    }>;
+  }
 
 type SaveWorkoutPlanResult = 
   | { success: true; data: any }
@@ -386,6 +387,8 @@ export async function saveWorkoutPlan(input: SaveWorkoutPlanInput): Promise<Save
       sets: item.sets || 1,
       instruction_video_url: item.instruction_video_url?.trim() || null,
       target_machine_id: item.target_machine_id || null,
+      smart_progression_enabled: item.smart_progression_enabled || false,
+      base_target_value: item.target_value, // Store original for progression
     }));
 
     if (itemsToInsert.length > 0) {
@@ -415,6 +418,123 @@ export async function saveWorkoutPlan(input: SaveWorkoutPlanInput): Promise<Save
   } catch (error: any) {
     console.error('[saveWorkoutPlan] Error:', error);
     return { success: false, error: error.message || 'Failed to save workout plan' };
+  }
+}
+
+/**
+ * Apply a workout template to a gym
+ * Creates a new workout plan based on a template
+ */
+export async function applyWorkoutTemplate(
+  gymId: string,
+  templateId: string,
+  templateData: {
+    name: string;
+    description: string;
+    goal: string;
+    structure: string;
+    equipment: string;
+    difficulty_level: string;
+    estimated_duration_minutes: number;
+    items: Array<{
+      order_index: number;
+      exercise_name: string;
+      exercise_description?: string;
+      target_machine_type: 'treadmill' | 'bike' | 'Smart';
+      target_metric: string;
+      target_value: number;
+      target_unit?: string;
+      rest_seconds: number;
+      sets: number;
+      smart_progression_enabled?: boolean;
+      target_machine_id?: string | null;
+      instruction_video_url?: string;
+    }>;
+  }
+) {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
+
+    // 1. Create the workout plan from template
+    const planData: any = {
+      gym_id: gymId,
+      name: templateData.name,
+      description: templateData.description || null,
+      access_type: 'free', // Templates default to free
+      access_level: 'gym_members_only',
+      price: 0,
+      currency: 'USD',
+      difficulty_level: templateData.difficulty_level || null,
+      estimated_duration_minutes: templateData.estimated_duration_minutes || null,
+      category: templateData.goal || null,
+      template_goal: templateData.goal || null,
+      template_structure: templateData.structure || null,
+      template_equipment: templateData.equipment || null,
+      is_template: false, // This is an instance, not a template
+      is_active: true,
+    };
+
+    const insertResult = await supabaseAdmin
+      .from('workout_plans')
+      .insert(planData as any)
+      .select('id')
+      .single();
+    
+    const { data: newPlan, error: planError } = insertResult as { data: { id: string } | null; error: any };
+
+    if (planError) throw planError;
+    if (!newPlan) throw new Error('Failed to create plan from template');
+
+    const planId = newPlan.id;
+
+    // 2. Create plan items
+    const itemsToInsert = templateData.items.map((item) => ({
+      plan_id: planId,
+      order_index: item.order_index,
+      exercise_name: item.exercise_name,
+      exercise_description: item.exercise_description || null,
+      target_machine_type: item.target_machine_type,
+      target_metric: item.target_metric,
+      target_value: item.target_value,
+      target_unit: item.target_unit || null,
+      rest_seconds: item.rest_seconds || 0,
+      sets: item.sets || 1,
+      target_machine_id: item.target_machine_id || null, // Will be set by admin if Smart type
+      instruction_video_url: item.instruction_video_url || null,
+      smart_progression_enabled: item.smart_progression_enabled || false,
+      base_target_value: item.target_value, // Store original target for progression
+    }));
+
+    if (itemsToInsert.length > 0) {
+      const { error: insertError } = await supabaseAdmin
+        .from('workout_plan_items')
+        .insert(itemsToInsert as any);
+
+      if (insertError) throw insertError;
+    }
+
+    // 3. Fetch the complete plan with items
+    const { data: refreshedPlan, error: refreshError } = await supabaseAdmin
+      .from('workout_plans')
+      .select(`
+        *,
+        items:workout_plan_items(*)
+      `)
+      .eq('id', planId)
+      .single();
+
+    if (refreshError) throw refreshError;
+    if (!refreshedPlan) throw new Error('Failed to fetch created plan');
+
+    revalidatePath(`/dashboard/gym/${gymId}/workout-plans`);
+
+    return { success: true, data: refreshedPlan };
+  } catch (error: any) {
+    console.error('[applyWorkoutTemplate] Error:', error);
+    return { success: false, error: error.message || 'Failed to apply workout template' };
   }
 }
 

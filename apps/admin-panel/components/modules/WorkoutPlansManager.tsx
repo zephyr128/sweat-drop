@@ -5,9 +5,11 @@ import { toast } from 'sonner';
 import { 
   deleteWorkoutPlan,
   toggleWorkoutPlanStatus,
-  saveWorkoutPlan
+  saveWorkoutPlan,
+  applyWorkoutTemplate
 } from '@/lib/actions/workout-plan-actions';
-import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save } from 'lucide-react';
+import { WORKOUT_TEMPLATES, filterTemplates, type TemplateGoal, type TemplateStructure, type TemplateEquipment } from '@/lib/utils/workout-templates';
+import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles } from 'lucide-react';
 
 interface WorkoutPlan {
   id: string;
@@ -38,6 +40,7 @@ interface WorkoutPlanItem {
   sets: number;
   instruction_video_url: string | null;
   target_machine_id: string | null;
+  smart_progression_enabled?: boolean;
 }
 
 interface Machine {
@@ -65,9 +68,18 @@ interface PlanFormData {
 export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPlansManagerProps) {
   const [plans, setPlans] = useState<WorkoutPlan[]>(initialPlans);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null);
   const [saving, setSaving] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  // Template filter state
+  const [templateFilter, setTemplateFilter] = useState<{
+    goal?: TemplateGoal;
+    structure?: TemplateStructure;
+    equipment?: TemplateEquipment;
+  }>({});
 
   // Form state
   const [formData, setFormData] = useState<PlanFormData>({
@@ -113,9 +125,58 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
         sets: item.sets || 1,
         instruction_video_url: item.instruction_video_url || '',
         target_machine_id: item.target_machine_id || null,
+        smart_progression_enabled: item.smart_progression_enabled || false,
       })),
     });
     setIsDialogOpen(true);
+  };
+
+  const handleApplyTemplate = async (templateId: string) => {
+    const template = WORKOUT_TEMPLATES.find(t => t.id === templateId);
+    if (!template) {
+      toast.error('Template not found');
+      return;
+    }
+
+    setApplyingTemplate(true);
+    try {
+      // Map Smart machine type items to actual machines if available
+      const itemsWithMachineMapping = template.items.map(item => {
+        if (item.target_machine_type === 'Smart') {
+          // Find a Smart machine in the gym (you may need to adjust this logic)
+          const smartMachine = machines.find(m => m.type === 'Smart' || m.name.toLowerCase().includes('smart'));
+          return {
+            ...item,
+            target_machine_id: smartMachine?.id || null,
+          };
+        }
+        return item;
+      });
+
+      const result = await applyWorkoutTemplate(gymId, templateId, {
+        name: template.name,
+        description: template.description,
+        goal: template.goal,
+        structure: template.structure,
+        equipment: template.equipment,
+        difficulty_level: template.difficulty_level,
+        estimated_duration_minutes: template.estimated_duration_minutes,
+        items: itemsWithMachineMapping,
+      });
+
+      if (result.success && result.data) {
+        setPlans([result.data as WorkoutPlan, ...plans]);
+        toast.success(`Template "${template.name}" applied successfully!`);
+        setIsTemplateDialogOpen(false);
+      } else {
+        toast.error(result.error || 'Failed to apply template');
+      }
+    } catch (error: any) {
+      console.error('[WorkoutPlansManager] Error applying template:', error);
+      toast.error(error.message || 'Failed to apply template');
+    } finally {
+      setApplyingTemplate(false);
+    }
   };
 
   const addItem = () => {
@@ -136,6 +197,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
           sets: 1,
           instruction_video_url: '',
           target_machine_id: null,
+          smart_progression_enabled: false,
         },
       ],
     });
@@ -249,6 +311,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
           sets: item.sets,
           instruction_video_url: (item.instruction_video_url ?? undefined) as string | undefined,
           target_machine_id: item.target_machine_id ?? undefined,
+          smart_progression_enabled: item.smart_progression_enabled || false,
         })),
       });
 
@@ -343,10 +406,23 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
     return machines.filter(m => m.type === type);
   };
 
+  const filteredTemplates = filterTemplates(
+    templateFilter.goal,
+    templateFilter.structure,
+    templateFilter.equipment
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header with Create Button */}
-      <div className="flex justify-end">
+      {/* Header with Create Buttons */}
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={() => setIsTemplateDialogOpen(true)}
+          className="px-6 py-3 bg-[#FFA500] text-black rounded-lg font-bold hover:bg-[#FF8C00] transition-colors flex items-center gap-2"
+        >
+          <Sparkles className="w-5 h-5" />
+          Apply Template
+        </button>
         <button
           onClick={openCreateDialog}
           className="px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors flex items-center gap-2"
@@ -615,6 +691,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                                 >
                                   <option value="bike">Bike</option>
                                   <option value="treadmill">Treadmill</option>
+                                  <option value="Smart">Smart Machine</option>
                                 </select>
                               </div>
                             </div>
@@ -650,7 +727,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                               </div>
                               <div>
                                 <label className="block text-xs font-medium text-[#808080] mb-1">
-                                  Machine
+                                  Machine {item.target_machine_type === 'Smart' && '(Required for Smart)'}
                                 </label>
                                 <select
                                   value={item.target_machine_id || ''}
@@ -658,15 +735,39 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                                     updateItem(index, 'target_machine_id', e.target.value || null)
                                   }
                                   className="w-full px-3 py-2 bg-[#121212] border border-[#1A1A1A] rounded-lg text-white text-sm focus:border-[#00E5FF] focus:outline-none"
+                                  required={item.target_machine_type === 'Smart'}
                                 >
-                                  <option value="">Any {item.target_machine_type}</option>
-                                  {getMachinesByType(item.target_machine_type).map((machine) => (
-                                    <option key={machine.id} value={machine.id}>
-                                      {machine.name}
-                                    </option>
-                                  ))}
+                                  <option value="">
+                                    {item.target_machine_type === 'Smart' 
+                                      ? 'Select Smart Machine' 
+                                      : `Any ${item.target_machine_type}`}
+                                  </option>
+                                  {item.target_machine_type === 'Smart' 
+                                    ? machines.filter(m => m.type === 'Smart' || m.name.toLowerCase().includes('smart')).map((machine) => (
+                                        <option key={machine.id} value={machine.id}>
+                                          {machine.name}
+                                        </option>
+                                      ))
+                                    : getMachinesByType(item.target_machine_type).map((machine) => (
+                                        <option key={machine.id} value={machine.id}>
+                                          {machine.name}
+                                        </option>
+                                      ))}
                                 </select>
                               </div>
+                              {item.target_machine_type === 'Smart' && (
+                                <div className="col-span-3">
+                                  <label className="flex items-center gap-2 text-xs font-medium text-[#808080]">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.smart_progression_enabled || false}
+                                      onChange={(e) => updateItem(index, 'smart_progression_enabled', e.target.checked)}
+                                      className="w-4 h-4 rounded border-[#1A1A1A] bg-[#121212] text-[#00E5FF] focus:ring-[#00E5FF]"
+                                    />
+                                    Enable SmartCoach AI Progression
+                                  </label>
+                                </div>
+                              )}
                             </div>
 
                             <div>
@@ -715,6 +816,134 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Selection Dialog */}
+      {isTemplateDialogOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-[#1A1A1A] rounded-xl p-8 max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Dialog Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">Apply Workout Template</h2>
+              <button
+                onClick={() => setIsTemplateDialogOpen(false)}
+                className="text-[#808080] hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Template Filters */}
+            <div className="mb-6 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Goal</label>
+                  <select
+                    value={templateFilter.goal || ''}
+                    onChange={(e) => setTemplateFilter({ ...templateFilter, goal: e.target.value as TemplateGoal || undefined })}
+                    className="w-full px-4 py-2 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="">All Goals</option>
+                    <option value="Strength">Strength</option>
+                    <option value="Hypertrophy">Hypertrophy</option>
+                    <option value="Fat loss">Fat loss</option>
+                    <option value="Conditioning">Conditioning</option>
+                    <option value="Rehab">Rehab</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Powerlifting">Powerlifting</option>
+                    <option value="Functional">Functional</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Structure</label>
+                  <select
+                    value={templateFilter.structure || ''}
+                    onChange={(e) => setTemplateFilter({ ...templateFilter, structure: e.target.value as TemplateStructure || undefined })}
+                    className="w-full px-4 py-2 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="">All Structures</option>
+                    <option value="Full body">Full body</option>
+                    <option value="Upper/Lower">Upper/Lower</option>
+                    <option value="Push Pull Legs">Push Pull Legs</option>
+                    <option value="4-day split">4-day split</option>
+                    <option value="5-day split">5-day split</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Equipment</label>
+                  <select
+                    value={templateFilter.equipment || ''}
+                    onChange={(e) => setTemplateFilter({ ...templateFilter, equipment: e.target.value as TemplateEquipment || undefined })}
+                    className="w-full px-4 py-2 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="">All Equipment</option>
+                    <option value="Machines only (Smart machines)">Machines only (Smart machines)</option>
+                    <option value="Free weights">Free weights</option>
+                    <option value="Mixed">Mixed</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Templates Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {filteredTemplates.length === 0 ? (
+                <div className="col-span-full text-center py-8 bg-[#1A1A1A] rounded-lg">
+                  <p className="text-[#808080]">No templates match your filters</p>
+                </div>
+              ) : (
+                filteredTemplates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg p-4 hover:border-[#00E5FF]/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-1">{template.name}</h3>
+                        <p className="text-sm text-[#808080] mb-2">{template.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span className="px-2 py-1 bg-[#00E5FF]/10 text-[#00E5FF] rounded-full text-xs">
+                        {template.goal}
+                      </span>
+                      <span className="px-2 py-1 bg-[#FFA500]/10 text-[#FFA500] rounded-full text-xs">
+                        {template.structure}
+                      </span>
+                      <span className="px-2 py-1 bg-[#4CAF50]/10 text-[#4CAF50] rounded-full text-xs">
+                        {template.equipment}
+                      </span>
+                      <span className="px-2 py-1 bg-[#808080]/10 text-[#808080] rounded-full text-xs">
+                        {template.difficulty_level}
+                      </span>
+                    </div>
+                    <div className="text-sm text-[#808080] mb-4">
+                      {template.items.length} exercises • {template.estimated_duration_minutes} min
+                    </div>
+                    <button
+                      onClick={() => handleApplyTemplate(template.id)}
+                      disabled={applyingTemplate}
+                      className="w-full px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {applyingTemplate ? 'Applying...' : 'Apply to Gym'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Dialog Actions */}
+            <div className="flex justify-end pt-6 border-t border-[#1A1A1A]">
+              <button
+                onClick={() => setIsTemplateDialogOpen(false)}
+                className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
