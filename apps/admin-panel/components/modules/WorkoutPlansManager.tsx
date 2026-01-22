@@ -23,6 +23,7 @@ interface WorkoutPlan {
   estimated_duration_minutes: number | null;
   category: string | null;
   is_active: boolean;
+  template_goal?: string | null;
   items?: WorkoutPlanItem[];
 }
 
@@ -412,105 +413,153 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
     templateFilter.equipment
   );
 
+  const getStatusBadge = (templateGoal: string | null | undefined) => {
+    if (!templateGoal) return null;
+    const badges: Record<string, { label: string; className: string }> = {
+      Strength: { label: 'Strength', className: 'bg-red-500/10 text-red-400' },
+      Hypertrophy: { label: 'Hypertrophy', className: 'bg-purple-500/10 text-purple-400' },
+      'Fat loss': { label: 'Fat Loss', className: 'bg-orange-500/10 text-orange-400' },
+      Conditioning: { label: 'Conditioning', className: 'bg-blue-500/10 text-blue-400' },
+      Rehab: { label: 'Rehab', className: 'bg-green-500/10 text-green-400' },
+      Beginner: { label: 'Beginner', className: 'bg-cyan-500/10 text-cyan-400' },
+      Advanced: { label: 'Advanced', className: 'bg-yellow-500/10 text-yellow-400' },
+      Powerlifting: { label: 'Powerlifting', className: 'bg-pink-500/10 text-pink-400' },
+      Functional: { label: 'Functional', className: 'bg-indigo-500/10 text-indigo-400' },
+    };
+    return badges[templateGoal] || { label: templateGoal, className: 'bg-zinc-500/10 text-zinc-400' };
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header with Create Buttons */}
-      <div className="flex justify-end gap-3">
-        <button
-          onClick={() => setIsTemplateDialogOpen(true)}
-          className="px-6 py-3 bg-[#FFA500] text-black rounded-lg font-bold hover:bg-[#FF8C00] transition-colors flex items-center gap-2"
-        >
-          <Sparkles className="w-5 h-5" />
-          Apply Template
-        </button>
-        <button
-          onClick={openCreateDialog}
-          className="px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          New Plan
-        </button>
-      </div>
+      {/* Plans Table */}
+      <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden">
+        {/* Table Header with Actions */}
+        <div className="p-6 border-b border-zinc-900 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white">SmartCoach Plans Overview</h2>
+            <p className="text-sm text-zinc-500 mt-1">Manage all workout plans for your gym</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsTemplateDialogOpen(true)}
+              className="px-4 py-2 bg-yellow-400  text-black  rounded-lg font-medium hover:bg-yellow-500 transition-colors flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              Apply Template
+            </button>
+            <button
+              onClick={openCreateDialog}
+              className="px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-medium hover:bg-[#00B8CC] transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Plan
+            </button>
+          </div>
+        </div>
 
-      {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Table */}
         {plans.length === 0 ? (
-          <div className="col-span-full bg-[#121212] border border-[#1A1A1A] rounded-xl p-12 text-center">
-            <p className="text-[#808080]">No workout plans yet. Create your first plan!</p>
+          <div className="p-12 text-center">
+            <p className="text-zinc-500">No workout plans yet. Create your first plan!</p>
           </div>
         ) : (
-          plans.map((plan) => {
-            const badge = getAccessTypeBadge(plan.access_type);
-            return (
-              <div
-                key={plan.id}
-                className="bg-[#121212] border border-[#1A1A1A] rounded-xl overflow-hidden hover:border-[#00E5FF]/30 transition-colors"
-              >
-                <div className="p-6">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-xl font-bold text-white">{plan.name}</h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${badge.className}`}>
-                          {badge.label}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-zinc-900">
+                  <th className="text-left p-4 text-sm font-medium text-zinc-500">Plan Name</th>
+                  <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                  <th className="text-left p-4 text-sm font-medium text-zinc-500">Access Type</th>
+                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Exercises</th>
+                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Duration</th>
+                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Price</th>
+                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plans.map((plan) => {
+                  const accessBadge = getAccessTypeBadge(plan.access_type);
+                  const statusBadge = getStatusBadge(plan.template_goal);
+                  return (
+                    <tr
+                      key={plan.id}
+                      className="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors"
+                    >
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-white">{plan.name}</p>
+                          {statusBadge && (
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge.className}`}>
+                              {statusBadge.label}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          plan.is_active 
+                            ? 'bg-green-500/10 text-green-400' 
+                            : 'bg-zinc-500/10 text-zinc-500'
+                        }`}>
+                          {plan.is_active ? 'Active' : 'Inactive'}
                         </span>
-                      </div>
-                      {plan.description && (
-                        <p className="text-sm text-[#808080] mb-3 line-clamp-2">{plan.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 ml-4">
-                      <button
-                        onClick={() => openEditDialog(plan)}
-                        className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleToggleStatus(plan.id, plan.is_active)}
-                        className={`p-2 transition-colors ${
-                          plan.is_active ? 'text-[#00E5FF]' : 'text-[#808080] hover:text-[#808080]'
-                        }`}
-                        title={plan.is_active ? 'Deactivate' : 'Activate'}
-                      >
-                        <Power className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeletePlan(plan.id)}
-                        disabled={deletingId === plan.id}
-                        className="p-2 text-[#808080] hover:text-[#FF5252] transition-colors disabled:opacity-50"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Price */}
-                  {plan.access_type === 'paid_one_time' && plan.price > 0 && (
-                    <div className="mb-4">
-                      <p className="text-2xl font-bold text-white">
-                        {formatCurrency(plan.price, plan.currency)}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Exercises Count */}
-                  <div className="flex items-center gap-2 text-sm text-[#808080]">
-                    <span>{plan.items?.length || 0} exercises</span>
-                    {plan.estimated_duration_minutes && (
-                      <>
-                        <span>•</span>
-                        <span>{plan.estimated_duration_minutes} min</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${accessBadge.className}`}>
+                          {accessBadge.label}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        <p className="text-white">{plan.items?.length || 0} exercises</p>
+                      </td>
+                      <td className="p-4 text-right">
+                        <p className="text-white">
+                          {plan.estimated_duration_minutes ? `${plan.estimated_duration_minutes} min` : '-'}
+                        </p>
+                      </td>
+                      <td className="p-4 text-right">
+                        <p className="text-white">
+                          {plan.access_type === 'paid_one_time' && plan.price > 0
+                            ? formatCurrency(plan.price, plan.currency)
+                            : 'Free'}
+                        </p>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openEditDialog(plan)}
+                            className="p-2 text-zinc-500 hover:text-[#00E5FF] transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" strokeWidth={1.5} />
+                          </button>
+                          <button
+                            onClick={() => handleToggleStatus(plan.id, plan.is_active)}
+                            className={`p-2 transition-colors ${
+                              plan.is_active 
+                                ? 'text-[#00E5FF] hover:text-[#00B8CC]' 
+                                : 'text-zinc-500 hover:text-zinc-400'
+                            }`}
+                            title={plan.is_active ? 'Deactivate' : 'Activate'}
+                          >
+                            <Power className="w-4 h-4" strokeWidth={1.5} />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePlan(plan.id)}
+                            disabled={deletingId === plan.id}
+                            className="p-2 text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

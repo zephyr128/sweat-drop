@@ -13,7 +13,6 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
 import { WorkoutPlansManager } from '@/components/modules/WorkoutPlansManager';
-import { SmartCoachOverview } from '@/components/modules/SmartCoachOverview';
 
 interface WorkoutPlansPageProps {
   params: Promise<{ id: string }>;
@@ -53,6 +52,7 @@ interface WorkoutPlan {
   estimated_duration_minutes: number | null;
   category: string | null;
   is_active: boolean;
+  template_goal?: string | null;
   items?: WorkoutPlanItem[];
 }
 
@@ -156,7 +156,6 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
         items:workout_plan_items(*)
       `)
       .eq('gym_id', id)
-      .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (plansError) {
@@ -195,17 +194,8 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
         <p className="text-[#808080]">Monitor workout plans, active sessions, and revenue</p>
       </div>
 
-      {/* Overview with Statistics */}
-      <div className="mb-8">
-        <SmartCoachOverview gymId={id} />
-      </div>
-
-      {/* Plans Manager */}
-      <div className="mt-12">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-white mb-2">Workout Plans Manager</h2>
-          <p className="text-[#808080]">Create and manage workout plans for your gym members</p>
-        </div>
+      {/* Plans Manager with Overview Table */}
+      <div>
         <WorkoutPlansManager 
           gymId={id} 
           initialPlans={plans} 
