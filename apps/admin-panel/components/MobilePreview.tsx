@@ -1,5 +1,7 @@
 'use client';
 
+import { Droplet } from 'lucide-react';
+
 interface MobilePreviewProps {
   primaryColor: string;
   logoUrl?: string | null;
@@ -46,7 +48,9 @@ export function MobilePreview({
                   color: primaryColor,
                 }}
               >
-                1,250 💧
+                <span className="flex items-center gap-1">
+                  1,250 <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                </span>
               </div>
             </div>
 
@@ -76,7 +80,7 @@ export function MobilePreview({
                     border: `2px solid ${primaryColor}`,
                   }}
                 >
-                  <span className="text-2xl">💧</span>
+                  <Droplet className="w-6 h-6" strokeWidth={1.5} />
                 </div>
               </div>
             </div>

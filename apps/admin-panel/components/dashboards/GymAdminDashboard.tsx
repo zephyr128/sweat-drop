@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import { StatsCard } from '../StatsCard';
+import { Palette, Trophy, ShoppingBag } from 'lucide-react';
 
 interface GymAdminDashboardProps {
   gymId: string;
@@ -48,30 +49,34 @@ export async function GymAdminDashboard({ gymId }: GymAdminDashboardProps) {
         <p className="text-[#808080]">{gym?.city && `${gym.city}, ${gym.country}`}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatsCard
           title="Gym Members"
           value={gymUsers || 0}
-          icon="👥"
-          gradient="cyan"
+          icon="Users"
+          accent="cyan"
+          priority="primary"
         />
         <StatsCard
           title="Active Challenges"
           value={activeChallenges?.length || 0}
-          icon="🏆"
-          gradient="cyan"
+          icon="Trophy"
+          accent="amber"
+          priority="secondary"
         />
         <StatsCard
           title="Drops Earned (30d)"
           value={totalDropsEarned}
-          icon="💧"
-          gradient="cyan"
+          icon="Droplet"
+          accent="cyan"
+          priority="secondary"
         />
         <StatsCard
           title="Drops Spent (30d)"
           value={totalDropsSpent}
-          icon="🛒"
-          gradient="orange"
+          icon="ShoppingBag"
+          accent="rose"
+          priority="secondary"
         />
       </div>
 
@@ -81,21 +86,24 @@ export async function GymAdminDashboard({ gymId }: GymAdminDashboardProps) {
           <div className="space-y-3">
             <a
               href={`/dashboard/gym/${gymId}/branding`}
-              className="block p-4 bg-[#1A1A1A] rounded-lg hover:bg-[#00E5FF]/10 border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-all"
+              className="flex items-center gap-2 p-4 bg-[#1A1A1A] rounded-lg hover:bg-[#00E5FF]/10 border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-all"
             >
-              <span className="text-[#00E5FF] font-medium">🎨 Update Branding</span>
+              <Palette className="w-4 h-4 text-[#00E5FF]" strokeWidth={1.5} />
+              <span className="text-[#00E5FF] font-medium">Update Branding</span>
             </a>
             <a
               href={`/dashboard/gym/${gymId}/challenges`}
-              className="block p-4 bg-[#1A1A1A] rounded-lg hover:bg-[#00E5FF]/10 border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-all"
+              className="flex items-center gap-2 p-4 bg-[#1A1A1A] rounded-lg hover:bg-[#00E5FF]/10 border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-all"
             >
-              <span className="text-[#00E5FF] font-medium">🏆 Manage Challenges</span>
+              <Trophy className="w-4 h-4 text-[#00E5FF]" strokeWidth={1.5} />
+              <span className="text-[#00E5FF] font-medium">Manage Challenges</span>
             </a>
             <a
               href={`/dashboard/gym/${gymId}/store`}
-              className="block p-4 bg-[#1A1A1A] rounded-lg hover:bg-[#00E5FF]/10 border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-all"
+              className="flex items-center gap-2 p-4 bg-[#1A1A1A] rounded-lg hover:bg-[#00E5FF]/10 border border-[#1A1A1A] hover:border-[#00E5FF]/30 transition-all"
             >
-              <span className="text-[#00E5FF] font-medium">🛒 Manage Store</span>
+              <ShoppingBag className="w-4 h-4 text-[#00E5FF]" strokeWidth={1.5} />
+              <span className="text-[#00E5FF] font-medium">Manage Store</span>
             </a>
           </div>
         </div>

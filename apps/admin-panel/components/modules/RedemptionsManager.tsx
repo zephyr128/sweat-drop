@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { confirmRedemption, cancelRedemption, validateRedemptionCode } from '@/lib/actions/redemption-actions';
-import { CheckCircle2, XCircle, Clock, CheckCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CheckCircle, Droplet, Ticket, Coffee, GlassWater, Shirt, Gift } from 'lucide-react';
 import { QRValidator } from '@/components/QRValidator';
 import { supabase } from '@/lib/supabase-client';
 import { formatDateTime } from '@/lib/utils/date';
@@ -148,13 +148,13 @@ export function RedemptionsManager({
     }
   };
 
-  const getRewardEmoji = (type: string) => {
+  const getRewardIcon = (type: string) => {
     switch (type) {
-      case 'coffee': return '☕';
-      case 'protein': return '🥤';
-      case 'discount': return '🎫';
-      case 'merch': return '👕';
-      default: return '🎁';
+      case 'coffee': return Coffee;
+      case 'protein': return GlassWater;
+      case 'discount': return Ticket;
+      case 'merch': return Shirt;
+      default: return Gift;
     }
   };
 
@@ -275,7 +275,10 @@ export function RedemptionsManager({
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-3">
-                          <div className="text-3xl">{getRewardEmoji(redemption.rewards?.reward_type || 'unknown')}</div>
+                          {(() => {
+                            const IconComponent = getRewardIcon(redemption.rewards?.reward_type || 'unknown');
+                            return <IconComponent className="w-8 h-8 text-[#00E5FF]" strokeWidth={1.5} />;
+                          })()}
                           <div className="flex-1">
                             <h3 className="text-lg font-bold text-white mb-1">
                               {redemption.rewards?.name || 'Unknown Reward'}
@@ -295,7 +298,9 @@ export function RedemptionsManager({
                           <div>
                             <p className="text-xs text-[#808080] mb-1">Drops Spent</p>
                             <p className="text-lg font-bold text-[#00E5FF]">
-                              {redemption.drops_spent} 💧
+                              <span className="flex items-center gap-1">
+                                {redemption.drops_spent} <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                              </span>
                             </p>
                           </div>
                           <div>
@@ -346,7 +351,10 @@ export function RedemptionsManager({
                     className="bg-[#1A1A1A] border border-[#00E5FF]/20 rounded-lg p-6"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="text-3xl">{getRewardEmoji(redemption.rewards?.reward_type || 'unknown')}</div>
+                          {(() => {
+                            const IconComponent = getRewardIcon(redemption.rewards?.reward_type || 'unknown');
+                            return <IconComponent className="w-8 h-8 text-[#00E5FF]" strokeWidth={1.5} />;
+                          })()}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="text-lg font-bold text-white">
@@ -377,7 +385,10 @@ export function RedemptionsManager({
           <div className="p-6">
             <div className="bg-[#1A1A1A] border border-[#00E5FF]/30 rounded-lg p-6">
               <div className="flex items-start gap-4 mb-6">
-                <div className="text-4xl">{getRewardEmoji(searchResult.rewards?.reward_type || 'unknown')}</div>
+                {(() => {
+                  const IconComponent = getRewardIcon(searchResult.rewards?.reward_type || 'unknown');
+                  return <IconComponent className="w-10 h-10 text-[#00E5FF]" strokeWidth={1.5} />;
+                })()}
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-white mb-2">
                     {searchResult.rewards?.name || 'Unknown Reward'}

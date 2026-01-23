@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { getNetworkOverviewStats } from '@/lib/actions/gym-actions';
 import { StatsCard } from '../StatsCard';
+import { BarChart3, Dumbbell, CheckCircle2, Pause, Users, Droplet } from 'lucide-react';
 
 interface NetworkOverviewToggleProps {
   ownerId: string;
@@ -50,9 +51,10 @@ export function NetworkOverviewToggle({ ownerId, currentGymId: _currentGymId }: 
       <div className="mb-6">
         <button
           onClick={handleToggle}
-          className="px-4 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white hover:bg-[#2A2A2A] transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white hover:bg-[#2A2A2A] transition-colors text-sm font-medium"
         >
-          📊 View Network Overview
+          <BarChart3 className="w-4 h-4" strokeWidth={1.5} />
+          View Network Overview
         </button>
       </div>
     );
@@ -79,38 +81,44 @@ export function NetworkOverviewToggle({ ownerId, currentGymId: _currentGymId }: 
           <StatsCard
             title="Total Gyms"
             value={networkStats.total_gyms}
-            icon="🏋️"
-            gradient="cyan"
+            icon="Building2"
+            accent="blue"
+            priority="primary"
           />
           <StatsCard
             title="Active Gyms"
             value={networkStats.active_gyms}
-            icon="✅"
-            gradient="cyan"
+            icon="CheckCircle2"
+            accent="emerald"
+            priority="secondary"
           />
           <StatsCard
             title="Suspended Gyms"
             value={networkStats.suspended_gyms}
-            icon="⏸️"
-            gradient="orange"
+            icon="Pause"
+            accent="amber"
+            priority="secondary"
           />
           <StatsCard
             title="Total Members"
             value={networkStats.total_members}
-            icon="👥"
-            gradient="cyan"
+            icon="Users"
+            accent="cyan"
+            priority="secondary"
           />
           <StatsCard
             title="Total Drops Earned"
             value={networkStats.total_drops_earned}
-            icon="💧"
-            gradient="cyan"
+            icon="Droplet"
+            accent="cyan"
+            priority="secondary"
           />
           <StatsCard
             title="Total Machines"
             value={networkStats.total_machines}
-            icon="🏋️"
-            gradient="cyan"
+            icon="Dumbbell"
+            accent="purple"
+            priority="secondary"
           />
         </div>
       ) : (

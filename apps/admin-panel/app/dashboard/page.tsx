@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
+import { Droplet } from 'lucide-react';
 
 export default function DashboardPage() {
   const [_session, setSession] = useState<any>(null);
@@ -146,7 +147,9 @@ export default function DashboardPage() {
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-medium text-gray-500">Total Drops Today</h3>
-            <p className="mt-2 text-3xl font-bold text-blue-600">💧 {stats.totalDrops}</p>
+            <p className="mt-2 text-3xl font-bold text-blue-600 flex items-center gap-2">
+              <Droplet className="w-8 h-8" strokeWidth={1.5} /> {stats.totalDrops}
+            </p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-medium text-gray-500">Redeems Today</h3>

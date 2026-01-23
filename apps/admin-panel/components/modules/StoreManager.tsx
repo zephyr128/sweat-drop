@@ -8,7 +8,7 @@ import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import { createStoreItem, deleteStoreItem, updateStoreItem } from '@/lib/actions/store-actions';
 import { uploadFile } from '@/lib/utils/storage';
-import { X, Trash2, Edit2 } from 'lucide-react';
+import { X, Trash2, Edit2, Droplet } from 'lucide-react';
 
 const storeItemSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -204,7 +204,9 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
 
                 <div className="mb-4">
                   <p className="text-2xl font-bold text-[#00E5FF] mb-2">
-                    {item.price_drops} 💧
+                    <span className="flex items-center gap-1">
+                      {item.price_drops} <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                    </span>
                   </p>
                   {item.stock !== null && (
                     <p className="text-sm text-[#808080]">Stock: {item.stock}</p>

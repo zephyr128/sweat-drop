@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { createChallenge, deleteChallenge, toggleChallengeStatus } from '@/lib/actions/challenge-actions';
-import { X, Trash2, Power } from 'lucide-react';
+import { X, Trash2, Power, Droplet } from 'lucide-react';
 
 const challengeSchema = z.object({
   name: z.string().min(1, 'Title is required'),
@@ -225,7 +225,9 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-[#00E5FF] font-bold">
-                        {challenge.drops_bounty || challenge.reward_drops} 💧
+                        <span className="flex items-center gap-1">
+                          {challenge.drops_bounty || challenge.reward_drops} <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                        </span>
                       </span>
                     </td>
                     <td className="px-6 py-4">
