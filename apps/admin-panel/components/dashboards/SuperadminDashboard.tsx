@@ -33,30 +33,34 @@ export async function SuperadminDashboard() {
         <p className="text-[#808080]">Overview of all gyms and users</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatsCard
           title="Total Users"
           value={totalUsers || 0}
-          icon="👥"
-          gradient="cyan"
+          icon="Users"
+          accent="cyan"
+          priority="primary"
         />
         <StatsCard
           title="Total Gyms"
           value={totalGyms || 0}
-          icon="🏋️"
-          gradient="cyan"
+          icon="Building2"
+          accent="blue"
+          priority="primary"
         />
         <StatsCard
           title="Drops Earned (30d)"
           value={totalDropsEarned}
-          icon="💧"
-          gradient="cyan"
+          icon="Droplet"
+          accent="cyan"
+          priority="secondary"
         />
         <StatsCard
           title="Drops Spent (30d)"
           value={totalDropsSpent}
-          icon="🛒"
-          gradient="orange"
+          icon="ShoppingBag"
+          accent="rose"
+          priority="secondary"
         />
       </div>
 

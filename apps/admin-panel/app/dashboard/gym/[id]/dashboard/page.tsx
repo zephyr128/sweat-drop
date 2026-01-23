@@ -176,26 +176,30 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         <StatsCard
           title="Members"
           value={members}
-          icon="👥"
-          gradient="cyan"
+          icon="Users"
+          accent="cyan"
+          priority="primary"
         />
         <StatsCard
           title="Active Challenges"
           value={challenges}
-          icon="🏆"
-          gradient="cyan"
+          icon="Trophy"
+          accent="amber"
+          priority="secondary"
         />
         <StatsCard
           title="Store Items"
           value={storeItems}
-          icon="🛒"
-          gradient="cyan"
+          icon="ShoppingBag"
+          accent="purple"
+          priority="secondary"
         />
         <StatsCard
           title="Drops Earned (7d)"
           value={weeklyDropsEarned}
-          icon="💧"
-          gradient="cyan"
+          icon="Droplet"
+          accent="cyan"
+          priority="secondary"
         />
       </div>
 
