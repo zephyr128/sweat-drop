@@ -6,6 +6,7 @@ import { MachineHeatmapWidget } from './MachineHeatmapWidget';
 import { PopularHoursWidget } from './PopularHoursWidget';
 import { TopPerformersWidget } from './TopPerformersWidget';
 import { LiveFeedWidget } from './LiveFeedWidget';
+import { StatsCard } from '@/components/StatsCard';
 
 interface AnalyticsSectionProps {
   gymId: string;
@@ -22,10 +23,21 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
   useEffect(() => {
     async function fetchAnalytics() {
       try {
+        setLoading(true);
+        console.log('[AnalyticsSection] Fetching analytics for gymId:', gymId);
         const data = await getGymAnalytics(gymId);
+        console.log('[AnalyticsSection] Fetched analytics data:', {
+          hasData: !!data,
+          machineUsage: data?.machine_usage,
+          machineUsageLength: data?.machine_usage?.length || 0,
+          hourlyTraffic: data?.hourly_traffic,
+          hourlyTrafficLength: data?.hourly_traffic?.length || 0,
+          economyStats: data?.economy_stats,
+        });
         setAnalytics(data);
       } catch (error) {
-        console.error('Error fetching analytics:', error);
+        console.error('[AnalyticsSection] Error fetching analytics:', error);
+        setAnalytics(null);
       } finally {
         setLoading(false);
       }
@@ -33,26 +45,6 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
 
     fetchAnalytics();
   }, [gymId, timeFilter]);
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-[#0A0A0A] border border-[#333] rounded-xl p-4">
-          <p className="text-[#808080]">Loading analytics...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!analytics) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-[#0A0A0A] border border-[#333] rounded-xl p-4">
-          <p className="text-[#808080]">No analytics data available</p>
-        </div>
-      </div>
-    );
-  }
 
   const getTimeFilterLabel = (filter: TimeFilter) => {
     switch (filter) {
@@ -64,6 +56,35 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
         return 'Last 30 Days';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 rounded-xl p-4">
+          <h3 className="text-base font-semibold text-white mb-1">Usage Overview</h3>
+          <p className="text-xs text-zinc-500 mb-4">{getTimeFilterLabel(timeFilter)}</p>
+          <div className="flex flex-col items-center justify-center min-h-[320px] text-center">
+            <p className="text-sm text-zinc-400">Loading analytics...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 rounded-xl p-4">
+          <h3 className="text-base font-semibold text-white mb-1">Usage Overview</h3>
+          <p className="text-xs text-zinc-500 mb-4">{getTimeFilterLabel(timeFilter)}</p>
+          <div className="flex flex-col items-center justify-center min-h-[320px] text-center">
+            <p className="text-sm text-zinc-400 mb-1">No analytics data available</p>
+            <p className="text-xs text-zinc-600">Analytics data will appear here once sessions are created</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -83,34 +104,26 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
       {/* Middle Section: Two Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Usage Overview (Grid Span 2) */}
-        <div className="lg:col-span-2 bg-[#0A0A0A] border border-[#333] rounded-xl p-4 flex flex-col max-h-[395px]">
+        <div className="lg:col-span-2 bg-[#0A0A0A] border border-[#333] rounded-xl p-4 flex flex-col">
           <h3 className="text-base font-semibold text-white mb-1">Usage Overview</h3>
           <p className="text-xs text-[#808080] mb-4">{getTimeFilterLabel(timeFilter)}</p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start flex-1">
-            <MachineHeatmapWidget 
-              machineUsage={analytics.machine_usage} 
-              timeFilter={timeFilter}
-              maxValue={Math.max(
-                ...analytics.machine_usage.map(m => m.scan_count),
-                ...analytics.hourly_traffic.map(h => h.scan_count),
-                1
-              )}
-            />
-            <PopularHoursWidget 
-              hourlyTraffic={analytics.hourly_traffic} 
-              timeFilter={timeFilter}
-              maxValue={Math.max(
-                ...analytics.machine_usage.map(m => m.scan_count),
-                ...analytics.hourly_traffic.map(h => h.scan_count),
-                1
-              )}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+            <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-6 min-h-[380px]">
+              <MachineHeatmapWidget 
+                machineUsage={Array.isArray(analytics.machine_usage) ? analytics.machine_usage : []} 
+              />
+            </div>
+            <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-6 min-h-[380px]">
+              <PopularHoursWidget 
+                hourlyTraffic={Array.isArray(analytics.hourly_traffic) ? analytics.hourly_traffic : []} 
+              />
+            </div>
           </div>
         </div>
 
         {/* Right Column: Activity Hub (Grid Span 1) */}
-        <div className="lg:col-span-1 flex flex-col">
+        <div className="lg:col-span-1 flex flex-col h-full">
           <LiveFeedWidget gymId={gymId} />
         </div>
       </div>
@@ -118,37 +131,31 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
       {/* Bottom Row: Economy Stats, Top Performers, Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Economy Stats */}
-        <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4">
+        <div className="bg-gradient-to-br from-[#0A0A0A] to-[#111] border border-zinc-800/50 rounded-xl p-6">
           <h3 className="text-base font-semibold text-white mb-1">Economy Stats</h3>
-          <p className="text-xs text-[#808080] mb-3">Current Month</p>
+          <p className="text-xs text-zinc-400 mb-4">Current Month</p>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-[#1A1A1A] rounded-lg border border-[#333]">
-              <div>
-                <p className="text-xs text-[#808080]">Issued</p>
-                <p className="text-xl font-bold text-[#00E5FF]">
-                  {analytics.economy_stats.drops_issued.toLocaleString()}
-                </p>
-              </div>
-              <div className="text-3xl">💧</div>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-[#1A1A1A] rounded-lg border border-[#333]">
-              <div>
-                <p className="text-xs text-[#808080]">Redeemed</p>
-                <p className="text-xl font-bold text-[#FF6B6B]">
-                  {analytics.economy_stats.drops_redeemed.toLocaleString()}
-                </p>
-              </div>
-              <div className="text-3xl">🛒</div>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-[#1A1A1A] rounded-lg border border-[#00E5FF]/30">
-              <div>
-                <p className="text-xs text-[#808080]">Net Circulation</p>
-                <p className="text-xl font-bold text-white">
-                  {(analytics.economy_stats.drops_issued - analytics.economy_stats.drops_redeemed).toLocaleString()}
-                </p>
-              </div>
-              <div className="text-3xl">📊</div>
-            </div>
+            <StatsCard
+              title="Issued"
+              value={analytics.economy_stats.drops_issued.toLocaleString()}
+              icon="Droplet"
+              accent="cyan"
+              priority="secondary"
+            />
+            <StatsCard
+              title="Redeemed"
+              value={analytics.economy_stats.drops_redeemed.toLocaleString()}
+              icon="ShoppingBag"
+              accent="rose"
+              priority="secondary"
+            />
+            <StatsCard
+              title="Net Circulation"
+              value={(analytics.economy_stats.drops_issued - analytics.economy_stats.drops_redeemed).toLocaleString()}
+              icon="BarChart3"
+              accent="emerald"
+              priority="primary"
+            />
           </div>
         </div>
 

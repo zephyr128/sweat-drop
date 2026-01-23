@@ -1,76 +1,117 @@
 'use client';
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
+import { Line } from 'react-chartjs-2';
 import { Clock } from 'lucide-react';
+import '@/lib/chart-setup';
 
-type TimeFilter = 'today' | '7days' | '30days';
+export function PopularHoursWidget({ hourlyTraffic }: any) {
+  const [isClient, setIsClient] = useState(false);
 
-interface PopularHoursWidgetProps {
-  hourlyTraffic: Array<{
-    hour: number;
-    scan_count: number;
-  }>;
-  timeFilter?: TimeFilter;
-  maxValue?: number;
-}
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-export function PopularHoursWidget({ hourlyTraffic, timeFilter: _timeFilter = '30days', maxValue }: PopularHoursWidgetProps) {
-  const chartData = hourlyTraffic.map((item) => ({
+  // 1. Prevent Hydration Mismatch & Layout Thrashing
+  if (!isClient) {
+    return <div className="h-[300px] w-full bg-zinc-900/20 animate-pulse rounded-xl" />;
+  }
+
+  // 2. Process data
+  const chartData = hourlyTraffic.map((item: any) => ({
     hour: `${String(item.hour).padStart(2, '0')}:00`,
-    scans: item.scan_count,
+    scans: Number(item.scan_count || 0),
   }));
 
-  const hasData = hourlyTraffic.length > 0 && hourlyTraffic.some(item => item.scan_count > 0);
+  const hasData = chartData.some(item => item.scans > 0);
 
+  // 3. Chart.js data configuration
+  const data = {
+    labels: chartData.map(item => item.hour),
+    datasets: [
+      {
+        label: 'Scans',
+        data: chartData.map(item => item.scans),
+        borderColor: '#00E5FF',
+        backgroundColor: 'rgba(0, 229, 255, 0.1)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: '#00E5FF',
+        pointHoverBorderColor: '#00E5FF',
+        pointHoverBorderWidth: 2,
+      },
+    ],
+  };
+
+  // 4. Chart.js options (Dark Mode Cyberpunk)
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false, // KLJUČNO: Ne mora da se pogodi tačka mišem
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: '#0A0A0A',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: '#333',
+        borderWidth: 1,
+        padding: 10,
+        displayColors: false, // Sklanja kockicu boje pored teksta
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#808080',
+          font: {
+            size: 11,
+            family: 'system-ui, -apple-system, sans-serif',
+          },
+          maxRotation: 45,
+          minRotation: 45,
+        },
+      },
+      y: {
+        grid: {
+          color: '#1A1A1A',
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#808080',
+          font: {
+            size: 11,
+            family: 'system-ui, -apple-system, sans-serif',
+          },
+          stepSize: 1,
+        },
+        beginAtZero: true,
+      },
+    },
+  };
+
+  // 5. Render chart ONLY when browser has calculated layout
   return (
-    <div className="flex flex-col h-full">
-      <h4 className="text-sm font-semibold text-white mb-1 flex-shrink-0">Popular Hours</h4>
-      <div className="flex-1 min-h-0">
+    <div className="flex flex-col w-full">
+      <h4 className="text-sm font-semibold text-white mb-4">Popular Hours</h4>
+      <div className="w-full h-[300px]">
         {hasData ? (
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={chartData} margin={{ left: 5, right: 5, top: 5, bottom: 40 }} syncId="usageCharts">
-              <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
-              <XAxis 
-                dataKey="hour" 
-                stroke="#808080"
-                tick={{ fill: '#808080', fontSize: 10 }}
-                angle={-45}
-                textAnchor="end"
-                height={40}
-                padding={{ left: 0, right: 0 }}
-              />
-              <YAxis 
-                stroke="#808080"
-                tick={{ fill: '#808080', fontSize: 12 }}
-                width={45}
-                domain={maxValue ? [0, Math.ceil(maxValue * 1.1)] : [0, 'auto']}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0A0A0A',
-                  border: '1px solid #333',
-                  borderRadius: '8px',
-                  color: '#fff',
-                }}
-                labelStyle={{ color: '#00E5FF' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="scans" 
-                stroke="#00E5FF"
-                strokeWidth={2}
-                dot={{ fill: '#00E5FF', r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <Line data={data} options={options} />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full min-h-[320px] text-center">
-            <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center mb-4">
-              <Clock className="w-8 h-8 text-zinc-600" strokeWidth={1.5} />
-            </div>
-            <p className="text-sm font-medium text-zinc-400 mb-1">No data available</p>
-            <p className="text-xs text-zinc-600">Popular hours data will appear here once available</p>
+          <div className="flex items-center justify-center h-full border border-dashed border-zinc-800 rounded-xl">
+            <p className="text-zinc-500 text-xs">No data available</p>
           </div>
         )}
       </div>

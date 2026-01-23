@@ -1,89 +1,114 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
+import { Bar } from 'react-chartjs-2';
 import { Activity } from 'lucide-react';
+import '@/lib/chart-setup';
 
-type TimeFilter = 'today' | '7days' | '30days';
+export function MachineHeatmapWidget({ machineUsage }: any) {
+  const [isClient, setIsClient] = useState(false);
 
-interface MachineHeatmapWidgetProps {
-  machineUsage: Array<{
-    machine_id: string;
-    machine_name: string;
-    machine_type: 'treadmill' | 'bike';
-    scan_count: number;
-  }>;
-  timeFilter?: TimeFilter;
-  maxValue?: number;
-}
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-export function MachineHeatmapWidget({ machineUsage, timeFilter: _timeFilter = '30days', maxValue }: MachineHeatmapWidgetProps) {
-  // Aggregate by machine type
-  const typeData = machineUsage.reduce(
-    (acc, machine) => {
-      const type = machine.machine_type === 'treadmill' ? 'Treadmill' : 'Bike';
-      acc[type] = (acc[type] || 0) + machine.scan_count;
-      return acc;
+  // 1. Prevent Hydration Mismatch & Layout Thrashing
+  if (!isClient) {
+    return <div className="h-[300px] w-full bg-zinc-900/20 animate-pulse rounded-xl" />;
+  }
+
+  // 2. Process data - Dinamički obrađujemo bilo koji tip mašine koji stigne
+  const typeData = (machineUsage || []).reduce((acc: any, machine: any) => {
+    const type = machine.machine_type || 'Unknown';
+    acc[type] = (acc[type] || 0) + Number(machine.scan_count || 0);
+    return acc;
+  }, {});
+
+  const chartData = Object.keys(typeData).map(type => ({
+    name: type.charAt(0).toUpperCase() + type.slice(1),
+    scans: typeData[type]
+  }));
+
+  const hasData = chartData.length > 0 && chartData.some(d => d.scans > 0);
+
+  // 3. Chart.js data configuration
+  const data = {
+    labels: chartData.map(item => item.name),
+    datasets: [
+      {
+        label: 'Scans',
+        data: chartData.map(item => item.scans),
+        backgroundColor: '#00E5FF',
+        borderRadius: 4,
+      },
+    ],
+  };
+
+  // 4. Chart.js options (Dark Mode Cyberpunk)
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false, // KLJUČNO: Ne mora da se pogodi tačka mišem
     },
-    {} as Record<string, number>
-  );
-
-  const chartData = [
-    {
-      type: 'Treadmill',
-      scans: typeData['Treadmill'] || 0,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: '#0A0A0A',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: '#333',
+        borderWidth: 1,
+        padding: 10,
+        displayColors: false, // Sklanja kockicu boje pored teksta
+      },
     },
-    {
-      type: 'Bike',
-      scans: typeData['Bike'] || 0,
+    scales: {
+      x: {
+        grid: {
+          display: false,
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#808080',
+          font: {
+            size: 11,
+            family: 'system-ui, -apple-system, sans-serif',
+          },
+        },
+      },
+      y: {
+        grid: {
+          color: '#1A1A1A',
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#808080',
+          font: {
+            size: 11,
+            family: 'system-ui, -apple-system, sans-serif',
+          },
+          stepSize: 1,
+        },
+        beginAtZero: true,
+      },
     },
-  ];
+  };
 
-  const hasData = machineUsage.length > 0 && chartData.some(item => item.scans > 0);
-
+  // 5. Render chart ONLY when browser has calculated layout
   return (
-    <div className="flex flex-col h-full">
-      <h4 className="text-sm font-semibold text-white mb-1 flex-shrink-0">Machine Usage</h4>
-      <div className="flex-1 min-h-0">
+    <div className="flex flex-col w-full">
+      <h4 className="text-sm font-semibold text-white mb-4">Machine Usage</h4>
+      <div className="w-full h-[300px]">
         {hasData ? (
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={chartData} margin={{ left: 5, right: 5, top: 5, bottom: 40 }} syncId="usageCharts">
-              <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
-              <XAxis 
-                dataKey="type" 
-                stroke="#808080"
-                tick={{ fill: '#808080', fontSize: 12 }}
-                height={40}
-                padding={{ left: 0, right: 0 }}
-              />
-              <YAxis 
-                stroke="#808080"
-                tick={{ fill: '#808080', fontSize: 12 }}
-                width={45}
-                domain={maxValue ? [0, Math.ceil(maxValue * 1.1)] : [0, 'auto']}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0A0A0A',
-                  border: '1px solid #333',
-                  borderRadius: '8px',
-                  color: '#fff',
-                }}
-                labelStyle={{ color: '#00E5FF' }}
-              />
-              <Bar 
-                dataKey="scans" 
-                fill="#00E5FF"
-                radius={[8, 8, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <Bar data={data} options={options} />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full min-h-[320px] text-center">
-            <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center mb-4">
-              <Activity className="w-8 h-8 text-zinc-600" strokeWidth={1.5} />
-            </div>
-            <p className="text-sm font-medium text-zinc-400 mb-1">No data available</p>
-            <p className="text-xs text-zinc-600">Machine usage data will appear here once available</p>
+          <div className="flex items-center justify-center h-full border border-dashed border-zinc-800 rounded-xl">
+            <p className="text-zinc-500 text-xs">No machine data yet</p>
           </div>
         )}
       </div>
