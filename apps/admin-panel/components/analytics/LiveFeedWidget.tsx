@@ -57,7 +57,7 @@ export function LiveFeedWidget({ gymId }: LiveFeedWidgetProps) {
   }
 
   return (
-    <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4 flex flex-col h-full max-h-[395px]">
+    <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4 flex flex-col h-full">
       <div className="flex-shrink-0 mb-3">
         <h3 className="text-base font-semibold text-white mb-1">Activity Hub</h3>
         <p className="text-xs text-[#808080]">Recent Activity</p>

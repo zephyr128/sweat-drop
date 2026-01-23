@@ -11,14 +11,14 @@ DECLARE
   v_economy_stats JSON;
 BEGIN
   -- 1. Machine Usage: Top 3 most scanned machines in the last 30 days
-  SELECT json_agg(
+  SELECT COALESCE(json_agg(
     json_build_object(
       'machine_id', machine_id,
       'machine_name', m.name,
       'machine_type', m.type,
       'scan_count', scan_count
     ) ORDER BY scan_count DESC
-  ) INTO v_machine_usage
+  ), '[]'::json) INTO v_machine_usage
   FROM (
     SELECT 
       s.machine_id,
@@ -31,7 +31,8 @@ BEGIN
     ORDER BY scan_count DESC
     LIMIT 3
   ) top_machines
-  LEFT JOIN public.machines m ON m.id = top_machines.machine_id;
+  LEFT JOIN public.machines m ON m.id = top_machines.machine_id
+  WHERE top_machines.machine_id IS NOT NULL;
 
   -- 2. Hourly Traffic: Aggregated scans per hour (00:00 - 23:00)
   SELECT json_agg(
