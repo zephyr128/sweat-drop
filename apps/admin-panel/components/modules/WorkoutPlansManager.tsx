@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { 
   deleteWorkoutPlan,
   toggleWorkoutPlanStatus,
   saveWorkoutPlan,
-  applyWorkoutTemplate
+  applyWorkoutTemplate,
+  getWorkoutPlansMetrics,
+  type WorkoutPlanMetrics
 } from '@/lib/actions/workout-plan-actions';
 import { WORKOUT_TEMPLATES, filterTemplates, type TemplateGoal, type TemplateStructure, type TemplateEquipment } from '@/lib/utils/workout-templates';
-import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles } from 'lucide-react';
+import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles, TrendingUp, TrendingDown, Minus, Users, Target, DollarSign, Trophy, Dumbbell } from 'lucide-react';
 
 interface WorkoutPlan {
   id: string;
@@ -74,6 +76,8 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
   const [saving, setSaving] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<Record<string, WorkoutPlanMetrics>>({});
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
   
   // Template filter state
   const [templateFilter, setTemplateFilter] = useState<{
@@ -81,6 +85,26 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
     structure?: TemplateStructure;
     equipment?: TemplateEquipment;
   }>({});
+
+  // Load metrics when plans change
+  useEffect(() => {
+    const loadMetrics = async () => {
+      if (plans.length === 0) return;
+      
+      setLoadingMetrics(true);
+      const planIds = plans.map((p) => p.id);
+      const result = await getWorkoutPlansMetrics(planIds);
+      
+      if (result.success) {
+        setMetrics(result.data || {});
+      } else {
+        console.error('[WorkoutPlansManager] Failed to load metrics:', result.error);
+      }
+      setLoadingMetrics(false);
+    };
+
+    loadMetrics();
+  }, [plans]);
 
   // Form state
   const [formData, setFormData] = useState<PlanFormData>({
@@ -165,12 +189,16 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
         items: itemsWithMachineMapping,
       });
 
-      if (result.success && result.data) {
-        setPlans([result.data as WorkoutPlan, ...plans]);
-        toast.success(`Template "${template.name}" applied successfully!`);
-        setIsTemplateDialogOpen(false);
+      if (result.success) {
+        if ('data' in result && result.data) {
+          setPlans([result.data as WorkoutPlan, ...plans]);
+          toast.success(`Template "${template.name}" applied successfully!`);
+          setIsTemplateDialogOpen(false);
+        }
       } else {
-        toast.error(result.error || 'Failed to apply template');
+        if ('error' in result) {
+          toast.error(result.error || 'Failed to apply template');
+        }
       }
     } catch (error: any) {
       console.error('[WorkoutPlansManager] Error applying template:', error);
@@ -429,20 +457,133 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
     return badges[templateGoal] || { label: templateGoal, className: 'bg-zinc-500/10 text-zinc-400' };
   };
 
+  // Sparkline component for performance trend
+  const SparklineChart = ({ data }: { data: number[] }) => {
+    if (!data || data.length === 0) {
+      return (
+        <div className="flex items-center gap-1 text-zinc-500">
+          <Minus className="w-3 h-3" />
+          <span className="text-xs">No data</span>
+        </div>
+      );
+    }
+
+    const max = Math.max(...data, 1);
+    const min = Math.min(...data);
+    const range = max - min || 1;
+    const width = 60;
+    const height = 20;
+    const points = data.map((value, index) => {
+      const x = (index / (data.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${x},${y}`;
+    }).join(' ');
+
+    // Determine trend (comparing first half to second half)
+    const firstHalf = data.slice(0, Math.floor(data.length / 2));
+    const secondHalf = data.slice(Math.floor(data.length / 2));
+    const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+    const isTrendingUp = secondAvg > firstAvg;
+    const isTrendingDown = secondAvg < firstAvg;
+
+    return (
+      <div className="flex items-center gap-1.5">
+        <svg width={width} height={height} className="text-[#00E5FF]">
+          <polyline
+            points={points}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        {isTrendingUp && <TrendingUp className="w-3 h-3 text-green-400" />}
+        {isTrendingDown && <TrendingDown className="w-3 h-3 text-red-400" />}
+        {!isTrendingUp && !isTrendingDown && <Minus className="w-3 h-3 text-zinc-500" />}
+      </div>
+    );
+  };
+
+  // Tooltip component
+  const Tooltip = ({ children, content }: { children: React.ReactNode; content: string }) => {
+    const [show, setShow] = useState(false);
+    const isLongContent = content.length > 50;
+    return (
+      <div 
+        className="relative inline-block"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+      >
+        {children}
+        {show && (
+          <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-800 text-white text-xs rounded-lg shadow-xl z-50 ${
+            isLongContent ? 'max-w-xs whitespace-normal' : 'whitespace-nowrap'
+          }`}>
+            {isLongContent ? (
+              <div className="space-y-1">
+                {content.split(', ').map((item, idx) => (
+                  <div key={idx} className="text-zinc-200">• {item}</div>
+                ))}
+              </div>
+            ) : (
+              content
+            )}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+              <div className="border-4 border-transparent border-t-zinc-800"></div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Calculate global stats
+  const totalActiveUsers = Object.values(metrics).reduce((sum, m) => sum + (m.active_users || 0), 0);
+  const averageCompletion = plans.length > 0
+    ? Math.round(
+        Object.values(metrics).reduce((sum, m) => sum + (m.completion_rate || 0), 0) / plans.length
+      )
+    : 0;
+  const monthlyRevenue = Object.values(metrics).reduce((sum, m) => sum + (m.revenue || 0), 0);
+
   return (
     <div className="space-y-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 relative overflow-hidden">
+          <div className="absolute top-2 right-2 opacity-20">
+            <Users className="w-8 h-8 text-white" strokeWidth={1.5} />
+          </div>
+          <p className="text-xs text-zinc-500 mb-1">Total Active Users</p>
+          <p className="text-2xl font-bold text-white">{totalActiveUsers}</p>
+        </div>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 relative overflow-hidden">
+          <div className="absolute top-2 right-2 opacity-20">
+            <Target className="w-8 h-8 text-white" strokeWidth={1.5} />
+          </div>
+          <p className="text-xs text-zinc-500 mb-1">Average Completion</p>
+          <p className="text-2xl font-bold text-white">{averageCompletion}%</p>
+        </div>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 relative overflow-hidden">
+          <div className="absolute top-2 right-2 opacity-20">
+            <DollarSign className="w-8 h-8 text-white" strokeWidth={1.5} />
+          </div>
+          <p className="text-xs text-zinc-500 mb-1">Monthly Revenue</p>
+          <p className="text-2xl font-bold text-white">{formatCurrency(monthlyRevenue, 'USD')}</p>
+        </div>
+      </div>
+
       {/* Plans Table */}
       <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden">
         {/* Table Header with Actions */}
         <div className="p-6 border-b border-zinc-900 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white">SmartCoach Plans Overview</h2>
-            <p className="text-sm text-zinc-500 mt-1">Manage all workout plans for your gym</p>
-          </div>
+          <h2 className="text-2xl font-bold text-white">SmartCoach Plans Overview</h2>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsTemplateDialogOpen(true)}
-              className="px-4 py-2 bg-yellow-400  text-black  rounded-lg font-medium hover:bg-yellow-500 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-yellow-400 text-black rounded-lg font-medium hover:bg-yellow-500 transition-colors flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
               Apply Template
@@ -470,9 +611,13 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                   <th className="text-left p-4 text-sm font-medium text-zinc-500">Plan Name</th>
                   <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
                   <th className="text-left p-4 text-sm font-medium text-zinc-500">Access Type</th>
-                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Exercises</th>
-                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Duration</th>
-                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Price</th>
+                  <th className="text-center p-4 text-sm font-medium text-zinc-500">Exercises</th>
+                  <th className="text-center p-4 text-sm font-medium text-zinc-500">Duration</th>
+                  {plans.some((p) => p.access_type === 'paid_one_time') && (
+                    <th className="text-right p-4 text-sm font-medium text-zinc-500">Price</th>
+                  )}
+                  <th className="text-center p-4 text-sm font-medium text-zinc-500">Engagement</th>
+                  <th className="text-right p-4 text-sm font-medium text-zinc-500">Revenue</th>
                   <th className="text-right p-4 text-sm font-medium text-zinc-500">Actions</th>
                 </tr>
               </thead>
@@ -483,7 +628,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                   return (
                     <tr
                       key={plan.id}
-                      className="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors"
+                      className="border-b border-zinc-900 hover:bg-zinc-900/40 transition-colors group"
                     >
                       <td className="p-4">
                         <div className="flex items-center gap-2">
@@ -509,23 +654,72 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                           {accessBadge.label}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
-                        <p className="text-white">{plan.items?.length || 0} exercises</p>
+                      <td className="p-4 text-center">
+                        <Tooltip
+                          content={
+                            plan.items && plan.items.length > 0
+                              ? plan.items.map((item) => item.exercise_name).join(', ')
+                              : 'No exercises'
+                          }
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Dumbbell className="w-3.5 h-3.5 text-zinc-400" strokeWidth={1.5} />
+                            <span className="px-2 py-0.5 bg-zinc-800 rounded text-white text-sm font-medium">
+                              {plan.items?.length || 0}
+                            </span>
+                          </div>
+                        </Tooltip>
                       </td>
-                      <td className="p-4 text-right">
-                        <p className="text-white">
+                      <td className="p-4 text-center">
+                        <p className="text-white text-sm">
                           {plan.estimated_duration_minutes ? `${plan.estimated_duration_minutes} min` : '-'}
                         </p>
                       </td>
+                      {plans.some((p) => p.access_type === 'paid_one_time') && (
+                        <td className="p-4 text-right">
+                          {plan.access_type === 'paid_one_time' && plan.price > 0 ? (
+                            <p className="text-white text-sm">
+                              {formatCurrency(plan.price, plan.currency)}
+                            </p>
+                          ) : (
+                            <p className="text-zinc-500 text-sm">-</p>
+                          )}
+                        </td>
+                      )}
+                      <td className="p-4 text-center">
+                        {loadingMetrics ? (
+                          <div className="flex items-center justify-center">
+                            <div className="w-4 h-4 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                        ) : (
+                          <Tooltip content={`Average workout duration: ${metrics[plan.id]?.avg_duration_minutes || 0}min`}>
+                            <p className="text-white text-sm">
+                              {metrics[plan.id]?.active_users || 0} users ({metrics[plan.id]?.completion_rate || 0}%)
+                            </p>
+                          </Tooltip>
+                        )}
+                      </td>
                       <td className="p-4 text-right">
-                        <p className="text-white">
-                          {plan.access_type === 'paid_one_time' && plan.price > 0
-                            ? formatCurrency(plan.price, plan.currency)
-                            : 'Free'}
-                        </p>
+                        {loadingMetrics ? (
+                          <div className="flex items-center justify-end">
+                            <div className="w-4 h-4 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                        ) : (
+                          <p className={`text-sm ${
+                            plan.access_type === 'paid_one_time' && (metrics[plan.id]?.revenue || 0) > 0
+                              ? 'text-green-400'
+                              : 'text-zinc-500'
+                          }`}>
+                            {plan.access_type === 'paid_one_time' && (metrics[plan.id]?.revenue || 0) > 0
+                              ? formatCurrency(metrics[plan.id]!.revenue, plan.currency)
+                              : plan.access_type === 'paid_one_time' && plan.price > 0
+                              ? '0.00'
+                              : 'N/A'}
+                          </p>
+                        )}
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => openEditDialog(plan)}
                             className="p-2 text-zinc-500 hover:text-[#00E5FF] transition-colors"
@@ -537,8 +731,8 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                             onClick={() => handleToggleStatus(plan.id, plan.is_active)}
                             className={`p-2 transition-colors ${
                               plan.is_active 
-                                ? 'text-[#00E5FF] hover:text-[#00B8CC]' 
-                                : 'text-zinc-500 hover:text-zinc-400'
+                                ? 'text-zinc-500 hover:text-yellow-400' 
+                                : 'text-zinc-500 hover:text-green-400'
                             }`}
                             title={plan.is_active ? 'Deactivate' : 'Activate'}
                           >

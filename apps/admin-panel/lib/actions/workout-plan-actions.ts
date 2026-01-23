@@ -425,6 +425,10 @@ export async function saveWorkoutPlan(input: SaveWorkoutPlanInput): Promise<Save
  * Apply a workout template to a gym
  * Creates a new workout plan based on a template
  */
+type ApplyWorkoutTemplateResult = 
+  | { success: true; data: any }
+  | { success: false; error: string };
+
 export async function applyWorkoutTemplate(
   gymId: string,
   templateId: string,
@@ -451,7 +455,7 @@ export async function applyWorkoutTemplate(
       instruction_video_url?: string;
     }>;
   }
-) {
+): Promise<ApplyWorkoutTemplateResult> {
   try {
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
@@ -538,81 +542,149 @@ export async function applyWorkoutTemplate(
   }
 }
 
-export async function getWorkoutPlansStats(gymId: string) {
+export interface WorkoutPlanMetrics {
+  plan_id: string;
+  active_sessions: number; // Sessions created in last 7 days
+  active_users: number; // Unique users with active subscriptions
+  completion_rate: number; // Percentage of completed sessions
+  revenue: number; // Total revenue from paid subscriptions
+  performance_trend: number[]; // Daily session counts for last 7 days (for sparkline)
+  avg_duration_minutes: number; // Average workout duration
+}
+
+export async function getWorkoutPlansMetrics(planIds: string[]): Promise<{ success: boolean; data: Record<string, WorkoutPlanMetrics>; error?: string }> {
   try {
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
-      return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
+      return { success: false, data: {}, error: 'Admin client not available. Check server environment variables.' };
     }
 
-    // Fetch all active plans for this gym
-    const { data: plans, error: plansError } = await supabaseAdmin
-      .from('workout_plans')
-      .select('id, name, access_type, price, currency')
-      .eq('gym_id', gymId)
-      .eq('is_active', true);
-
-    if (plansError) {
-      throw plansError;
+    if (planIds.length === 0) {
+      return { success: true, data: {} };
     }
 
-    if (!plans || plans.length === 0) {
-      return { success: true, data: [] };
-    }
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoISO = sevenDaysAgo.toISOString();
 
-    // Type assertion for plans
-    type PlanRow = {
-      id: string;
-      name: string;
-      access_type: string | null;
-      price: number | null;
-      currency: string | null;
-    };
-    const typedPlans = plans as PlanRow[];
-
-    // For each plan, get:
-    // 1. Count of active live_sessions
-    // 2. Sum of payment_amount from active_subscriptions where payment_status='paid'
-    const statsPromises = typedPlans.map(async (plan) => {
-      // Count active live sessions
-      const { count: liveSessionsCount } = await supabaseAdmin
-        .from('live_sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('plan_id', plan.id)
+    // Calculate metrics for each plan
+    const metricsPromises = planIds.map(async (planId) => {
+      // First, get all users with active subscriptions to this plan
+      const { data: subscriptions } = await supabaseAdmin
+        .from('active_subscriptions')
+        .select('user_id, status')
+        .eq('plan_id', planId)
         .eq('status', 'active');
 
-      // Sum revenue from active paid subscriptions
-      const { data: subscriptions, error: subsError } = await supabaseAdmin
-        .from('active_subscriptions')
-        .select('payment_amount, payment_status')
-        .eq('plan_id', plan.id)
-        .eq('status', 'active')
-        .eq('payment_status', 'paid');
+      type Subscription = { user_id: string; status: string };
+      const typedSubscriptions = (subscriptions || []) as Subscription[];
 
-      if (subsError) {
-        console.error(`[getWorkoutPlansStats] Error fetching subscriptions for plan ${plan.id}:`, subsError);
+      const uniqueUserIds = Array.from(new Set(typedSubscriptions.map((s) => s.user_id)));
+      const activeUsers = uniqueUserIds.length;
+
+      // If no active subscriptions, return zero metrics
+      if (uniqueUserIds.length === 0) {
+        return {
+          plan_id: planId,
+          active_sessions: 0,
+          active_users: 0,
+          completion_rate: 0,
+          revenue: 0,
+          performance_trend: [0, 0, 0, 0, 0, 0, 0],
+          avg_duration_minutes: 0,
+        };
       }
 
-      const revenue = (subscriptions as any)?.reduce((sum: number, sub: any) => {
+      // 1. Get all sessions for subscribed users in last 7 days
+      const { data: allSessions } = await supabaseAdmin
+        .from('sessions')
+        .select('id, user_id, created_at, started_at, ended_at, duration_seconds, is_active')
+        .in('user_id', uniqueUserIds)
+        .gte('created_at', sevenDaysAgoISO)
+        .order('created_at', { ascending: true });
+
+      type Session = { 
+        id: string;
+        user_id: string;
+        created_at: string;
+        started_at: string;
+        ended_at: string | null;
+        duration_seconds: number | null;
+        is_active: boolean;
+      };
+      const typedSessions = (allSessions || []) as Session[];
+
+      // 2. Active sessions (sessions created in last 7 days)
+      const activeSessionsCount = typedSessions.length;
+
+      // 3. Performance trend (daily session counts for last 7 days)
+      const performanceTrend: number[] = [];
+      const days = 7;
+      for (let i = 0; i < days; i++) {
+        const dayStart = new Date(sevenDaysAgo);
+        dayStart.setDate(dayStart.getDate() + i);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const dayCount = typedSessions.filter((s) => {
+          const createdAt = new Date(s.created_at);
+          return createdAt >= dayStart && createdAt <= dayEnd;
+        }).length;
+        performanceTrend.push(dayCount);
+      }
+
+      // 4. Completion rate (completed sessions / total sessions)
+      // A session is completed if it has ended_at and is_active = false
+      const totalSessions = typedSessions.length;
+      const completedSessions = typedSessions.filter((s) => !s.is_active && s.ended_at !== null).length;
+      const completionRate = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0;
+
+      // 5. Average duration (from completed sessions)
+      const completedSessionsData = typedSessions.filter((s) => !s.is_active && s.ended_at !== null && s.duration_seconds !== null);
+      
+      let avgDurationMinutes = 0;
+      if (completedSessionsData.length > 0) {
+        const durations = completedSessionsData
+          .map((s) => (s.duration_seconds || 0) / 60) // Convert seconds to minutes
+          .filter((d) => d > 0);
+        
+        if (durations.length > 0) {
+          avgDurationMinutes = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+        }
+      }
+
+      // 6. Revenue (sum of payment_amount from paid subscriptions)
+      const { data: paidSubscriptions } = await supabaseAdmin
+        .from('active_subscriptions')
+        .select('payment_amount')
+        .eq('plan_id', planId)
+        .eq('payment_status', 'paid');
+
+      const revenue = (paidSubscriptions || []).reduce((sum: number, sub: any) => {
         return sum + (parseFloat(sub.payment_amount?.toString() || '0') || 0);
-      }, 0) || 0;
+      }, 0);
 
       return {
-        plan_id: plan.id,
-        plan_name: plan.name,
-        access_type: plan.access_type || 'free',
-        price: plan.price || 0,
-        currency: plan.currency || 'USD',
-        active_live_sessions: liveSessionsCount || 0,
+        plan_id: planId,
+        active_sessions: activeSessionsCount || 0,
+        active_users: activeUsers,
+        completion_rate: completionRate,
         revenue: revenue,
+        performance_trend: performanceTrend,
+        avg_duration_minutes: avgDurationMinutes,
       };
     });
 
-    const stats = await Promise.all(statsPromises);
+    const metrics = await Promise.all(metricsPromises);
+    const metricsMap: Record<string, WorkoutPlanMetrics> = {};
+    metrics.forEach((m) => {
+      metricsMap[m.plan_id] = m;
+    });
 
-    return { success: true, data: stats };
+    return { success: true, data: metricsMap };
   } catch (error: any) {
-    console.error('Error fetching workout plans stats:', error);
-    return { success: false, error: error.message || 'Failed to fetch workout plans stats', data: [] };
+    console.error('[getWorkoutPlansMetrics] Error:', error);
+    return { success: false, data: {}, error: error.message || 'Failed to fetch workout plans metrics' };
   }
 }

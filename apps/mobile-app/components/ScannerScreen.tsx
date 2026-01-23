@@ -37,7 +37,7 @@ const CORNER_WIDTH = 4;
 // Development mode: Hardcoded QR UUID for testing
 // Change this to your test machine's QR UUID
 // To find your machine's QR UUID, scan the QR code once and check the console logs
-const DEV_QR_UUID = '6a5b3904-1c60-417f-9737-0974464af239'; // Replace with your test machine QR UUID
+const DEV_QR_UUID = '92e1ad0d-8a2a-4993-8b19-61244ab82164'; // Replace with your test machine QR UUID
 
 interface MachineStatus {
   machine_id: string;
