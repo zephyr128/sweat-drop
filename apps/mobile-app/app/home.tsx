@@ -585,56 +585,66 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* SmartCoach Card - Same width as both bottom cards plus gap */}
-          <View style={styles.smartCoachSection}>
-            <TouchableOpacity
-              style={[
-                styles.smartCoachCard, 
-                { 
-                  width: SMARTCOACH_CARD_WIDTH,
-                  borderColor: hexToRgba(branding.primary, 0.3), // rgba(primaryColor, 0.3)
-                }
-              ]}
-              onPress={() => {
-                if (!isUnlocked) return;
-                router.push('/smartcoach');
-              }}
-              activeOpacity={isUnlocked ? 0.9 : 1}
-              disabled={!isUnlocked}
-            >
-              <LinearGradient
-                colors={[branding.primaryLight, branding.primaryLight, branding.primaryLight]} // Use primaryLight for subtle background
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.smartCoachGradient}
+          {/* SmartCoach Card - Only show if smartcoach_enabled is true for active gym */}
+          {/* AGENT NOTE: [2025-01-27] - mobile-coder
+              CHANGE: Added conditional rendering based on activeGym?.smartcoach_enabled
+              REASON: Hide SmartCoach card when feature is disabled for the active gym
+              AFFECTS: SmartCoach card visibility on home screen
+              RELATED FILES:
+              - backend/supabase/migrations/20250127130000_disable_smartcoach_per_gym.sql
+              - apps/mobile-app/lib/stores/useGymStore.ts (Gym interface updated)
+          */}
+          {activeGym?.smartcoach_enabled && (
+            <View style={styles.smartCoachSection}>
+              <TouchableOpacity
+                style={[
+                  styles.smartCoachCard, 
+                  { 
+                    width: SMARTCOACH_CARD_WIDTH,
+                    borderColor: hexToRgba(branding.primary, 0.3), // rgba(primaryColor, 0.3)
+                  }
+                ]}
+                onPress={() => {
+                  if (!isUnlocked) return;
+                  router.push('/smartcoach');
+                }}
+                activeOpacity={isUnlocked ? 0.9 : 1}
+                disabled={!isUnlocked}
               >
-                <View style={styles.smartCoachContent}>
-                  <View style={styles.smartCoachHeader}>
-                    <View style={styles.smartCoachIconContainer}>
-                      <Ionicons name="fitness" size={32} color={branding.primary} />
+                <LinearGradient
+                  colors={[branding.primaryLight, branding.primaryLight, branding.primaryLight]} // Use primaryLight for subtle background
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.smartCoachGradient}
+                >
+                  <View style={styles.smartCoachContent}>
+                    <View style={styles.smartCoachHeader}>
+                      <View style={styles.smartCoachIconContainer}>
+                        <Ionicons name="fitness" size={32} color={branding.primary} />
+                      </View>
+                      <View style={styles.smartCoachTextContainer}>
+                        <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
+                        <Text style={[styles.smartCoachSubtitle, { color: branding.primary + 'CC' }]} numberOfLines={2}>
+                          Follow workout plans from your gym
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          {
+                            backgroundColor: branding.primary,
+                            borderRadius: 20,
+                            padding: 4,
+                          }
+                        ]}
+                      >
+                        <Ionicons name="arrow-forward-circle" size={28} color={branding.onPrimary} />
+                      </TouchableOpacity>
                     </View>
-                    <View style={styles.smartCoachTextContainer}>
-                      <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
-                      <Text style={[styles.smartCoachSubtitle, { color: branding.primary + 'CC' }]} numberOfLines={2}>
-                        Follow workout plans from your gym
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[
-                        {
-                          backgroundColor: branding.primary,
-                          borderRadius: 20,
-                          padding: 4,
-                        }
-                      ]}
-                    >
-                      <Ionicons name="arrow-forward-circle" size={28} color={branding.onPrimary} />
-                    </TouchableOpacity>
                   </View>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Bottom Cards Row */}
           <View style={styles.bottomCardsRow}>

@@ -11,6 +11,7 @@ export interface Gym {
   primary_color?: string;
   background_url?: string;
   logo_url?: string;
+  smartcoach_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 }

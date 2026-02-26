@@ -297,6 +297,35 @@ export default function WorkoutScreen() {
         return;
       }
 
+      // AGENT NOTE: [2025-01-27] - mobile-coder
+      // Check if SmartCoach is enabled for the gym before loading plan item
+      // If gym doesn't have smartcoach_enabled, disable SmartCoach mode
+      const activeGymId = gymId || session?.gym_id;
+      if (activeGymId) {
+        // Check if gym has smartcoach_enabled
+        // If session.gym is already loaded, use it; otherwise fetch gym data
+        let gymSmartCoachEnabled = session?.gym?.smartcoach_enabled;
+        
+        // If gym data not in session, fetch it
+        if (gymSmartCoachEnabled === undefined) {
+          const { data: gymData } = await supabase
+            .from('gyms')
+            .select('smartcoach_enabled')
+            .eq('id', activeGymId)
+            .single();
+          
+          gymSmartCoachEnabled = gymData?.smartcoach_enabled ?? false;
+        }
+
+        // If SmartCoach is disabled for this gym, don't load plan item
+        if (!gymSmartCoachEnabled) {
+          console.log('[SmartCoach] SmartCoach is disabled for this gym, skipping plan load');
+          setIsSmartCoachMode(false);
+          setCurrentPlanItem(null);
+          return;
+        }
+      }
+
       try {
         console.log('[SmartCoach] Loading plan item for planId:', planId, 'machineId:', activeMachineId, 'index:', currentExerciseIndex);
         
@@ -367,7 +396,7 @@ export default function WorkoutScreen() {
     };
 
     loadPlanItem();
-  }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user]);
+  }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, gymId, session?.gym_id, session?.gym?.smartcoach_enabled]);
 
   // BLE Monitoring - REQUIRED to start workout
   useEffect(() => {
@@ -1719,7 +1748,7 @@ export default function WorkoutScreen() {
     // GYM SUSPEND CHECK: Verify gym is not suspended before creating session
     const { data: gym, error: gymError } = await supabase
       .from('gyms')
-      .select('id, name, status, is_suspended')
+      .select('id, name, status, is_suspended, smartcoach_enabled')
       .eq('id', gymId)
       .single();
 
