@@ -258,6 +258,43 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
 }
 
 /**
+ * Update SmartCoach enabled status for a gym (SuperAdmin only)
+ */
+export async function updateGymSmartCoach(gymId: string, enabled: boolean) {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can update SmartCoach status' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('gyms')
+      // @ts-expect-error - Supabase type inference issue
+      .update({
+        smartcoach_enabled: enabled,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', gymId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath('/dashboard/gyms');
+    revalidatePath(`/dashboard/gyms/${gymId}`);
+    revalidatePath(`/dashboard/gym/${gymId}/dashboard`);
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Suspend a gym (SuperAdmin only)
  */
 export async function suspendGym(gymId: string) {

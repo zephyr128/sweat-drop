@@ -7,6 +7,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getCurrentProfile } from '@/lib/auth';
+import { SmartCoachToggle } from '@/components/SmartCoachToggle';
 
 interface GymDetailPageProps {
   params: Promise<{ id: string }>;
@@ -19,6 +21,7 @@ interface GymData {
   country: string | null;
   address: string | null;
   primary_color: string | null;
+  smartcoach_enabled: boolean;
 }
 
 interface AdminData {
@@ -46,7 +49,11 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
     redirect('/login');
   }
 
-  // 2. Fetch gym data with error handling
+  // 2. Get current user profile to check if superadmin
+  const profile = await getCurrentProfile();
+  const isSuperadmin = profile?.role === 'superadmin';
+
+  // 3. Fetch gym data with error handling
   let gym: GymData;
   try {
     const { data: gymData, error: gymError } = await supabase
@@ -61,12 +68,16 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
     }
 
     gym = gymData as GymData;
+    // Ensure smartcoach_enabled has a default value if not present
+    if (typeof gym.smartcoach_enabled !== 'boolean') {
+      gym.smartcoach_enabled = false;
+    }
   } catch (error) {
     console.error('[GymDetailPage] Unexpected error fetching gym:', error);
     notFound();
   }
 
-  // 3. Get gym admin (if any) with error handling
+  // 4. Get gym admin (if any) with error handling
   let admin: AdminData | null = null;
   try {
     const { data: adminData, error: adminError } = await supabase
@@ -84,7 +95,7 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
     // Continue without admin - it's optional
   }
 
-  // 4. Get stats with error handling
+  // 5. Get stats with error handling
   let members = 0;
   let challenges = 0;
   let storeItems = 0;
@@ -173,6 +184,14 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
                 />
                 <span className="text-white">{gym.primary_color}</span>
               </div>
+            </div>
+          )}
+          {isSuperadmin && (
+            <div className="pt-4 border-t border-[#1A1A1A]">
+              <SmartCoachToggle 
+                gymId={gym.id} 
+                initialEnabled={gym.smartcoach_enabled} 
+              />
             </div>
           )}
         </div>

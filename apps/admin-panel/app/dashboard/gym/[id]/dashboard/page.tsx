@@ -9,6 +9,7 @@ import { StatsCard } from '@/components/StatsCard';
 import { AnalyticsSection } from '@/components/analytics/AnalyticsSection';
 import { NetworkOverviewToggle } from '@/components/dashboards/NetworkOverviewToggle';
 import { notFound } from 'next/navigation';
+import { SmartCoachToggle } from '@/components/SmartCoachToggle';
 
 interface DashboardPageProps {
   params: Promise<{ id: string }>;
@@ -20,6 +21,7 @@ interface GymData {
   city: string | null;
   country: string | null;
   owner_id: string | null;
+  smartcoach_enabled: boolean;
 }
 
 interface SessionData {
@@ -90,6 +92,10 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
     }
 
     gym = gymData as GymData;
+    // Ensure smartcoach_enabled has a default value if not present
+    if (typeof gym.smartcoach_enabled !== 'boolean') {
+      gym.smartcoach_enabled = false;
+    }
   } catch (error) {
     console.error('[GymDashboardPage] Unexpected error fetching gym:', error);
     notFound();
@@ -169,6 +175,16 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
       {/* Network Overview Toggle (only for gym owners with multiple gyms) */}
       {profile.role === 'gym_owner' && gym.owner_id && (
         <NetworkOverviewToggle ownerId={ownerId} currentGymId={id} />
+      )}
+
+      {/* SmartCoach Toggle (only for superadmin) */}
+      {profile.role === 'superadmin' && (
+        <div className="mb-6 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
+          <SmartCoachToggle 
+            gymId={gym.id} 
+            initialEnabled={gym.smartcoach_enabled} 
+          />
+        </div>
       )}
 
       {/* Header Row: Summary Cards */}
