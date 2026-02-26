@@ -167,7 +167,8 @@ export const getNumberStyle = (fontSize: number) => ({
   fontSize,
   fontWeight: theme.typography.fontWeight.bold,
   color: theme.colors.text,
-  fontVariant: ['tabular-nums'], // Apple Fitness+ style: prevents number jumping
+  // Note: fontVariant removed due to TypeScript type incompatibility with React Native
+  // The monospace font family already provides consistent number width
 });
 
 // Export individual color values for convenience

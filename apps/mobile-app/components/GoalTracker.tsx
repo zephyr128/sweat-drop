@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   exerciseName: {
-    fontSize: theme.typography.fontSize.md,
+    fontSize: theme.typography.fontSize.base,
     fontWeight: '600',
     flex: 1,
   },

@@ -73,11 +73,11 @@ export default function StatsView() {
 
       // Calculate stats from sessions
       const totalDuration = (sessionsData || []).reduce(
-        (sum, s) => sum + (s.duration_seconds || 0),
+        (sum: number, s: { duration_seconds: number | null }) => sum + (s.duration_seconds || 0),
         0
       );
       const totalDrops = (sessionsData || []).reduce(
-        (sum, s) => sum + (s.drops_earned || 0),
+        (sum: number, s: { drops_earned: number | null }) => sum + (s.drops_earned || 0),
         0
       );
 

@@ -401,7 +401,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     pointerEvents: 'none', // Don't block touch events
     flex: 1,
-    textAlign: 'center',
   },
   planInfo: {
     marginBottom: 24,

@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
 import BleManager from 'react-native-ble-manager';
@@ -82,7 +82,7 @@ export default function RootLayout() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setSession(session);
     });
 

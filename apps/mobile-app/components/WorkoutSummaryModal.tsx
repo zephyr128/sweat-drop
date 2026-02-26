@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     maxHeight: '80%',
-    ...theme.shadows.xl,
+    ...theme.shadows.lg,
   },
   scrollContent: {
     gap: theme.spacing.lg,
