@@ -1,0 +1,383 @@
+# SWEATDROP Monorepo - Cursor Rules
+
+## Project Overview
+**Project Name:** SWEATDROP  
+**Package Manager:** pnpm (v10.0.0+)  
+**Node Version:** >=18.0.0
+
+**Workspace Structure:**
+- `apps/admin-panel`: Next.js 15 (React 19, App Router, Web)
+- `apps/mobile-app`: React Native (Expo ~54, React 19, Mobile)
+- `backend/supabase`: Supabase local setup (PostgreSQL migrations, Deno Edge Functions)
+
+---
+
+## 🔴 CRITICAL: Context-Awareness Rules
+
+### MANDATORY: Check Working Directory Before Any Code Generation
+
+**Before writing ANY code, you MUST:**
+1. Identify the current working directory (`pwd` or check file path)
+2. Verify which workspace you're operating in
+3. Apply ONLY the rules for that specific workspace
+4. NEVER mix web and mobile code patterns
+
+### Workspace Detection Rules
+
+**If working in `apps/admin-panel/` or any subdirectory:**
+- ✅ Use Next.js App Router conventions (`app/` directory structure)
+- ✅ Use React DOM elements: `<div>`, `<span>`, `<button>`, `<input>`, etc.
+- ✅ Use web-specific libraries (e.g., `react-dropzone`, `react-to-print`)
+- ✅ Use `@supabase/ssr` for server/client Supabase clients
+- ✅ Use Tailwind CSS for styling
+- ✅ Use `NEXT_PUBLIC_*` environment variables
+- ❌ NEVER use React Native components (`<View>`, `<Text>`, etc.)
+- ❌ NEVER use Expo modules
+- ❌ NEVER use React Native-specific libraries
+
+**If working in `apps/mobile-app/` or any subdirectory:**
+- ✅ Use React Native elements: `<View>`, `<Text>`, `<Pressable>`, `<ScrollView>`, etc.
+- ✅ Use Expo modules (e.g., `expo-router`, `expo-image`, `expo-av`)
+- ✅ Use `@supabase/supabase-js` with AsyncStorage for auth persistence
+- ✅ Use StyleSheet API or inline styles (consider NativeWind if configured)
+- ✅ Use `EXPO_PUBLIC_*` environment variables
+- ✅ Use React Native navigation (`@react-navigation/native`, `expo-router`)
+- ❌ NEVER use DOM elements (`<div>`, `<span>`, etc.)
+- ❌ NEVER use web-specific libraries
+- ❌ NEVER use `window`, `document`, or browser APIs
+- ❌ NEVER use Next.js conventions
+
+**If working in `backend/supabase/`:**
+- ✅ Use strict PostgreSQL syntax for migrations (`.sql` files)
+- ✅ Use Deno/TypeScript for Edge Functions (`functions/*/index.ts`)
+- ✅ Follow Supabase migration naming conventions
+- ✅ Use `supabase` CLI commands for local development
+- ❌ NEVER use Node.js-specific APIs in Edge Functions
+- ❌ NEVER use npm/yarn commands
+
+---
+
+## 📦 Monorepo Dependency Management
+
+### Package Manager Rules
+
+**ALWAYS use pnpm, NEVER npm or yarn:**
+```bash
+# Adding dependencies to a specific workspace
+pnpm add <package> --filter sweatdrop-admin-panel
+pnpm add <package> --filter sweatdrop-mobile-app
+
+# Adding dev dependencies
+pnpm add -D <package> --filter <workspace-name>
+
+# Running scripts
+pnpm --filter <workspace-name> <script-name>
+
+# Root-level scripts (use from package.json)
+pnpm dev:admin
+pnpm dev:mobile
+pnpm build:admin
+pnpm build:mobile
+```
+
+### Cross-Workspace Imports
+
+**Current Setup:**
+- No shared packages detected in workspace configuration
+- Each app manages its own dependencies independently
+- If shared packages are added later, use pnpm workspace protocol: `workspace:*`
+
+**If creating shared packages:**
+1. Create in `packages/` directory
+2. Add to `pnpm-workspace.yaml`
+3. Reference using: `"shared-package": "workspace:*"`
+4. Run `pnpm install` at root to link workspaces
+
+---
+
+## 🔷 TypeScript Configuration
+
+### Strict Type Safety (All Workspaces)
+
+**Enforce across ALL workspaces:**
+- ✅ `strict: true` in tsconfig.json
+- ✅ No `any` types without explicit `// @ts-expect-error` or `// @ts-ignore` with justification
+- ✅ Use proper type imports: `import type { ... }` for type-only imports
+- ✅ Define interfaces/types for all API responses
+- ✅ Use Zod schemas for runtime validation (both apps use `zod`)
+
+### Type Definitions
+
+**Admin Panel (`apps/admin-panel/`):**
+- Use Next.js types: `@types/react`, `@types/react-dom`, `@types/node`
+- Path alias: `@/*` maps to workspace root
+
+**Mobile App (`apps/mobile-app/`):**
+- Use Expo types: extends `expo/tsconfig.base`
+- Path alias: `@/*` maps to workspace root
+- React Native types are included via Expo
+
+**Backend (`backend/supabase/`):**
+- Use generated types from Supabase: `backend/types/database.types.ts`
+- Reference types in Edge Functions: `import type { Database } from '../types/database.types.ts'`
+
+---
+
+## 🔌 Supabase Integration Patterns
+
+### Admin Panel Supabase Client
+
+**File:** `apps/admin-panel/lib/supabase-client.ts`
+
+**Pattern:**
+```typescript
+'use client';
+import { createBrowserClient } from '@supabase/ssr';
+
+// CRITICAL: Always trim env vars (Vercel UI can add whitespace)
+const supabaseUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+const supabaseAnonKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+```
+
+**Server Components:**
+- Use `@supabase/ssr` server utilities for server-side operations
+- Create server clients in Server Components or Route Handlers
+
+### Mobile App Supabase Client
+
+**File:** `apps/mobile-app/lib/supabase.ts`
+
+**Pattern:**
+```typescript
+import 'react-native-url-polyfill/auto';
+import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+export const supabase = createClient(url, key, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
+```
+
+**Key Differences:**
+- Mobile uses `@supabase/supabase-js` (not `@supabase/ssr`)
+- Mobile requires `react-native-url-polyfill/auto` import
+- Mobile uses `AsyncStorage` for auth persistence
+- Mobile uses `EXPO_PUBLIC_*` env vars (via `expo-constants`)
+
+### API Call Patterns
+
+**Both apps should:**
+- Use TypeScript types from `backend/types/database.types.ts` when available
+- Handle errors with proper error boundaries
+- Use React Query (`@tanstack/react-query`) in admin panel for data fetching
+- Use Zustand or React hooks for state management in mobile app
+- Always validate responses with Zod schemas when dealing with external data
+
+---
+
+## 🎨 Styling Conventions
+
+### Admin Panel (`apps/admin-panel/`)
+
+**Framework:** Tailwind CSS
+
+**Configuration:**
+- Config file: `apps/admin-panel/tailwind.config.js`
+- PostCSS: `apps/admin-panel/postcss.config.js`
+- Use Tailwind utility classes: `className="flex items-center gap-2"`
+- Use `clsx` for conditional classes: `clsx('base-class', condition && 'conditional-class')`
+- Use CSS modules or global CSS for complex styles if needed
+
+**UI Libraries:**
+- `lucide-react` for icons
+- `sonner` for toast notifications
+- `react-hook-form` + `zod` for forms
+- `chart.js` + `react-chartjs-2` for charts
+
+### Mobile App (`apps/mobile-app/`)
+
+**Framework:** StyleSheet API (NativeWind optional if configured)
+
+**Pattern:**
+```typescript
+import { StyleSheet, View, Text } from 'react-native';
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+  },
+});
+
+// Or inline styles for simple cases
+<View style={{ flex: 1, padding: 16 }}>
+```
+
+**UI Libraries:**
+- Expo components: `expo-image`, `expo-blur`, `expo-linear-gradient`
+- React Native components: Use core RN components
+- `react-native-svg` for SVG graphics
+- `@shopify/react-native-skia` for advanced graphics
+
+**NEVER use:**
+- Tailwind classes (unless NativeWind is explicitly configured)
+- CSS files
+- Web-specific styling
+
+---
+
+## 🤖 AI Agent Collaboration Protocol
+
+### Agent Notes & Context Preservation
+
+**When working on cross-workspace tasks:**
+
+1. **Leave Agent Notes:**
+   ```typescript
+   // AGENT NOTE: [Date] - [Agent/Context]
+   // This component bridges mobile app and Supabase backend.
+   // Next agent: Ensure the API endpoint in backend/supabase/functions/
+   // matches the expected request format defined here.
+   // Related files:
+   // - apps/mobile-app/lib/api.ts (client)
+   // - backend/supabase/functions/my-function/index.ts (server)
+   ```
+
+2. **Document Dependencies:**
+   - If a mobile feature requires a new Supabase function, document the expected interface
+   - If an admin panel feature requires a new database table, document the schema requirements
+   - Link related files using relative paths
+
+3. **Break Down Tasks:**
+   - If a task spans multiple workspaces, break it into clear steps
+   - Complete one workspace's changes before moving to the next
+   - Leave TODO comments with workspace context: `// TODO(mobile-app): Implement BLE scanning`
+
+4. **File Organization:**
+   - Keep workspace-specific code in its respective `apps/` directory
+   - Shared types go in `backend/types/` if used by multiple workspaces
+   - Never create files in the wrong workspace
+
+---
+
+## 🚫 Anti-Patterns & Common Mistakes
+
+### ❌ NEVER Do These:
+
+1. **Mixing Web and Mobile Code:**
+   ```typescript
+   // ❌ WRONG - Using <div> in mobile app
+   <div style={{ flex: 1 }}>Content</div>
+   
+   // ✅ CORRECT - Using <View> in mobile app
+   <View style={{ flex: 1 }}><Text>Content</Text></View>
+   ```
+
+2. **Using Wrong Package Manager:**
+   ```bash
+   # ❌ WRONG
+   npm install package
+   yarn add package
+   
+   # ✅ CORRECT
+   pnpm add package --filter <workspace>
+   ```
+
+3. **Wrong Supabase Client:**
+   ```typescript
+   // ❌ WRONG - Using @supabase/ssr in mobile app
+   import { createBrowserClient } from '@supabase/ssr';
+   
+   // ✅ CORRECT - Using @supabase/supabase-js in mobile app
+   import { createClient } from '@supabase/supabase-js';
+   ```
+
+4. **Missing Context Checks:**
+   - Always verify working directory before generating code
+   - Don't assume you're in a specific workspace
+   - Check file paths in the current context
+
+5. **Cross-Workspace Imports Without Proper Setup:**
+   - Don't import from `apps/admin-panel` in `apps/mobile-app` (or vice versa)
+   - Use shared packages if code needs to be reused
+
+---
+
+## ✅ Code Quality Standards
+
+### Linting & Formatting
+
+**All workspaces:**
+- Run `pnpm lint` before committing
+- Use Prettier (configured at root)
+- Follow ESLint rules per workspace:
+  - Admin: `eslint-config-next`
+  - Mobile: `eslint-config-expo`
+
+### Type Checking
+
+**Before committing:**
+```bash
+# Type check all workspaces
+pnpm type-check
+
+# Or per workspace
+pnpm --filter sweatdrop-admin-panel type-check
+pnpm --filter sweatdrop-mobile-app type-check
+```
+
+### Git Workflow
+
+- Commit messages should include workspace context: `[admin-panel] Add user management`
+- Use conventional commits when possible
+- Never commit `node_modules/` or build artifacts
+
+---
+
+## 📚 Additional Resources
+
+### Key Configuration Files
+
+- Root: [package.json](mdc:package.json) - Monorepo scripts and pnpm config
+- Workspace: [pnpm-workspace.yaml](mdc:pnpm-workspace.yaml) - Workspace definitions
+- Admin: [apps/admin-panel/package.json](mdc:apps/admin-panel/package.json)
+- Mobile: [apps/mobile-app/package.json](mdc:apps/mobile-app/package.json)
+- Supabase: [backend/supabase/config.toml](mdc:backend/supabase/config.toml)
+
+### Documentation Files
+
+- [README.md](mdc:README.md) - Project overview
+- [BUILD_INSTRUCTIONS.md](mdc:BUILD_INSTRUCTIONS.md) - Build setup
+- [SUPABASE_SETUP.md](mdc:SUPABASE_SETUP.md) - Supabase configuration
+
+---
+
+## 🎯 Quick Reference Checklist
+
+**Before writing code, verify:**
+- [ ] Current working directory is identified
+- [ ] Correct workspace rules are applied
+- [ ] Using correct React elements (DOM vs Native)
+- [ ] Using correct Supabase client pattern
+- [ ] Using pnpm commands (not npm/yarn)
+- [ ] TypeScript types are properly defined
+- [ ] Styling approach matches workspace (Tailwind vs StyleSheet)
+- [ ] Environment variables use correct prefix (`NEXT_PUBLIC_` vs `EXPO_PUBLIC_`)
+
+**When bridging workspaces:**
+- [ ] Leave agent notes with context
+- [ ] Document API contracts
+- [ ] Link related files
+- [ ] Break down into workspace-specific tasks
+
+---
+
+**Remember: Context is everything. Always check where you are before you code.**
