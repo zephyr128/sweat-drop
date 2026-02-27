@@ -17,8 +17,8 @@ export async function getCurrentUser(): Promise<User | null> {
   try {
     const supabase = await createClient();
     
-    // VAŽNO: getUser() je jedini siguran način za Server Komponente
-    // On automatski verifikuje JWT i osvežava sesiju ako je potrebno
+    // IMPORTANT: getUser() is the only safe way for Server Components
+    // It automatically verifies JWT and refreshes session if needed
     const { data: { user }, error } = await supabase.auth.getUser();
     
     if (error) {

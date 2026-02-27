@@ -8,21 +8,51 @@ const createChallengeSchema = z.object({
   gymId: z.string().uuid(),
   name: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
+  challengeType: z.enum(['daily', 'weekly', 'monthly', 'streak', 'milestone']),
+  // Conditional fields based on challengeType
+  targetDrops: z.number().int().positive().optional(), // For daily/weekly/monthly
+  milestoneThreshold: z.number().int().positive().optional(), // For milestone
+  streakDays: z.number().int().positive().optional(), // For streak
+  rewardDrops: z.number().int().min(0),
+  badgeImageUrl: z.string().url().optional().or(z.literal('')),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  // Cardio Challenge fields
-  frequency: z.enum(['daily', 'weekly', 'one-time', 'streak']),
-  requiredMinutes: z.number().int().positive().optional(),
-  machineType: z.enum(['treadmill', 'bike', 'any']),
-  dropsBounty: z.number().int().min(0),
-  streakDays: z.number().int().positive().optional(),
+}).superRefine((data, ctx) => {
+  // Conditional validation with specific field errors
+  if (data.challengeType === 'daily' || data.challengeType === 'weekly' || data.challengeType === 'monthly') {
+    if (!data.targetDrops || data.targetDrops <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Target drops is required for this challenge type',
+        path: ['targetDrops'],
+      });
+    }
+  }
+  if (data.challengeType === 'streak') {
+    if (!data.streakDays || data.streakDays <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Streak days is required for streak challenges',
+        path: ['streakDays'],
+      });
+    }
+  }
+  if (data.challengeType === 'milestone') {
+    if (!data.milestoneThreshold || data.milestoneThreshold <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Milestone threshold is required for milestone challenges',
+        path: ['milestoneThreshold'],
+      });
+    }
+  }
 });
 
 export async function createChallenge(input: z.infer<typeof createChallengeSchema>) {
   try {
     const validated = createChallengeSchema.parse(input);
 
-    // Set default dates based on frequency
+    // Set default dates based on challenge type
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -36,29 +66,35 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
 
     if (validated.endDate) {
       endDate = new Date(validated.endDate);
-    } else if (validated.frequency === 'daily') {
+    } else if (validated.challengeType === 'daily') {
       endDate = new Date(now);
       endDate.setHours(23, 59, 59, 999);
-    } else if (validated.frequency === 'weekly') {
+    } else if (validated.challengeType === 'weekly') {
       endDate = new Date(now);
       // Set to end of current week (Sunday)
       const dayOfWeek = endDate.getDay();
       const daysUntilSunday = 7 - dayOfWeek;
       endDate.setDate(endDate.getDate() + daysUntilSunday);
       endDate.setHours(23, 59, 59, 999);
-    } else if (validated.frequency === 'streak') {
+    } else if (validated.challengeType === 'monthly') {
+      endDate = new Date(now);
+      // Set to end of current month
+      endDate.setMonth(endDate.getMonth() + 1);
+      endDate.setDate(0); // Last day of current month
+      endDate.setHours(23, 59, 59, 999);
+    } else if (validated.challengeType === 'streak') {
       // Streak challenge: end date is based on streak_days
       endDate = new Date(now);
       const streakDays = validated.streakDays || 3;
       endDate.setDate(endDate.getDate() + streakDays);
       endDate.setHours(23, 59, 59, 999);
     } else {
-      // One-time challenge: default 30 days
+      // Milestone challenge: no end date (all-time)
       endDate = new Date(now);
-      endDate.setDate(endDate.getDate() + 30);
+      endDate.setFullYear(endDate.getFullYear() + 10); // Far future date
     }
 
-    // Build insert object for cardio challenge
+    // Build insert object for challenge
     const insertData: any = {
       gym_id: validated.gymId,
       name: validated.name,
@@ -66,15 +102,25 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       start_date: startDate.toISOString().split('T')[0], // DATE format
       end_date: endDate.toISOString().split('T')[0], // DATE format
       is_active: true,
-      frequency: validated.frequency,
-      required_minutes: validated.requiredMinutes || null,
-      machine_type: validated.machineType,
-      drops_bounty: validated.dropsBounty,
-      streak_days: validated.frequency === 'streak' ? validated.streakDays : null,
-      // For backward compatibility with old schema
-      challenge_type: validated.frequency,
-      target_drops: 0, // Not used for cardio challenges
-      reward_drops: validated.dropsBounty,
+      challenge_type: validated.challengeType,
+      // For milestone: use milestone_threshold, target_drops is not used
+      // For streak: target_drops is required by constraint but not used (streak_days is used instead)
+      // For daily/weekly/monthly: use target_drops
+      target_drops: validated.challengeType === 'milestone' 
+        ? 0  // Dummy value for milestone (not used, constraint requires it)
+        : validated.challengeType === 'streak'
+        ? 0  // Dummy value for streak (not used, constraint requires it)
+        : validated.targetDrops || 0,
+      milestone_threshold: validated.challengeType === 'milestone' 
+        ? validated.milestoneThreshold 
+        : null,
+      streak_days: validated.challengeType === 'streak' 
+        ? validated.streakDays 
+        : null,
+      reward_drops: validated.rewardDrops,
+      badge_image_url: validated.badgeImageUrl && validated.badgeImageUrl.trim() !== '' 
+        ? validated.badgeImageUrl.trim() 
+        : null,
     };
 
     const supabaseAdmin = getAdminClient();

@@ -11,12 +11,44 @@ import { X, Trash2, Power, Droplet } from 'lucide-react';
 const challengeSchema = z.object({
   name: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
-  // Cardio Challenge fields
-  frequency: z.enum(['daily', 'weekly', 'one-time', 'streak']),
-  requiredMinutes: z.number().int().positive().optional(),
-  machineType: z.enum(['treadmill', 'bike', 'any']),
-  dropsBounty: z.number().int().min(0),
-  streakDays: z.number().int().positive().optional(),
+  challengeType: z.enum(['daily', 'weekly', 'monthly', 'streak', 'milestone']),
+  // Conditional fields based on challengeType
+  targetDrops: z.number().int().positive().optional(), // For daily/weekly/monthly
+  milestoneThreshold: z.number().int().positive().optional(), // For milestone
+  streakDays: z.number().int().positive().optional(), // For streak
+  rewardDrops: z.number().int().min(0),
+  badgeImageUrl: z.string().url().optional().or(z.literal('')), // Optional badge image URL
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+}).superRefine((data, ctx) => {
+  // Conditional validation with specific field errors
+  if (data.challengeType === 'daily' || data.challengeType === 'weekly' || data.challengeType === 'monthly') {
+    if (!data.targetDrops || data.targetDrops <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Target drops is required for this challenge type',
+        path: ['targetDrops'],
+      });
+    }
+  }
+  if (data.challengeType === 'streak') {
+    if (!data.streakDays || data.streakDays <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Streak days is required for streak challenges',
+        path: ['streakDays'],
+      });
+    }
+  }
+  if (data.challengeType === 'milestone') {
+    if (!data.milestoneThreshold || data.milestoneThreshold <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Milestone threshold is required for milestone challenges',
+        path: ['milestoneThreshold'],
+      });
+    }
+  }
 });
 
 type ChallengeFormData = z.infer<typeof challengeSchema>;
@@ -30,13 +62,15 @@ interface Challenge {
   is_active: boolean;
   start_date: string;
   end_date: string;
-  target_drops: number;
-  // Cardio Challenge fields
+  target_drops: number | null;
+  milestone_threshold: number | null;
+  streak_days: number | null;
+  badge_image_url: string | null;
+  // Legacy fields (deprecated)
   frequency?: string;
   required_minutes?: number;
   machine_type?: string;
   drops_bounty?: number;
-  streak_days?: number;
 }
 
 interface ChallengesManagerProps {
@@ -58,16 +92,19 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   } = useForm<ChallengeFormData>({
     resolver: zodResolver(challengeSchema),
     defaultValues: {
-      frequency: 'daily',
-      machineType: 'any',
-      dropsBounty: 0,
-      requiredMinutes: 30,
+      challengeType: 'daily',
+      rewardDrops: 0,
+      targetDrops: 100,
       streakDays: 3,
+      milestoneThreshold: 1000,
+      badgeImageUrl: '',
     },
   });
 
-  const watchedFrequency = watch('frequency');
-  const isStreakChallenge = watchedFrequency === 'streak';
+  const watchedChallengeType = watch('challengeType');
+  const isStreakChallenge = watchedChallengeType === 'streak';
+  const isMilestoneChallenge = watchedChallengeType === 'milestone';
+  const isDropsBasedChallenge = watchedChallengeType === 'daily' || watchedChallengeType === 'weekly' || watchedChallengeType === 'monthly';
 
   const onSubmit = async (data: ChallengeFormData) => {
     try {
@@ -75,20 +112,6 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         ...data,
         gymId,
       };
-
-      // For streak challenges, ensure streakDays is set
-      if (data.frequency === 'streak') {
-        if (!data.streakDays || data.streakDays < 1) {
-          toast.error('Streak days is required for streak challenges');
-          return;
-        }
-      } else {
-        // For non-streak challenges, ensure requiredMinutes is set
-        if (!data.requiredMinutes) {
-          toast.error('Required minutes is required');
-          return;
-        }
-      }
 
       const result = await createChallenge(submitData) as {
         success: boolean;
@@ -195,38 +218,32 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100]">
-                          {challenge.frequency === 'streak' && challenge.streak_days
-                            ? `${challenge.streak_days}-Day Streak`
-                            : challenge.frequency || challenge.challenge_type}
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100] capitalize">
+                          {challenge.challenge_type || challenge.frequency}
                         </span>
-                        {challenge.machine_type && (
-                          <span className="text-xs text-[#808080]">
-                            {challenge.machine_type}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {challenge.frequency === 'streak' && challenge.streak_days ? (
+                      {challenge.challenge_type === 'streak' && challenge.streak_days ? (
                         <span className="text-white font-bold">
                           {challenge.streak_days} days streak
-                          {challenge.required_minutes && ` (${challenge.required_minutes} min/day)`}
                         </span>
-                      ) : challenge.required_minutes ? (
+                      ) : challenge.challenge_type === 'milestone' && challenge.milestone_threshold ? (
                         <span className="text-white font-bold">
-                          {challenge.required_minutes} min
+                          {challenge.milestone_threshold} drops (all-time)
+                        </span>
+                      ) : challenge.target_drops ? (
+                        <span className="text-white font-bold">
+                          {challenge.target_drops} <Droplet className="w-4 h-4 inline" strokeWidth={1.5} />
                         </span>
                       ) : (
-                        <span className="text-white font-bold">
-                          {challenge.target_drops} drops
-                        </span>
+                        <span className="text-[#808080] text-sm">No target set</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-[#00E5FF] font-bold">
                         <span className="flex items-center gap-1">
-                          {challenge.drops_bounty || challenge.reward_drops} <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                          {challenge.reward_drops || challenge.drops_bounty || 0} <Droplet className="w-4 h-4" strokeWidth={1.5} />
                         </span>
                       </span>
                     </td>
@@ -299,7 +316,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 <input
                   {...register('name')}
                   className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                  placeholder="E.g., Daily 30-Minute Treadmill Challenge"
+                  placeholder="E.g., Daily 100 Drops Challenge"
                 />
                 {errors.name && (
                   <p className="mt-1 text-sm text-[#FF5252]">{errors.name.message}</p>
@@ -318,143 +335,135 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Frequency *
-                  </label>
-                      <select
-                        {...register('frequency')}
-                        className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
-                      >
-                        <option value="daily">Daily (Resets every 24h)</option>
-                        <option value="weekly">Weekly (Resets every Monday)</option>
-                        <option value="streak">Streak (Consecutive days)</option>
-                        <option value="one-time">One-Time</option>
-                      </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Machine Type *
-                  </label>
-                  <select
-                    {...register('machineType')}
-                    className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
-                  >
-                    <option value="any">Any Machine</option>
-                    <option value="treadmill">Treadmill Only</option>
-                    <option value="bike">Bike Only</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Challenge Type *
+                </label>
+                <select
+                  {...register('challengeType')}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                >
+                  <option value="daily">Daily (Resets every 24h)</option>
+                  <option value="weekly">Weekly (Resets every Monday)</option>
+                  <option value="monthly">Monthly (Resets every month)</option>
+                  <option value="streak">Streak (Consecutive days)</option>
+                  <option value="milestone">Milestone (All-time drops in gym)</option>
+                </select>
+                {errors.challengeType && (
+                  <p className="mt-1 text-sm text-[#FF5252]">{errors.challengeType.message}</p>
+                )}
               </div>
 
-              {isStreakChallenge ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Streak Days *
-                    </label>
-                    <input
-                      type="number"
-                      {...register('streakDays', { valueAsNumber: true })}
-                      min={1}
-                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                      placeholder="3"
-                    />
-                    <p className="mt-1 text-xs text-[#808080]">
-                      Number of consecutive days required
+              {/* Conditional fields based on challenge type */}
+              {isDropsBasedChallenge && (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Target Drops *
+                  </label>
+                  <input
+                    type="number"
+                    {...register('targetDrops', { valueAsNumber: true })}
+                    min={1}
+                    className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                    placeholder="100"
+                  />
+                  <p className="mt-1 text-xs text-[#808080]">
+                    Total drops required to complete this challenge
+                  </p>
+                  {errors.targetDrops && (
+                    <p className="mt-1 text-sm text-[#FF5252]">
+                      {errors.targetDrops.message}
                     </p>
-                    {errors.streakDays && (
-                      <p className="mt-1 text-sm text-[#FF5252]">
-                        {errors.streakDays.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Daily Minutes Required *
-                    </label>
-                    <input
-                      type="number"
-                      {...register('requiredMinutes', { valueAsNumber: true })}
-                      min={1}
-                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                      placeholder="30"
-                    />
-                    <p className="mt-1 text-xs text-[#808080]">
-                      Minutes required per day
-                    </p>
-                    {errors.requiredMinutes && (
-                      <p className="mt-1 text-sm text-[#FF5252]">
-                        {errors.requiredMinutes.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Required Minutes *
-                    </label>
-                    <input
-                      type="number"
-                      {...register('requiredMinutes', { valueAsNumber: true })}
-                      min={1}
-                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                      placeholder="30"
-                    />
-                    {errors.requiredMinutes && (
-                      <p className="mt-1 text-sm text-[#FF5252]">
-                        {errors.requiredMinutes.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Drops Bounty *
-                    </label>
-                    <input
-                      type="number"
-                      {...register('dropsBounty', { valueAsNumber: true })}
-                      min={0}
-                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                      placeholder="100"
-                    />
-                    {errors.dropsBounty && (
-                      <p className="mt-1 text-sm text-[#FF5252]">
-                        {errors.dropsBounty.message}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
               )}
 
               {isStreakChallenge && (
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Drops Bounty (Total Reward) *
+                    Streak Days *
                   </label>
                   <input
                     type="number"
-                    {...register('dropsBounty', { valueAsNumber: true })}
-                    min={0}
+                    {...register('streakDays', { valueAsNumber: true })}
+                    min={1}
                     className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                    placeholder="500"
+                    placeholder="3"
                   />
                   <p className="mt-1 text-xs text-[#808080]">
-                    Total drops awarded when streak is completed
+                    Number of consecutive days required (minimum 1 drop per day)
                   </p>
-                  {errors.dropsBounty && (
+                  {errors.streakDays && (
                     <p className="mt-1 text-sm text-[#FF5252]">
-                      {errors.dropsBounty.message}
+                      {errors.streakDays.message}
                     </p>
                   )}
                 </div>
               )}
+
+              {isMilestoneChallenge && (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Milestone Threshold *
+                  </label>
+                  <input
+                    type="number"
+                    {...register('milestoneThreshold', { valueAsNumber: true })}
+                    min={1}
+                    className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                    placeholder="1000"
+                  />
+                  <p className="mt-1 text-xs text-[#808080]">
+                    All-time drops required in this gym to complete the milestone
+                  </p>
+                  {errors.milestoneThreshold && (
+                    <p className="mt-1 text-sm text-[#FF5252]">
+                      {errors.milestoneThreshold.message}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Reward Drops *
+                </label>
+                <input
+                  type="number"
+                  {...register('rewardDrops', { valueAsNumber: true })}
+                  min={0}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                  placeholder="100"
+                />
+                <p className="mt-1 text-xs text-[#808080]">
+                  Drops awarded when challenge is completed
+                </p>
+                {errors.rewardDrops && (
+                  <p className="mt-1 text-sm text-[#FF5252]">
+                    {errors.rewardDrops.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Badge Image URL
+                </label>
+                <input
+                  type="url"
+                  {...register('badgeImageUrl')}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                  placeholder="https://example.com/badge.png"
+                />
+                <p className="mt-1 text-xs text-[#808080]">
+                  Optional: URL to badge image/icon that users earn when completing this challenge
+                </p>
+                {errors.badgeImageUrl && (
+                  <p className="mt-1 text-sm text-[#FF5252]">
+                    {errors.badgeImageUrl.message}
+                  </p>
+                )}
+              </div>
 
               <div className="flex gap-4">
                 <button
