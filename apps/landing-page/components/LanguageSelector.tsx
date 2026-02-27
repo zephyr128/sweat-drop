@@ -62,7 +62,7 @@ export const LanguageSelector = memo(function LanguageSelector() {
                     language === lang.code ? 'bg-white/10' : ''
                   }`}
                   role="menuitem"
-                  aria-selected={language === lang.code}
+                  aria-current={language === lang.code ? 'true' : undefined}
                 >
                   {lang.name}
                 </button>
