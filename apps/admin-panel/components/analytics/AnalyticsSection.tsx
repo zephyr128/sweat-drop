@@ -19,13 +19,25 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
   const [analytics, setAnalytics] = useState<GymAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30days');
+  
+  // Default empty analytics structure
+  const defaultAnalytics: GymAnalytics = {
+    machine_usage: [],
+    hourly_traffic: Array.from({ length: 24 }, (_, i) => ({ hour: i, scan_count: 0 })),
+    economy_stats: {
+      drops_issued: 0,
+      drops_redeemed: 0,
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+    },
+  };
 
   useEffect(() => {
     async function fetchAnalytics() {
       try {
         setLoading(true);
-        console.log('[AnalyticsSection] Fetching analytics for gymId:', gymId);
-        const data = await getGymAnalytics(gymId);
+        console.log('[AnalyticsSection] Fetching analytics for gymId:', gymId, 'timeFilter:', timeFilter);
+        const data = await getGymAnalytics(gymId, timeFilter);
         console.log('[AnalyticsSection] Fetched analytics data:', {
           hasData: !!data,
           machineUsage: data?.machine_usage,
@@ -34,6 +46,40 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
           hourlyTrafficLength: data?.hourly_traffic?.length || 0,
           economyStats: data?.economy_stats,
         });
+        
+        // Ensure data structure is valid
+        if (data) {
+          // Ensure economy_stats exists and has required fields
+          if (!data.economy_stats || typeof data.economy_stats !== 'object') {
+            data.economy_stats = {
+              drops_issued: 0,
+              drops_redeemed: 0,
+              month: new Date().getMonth() + 1,
+              year: new Date().getFullYear(),
+            };
+          }
+          // Ensure arrays exist
+          if (!Array.isArray(data.machine_usage)) {
+            data.machine_usage = [];
+          }
+          if (!Array.isArray(data.hourly_traffic)) {
+            // Ensure all 24 hours are represented
+            data.hourly_traffic = Array.from({ length: 24 }, (_, i) => ({ hour: i, scan_count: 0 }));
+          }
+          // Ensure economy_stats has all required numeric fields
+          if (typeof data.economy_stats.drops_issued !== 'number') {
+            data.economy_stats.drops_issued = 0;
+          }
+          if (typeof data.economy_stats.drops_redeemed !== 'number') {
+            data.economy_stats.drops_redeemed = 0;
+          }
+        } else {
+          // If data is null, use default structure
+          console.warn('[AnalyticsSection] Received null data, using default structure');
+          setAnalytics(defaultAnalytics);
+          return;
+        }
+        
         setAnalytics(data);
       } catch (error) {
         console.error('[AnalyticsSection] Error fetching analytics:', error);
@@ -43,7 +89,9 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
       }
     }
 
-    fetchAnalytics();
+    if (gymId) {
+      fetchAnalytics();
+    }
   }, [gymId, timeFilter]);
 
   const getTimeFilterLabel = (filter: TimeFilter) => {
@@ -71,20 +119,9 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
     );
   }
 
-  if (!analytics) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 rounded-xl p-4">
-          <h3 className="text-base font-semibold text-white mb-1">Usage Overview</h3>
-          <p className="text-xs text-zinc-500 mb-4">{getTimeFilterLabel(timeFilter)}</p>
-          <div className="flex flex-col items-center justify-center min-h-[320px] text-center">
-            <p className="text-sm text-zinc-400 mb-1">No analytics data available</p>
-            <p className="text-xs text-zinc-600">Analytics data will appear here once sessions are created</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Always render analytics section, even if data is empty
+  // getGymAnalytics now returns empty structure instead of null
+  const displayAnalytics = analytics || defaultAnalytics;
 
   return (
     <div className="space-y-4">
@@ -111,12 +148,12 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
             <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-6 min-h-[380px]">
               <MachineHeatmapWidget 
-                machineUsage={Array.isArray(analytics.machine_usage) ? analytics.machine_usage : []} 
+                machineUsage={Array.isArray(displayAnalytics.machine_usage) ? displayAnalytics.machine_usage : []} 
               />
             </div>
             <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-6 min-h-[380px]">
               <PopularHoursWidget 
-                hourlyTraffic={Array.isArray(analytics.hourly_traffic) ? analytics.hourly_traffic : []} 
+                hourlyTraffic={Array.isArray(displayAnalytics.hourly_traffic) ? displayAnalytics.hourly_traffic : []} 
               />
             </div>
           </div>
@@ -137,21 +174,21 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
           <div className="space-y-3">
             <StatsCard
               title="Issued"
-              value={analytics.economy_stats.drops_issued.toLocaleString()}
+              value={(displayAnalytics.economy_stats?.drops_issued || 0).toLocaleString()}
               icon="Droplet"
               accent="cyan"
               priority="secondary"
             />
             <StatsCard
               title="Redeemed"
-              value={analytics.economy_stats.drops_redeemed.toLocaleString()}
+              value={(displayAnalytics.economy_stats?.drops_redeemed || 0).toLocaleString()}
               icon="ShoppingBag"
               accent="rose"
               priority="secondary"
             />
             <StatsCard
               title="Net Circulation"
-              value={(analytics.economy_stats.drops_issued - analytics.economy_stats.drops_redeemed).toLocaleString()}
+              value={((displayAnalytics.economy_stats?.drops_issued || 0) - (displayAnalytics.economy_stats?.drops_redeemed || 0)).toLocaleString()}
               icon="BarChart3"
               accent="emerald"
               priority="primary"
