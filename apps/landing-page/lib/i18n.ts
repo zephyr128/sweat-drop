@@ -129,6 +129,7 @@ export const translations = {
         analytics: 'Member analytics',
         rewards: 'Reward management',
         challenges: 'Challenge creation',
+        branding: 'Custom branding (colors, logo, background) for mobile app',
       },
     },
     futureVision: {
@@ -466,6 +467,7 @@ export const translations = {
         analytics: 'Analitika članova',
         rewards: 'Upravljanje nagradama',
         challenges: 'Kreiranje izazova',
+        branding: 'Prilagođavanje brendinga (boje, logo, pozadina) za mobilnu aplikaciju',
       },
     },
     futureVision: {

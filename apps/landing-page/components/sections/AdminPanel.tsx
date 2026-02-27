@@ -14,6 +14,7 @@ export const AdminPanel = memo(function AdminPanel() {
     t.adminPanel.features.analytics,
     t.adminPanel.features.rewards,
     t.adminPanel.features.challenges,
+    t.adminPanel.features.branding,
   ];
 
   return (
