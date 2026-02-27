@@ -48,7 +48,7 @@ export const AppExperience = memo(function AppExperience() {
                 src="/mobile-app-mockup.png"
                 alt="SweatDrop Mobile App"
                 fill
-                className="object-contain"
+                className="object-cover"
                 priority
               />
             </div>

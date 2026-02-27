@@ -51,7 +51,7 @@ export const AdminPanel = memo(function AdminPanel() {
                 src="/admin-panel-mockup.png"
                 alt="SweatDrop Admin Panel"
                 fill
-                className="object-contain"
+                className="object-cover"
                 priority
               />
             </div>
