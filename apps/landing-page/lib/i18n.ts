@@ -129,7 +129,7 @@ export const translations = {
         analytics: 'Member analytics',
         rewards: 'Reward management',
         challenges: 'Challenge creation',
-        branding: 'Custom branding (colors, logo, background) for mobile app',
+        branding: 'Custom branding for mobile app',
       },
     },
     futureVision: {
