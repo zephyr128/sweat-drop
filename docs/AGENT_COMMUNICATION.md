@@ -176,6 +176,11 @@ This document defines how AI agents communicate with each other in the SWEATDROP
 - Read `CHANGELOG.md` (see recent API changes)
 - Check `backend/types/database.types.ts` (latest types)
 
+**landing-page-coder:**
+- Read `CHANGELOG.md` (see recent changes)
+- Read `STATE_OF_THE_APP.md` (understand features to showcase)
+- Read `ARCHITECTURE.md` (understand value propositions)
+
 **architect:**
 - Read `CHANGELOG.md` (understand recent changes)
 - Read `MIGRATION_NOTES.md` (understand database state)
