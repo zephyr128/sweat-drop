@@ -86,7 +86,7 @@ export default function HomeScreen() {
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
 
   // Load challenge progress for all machine types
-  const { challenges: allChallenges, loading: challengesLoading } = useChallengeProgress(activeGymId, null);
+  const { challenges: allChallenges, loading: challengesLoading, refresh: refreshChallenges } = useChallengeProgress(activeGymId, null);
   
   // RPC function already filters by is_active = true and date range
   // Show all challenges returned by RPC (they are all active)
@@ -95,8 +95,23 @@ export default function HomeScreen() {
   // Show all challenges in horizontal scroll, plus "View All" button to see all challenges screen
   const displayedChallenges = activeChallenges;
   
+  // Debug: Log challenges data
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[Home] Challenges state:', {
+        activeGymId,
+        challengesLoading,
+        allChallengesCount: allChallenges.length,
+        activeChallengesCount: activeChallenges.length,
+        displayedChallengesCount: displayedChallenges.length,
+        challenges: allChallenges,
+        shouldShowChallenges: !challengesLoading && displayedChallenges.length > 0,
+      });
+    }
+  }, [activeGymId, challengesLoading, allChallenges, activeChallenges, displayedChallenges]);
+  
   // For backward compatibility with existing code, keep primaryWeeklyChallenge
-  const weeklyChallenges = allChallenges.filter((c) => c.frequency === 'weekly');
+  const weeklyChallenges = allChallenges.filter((c) => c.challenge_type === 'weekly');
   const primaryWeeklyChallenge = weeklyChallenges[0] || null;
 
   // Glow animation for QR button
@@ -127,6 +142,15 @@ export default function HomeScreen() {
       refreshLocalDrops();
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
+
+  // Refresh challenges when screen is focused (to update progress after workout)
+  useFocusEffect(
+    useCallback(() => {
+      if (activeGymId && session?.user && refreshChallenges) {
+        refreshChallenges();
+      }
+    }, [activeGymId, session?.user, refreshChallenges])
+  );
 
   const loadData = async () => {
     if (!session?.user) return;
@@ -163,7 +187,9 @@ export default function HomeScreen() {
         if (challengeData) {
           setDailyChallenge(challengeData);
 
-          // Load progress
+          // Load progress (if exists)
+          // NOTE: Progress is automatically created when add_drops() is called during workout
+          // Frontend should NOT insert directly into challenge_progress
           const { data: progressData } = await supabase
             .from('challenge_progress')
             .select('*')
@@ -174,20 +200,9 @@ export default function HomeScreen() {
           if (progressData) {
             setChallengeProgress(progressData);
           } else {
-            // Create progress entry if doesn't exist
-            const { data: newProgress } = await supabase
-              .from('challenge_progress')
-              .insert({
-                user_id: session.user.id,
-                challenge_id: challengeData.id,
-                current_drops: 0,
-              })
-              .select()
-              .single();
-
-            if (newProgress) {
-              setChallengeProgress(newProgress);
-            }
+            // Progress doesn't exist yet - it will be created automatically when user earns drops
+            // Set to null to show 0 progress in UI
+            setChallengeProgress(null);
           }
         }
 
@@ -387,7 +402,51 @@ export default function HomeScreen() {
           )}
 
           {/* Challenges Horizontal Scroll */}
-          {!challengesLoading && activeChallenges.length > 0 && (
+          {challengesLoading && (
+            <View style={styles.challengesSection}>
+              <View style={styles.challengesSectionHeader}>
+                <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.challengesScrollContent}
+                style={styles.challengesScrollView}
+                scrollEnabled={false}
+              >
+                {/* Skeleton Loaders */}
+                {[1, 2].map((index) => (
+                  <View
+                    key={`skeleton-${index}`}
+                    style={[styles.horizontalChallengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
+                  >
+                    <View style={styles.horizontalChallengeCardSkeleton}>
+                      <LinearGradient
+                        colors={['#0A1A2E', '#1A1A2E', '#0F0F1E']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.horizontalChallengeGradient}
+                      >
+                        <View style={styles.horizontalChallengeContent}>
+                          <View style={styles.horizontalChallengeHeader}>
+                            <View style={[styles.skeletonBadge, { backgroundColor: branding.primaryLight + '40' }]} />
+                            <View style={[styles.skeletonTitle, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
+                          </View>
+                          <View style={styles.horizontalChallengeProgress}>
+                            <View style={[styles.horizontalProgressBar, { backgroundColor: branding.primaryLight + '20' }]} />
+                            <View style={[styles.skeletonProgressText, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
+                          </View>
+                          <View style={[styles.skeletonReward, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
+                        </View>
+                      </LinearGradient>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {!challengesLoading && displayedChallenges.length > 0 && (
             <View style={styles.challengesSection}>
               <View style={styles.challengesSectionHeader}>
                 <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
@@ -403,9 +462,45 @@ export default function HomeScreen() {
                 pagingEnabled={false}
               >
                 {displayedChallenges.map((challenge) => {
-                  const progressRatio = challenge.required_minutes > 0 
-                    ? Math.min(challenge.current_minutes / challenge.required_minutes, 1) 
-                    : 0;
+                  // Calculate progress based on challenge type
+                  const progressRatio = challenge.progress_percentage / 100 || 0;
+                  
+                  // Get challenge type label
+                  const getChallengeTypeLabel = () => {
+                    switch (challenge.challenge_type) {
+                      case 'daily':
+                        return 'Daily';
+                      case 'weekly':
+                        return 'Weekly';
+                      case 'monthly':
+                        return 'Monthly';
+                      case 'streak':
+                        return 'Streak';
+                      case 'milestone':
+                        return 'Milestone';
+                      default:
+                        return 'Challenge';
+                    }
+                  };
+
+                  // Get progress label based on challenge type
+                  const getProgressLabel = () => {
+                    if (challenge.challenge_type === 'streak') {
+                      return {
+                        current: challenge.current_streak_days,
+                        target: challenge.target_drops,
+                        unit: 'days',
+                      };
+                    } else {
+                      return {
+                        current: challenge.current_drops,
+                        target: challenge.target_drops,
+                        unit: 'drops',
+                      };
+                    }
+                  };
+
+                  const progressLabel = getProgressLabel();
                   
                   return (
                     <View
@@ -436,7 +531,7 @@ export default function HomeScreen() {
                         <View style={styles.horizontalChallengeContent}>
                           <View style={styles.horizontalChallengeHeader}>
                             <Text style={[styles.horizontalChallengeType, { color: branding.primary }]}>
-                              {challenge.frequency === 'daily' ? 'Daily' : challenge.frequency === 'weekly' ? 'Weekly' : 'Challenge'}
+                              {getChallengeTypeLabel()}
                             </Text>
                             <Text style={styles.horizontalChallengeName} numberOfLines={2}>
                               {challenge.challenge_name}
@@ -462,20 +557,23 @@ export default function HomeScreen() {
                             </View>
                             <Text style={styles.horizontalProgressText}>
                               <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                {challenge.current_minutes}
+                                {progressLabel.current}
                               </Text>
                               {' / '}
                               <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                {challenge.required_minutes}
+                                {progressLabel.target}
                               </Text>
-                              {' min'}
+                              {' '}
+                              <Text style={[getNumberStyle(12), { color: branding.primary }]}>
+                                {progressLabel.unit}
+                              </Text>
                             </Text>
                           </View>
 
                           <View style={styles.horizontalChallengeReward}>
                             <Ionicons name="water" size={14} color="#00E5FF" />
                             <Text style={[styles.horizontalChallengeRewardText, { color: branding.primary }]}>
-                              {challenge.drops_bounty} drops
+                              {challenge.reward_drops} drops
                             </Text>
                           </View>
                         </View>
@@ -518,7 +616,7 @@ export default function HomeScreen() {
           )}
 
           {/* No Active Challenges Card with View All */}
-          {!challengesLoading && activeChallenges.length === 0 && (
+          {!challengesLoading && displayedChallenges.length === 0 && activeGymId && (
             <View style={styles.challengesSection}>
               <View style={styles.challengesSectionHeader}>
                 <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
@@ -1088,6 +1186,39 @@ const styles = StyleSheet.create({
   challengesScrollContent: {
     paddingHorizontal: 16,
     paddingRight: 28, // Extra padding at end for last card (16 + 12)
+  },
+  horizontalChallengeCardSkeleton: {
+    width: '100%',
+    height: CHALLENGE_CARD_HEIGHT,
+    borderRadius: 16,
+    overflow: 'hidden',
+    opacity: 0.6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  skeletonBadge: {
+    width: 60,
+    height: 20,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  skeletonTitle: {
+    width: '80%',
+    height: 16,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  skeletonProgressText: {
+    width: '60%',
+    height: 12,
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  skeletonReward: {
+    width: '50%',
+    height: 14,
+    borderRadius: 4,
+    marginTop: 12,
   },
   horizontalChallengeCardWrapper: {
     marginRight: 12,

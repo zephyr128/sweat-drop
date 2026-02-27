@@ -53,6 +53,7 @@ function StackNavigator() {
       <Stack.Screen name="redemptions" options={{ headerShown: false }} />
       <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
       <Stack.Screen name="smartcoach" options={{ headerShown: false }} />
+      <Stack.Screen name="trophy-room" options={{ headerShown: false }} />
       <Stack.Screen name="gym-plans" options={{ headerShown: false }} />
       <Stack.Screen name="plan-detail" options={{ headerShown: false }} />
       <Stack.Screen 

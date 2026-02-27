@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 export default function SessionSummaryScreen() {
   const { sessionId, drops, duration } = useLocalSearchParams<{
@@ -17,12 +18,15 @@ export default function SessionSummaryScreen() {
   const [session, setSession] = useState<any>(null);
   const [percentile, setPercentile] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [earnedBadges, setEarnedBadges] = useState<any[]>([]);
   const router = useRouter();
   const { session: authSession } = useSession();
+  const branding = useBranding();
 
   useEffect(() => {
     loadSession();
     calculatePercentile();
+    loadEarnedBadges();
   }, []);
 
   const loadSession = async () => {
@@ -73,6 +77,35 @@ export default function SessionSummaryScreen() {
     const mins = Math.floor(secs / 60);
     const sec = secs % 60;
     return `${mins}m ${sec}s`;
+  };
+
+  const loadEarnedBadges = async () => {
+    if (!authSession?.user) return;
+
+    try {
+      // Get badges earned in the last 5 minutes (newly earned)
+      const fiveMinutesAgo = new Date();
+      fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5);
+
+      const { data, error } = await supabase.rpc('get_user_badges', {
+        p_user_id: authSession.user.id,
+      });
+
+      if (error) {
+        console.error('Error loading badges:', error);
+        return;
+      }
+
+      // Filter badges earned in last 5 minutes
+      const newlyEarned = (data || []).filter((badge: any) => {
+        const earnedAt = new Date(badge.earned_at);
+        return earnedAt >= fiveMinutesAgo;
+      });
+
+      setEarnedBadges(newlyEarned);
+    } catch (err) {
+      console.error('Error in loadEarnedBadges:', err);
+    }
   };
 
   if (loading) {
@@ -131,6 +164,33 @@ export default function SessionSummaryScreen() {
             <Text style={styles.percentileText}>
               Today you beat {percentile}% of people in {session.gym.name}! 🔥
             </Text>
+          </View>
+        )}
+
+        {/* Earned Badges Section */}
+        {earnedBadges.length > 0 && (
+          <View style={styles.badgesSection}>
+            <Text style={styles.badgesSectionTitle}>Earned Badges</Text>
+            <View style={styles.badgesGrid}>
+              {earnedBadges.map((badge) => (
+                <View key={badge.badge_id} style={styles.badgeCard}>
+                  {badge.badge_image_url ? (
+                    <Image
+                      source={{ uri: badge.badge_image_url }}
+                      style={styles.badgeImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={[styles.badgePlaceholder, { backgroundColor: branding.primaryLight }]}>
+                      <Ionicons name="trophy" size={32} color={branding.primary} />
+                    </View>
+                  )}
+                  <Text style={styles.badgeName} numberOfLines={2}>
+                    {badge.challenge_name}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -249,5 +309,48 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.5,
+  },
+  badgesSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  badgesSectionTitle: {
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+    letterSpacing: 0.5,
+  },
+  badgesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  badgeCard: {
+    width: '30%',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  badgeImage: {
+    width: 64,
+    height: 64,
+    marginBottom: theme.spacing.sm,
+  },
+  badgePlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: theme.borderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  badgeName: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text,
+    textAlign: 'center',
+    fontWeight: theme.typography.fontWeight.medium,
   },
 });

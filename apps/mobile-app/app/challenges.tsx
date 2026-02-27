@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +23,15 @@ export default function ChallengesScreen() {
       loadChallenges();
     }
   }, [session]);
+
+  // Refresh challenges when screen is focused (to update progress after workout)
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.user) {
+        loadChallenges();
+      }
+    }, [session?.user])
+  );
 
   useEffect(() => {
     if (challenges.length > 0) {
@@ -47,65 +56,86 @@ export default function ChallengesScreen() {
       return;
     }
 
-    // Use the same RPC function as home screen to get consistent results
-    const { data, error } = await supabase.rpc('get_active_challenges_for_user', {
-      p_user_id: session.user.id,
-      p_gym_id: gymId,
-      p_machine_type: null, // Get all machine types
-    });
+    // Query challenges directly with new schema (challenge_type, target_drops, current_drops)
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { data: challengesData, error: challengesError } = await supabase
+      .from('challenges')
+      .select(`
+        id,
+        name,
+        description,
+        challenge_type,
+        target_drops,
+        milestone_threshold,
+        reward_drops,
+        streak_days,
+        start_date,
+        end_date,
+        gym_id,
+        created_at,
+        updated_at
+      `)
+      .eq('gym_id', gymId)
+      .eq('is_active', true)
+      .lte('start_date', today)
+      .gte('end_date', today);
 
-    if (error) {
-      console.error('Error loading challenges:', error);
+    if (challengesError) {
+      console.error('Error loading challenges:', challengesError);
       setChallenges([]);
       return;
     }
 
-    // Transform the RPC result to match the expected format
-    if (data) {
-      // Fetch full challenge details for each challenge
-      const challengeIds = data.map((c: any) => c.challenge_id);
-      if (challengeIds.length > 0) {
-        const { data: fullChallenges, error: fullError } = await supabase
-          .from('challenges')
-          .select('*')
-          .in('id', challengeIds);
-
-        if (fullError) {
-          console.error('Error loading full challenge details:', fullError);
-          setChallenges([]);
-          return;
-        }
-
-        // Merge RPC data with full challenge data
-        const mergedChallenges = (fullChallenges || []).map((challenge: any) => {
-          const progressData = data.find((p: any) => p.challenge_id === challenge.id);
-          return {
-            ...challenge,
-            progress: progressData,
-          };
-        });
-
-        setChallenges(mergedChallenges);
-      } else {
-        setChallenges([]);
-      }
-    } else {
+    if (!challengesData || challengesData.length === 0) {
       setChallenges([]);
+      return;
     }
+
+    // Get challenge progress for user
+    const challengeIds = challengesData.map((c) => c.id);
+    const { data: progressData, error: progressError } = await supabase
+      .from('challenge_progress')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('gym_id', gymId)
+      .in('challenge_id', challengeIds);
+
+    if (progressError) {
+      console.error('Error loading challenge progress:', progressError);
+      // Continue without progress data
+    }
+
+    // Merge challenges with progress
+    const mergedChallenges = challengesData.map((challenge) => {
+      const progress = progressData?.find((p) => p.challenge_id === challenge.id);
+      return {
+        ...challenge,
+        progress: progress,
+      };
+    });
+
+    setChallenges(mergedChallenges);
   };
 
   const loadProgress = async () => {
     if (!session?.user) return;
 
-    // Progress is already loaded in loadChallenges via RPC
+    // Progress is already loaded in loadChallenges
     // Just create a map from the progress data
     const progressMap: Record<string, any> = {};
     challenges.forEach((c: any) => {
       if (c.progress) {
+        // Use current_drops for drops-based challenges, current_streak_days for streak
+        const current = c.challenge_type === 'streak' 
+          ? (c.progress.current_streak_days || 0)
+          : (c.progress.current_drops || 0);
+        
         progressMap[c.id] = {
-          current_drops: c.progress.current_minutes, // Map minutes to drops for display
-          current_minutes: c.progress.current_minutes,
-          is_completed: c.progress.is_completed,
+          current_drops: current,
+          current_minutes: current, // Keep for backward compatibility
+          current_streak_days: c.progress.current_streak_days || 0,
+          is_completed: c.progress.is_completed || false,
         };
       }
     });
@@ -132,8 +162,12 @@ export default function ChallengesScreen() {
         return 'Daily';
       case 'weekly':
         return 'Weekly';
+      case 'monthly':
+        return 'Monthly';
       case 'streak':
         return 'Streak';
+      case 'milestone':
+        return 'Milestone';
       default:
         return type;
     }
@@ -174,17 +208,32 @@ export default function ChallengesScreen() {
         ) : (
           challenges.map((challenge: any) => {
             const userProgress = progress[challenge.id];
-            const currentMinutes = userProgress?.current_minutes || 0;
-            const requiredMinutes = challenge.required_minutes || challenge.target_drops || 0;
-            const progressPercent = requiredMinutes > 0 
-              ? Math.min((currentMinutes / requiredMinutes) * 100, 100)
+            
+            // Calculate target based on challenge type
+            let target = 0;
+            if (challenge.challenge_type === 'milestone') {
+              target = challenge.milestone_threshold || 0;
+            } else if (challenge.challenge_type === 'streak') {
+              target = challenge.streak_days || challenge.target_drops || 0;
+            } else {
+              target = challenge.target_drops || 0;
+            }
+            
+            // Calculate current progress based on challenge type
+            let current = 0;
+            if (challenge.challenge_type === 'streak') {
+              current = userProgress?.current_streak_days || 0;
+            } else {
+              current = userProgress?.current_drops || userProgress?.current_minutes || 0;
+            }
+            
+            const progressPercent = target > 0 
+              ? Math.min((current / target) * 100, 100)
               : 0;
             const isCompleted = userProgress?.is_completed || false;
 
             // Determine challenge type label
-            const challengeTypeLabel = challenge.frequency 
-              ? (challenge.frequency === 'daily' ? 'Daily' : challenge.frequency === 'weekly' ? 'Weekly' : 'One-Time')
-              : getChallengeTypeLabel(challenge.challenge_type || 'one-time');
+            const challengeTypeLabel = getChallengeTypeLabel(challenge.challenge_type || 'daily');
 
             return (
               <TouchableOpacity
@@ -234,18 +283,19 @@ export default function ChallengesScreen() {
                     />
                   </View>
                   <Text style={styles.progressText}>
-                    <Text style={[getNumberStyle(14), { color: branding.primary }]}>{currentMinutes}</Text>
+                    <Text style={[getNumberStyle(14), { color: branding.primary }]}>{current}</Text>
                     {' / '}
-                    <Text style={[getNumberStyle(14), { color: branding.primary }]}>{requiredMinutes}</Text>
-                    {' min'}
+                    <Text style={[getNumberStyle(14), { color: branding.primary }]}>{target}</Text>
+                    {' '}
+                    {challenge.challenge_type === 'streak' ? 'days' : 'drops'}
                   </Text>
                 </View>
 
-                {challenge.drops_bounty > 0 && (
+                {challenge.reward_drops > 0 && (
                   <View style={styles.rewardInfo}>
                     <Ionicons name="water" size={14} color="#00E5FF" />
                     <Text style={[styles.rewardText, { color: branding.primary }]}>
-                      {challenge.drops_bounty} drops reward
+                      {challenge.reward_drops} drops reward
                     </Text>
                   </View>
                 )}
@@ -253,7 +303,7 @@ export default function ChallengesScreen() {
                 {isCompleted && (
                   <View style={styles.completedBadge}>
                     <Text style={styles.completedText}>
-                      ✅ Completed! {challenge.drops_bounty || challenge.reward_drops || 0} drops earned
+                      ✅ Completed! {challenge.reward_drops || 0} drops earned
                     </Text>
                   </View>
                 )}

@@ -197,6 +197,21 @@ export function UserSettingsSheet({ visible, onClose, profile }: UserSettingsShe
                     <Ionicons name="chevron-forward" size={20} color={baseTheme.colors.textSecondary} />
                   </TouchableOpacity>
                 </Animated.View>
+
+                <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => {
+                      onClose();
+                      router.push('/trophy-room');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="medal-outline" size={20} color={baseTheme.colors.text} />
+                    <Text style={styles.actionButtonText}>Trophy Room</Text>
+                    <Ionicons name="chevron-forward" size={20} color={baseTheme.colors.textSecondary} />
+                  </TouchableOpacity>
+                </Animated.View>
               </View>
 
               {/* Logout */}
@@ -328,6 +343,19 @@ export function UserSettingsSheet({ visible, onClose, profile }: UserSettingsShe
               >
                 <Ionicons name="trophy-outline" size={20} color={baseTheme.colors.text} />
                 <Text style={styles.actionButtonText}>Leaderboard</Text>
+                <Ionicons name="chevron-forward" size={20} color={baseTheme.colors.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                  onClose();
+                  router.push('/trophy-room');
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="medal-outline" size={20} color={baseTheme.colors.text} />
+                <Text style={styles.actionButtonText}>Trophy Room</Text>
                 <Ionicons name="chevron-forward" size={20} color={baseTheme.colors.textSecondary} />
               </TouchableOpacity>
             </View>

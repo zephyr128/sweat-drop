@@ -35,6 +35,7 @@ import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { bleService, CSCMeasurement } from '@/lib/ble-service';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { useTheme } from '@/lib/contexts/ThemeContext';
+import { ActiveChallengesOverlay } from '@/components/ActiveChallengesOverlay';
 
 // ActiveDrop interface removed - drops are now managed internally by DropEmitter
 
@@ -90,13 +91,15 @@ export default function WorkoutScreen() {
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [challengeMessage, setChallengeMessage] = useState<string | null>(null);
+  // REMOVED: challengeMessage state - challenge completions are now shown in session summary
+  // Challenge progress is automatically updated via add_drops() when workout ends
   const [averageRPM, setAverageRPM] = useState<number>(0); // Average RPM for database sync (low frequency, OK to use state)
   const [showAutoPauseOverlay, setShowAutoPauseOverlay] = useState(false);
   const [showSensorAsleep, setShowSensorAsleep] = useState(false);
   const [showPlanCompleted, setShowPlanCompleted] = useState(false);
   const [showWorkoutSummary, setShowWorkoutSummary] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [showChallengesOverlay, setShowChallengesOverlay] = useState(false);
   const reconnectAttemptRef = useRef<number>(0); // Track reconnect attempts for exponential backoff
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
@@ -112,9 +115,8 @@ export default function WorkoutScreen() {
   const lastHapticTimeRef = useRef<number>(0); // Throttle haptic feedback (max 5/s)
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const challengeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastChallengeUpdateRef = useRef<number>(0);
-  const challengeMessageTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // REMOVED: challengeUpdateIntervalRef, lastChallengeUpdateRef, challengeMessageTimerRef
+  // Challenge progress is now automatically updated via add_drops() when workout ends
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bleMonitoringRef = useRef<boolean>(false);
   const lastRPMTimeRef = useRef<number>(Date.now());
@@ -280,7 +282,9 @@ export default function WorkoutScreen() {
   }, [paramMachineType, session?.machine?.type, session?.equipment?.equipment_type, machineType, session?.gym_id]);
 
   // Load challenge progress
-  const { challenges, updateProgress, refresh: refreshChallenges } = useChallengeProgress(
+  // NOTE: Challenge progress is automatically updated via add_drops() when workout ends
+  // No need to manually update progress during workout
+  const { challenges, refresh: refreshChallenges } = useChallengeProgress(
     session?.gym_id || null,
     machineType
   );
@@ -897,7 +901,7 @@ export default function WorkoutScreen() {
                     setShowAutoPauseOverlay(false);
                     Alert.alert(
                       'Workout Paused',
-                      'Trening je automatski pauziran jer senzor ne šalje podatke. Proverite konekciju sa senzorom.',
+                      'Workout automatically paused because sensor is not sending data. Check sensor connection.',
                       [{ text: 'OK' }]
                     );
                   }
@@ -1349,11 +1353,7 @@ export default function WorkoutScreen() {
           heartbeatIntervalRef.current = null;
         }
         
-        // Clear challenge update interval
-        if (challengeUpdateIntervalRef.current) {
-          clearInterval(challengeUpdateIntervalRef.current);
-          challengeUpdateIntervalRef.current = null;
-        }
+        // REMOVED: challengeUpdateIntervalRef cleanup - challenge progress is now automatic via add_drops()
         
         // Clear all timers
         if (longPressTimerRef.current) {
@@ -1361,10 +1361,7 @@ export default function WorkoutScreen() {
           longPressTimerRef.current = null;
         }
         
-        if (challengeMessageTimerRef.current) {
-          clearTimeout(challengeMessageTimerRef.current);
-          challengeMessageTimerRef.current = null;
-        }
+        // REMOVED: challengeMessageTimerRef cleanup - no longer needed
         
         if (autoPauseTimerRef.current) {
           clearTimeout(autoPauseTimerRef.current);
@@ -1621,7 +1618,7 @@ export default function WorkoutScreen() {
   // Pace = Time (seconds) / Distance (km) = seconds per km
   // Then convert to min:sec format
   // Distance for treadmill = total_drops * 0.0008 (average step 0.8m)
-  // Distance for bike = ukupni_obrtaji * 0.002 (krug od 2m)
+  // Distance for bike = total_revolutions * 0.002 (2m circle)
   // If RPM is 0 or distance is 0, display --:--
   useAnimatedReaction(
     () => [duration, totalDropsShared.value, totalCrankRevolutionsShared.value, smoothedRPMShared.value, machineType] as const,
@@ -1641,7 +1638,7 @@ export default function WorkoutScreen() {
         // Treadmill: Distance = drops * 0.0008 km (0.8m per step)
         distanceKm = drops * 0.0008;
       } else {
-        // Bike: Distance = ukupni_obrtaji * 0.002 (krug od 2m)
+        // Bike: Distance = total_revolutions * 0.002 (2m circle)
         distanceKm = totalRevolutions * 0.002;
       }
       
@@ -1679,8 +1676,8 @@ export default function WorkoutScreen() {
   );
 
   // PRO-FITNESS: Calculate calories based on machine type
-  // Bike: Kcal = (ukupni_obrtaji * 0.15)
-  // Treadmill: Kcal = (ukupno_kapi * 0.04)
+  // Bike: Kcal = (total_revolutions * 0.15)
+  // Treadmill: Kcal = (total_drops * 0.04)
   useAnimatedReaction(
     () => [totalDropsShared.value, totalCrankRevolutionsShared.value, machineType] as const,
     ([drops, totalRevolutions, mType]) => {
@@ -1688,10 +1685,10 @@ export default function WorkoutScreen() {
       const currentMachineType = mType || 'treadmill';
       
       if (currentMachineType === 'bike') {
-        // Bike formula: Kcal = (ukupni_obrtaji * 0.15)
+        // Bike formula: Kcal = (total_revolutions * 0.15)
         caloriesShared.value = Math.floor(totalRevolutions * 0.15);
       } else {
-        // Treadmill formula: Kcal = (ukupno_kapi * 0.04)
+        // Treadmill formula: Kcal = (total_drops * 0.04)
         caloriesShared.value = Math.floor(drops * 0.04);
       }
     },
@@ -1822,8 +1819,7 @@ export default function WorkoutScreen() {
       }
       if (data.duration_seconds) {
         setDuration(data.duration_seconds);
-        // Reset challenge update ref if resuming a session
-        lastChallengeUpdateRef.current = Math.floor(data.duration_seconds / 60);
+        // REMOVED: lastChallengeUpdateRef - challenge progress is now automatic via add_drops()
         // Recalculate calories based on drops (1 drop ≈ 0.4 kcal)
         setCalories(Math.floor(data.drops_earned * 0.4));
       }
@@ -2090,69 +2086,38 @@ export default function WorkoutScreen() {
     };
   }, [isSmartCoachMode, currentPlanItem, isPaused, bleConnected, exerciseCompleted, isPlanCompleted, durationShared, currentProgressShared, goalPercentageShared, exerciseCompletedShared, isMountedRef, handleNextExercise]);
 
-  // Update challenge progress every minute (only when a new minute is reached)
+  // Auto-refresh challenge progress every 12 seconds during workout
   useEffect(() => {
-    if (!session?.gym_id || !machineType || isPaused) {
+    if (!session?.gym_id || !machineType || isPaused || !bleConnected) {
       return;
     }
 
-    // Don't update if challenges haven't loaded yet
-    if (challenges.length === 0) {
-      return;
-    }
-    
-    // Only update when we cross a new minute threshold (1, 2, 3, etc.)
-    // Don't update on every second - only when minutes change
-    if (currentMinutes > 0 && currentMinutes > lastChallengeUpdateRef.current) {
-      const minutesToAdd = 1; // Always add exactly 1 minute per update
-      
-      console.log('[Workout] Updating challenge progress:', {
-        minutes: currentMinutes,
-        minutesToAdd,
-        gymId: session.gym_id,
-        machineType,
-      });
-
-      lastChallengeUpdateRef.current = currentMinutes;
-
-      // Update challenge progress
-      if (updateProgress) {
-        updateProgress(minutesToAdd).then((result) => {
-          if (!isMountedRef.current) return;
-          console.log('[Workout] Challenge update result:', result);
-          if (result.success && result.totalDropsAwarded && result.totalDropsAwarded > 0) {
-            if (!isMountedRef.current) return;
-            setChallengeMessage(`Challenge Completed! 🎉\n+${result.totalDropsAwarded} drops`);
-            if (challengeMessageTimerRef.current) {
-              clearTimeout(challengeMessageTimerRef.current);
-            }
-            challengeMessageTimerRef.current = setTimeout(() => {
-              if (!isMountedRef.current) return;
-              setChallengeMessage(null);
-              challengeMessageTimerRef.current = null;
-            }, 5000);
-          } else if (!result.success) {
-            console.error('[Workout] Challenge update failed:', result.error);
-          } else {
-            console.log('[Workout] Challenge progress updated successfully (no completions)');
-          }
-        }).catch((error) => {
-          console.error('[Workout] Challenge update error:', error);
-        });
-      } else {
-        console.error('[Workout] updateProgress function is not available');
+    // Refresh challenge progress every 12 seconds to keep overlay updated
+    const refreshInterval = setInterval(() => {
+      if (refreshChallenges) {
+        refreshChallenges();
       }
-    }
-  }, [currentMinutes, session?.gym_id, machineType, isPaused, updateProgress, challenges.length]);
+    }, 12000); // 12 seconds
 
-  // Cleanup challenge message timer on unmount
-  useEffect(() => {
     return () => {
-      if (challengeMessageTimerRef.current) {
-        clearTimeout(challengeMessageTimerRef.current);
-      }
+      clearInterval(refreshInterval);
     };
-  }, []);
+  }, [session?.gym_id, machineType, isPaused, bleConnected, refreshChallenges]);
+
+  // Update challenge progress every minute (only when a new minute is reached)
+  // NOTE: Challenge progress is automatically updated via add_drops() when workout ends
+  // No need to manually update progress during workout - removed deprecated updateProgress calls
+  // Progress will be updated when end_session() -> add_drops() -> update_challenge_progress() is called
+  // 
+  // Refresh challenges after workout ends to show updated progress
+  useEffect(() => {
+    if (!bleConnected && session?.gym_id) {
+      // Refresh challenges when workout ends (BLE disconnected)
+      refreshChallenges();
+    }
+  }, [bleConnected, session?.gym_id, refreshChallenges]);
+
+  // REMOVED: challenge message timer cleanup - no longer needed
 
   // REMOVED: Old drop creation logic - drops are now managed imperatively via dropEmitterRef.current?.emit()
   // Drops are emitted directly in BLE callback when new drops are earned
@@ -2336,16 +2301,9 @@ export default function WorkoutScreen() {
       console.warn('No gym membership found - this might be normal if add_drops failed to create it');
     }
 
-    // Final challenge progress update with remaining minutes
-    const finalMinutes = Math.floor(duration / 60);
-    const remainingMinutes = finalMinutes - lastChallengeUpdateRef.current;
-    if (remainingMinutes > 0 && machineType) {
-      const result = await updateProgress(remainingMinutes);
-      if (result.success && result.totalDropsAwarded && result.totalDropsAwarded > 0) {
-        // Challenge completion will be shown in session summary
-        console.log('Challenges completed:', result.completedChallenges);
-      }
-    }
+    // NOTE: Challenge progress is automatically updated via add_drops() when end_session() is called
+    // No need to manually update progress here - it's handled by the backend
+    // Progress will be updated when end_session() -> add_drops() -> update_challenge_progress() is called
 
     // Unlock machine if it was locked
     if (session.machine_id && authSession?.user) {
@@ -2564,12 +2522,31 @@ export default function WorkoutScreen() {
             </View>
           )}
         </View>
-        <View style={styles.headerDrops}>
-          <Ionicons name="water" size={20} color={theme.colors.primary} />
-          <AnimatedText 
-            text={animatedDropsText}
-            style={[styles.headerDropsText, getNumberStyle(18), { color: theme.colors.primary }]}
-          />
+        <View style={styles.headerRight}>
+          {/* Challenges Overlay Button */}
+          {challenges.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setShowChallengesOverlay(true)}
+              style={[styles.challengesButton, { backgroundColor: branding.primaryLight }]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trophy" size={20} color={branding.primary} />
+              {challenges.filter((c) => !c.is_completed).length > 0 && (
+                <View style={[styles.challengesBadge, { backgroundColor: branding.primary }]}>
+                  <Text style={[styles.challengesBadgeText, { color: branding.onPrimary }]}>
+                    {challenges.filter((c) => !c.is_completed).length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerDrops}>
+            <Ionicons name="water" size={20} color={theme.colors.primary} />
+            <AnimatedText 
+              text={animatedDropsText}
+              style={[styles.headerDropsText, getNumberStyle(18), { color: theme.colors.primary }]}
+            />
+          </View>
         </View>
       </View>
 
@@ -2651,6 +2628,15 @@ export default function WorkoutScreen() {
       )}
 
       {/* Workout Summary Modal */}
+      {/* Active Challenges Overlay */}
+      {showChallengesOverlay && session?.gym_id && (
+        <ActiveChallengesOverlay
+          challenges={challenges}
+          gymId={session.gym_id}
+          onClose={() => setShowChallengesOverlay(false)}
+        />
+      )}
+
       <WorkoutSummaryModal
         visible={showWorkoutSummary}
         onClose={() => {
@@ -2851,9 +2837,9 @@ export default function WorkoutScreen() {
       {showAutoPauseOverlay && !isPaused && (session?.machine?.sensor_id || sensorId) && (
         <Animated.View style={[styles.autoPauseOverlay, pausedOverlayStyle]} pointerEvents="none">
           <Ionicons name="warning-outline" size={48} color={theme.colors.warning || '#FFA500'} />
-          <Text style={styles.autoPauseTitle}>Senzor Ne Šalje Podatke</Text>
+          <Text style={styles.autoPauseTitle}>Sensor Not Sending Data</Text>
           <Text style={styles.autoPauseText}>
-            Trening će biti automatski pauziran ako se senzor ne poveže u narednih 20 sekundi.
+            Workout will be automatically paused if sensor does not connect within the next 20 seconds.
           </Text>
         </Animated.View>
       )}
@@ -2972,6 +2958,34 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.sm,
     fontWeight: '500',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  challengesButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  challengesBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  challengesBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   headerDrops: {
     flexDirection: 'row',

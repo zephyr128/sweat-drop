@@ -64,7 +64,7 @@ export default function ChallengeDetailScreen() {
 
       // Load user progress for this challenge
       const { data: progressData, error: progressError } = await supabase
-        .from('user_challenge_progress')
+        .from('challenge_progress')
         .select('*')
         .eq('user_id', session.user.id)
         .eq('challenge_id', challengeId)
@@ -99,14 +99,18 @@ export default function ChallengeDetailScreen() {
     return `${minutes}m left`;
   };
 
-  const getFrequencyLabel = (frequency: string) => {
-    switch (frequency) {
+  const getChallengeTypeLabel = (challengeType: string) => {
+    switch (challengeType) {
       case 'daily':
         return 'Daily Challenge';
       case 'weekly':
         return 'Weekly Challenge';
-      case 'one-time':
-        return 'One-Time Challenge';
+      case 'monthly':
+        return 'Monthly Challenge';
+      case 'streak':
+        return 'Streak Challenge';
+      case 'milestone':
+        return 'Milestone Challenge';
       default:
         return 'Challenge';
     }
@@ -151,11 +155,27 @@ export default function ChallengeDetailScreen() {
   }
 
   // Use progress from hook if available, otherwise use local state
-  const currentMinutes = challengeProgress?.current_minutes || progress?.current_minutes || 0;
+  // Calculate target based on challenge type
+  let target = 0;
+  if (challenge?.challenge_type === 'milestone') {
+    target = challenge.milestone_threshold || 0;
+  } else if (challenge?.challenge_type === 'streak') {
+    target = challenge.streak_days || challenge.target_drops || 0;
+  } else {
+    target = challenge?.target_drops || 0;
+  }
+  
+  // Calculate current progress based on challenge type
+  let current = 0;
+  if (challenge?.challenge_type === 'streak') {
+    current = challengeProgress?.current_streak_days || progress?.current_streak_days || 0;
+  } else {
+    current = challengeProgress?.current_drops || progress?.current_drops || 0;
+  }
+  
   const isCompleted = challengeProgress?.is_completed || progress?.is_completed || false;
-  const requiredMinutes = challenge?.required_minutes || 0;
-  const progressRatio = requiredMinutes > 0 ? Math.min(currentMinutes / requiredMinutes, 1) : 0;
-  const dropsBounty = challenge?.drops_bounty || 0;
+  const progressRatio = target > 0 ? Math.min(current / target, 1) : 0;
+  const rewardDrops = challenge?.reward_drops || 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -193,7 +213,7 @@ export default function ChallengeDetailScreen() {
                 }
               ]}>
                 <Text style={[styles.challengeTypeText, { color: branding.primary }]}>
-                  {getFrequencyLabel(challenge.frequency || 'one-time')}
+                  {getChallengeTypeLabel(challenge.challenge_type || 'daily')}
                 </Text>
               </View>
 
@@ -208,21 +228,15 @@ export default function ChallengeDetailScreen() {
               {/* Challenge Info */}
               <View style={styles.challengeInfo}>
                 <View style={styles.infoRow}>
-                  <Ionicons name="time-outline" size={18} color={branding.primary} />
+                  <Ionicons name="trophy-outline" size={18} color={branding.primary} />
                   <Text style={styles.infoText}>
-                    {requiredMinutes} minutes required
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="bicycle-outline" size={18} color={branding.primary} />
-                  <Text style={styles.infoText}>
-                    {getMachineTypeLabel(challenge.machine_type || 'any')}
+                    {target} {challenge.challenge_type === 'streak' ? 'days' : 'drops'} needed
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Ionicons name="water" size={18} color="#00E5FF" />
                   <Text style={styles.infoText}>
-                    {dropsBounty} drops reward
+                    {rewardDrops} drops reward
                   </Text>
                 </View>
                 {challenge.end_date && (
@@ -263,20 +277,21 @@ export default function ChallengeDetailScreen() {
                 <View style={styles.progressTextContainer}>
                   <Text style={styles.progressText}>
                     <Text style={[getNumberStyle(24), { color: branding.primary }]}>
-                      {currentMinutes}
+                      {current}
                     </Text>
                     {' / '}
                     <Text style={[getNumberStyle(24), { color: branding.primary }]}>
-                      {requiredMinutes}
+                      {target}
                     </Text>
-                    {' minutes'}
+                    {' '}
+                    {challenge.challenge_type === 'streak' ? 'days' : 'drops'}
                   </Text>
                 </View>
 
                 {/* Remaining */}
                 {!isCompleted && (
                   <Text style={styles.remainingText}>
-                    {Math.max(requiredMinutes - currentMinutes, 0)} minutes remaining
+                    {Math.max(target - current, 0)} {challenge.challenge_type === 'streak' ? 'days' : 'drops'} remaining
                   </Text>
                 )}
               </View>
@@ -289,7 +304,7 @@ export default function ChallengeDetailScreen() {
                     Challenge Completed! 🎉
                   </Text>
                   <Text style={styles.completedSubtext}>
-                    You earned {dropsBounty} drops
+                    You earned {rewardDrops} drops
                   </Text>
                 </View>
               )}
@@ -340,7 +355,7 @@ export default function ChallengeDetailScreen() {
                 <Text style={[styles.stepNumberText, { color: branding.primary }]}>3</Text>
               </View>
               <Text style={styles.stepText}>
-                Complete the challenge to earn {dropsBounty} drops
+                Complete the challenge to earn {rewardDrops} drops
               </Text>
             </View>
           </View>
