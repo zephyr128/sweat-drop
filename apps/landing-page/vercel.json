@@ -4,6 +4,5 @@
   "buildCommand": "cd apps/landing-page && pnpm install && pnpm build",
   "outputDirectory": "apps/landing-page/.next",
   "devCommand": "cd apps/landing-page && pnpm dev",
-  "installCommand": "pnpm install --filter ./apps/landing-page...",
-  "rootDirectory": "apps/landing-page"
+  "installCommand": "pnpm install --filter ./apps/landing-page..."
 }
