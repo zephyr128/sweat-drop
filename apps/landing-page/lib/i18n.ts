@@ -467,7 +467,7 @@ export const translations = {
         analytics: 'Analitika članova',
         rewards: 'Upravljanje nagradama',
         challenges: 'Kreiranje izazova',
-        branding: 'Prilagođavanje brendinga (boje, logo, pozadina) za mobilnu aplikaciju',
+        branding: 'Custom branding mobilne aplikacije',
       },
     },
     futureVision: {

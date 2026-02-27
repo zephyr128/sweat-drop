@@ -43,7 +43,7 @@ export function validateRequestDemo(data: {
 
   if (!validateRequired(data.email)) {
     errors.email = 'Email is required';
-  } else if (!validateEmail(data.email)) {
+  } else if (data.email && !validateEmail(data.email)) {
     errors.email = 'Invalid email format';
   }
 
@@ -78,13 +78,13 @@ export function validateApplyPilot(data: {
 
   if (!validateRequired(data.activeMembers)) {
     errors.activeMembers = 'Number of active members is required';
-  } else if (!validateNumber(data.activeMembers)) {
+  } else if (data.activeMembers && !validateNumber(data.activeMembers)) {
     errors.activeMembers = 'Please enter a valid number';
   }
 
   if (!validateRequired(data.cardioMachines)) {
     errors.cardioMachines = 'Cardio machines count is required';
-  } else if (!validateNumber(data.cardioMachines)) {
+  } else if (data.cardioMachines && !validateNumber(data.cardioMachines)) {
     errors.cardioMachines = 'Please enter a valid number';
   }
 

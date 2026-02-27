@@ -1,8 +1,8 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "buildCommand": "cd apps/landing-page && pnpm install --no-frozen-lockfile && pnpm build",
+  "buildCommand": "pnpm install --filter ./apps/landing-page... --no-frozen-lockfile && pnpm --filter sweatdrop-landing-page build",
   "outputDirectory": "apps/landing-page/.next",
-  "devCommand": "cd apps/landing-page && pnpm dev",
+  "devCommand": "pnpm --filter sweatdrop-landing-page dev",
   "installCommand": "pnpm install --filter ./apps/landing-page... --no-frozen-lockfile"
 }
