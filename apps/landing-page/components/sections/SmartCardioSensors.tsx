@@ -2,16 +2,21 @@
 
 import { memo } from 'react';
 import { ScrollReveal } from '@/components/ui/ScrollReveal';
-import { Bike, Activity, TrendingUp } from 'lucide-react';
+import { Bike, Activity, TrendingUp, Dumbbell, Lock } from 'lucide-react';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/use-language';
 
 export const SmartCardioSensors = memo(function SmartCardioSensors() {
   const { t } = useLanguage();
   const devices = [
-    { name: 'Bike', icon: Bike },
-    { name: 'Treadmill', icon: Activity },
-    { name: 'Elliptical', icon: TrendingUp },
+    { name: 'Bike', icon: Bike, locked: false },
+    { name: 'Treadmill', icon: Activity, locked: false },
+    { name: 'Elliptical', icon: TrendingUp, locked: false },
+  ];
+
+  const comingNext = [
+    { name: t.smartCardioSensors.weightMachines, icon: Dumbbell, locked: true },
+    { name: t.smartCardioSensors.freeWeights, icon: Dumbbell, locked: true },
   ];
 
   return (
@@ -65,12 +70,24 @@ export const SmartCardioSensors = memo(function SmartCardioSensors() {
 
         {/* Coming Next */}
         <ScrollReveal delay={0.4}>
-          <div className="mt-16 text-center">
-            <p className="text-sm text-white/50 uppercase tracking-wider mb-4">{t.smartCardioSensors.comingNext}</p>
-            <div className="flex flex-wrap justify-center gap-6 text-white/70">
-              <span>{t.smartCardioSensors.weightMachines}</span>
-              <span>•</span>
-              <span>{t.smartCardioSensors.freeWeights}</span>
+          <div className="mt-16">
+            <p className="text-sm text-white/50 uppercase tracking-wider mb-8 text-center">{t.smartCardioSensors.comingNext}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-2xl mx-auto">
+              {comingNext.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.name}
+                    className="relative p-8 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 text-center opacity-60 grayscale"
+                  >
+                    <div className="absolute top-4 right-4">
+                      <Lock className="w-5 h-5 text-white/50" />
+                    </div>
+                    <Icon className="w-12 h-12 text-white/50 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-white/70 mb-2">{item.name}</h3>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </ScrollReveal>
