@@ -3,15 +3,21 @@
 ## Problem
 Vercel ne vidi `apps/landing-page` jer je to monorepo projekat. Vercel mora da zna gde je root directory Next.js aplikacije.
 
+**Error:** "No Next.js version detected" - ovo znači da Vercel gleda u pogrešan direktorijum.
+
 ## Rešenje
 
-### Opcija 1: Postaviti Root Directory u Vercel Dashboard (Preporučeno)
+### ⚠️ OBAVEZNO: Postaviti Root Directory u Vercel Dashboard
 
-1. Idite na Vercel Dashboard → Vaš projekat → Settings → General
+**Ovo je KRITIČNO i mora biti urađeno prvo!**
+
+1. Idite na Vercel Dashboard → Vaš projekat → **Settings** → **General**
 2. U sekciji **"Root Directory"** kliknite **"Edit"**
-3. Unesite: `apps/landing-page`
-4. Sačuvajte promene
-5. Vercel će automatski detektovati Next.js projekat
+3. **Unesite:** `apps/landing-page` (bez leading slash)
+4. Kliknite **"Save"**
+5. Vercel će automatski detektovati Next.js projekat iz `apps/landing-page/package.json`
+
+**Bez ovog koraka, Vercel neće moći da detektuje Next.js!**
 
 ### Opcija 2: Koristiti Vercel CLI
 
@@ -48,13 +54,23 @@ Ne zaboravite da dodate environment variables u Vercel:
 
 Vidi `EMAIL_SETUP.md` za detalje.
 
-## Build Settings (Ako se koristi Root Directory)
+## Build Settings
 
-Ako ste postavili Root Directory na `apps/landing-page`, Vercel će automatski:
-- Detektovati Next.js framework
-- Koristiti `package.json` iz `apps/landing-page`
-- Pokrenuti `pnpm install` (ili `npm install`)
-- Pokrenuti `pnpm build` (ili `npm run build`)
+**Nakon što postavite Root Directory na `apps/landing-page`**, Vercel će automatski:
+- ✅ Detektovati Next.js framework iz `package.json`
+- ✅ Koristiti `package.json` iz `apps/landing-page`
+- ✅ Pokrenuti `pnpm install` (ili `npm install`)
+- ✅ Pokrenuti `pnpm build` (ili `npm run build`)
+
+**Trenutni `vercel.json` koristi pnpm filter komande:**
+- `buildCommand`: `pnpm --filter ./apps/landing-page build`
+- `outputDirectory`: `apps/landing-page/.next`
+- `installCommand`: `pnpm install --filter ./apps/landing-page...`
+
+**NAPOMENA:** Ako postavite Root Directory na `apps/landing-page`, možete koristiti jednostavnije komande:
+- `buildCommand`: `pnpm build` (ili `npm run build`)
+- `outputDirectory`: `.next`
+- `installCommand`: `pnpm install` (ili `npm install`)
 
 ## Troubleshooting
 
@@ -67,10 +83,12 @@ Ako ste postavili Root Directory na `apps/landing-page`, Vercel će automatski:
 - Možda treba da koristite `pnpm install` umesto `npm install`
 - Proverite da li postoji `pnpm-workspace.yaml` u root-u
 
-### Problem: "Framework not detected"
+### Problem: "No Next.js version detected" ili "Framework not detected"
 **Rešenje:** 
-- Eksplicitno postavite Framework na "Next.js" u Vercel settings
-- Ili dodajte `vercel.json` sa `"framework": "nextjs"`
+1. **Proverite Root Directory** - mora biti postavljen na `apps/landing-page` u Vercel Settings → General
+2. Proverite da li `apps/landing-page/package.json` sadrži `"next"` u dependencies
+3. Eksplicitno postavite Framework na "Next.js" u Vercel Settings → General → Framework Preset
+4. Ako i dalje ne radi, pokušajte da redeploy-ujete projekat nakon promene Root Directory
 
 ## Trenutna Konfiguracija
 
