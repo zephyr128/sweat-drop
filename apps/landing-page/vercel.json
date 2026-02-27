@@ -1,8 +1,8 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "buildCommand": "cd apps/landing-page && pnpm install && pnpm build",
+  "buildCommand": "cd apps/landing-page && pnpm install --no-frozen-lockfile && pnpm build",
   "outputDirectory": "apps/landing-page/.next",
   "devCommand": "cd apps/landing-page && pnpm dev",
-  "installCommand": "pnpm install --filter ./apps/landing-page..."
+  "installCommand": "pnpm install --filter ./apps/landing-page... --no-frozen-lockfile"
 }
