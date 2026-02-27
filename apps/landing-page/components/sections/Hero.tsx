@@ -1,10 +1,10 @@
 'use client';
 
 import { memo, useState } from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { ArrowRight, Play } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { BorderBeam } from '@/components/ui/BorderBeam';
-import { SmartPlaceholder } from '@/components/ui/SmartPlaceholder';
 import { RequestDemoModal } from '@/components/modals/RequestDemoModal';
 import { ApplyPilotModal } from '@/components/modals/ApplyPilotModal';
 import { useLanguage } from '@/lib/use-language';
@@ -78,19 +78,20 @@ export const Hero = memo(function Hero() {
             </motion.button>
           </motion.div>
 
-          {/* Video mockup placeholder */}
+          {/* Hero image */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.4 }}
             className="relative w-full h-[500px] md:h-[600px] rounded-3xl overflow-hidden bg-white/5 backdrop-blur-lg border border-white/10"
-            aria-label="Video mockup placeholder"
+            aria-label="Hero image"
           >
-            <SmartPlaceholder
-              icon={Play}
-              title="Video Mockup"
-              gradient="from-primary/20 via-primary/10 to-transparent"
-              className="w-full h-full"
+            <Image
+              src="/hero.png"
+              alt="SweatDrop Platform"
+              fill
+              className="object-cover"
+              priority
             />
           </motion.div>
         </div>

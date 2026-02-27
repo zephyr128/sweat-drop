@@ -3,7 +3,6 @@
 import { memo } from 'react';
 import { ScrollReveal } from '@/components/ui/ScrollReveal';
 import { Bike, Activity, TrendingUp } from 'lucide-react';
-import { SmartPlaceholder } from '@/components/ui/SmartPlaceholder';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/use-language';
 
@@ -55,7 +54,7 @@ export const SmartCardioSensors = memo(function SmartCardioSensors() {
         <ScrollReveal delay={0.3}>
           <div className="relative w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden bg-white/5 backdrop-blur-lg border border-white/10">
             <Image
-              src="/assets/swatdrop-bike.jpg"
+              src="/bike-sensor.png"
               alt="Smart sensor on bike"
               fill
               className="object-cover relative z-10"
