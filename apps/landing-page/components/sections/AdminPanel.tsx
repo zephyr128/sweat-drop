@@ -47,11 +47,12 @@ export const AdminPanel = memo(function AdminPanel() {
           {/* Dashboard Mockup */}
           <ScrollReveal delay={0.2}>
             <div className="relative w-full h-[500px] rounded-3xl overflow-hidden bg-white/5 backdrop-blur-lg border border-white/10">
-              <SmartPlaceholder
-                icon={Monitor}
-                title="Dashboard Mockup"
-                gradient="from-primary/20 via-primary/10 to-transparent"
-                className="w-full h-full"
+              <Image
+                src="/admin-panel-mockup.png"
+                alt="SweatDrop Admin Panel"
+                fill
+                className="object-contain"
+                priority
               />
             </div>
           </ScrollReveal>

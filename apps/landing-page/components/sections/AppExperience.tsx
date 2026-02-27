@@ -1,9 +1,9 @@
 'use client';
 
 import { memo } from 'react';
+import Image from 'next/image';
 import { ScrollReveal } from '@/components/ui/ScrollReveal';
-import { Smartphone, Check } from 'lucide-react';
-import { SmartPlaceholder } from '@/components/ui/SmartPlaceholder';
+import { Check } from 'lucide-react';
 import { useLanguage } from '@/lib/use-language';
 
 export const AppExperience = memo(function AppExperience() {
@@ -44,11 +44,12 @@ export const AppExperience = memo(function AppExperience() {
           {/* Device Mockup */}
           <ScrollReveal delay={0.2}>
             <div className="relative w-full h-[600px] rounded-3xl overflow-hidden bg-white/5 backdrop-blur-lg border border-white/10">
-              <SmartPlaceholder
-                icon={Smartphone}
-                title="App Mockup"
-                gradient="from-primary/20 via-primary/10 to-transparent"
-                className="w-full h-full"
+              <Image
+                src="/mobile-app-mockup.png"
+                alt="SweatDrop Mobile App"
+                fill
+                className="object-contain"
+                priority
               />
             </div>
           </ScrollReveal>
