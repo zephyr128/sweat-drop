@@ -25,14 +25,17 @@
 # Development
 pnpm dev:admin          # Start Next.js admin panel
 pnpm dev:mobile         # Start Expo mobile app
+pnpm dev:landing        # Start landing page
 
 # Building
 pnpm build:admin        # Build Next.js admin panel
-pnpm build:mobile       # Build mobile app
+pnpm build:mobile        # Build mobile app
+pnpm build:landing       # Build landing page
 
 # Dependency Management
 pnpm add <package> --filter sweatdrop-admin-panel
 pnpm add <package> --filter sweatdrop-mobile-app
+pnpm add <package> --filter sweatdrop-landing-page
 
 # Type Checking
 pnpm type-check         # Type check all workspaces
@@ -144,7 +147,51 @@ apps/mobile-app/
 
 ---
 
-### 3. `backend/supabase` - Supabase Local Setup
+### 3. `apps/landing-page` - Marketing Landing Page
+
+**Purpose:** Professional marketing website for potential clients (gym owners)
+
+**Tech Stack:**
+- **Framework:** Next.js 15 (App Router)
+- **React:** 19.1.0
+- **Language:** TypeScript (strict mode)
+- **Styling:** Tailwind CSS
+- **SEO:** Next.js Metadata API, structured data (JSON-LD)
+- **Analytics:** Google Analytics 4
+- **Performance:** Next.js Image optimization, font optimization
+
+**Key Features:**
+- Hero section with value proposition
+- Features showcase
+- How it works section
+- Social proof (testimonials, case studies)
+- Pricing/plans (if applicable)
+- FAQ section
+- Contact/demo scheduling
+- SEO optimized (meta tags, structured data, sitemap)
+- Conversion tracking and analytics
+
+**Environment Variables:**
+- `NEXT_PUBLIC_GA_ID` (Google Analytics ID, optional)
+- `NEXT_PUBLIC_SITE_URL` (for SEO metadata)
+
+**Directory Structure:**
+```
+apps/landing-page/
+├── app/                    # Next.js App Router pages
+│   ├── page.tsx           # Home page
+│   ├── layout.tsx          # Root layout with SEO
+│   └── [other-pages]/     # Additional pages
+├── components/             # React components
+│   ├── sections/          # Landing page sections
+│   └── ui/                # Reusable UI components
+├── lib/                   # Utilities, analytics
+└── public/                # Static assets
+```
+
+---
+
+### 4. `backend/supabase` - Supabase Local Setup
 
 **Purpose:** PostgreSQL database, authentication, and Edge Functions
 

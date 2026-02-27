@@ -5,10 +5,13 @@
   "description": "SweatDrop - Fitness tracking platform",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
+    "ensure-deps": "./scripts/ensure-deps.sh",
     "dev:mobile": "pnpm --filter sweatdrop-mobile-app start",
     "dev:admin": "pnpm --filter sweatdrop-admin-panel dev",
+    "dev:landing": "pnpm --filter sweatdrop-landing-page dev",
     "build:mobile": "pnpm --filter sweatdrop-mobile-app build",
     "build:admin": "pnpm --filter sweatdrop-admin-panel build",
+    "build:landing": "pnpm --filter sweatdrop-landing-page build",
     "ios:prebuild": "expo prebuild apps/mobile-app --platform ios",
     "ios:setup": "cd apps/mobile-app/ios && rm -rf Pods Podfile.lock && export LANG=en_US.UTF-8 && arch -arm64 pod install",
     "ios:clean": "cd apps/mobile-app/ios && rm -rf Pods Podfile.lock ~/Library/Developer/Xcode/DerivedData/SweatDrop-* && echo 'Cleaned iOS build artifacts'",

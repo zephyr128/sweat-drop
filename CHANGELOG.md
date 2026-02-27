@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent communication protocol (`docs/AGENT_COMMUNICATION.md`)
 - Changelog file for tracking all changes
 - Migration notes system for database changes
+- Landing page coder agent (`.cursor/rules/landing-page-coder.mdc`)
+  - Professional marketing website builder
+  - SEO-optimized, conversion-focused landing pages
+  - Next.js 15 with App Router
 
 ### Changed
 - SmartCoach card on home screen now conditionally renders based on `gym.smartcoach_enabled` flag
