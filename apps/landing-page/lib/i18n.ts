@@ -75,9 +75,27 @@ export const translations = {
     smartCardioSensors: {
       title: 'Smart Cardio Sensors',
       subtitle: 'Non-invasive sensors that attach to existing equipment. No modifications required.',
-      comingNext: 'Coming Next',
-      weightMachines: 'Weight machines',
-      freeWeights: 'Free weights',
+      cardioEcosystem: {
+        title: 'Smart Cardio Ecosystem',
+        subtitle: 'Non-invasive, Zero-modification',
+      },
+      futureResistance: {
+        title: 'The Future of Resistance',
+        subtitle: 'Coming Soon',
+        smartPin: {
+          name: 'Smart Pin',
+          description: 'Sensor that replaces standard weight pins, tracking reps and resistance.',
+        },
+        smartCarabiner: {
+          name: 'Smart Carabiner',
+          description: 'Intelligent carabiner for cable machines measuring tension and repetitions.',
+        },
+        universalMotion: {
+          name: 'Universal Motion Sensor',
+          description: 'Ultra-small sensor for dumbbells and barbells tracking biomechanics and movement path.',
+        },
+        joinBeta: 'JOIN BETA WAITLIST',
+      },
     },
     appExperience: {
       title: 'Train. Earn. Compete.',
@@ -394,9 +412,27 @@ export const translations = {
     smartCardioSensors: {
       title: 'Pametni Kardio Senzori',
       subtitle: 'Neinvazivni senzori koji se montiraju na postojeću opremu. Nisu potrebne modifikacije.',
-      comingNext: 'Uskoro',
-      weightMachines: 'Mašine za tegove',
-      freeWeights: 'Slobodni tegovi',
+      cardioEcosystem: {
+        title: 'Smart Cardio Ekosistem',
+        subtitle: 'Neinvazivno, Bez modifikacija',
+      },
+      futureResistance: {
+        title: 'Budućnost Otpora',
+        subtitle: 'Uskoro',
+        smartPin: {
+          name: 'Smart Pin',
+          description: 'Senzor koji zamenjuje standardne osigurače, prati ponavljanja i otpor.',
+        },
+        smartCarabiner: {
+          name: 'Smart Carabiner',
+          description: 'Inteligentni karabiner za sprave sa sajlama koji meri tenziju i ponavljanja.',
+        },
+        universalMotion: {
+          name: 'Universal Motion Sensor',
+          description: 'Ultra-mali senzor za bućice i šipke koji prati biomehaniku i putanju pokreta.',
+        },
+        joinBeta: 'PRIJAVI SE ZA BETA',
+      },
     },
     appExperience: {
       title: 'Vežbaj. Zarađuj. Takmiči se.',
