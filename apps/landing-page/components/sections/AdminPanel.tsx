@@ -1,9 +1,9 @@
 'use client';
 
 import { memo } from 'react';
+import Image from 'next/image';
 import { ScrollReveal } from '@/components/ui/ScrollReveal';
-import { SmartPlaceholder } from '@/components/ui/SmartPlaceholder';
-import { Monitor, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useLanguage } from '@/lib/use-language';
 
 export const AdminPanel = memo(function AdminPanel() {
