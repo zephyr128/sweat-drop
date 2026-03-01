@@ -49,7 +49,7 @@ export default function ChallengeDetailScreen() {
 
     try {
       const { data: challengeData, error: challengeError } = await supabase
-        .from('challenges')
+        .from('gym_challenges')
         .select('*')
         .eq('id', challengeId)
         .single();

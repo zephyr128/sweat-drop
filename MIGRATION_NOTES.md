@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2025-01-27 (Fix: Ambiguous column reference in user_badges INSERT)
+**Last Updated:** 2025-01-28 (Faza 3: Storage Strategy - Global Achievement Badges Bucket)
 
 ---
 
@@ -16,6 +16,159 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2025-01-28] - Create RLS Policies for Global Achievement Badges Storage Bucket
+
+**Migration File:** `backend/supabase/migrations/20250128000006_create_global_achievement_badges_bucket.sql`
+
+**Agent:** supabase-dba
+
+**Problem:**
+- Upload failed: Permission denied for bucket 'global-achievement-badges'
+- Bucket exists but RLS policies are missing
+
+**IMPORTANT: Bucket must be created manually before running this migration!**
+
+**To create the bucket:**
+1. Go to Supabase Dashboard → Storage → Create a new bucket
+2. Name: `global-achievement-badges`
+3. Public: Yes (for public read access)
+4. File size limit: 1MB (or as needed)
+5. Allowed MIME types: `image/png`, `image/jpeg`, `image/jpg`, `image/webp`, `image/svg+xml`
+
+**Changes:**
+- Added RLS policies for `global-achievement-badges` bucket:
+  - "Anyone can view global badges" (SELECT) - public read access
+  - "Superadmin can upload global badges" (INSERT) - only superadmin
+  - "Superadmin can update global badges" (UPDATE) - only superadmin
+  - "Superadmin can delete global badges" (DELETE) - only superadmin
+- Bucket configuration:
+  - Public: true (badges should be publicly accessible)
+  - File size limit: 1MB per file
+  - Allowed MIME types: image/png, image/jpeg, image/jpg, image/webp, image/svg+xml
+
+**Impact:**
+- **Backend:**
+  - Superadmin can now upload badge images to global-achievement-badges bucket
+  - Public URLs are accessible for mobile app and admin panel
+- **Admin Panel:**
+  - Superadmin can upload badge images when creating/editing global achievements
+  - Images are accessible via public URLs
+- **Mobile App:**
+  - Can access badge images via public URLs
+  - No authentication required for viewing badges
+
+**Breaking Changes:** None (new bucket)
+
+**Next Steps:**
+1. ⏳ **Create bucket manually** in Supabase Dashboard (see instructions above)
+2. ⏳ Run: `supabase db reset` (or apply migration) to create RLS policies
+3. ⏳ Test: Upload badge image as superadmin
+4. ⏳ Verify: Public URL access works
+4. ⏳ Update admin panel to use bucket for badge uploads
+
+**Public URL Format:**
+```
+https://{supabase_project_id}.supabase.co/storage/v1/object/public/global-achievement-badges/{achievement_code}-badge.png
+```
+
+**Path Structure:**
+```
+global-achievement-badges/
+  ├── first_workout-badge.png
+  ├── thousand_drops-badge.png
+  ├── ten_day_streak-badge.png
+  └── ...
+```
+
+---
+
+### [2025-01-28] - Faza 1: Data Modeling - Hybrid Gamification System
+
+**Migration Files:**
+- `backend/supabase/migrations/20250128000001_create_global_achievements.sql`
+- `backend/supabase/migrations/20250128000002_rename_challenges_to_gym_challenges.sql`
+- `backend/supabase/migrations/20250128000003_add_criteria_to_gym_challenges.sql`
+- `backend/supabase/migrations/20250128000004_create_user_progress.sql`
+- `backend/supabase/migrations/20250128000005_update_user_badges_polymorphic.sql`
+
+**Agent:** supabase-dba
+
+**Plan Reference:** `docs/plans/hybrid_gamification_system_plan.md` - Faza 1: Data Modeling
+
+**Changes:**
+
+**Korak 1.1: Global Achievements Table**
+- Created `global_achievements` table for fixed global badges defined by SweatDrop team
+- Added columns: `code` (unique), `name`, `description`, `badge_image_url`, `criteria` (JSONB), `reward_drops`, `is_active`, `display_order`
+- Added indexes: `idx_global_achievements_code`, `idx_global_achievements_is_active`, `idx_global_achievements_display_order`
+- Added RLS policies: Anyone can view active achievements, Superadmin can manage achievements
+
+**Korak 1.2: Rename Challenges to Gym Challenges**
+- Renamed table: `challenges` → `gym_challenges`
+- Renamed indexes: `idx_challenges_*` → `idx_gym_challenges_*`
+- PostgreSQL automatically updates foreign key references
+
+**Korak 1.3: Add Criteria JSONB to Gym Challenges**
+- Added `criteria` JSONB column to `gym_challenges` for flexible challenge conditions
+- Migrated existing data: `challenge_type + target_drops` → `criteria` JSONB format
+- Added GIN index: `idx_gym_challenges_criteria` for JSONB queries
+- Old columns (`challenge_type`, `target_drops`, `streak_days`, `milestone_threshold`) kept for backward compatibility
+
+**Korak 1.4: Create User Progress Table**
+- Created `user_progress` table for unified progress tracking (global achievements + gym challenges)
+- Added polymorphic references: `global_achievement_id` OR `gym_challenge_id` (exactly one must be set)
+- Added `progress_data` JSONB column for flexible progress metrics
+- Added indexes: `idx_user_progress_*`, `idx_user_progress_progress_data` (GIN)
+- Added RLS policies: Users can view own progress, Global achievement progress, Gym admins can view gym challenge progress, Backend can manage progress
+
+**Korak 1.5: Update User Badges for Polymorphic References**
+- Added columns: `global_achievement_id`, `gym_challenge_id` to `user_badges`
+- Migrated existing data: `challenge_id` → `gym_challenge_id`
+- Added constraint: `user_badges_exactly_one_reference` (exactly one reference must be set)
+- Updated unique constraint: `user_badges_unique_per_user_and_achievement`
+- Added indexes: `idx_user_badges_global_achievement_id`, `idx_user_badges_gym_challenge_id`
+- Old `challenge_id` column kept for backward compatibility (will be dropped in future migration)
+
+**Impact:**
+- **Backend:**
+  - New tables and columns support hybrid gamification system
+  - Polymorphic references allow unified tracking of global achievements and gym challenges
+  - Criteria JSONB enables flexible challenge conditions
+  - All existing data is migrated to new structure
+- **Mobile App:**
+  - Will need to update queries to use `gym_challenges` instead of `challenges`
+  - Will need to handle both `global_achievement_id` and `gym_challenge_id` in badges
+  - Will need to use `criteria` JSONB instead of `challenge_type`/`target_drops`
+- **Admin Panel:**
+  - Will need to update challenge creation form to use `criteria` JSONB
+  - Will need to handle polymorphic references in badge queries
+  - Superadmin will need UI to manage global achievements
+
+**Breaking Changes:**
+- Table name changed: `challenges` → `gym_challenges` (all code must be updated)
+- New `criteria` JSONB column (old columns deprecated but kept for backward compatibility)
+- `user_badges` now uses polymorphic references (old `challenge_id` kept for backward compatibility)
+
+**Next Steps:**
+1. ⏳ Run: `supabase gen types typescript --local > backend/types/database.types.ts`
+2. ⏳ Update all code references:
+   - Mobile App: Update all queries from `challenges` to `gym_challenges`
+   - Admin Panel: Update challenge creation form to use `criteria` JSONB
+   - Backend Functions: Update `update_challenge_progress()` and other functions to use `gym_challenges`
+3. ⏳ Proceed to Faza 2: Criteria System (Koraci 2.1-2.2)
+4. ⏳ Proceed to Faza 3: Storage Strategy (Koraci 3.1-3.2)
+5. ⏳ Proceed to Faza 4: Edge Worker Strategy (Koraci 4.1-4.4)
+6. ⏳ Proceed to Faza 5: Multi-tenant Security (Koraci 5.1-5.2)
+
+**Migration Notes:**
+- All migrations are backward compatible (old columns kept)
+- Data migration is performed automatically
+- Foreign key references are automatically updated by PostgreSQL
+- RLS policies are updated for new structure
+- Old `challenge_id` column in `user_badges` will be dropped in a future migration
+
+---
 
 ### [2025-01-27] - Fix Ambiguous Column Reference in user_badges INSERT
 

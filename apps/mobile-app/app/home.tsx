@@ -14,10 +14,13 @@ import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
+import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
 import { getNumberStyle } from '@/lib/theme';
+import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { GymSelectorModal } from '@/components/GymSelectorModal';
 import { LockedOverlay } from '@/components/LockedOverlay';
 import { UserSettingsSheet } from '@/components/UserSettingsSheet';
+import { ProgressWidget } from '@/components/ProgressWidget';
 import { Gym } from '@/lib/stores/useGymStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -84,6 +87,20 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [gymSelectorVisible, setGymSelectorVisible] = useState(false);
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  // Badge notifications with confetti
+  const { newBadge, clearNewBadge } = useBadgeNotifications({
+    onBadgeEarned: (badge) => {
+      console.log('Badge earned!', badge);
+      setShowConfetti(true);
+      // Auto-hide confetti after 3 seconds
+      setTimeout(() => {
+        setShowConfetti(false);
+        clearNewBadge();
+      }, 3000);
+    },
+  });
 
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading, refresh: refreshChallenges } = useChallengeProgress(activeGymId, null);
@@ -174,7 +191,7 @@ export default function HomeScreen() {
       if (activeGymId) {
         const today = new Date().toISOString().split('T')[0];
         const { data: challengeData } = await supabase
-          .from('challenges')
+          .from('gym_challenges')
           .select('*')
           .eq('gym_id', activeGymId)
           .eq('challenge_type', 'daily')
@@ -683,6 +700,18 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* Progress Widget - Next Badge */}
+          {isUnlocked && (
+            <View style={styles.challengesSection}>
+              <View style={styles.challengesSectionHeader}>
+                <Text style={styles.challengesSectionTitle}>Next Badge</Text>
+              </View>
+              <View style={styles.progressWidgetContainer}>
+                <ProgressWidget />
+              </View>
+            </View>
+          )}
+
           {/* SmartCoach Card - Only show if smartcoach_enabled is true for active gym */}
           {/* AGENT NOTE: [2025-01-27] - mobile-coder
               CHANGE: Added conditional rendering based on activeGym?.smartcoach_enabled
@@ -844,6 +873,17 @@ export default function HomeScreen() {
         onClose={() => setSettingsSheetVisible(false)}
         profile={profile}
       />
+
+      {/* Confetti Effect for Badge Earned */}
+      {showConfetti && (
+        <ConfettiEffect
+          visible={showConfetti}
+          onComplete={() => {
+            setShowConfetti(false);
+            clearNewBadge();
+          }}
+        />
+      )}
       </SafeAreaView>
     </Animated.View>
   );
@@ -1178,6 +1218,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+  },
+  progressWidgetContainer: {
+    alignItems: 'flex-start',
   },
   challengesScrollView: {
     marginHorizontal: -16, // Offset parent padding

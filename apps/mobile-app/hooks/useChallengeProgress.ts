@@ -45,7 +45,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
       const today = new Date().toISOString().split('T')[0];
       
       const { data: challengesData, error: challengesError } = await supabase
-        .from('challenges')
+        .from('gym_challenges')
         .select(`
           id,
           name,
