@@ -125,7 +125,7 @@ export default async function ChallengesPage({ params }: ChallengesPageProps) {
   let challenges: ChallengeData[] = [];
   try {
     const { data: challengesData, error: challengesError } = await supabase
-      .from('challenges')
+      .from('gym_challenges')
       .select('*')
       .eq('gym_id', id)
       .order('created_at', { ascending: false });

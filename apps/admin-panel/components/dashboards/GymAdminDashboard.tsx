@@ -33,7 +33,7 @@ export async function GymAdminDashboard({ gymId }: GymAdminDashboardProps) {
       .eq('gym_id', gymId)
       .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
     supabase
-      .from('challenges')
+      .from('gym_challenges')
       .select('*')
       .eq('gym_id', gymId)
       .eq('is_active', true),

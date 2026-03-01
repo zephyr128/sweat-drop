@@ -121,7 +121,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         .select('*', { count: 'exact', head: true })
         .eq('gym_id', id),
       supabase
-        .from('challenges')
+        .from('gym_challenges')
         .select('*', { count: 'exact', head: true })
         .eq('gym_id', id)
         .eq('is_active', true),

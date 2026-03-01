@@ -111,7 +111,7 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
         .select('*', { count: 'exact', head: true })
         .eq('gym_id', gym.id),
       supabase
-        .from('challenges')
+        .from('gym_challenges')
         .select('*', { count: 'exact', head: true })
         .eq('gym_id', gym.id),
       supabase
