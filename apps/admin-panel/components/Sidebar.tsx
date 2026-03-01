@@ -17,6 +17,7 @@ import {
   Building2,
   Settings,
   Activity,
+  Award,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -85,6 +86,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     { href: '/dashboard/super', label: 'Gyms', icon: Building2 },
     { href: '/dashboard/super/owners', label: 'Owners', icon: Users },
     { href: '/dashboard/super/machines', label: 'Global Machines', icon: Cpu },
+    { href: '/dashboard/super/achievements', label: 'Achievements', icon: Award },
     { href: '/dashboard/super/health', label: 'System Health', icon: Activity },
   ];
 

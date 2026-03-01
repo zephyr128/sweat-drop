@@ -5,8 +5,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { createChallenge, deleteChallenge, toggleChallengeStatus } from '@/lib/actions/challenge-actions';
-import { X, Trash2, Power, Droplet } from 'lucide-react';
+import { createChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats } from '@/lib/actions/challenge-actions';
+import { X, Trash2, Power, Droplet, Upload, Image } from 'lucide-react';
+import { useDropzone } from 'react-dropzone';
+import { uploadFile } from '@/lib/utils/storage';
 
 const challengeSchema = z.object({
   name: z.string().min(1, 'Title is required'),
@@ -82,6 +84,10 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [uploadingBadge, setUploadingBadge] = useState(false);
+  const [badgePreview, setBadgePreview] = useState<string | null>(null);
+  const [statsLoading, setStatsLoading] = useState<Record<string, boolean>>({});
+  const [challengeStats, setChallengeStats] = useState<Record<string, { total_completions: number }>>({});
 
   const {
     register,
@@ -106,6 +112,40 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   const isMilestoneChallenge = watchedChallengeType === 'milestone';
   const isDropsBasedChallenge = watchedChallengeType === 'daily' || watchedChallengeType === 'weekly' || watchedChallengeType === 'monthly';
 
+  // Badge image upload dropzone
+  const badgeDropzone = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+    },
+    maxFiles: 1,
+    onDrop: async (acceptedFiles) => {
+      if (acceptedFiles.length === 0) return;
+
+      setUploadingBadge(true);
+      try {
+        const file = acceptedFiles[0];
+        // Upload to gym-challenge-badges bucket in gym-specific folder
+        const result = await uploadFile(file, 'gym-challenge-badges', gymId);
+        // Set the badge image URL in the form
+        reset({ ...watch(), badgeImageUrl: result.url });
+        setBadgePreview(result.url);
+        toast.success('Badge image uploaded successfully');
+      } catch (error: any) {
+        console.error('Badge upload error:', error);
+        const errorMessage = error.message || 'Unknown error';
+        if (errorMessage.includes('Bucket') && errorMessage.includes('does not exist')) {
+          toast.error('Bucket "gym-challenge-badges" not found. Please ensure it exists in Supabase Dashboard > Storage and is set to Public.');
+        } else if (errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
+          toast.error('Permission denied. Please check RLS policies for the "gym-challenge-badges" bucket.');
+        } else {
+          toast.error(`Failed to upload badge: ${errorMessage}`);
+        }
+      } finally {
+        setUploadingBadge(false);
+      }
+    },
+  });
+
   const onSubmit = async (data: ChallengeFormData) => {
     try {
       const submitData: any = {
@@ -123,6 +163,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         setChallenges([result.data as Challenge, ...challenges]);
         toast.success('Challenge created successfully');
         reset();
+        setBadgePreview(null);
         setIsModalOpen(false);
       } else {
         toast.error(`Failed to create challenge: ${result.error}`);
@@ -168,6 +209,25 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
       }
     } catch (error: any) {
       toast.error(`Error: ${error.message}`);
+    }
+  };
+
+  const loadChallengeStats = async (challengeId: string) => {
+    if (statsLoading[challengeId] || challengeStats[challengeId]) return;
+    
+    setStatsLoading((prev) => ({ ...prev, [challengeId]: true }));
+    try {
+      const result = await getChallengeCompletionStats(challengeId, gymId);
+      if (result.success && result.data) {
+        setChallengeStats((prev) => ({
+          ...prev,
+          [challengeId]: result.data as { total_completions: number },
+        }));
+      }
+    } catch (error: any) {
+      console.error('Error loading challenge stats:', error);
+    } finally {
+      setStatsLoading((prev) => ({ ...prev, [challengeId]: false }));
     }
   };
 
@@ -241,11 +301,27 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-[#00E5FF] font-bold">
-                        <span className="flex items-center gap-1">
-                          {challenge.reward_drops || challenge.drops_bounty || 0} <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[#00E5FF] font-bold">
+                          <span className="flex items-center gap-1">
+                            {challenge.reward_drops || challenge.drops_bounty || 0} <Droplet className="w-4 h-4" strokeWidth={1.5} />
+                          </span>
                         </span>
-                      </span>
+                        {challenge.is_active && (
+                          <button
+                            onClick={() => loadChallengeStats(challenge.id)}
+                            className="text-xs text-[#808080] hover:text-[#00E5FF] transition-colors text-left"
+                          >
+                            {statsLoading[challenge.id] ? (
+                              'Loading...'
+                            ) : challengeStats[challenge.id] ? (
+                              `${challengeStats[challenge.id].total_completions} completed`
+                            ) : (
+                              'View stats'
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span
@@ -301,6 +377,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 onClick={() => {
                   setIsModalOpen(false);
                   reset();
+                  setBadgePreview(null);
                 }}
                 className="text-[#808080] hover:text-white transition-colors"
               >
@@ -447,16 +524,81 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
 
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
-                  Badge Image URL
+                  Badge Image
                 </label>
-                <input
-                  type="url"
-                  {...register('badgeImageUrl')}
-                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                  placeholder="https://example.com/badge.png"
-                />
-                <p className="mt-1 text-xs text-[#808080]">
-                  Optional: URL to badge image/icon that users earn when completing this challenge
+                
+                {/* Badge Image Upload Dropzone */}
+                <div
+                  {...badgeDropzone.getRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    badgeDropzone.isDragActive
+                      ? 'border-[#00E5FF] bg-[#00E5FF]/10'
+                      : 'border-[#333] bg-[#1A1A1A] hover:border-[#00E5FF]/50'
+                  } ${uploadingBadge ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <input {...badgeDropzone.getInputProps()} />
+                  {badgePreview ? (
+                    <div className="space-y-3">
+                      <div className="relative inline-block">
+                        <img
+                          src={badgePreview}
+                          alt="Badge preview"
+                          className="w-32 h-32 object-contain mx-auto rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBadgePreview(null);
+                            reset({ ...watch(), badgeImageUrl: '' });
+                          }}
+                          className="absolute top-0 right-0 p-1 bg-[#FF5252] text-white rounded-full hover:bg-[#FF0000] transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-sm text-[#808080]">Click or drag to replace</p>
+                    </div>
+                  ) : uploadingBadge ? (
+                    <div className="space-y-2">
+                      <Upload className="w-8 h-8 text-[#00E5FF] mx-auto animate-pulse" />
+                      <p className="text-sm text-[#808080]">Uploading...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Image className="w-8 h-8 text-[#808080] mx-auto" />
+                      <p className="text-sm text-white">
+                        Drag & drop badge image here, or click to select
+                      </p>
+                      <p className="text-xs text-[#808080]">
+                        PNG, JPG, JPEG, WEBP (max 10MB)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Manual URL input (fallback) */}
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-[#808080] mb-1">
+                    Or enter URL manually:
+                  </label>
+                  <input
+                    type="url"
+                    {...register('badgeImageUrl')}
+                    className="w-full px-4 py-2 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none text-sm"
+                    placeholder="https://example.com/badge.png"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setBadgePreview(e.target.value);
+                      } else {
+                        setBadgePreview(null);
+                      }
+                    }}
+                  />
+                </div>
+
+                <p className="mt-2 text-xs text-[#808080]">
+                  Optional: Badge image/icon that users earn when completing this challenge
                 </p>
                 {errors.badgeImageUrl && (
                   <p className="mt-1 text-sm text-[#FF5252]">
@@ -478,6 +620,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   onClick={() => {
                     setIsModalOpen(false);
                     reset();
+                    setBadgePreview(null);
                   }}
                   className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors"
                 >

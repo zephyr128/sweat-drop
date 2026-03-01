@@ -94,6 +94,41 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       endDate.setFullYear(endDate.getFullYear() + 10); // Far future date
     }
 
+    // Build criteria JSONB based on challenge type
+    let criteria: any;
+    
+    if (validated.challengeType === 'streak') {
+      criteria = {
+        type: 'streak',
+        operator: '>=',
+        value: validated.streakDays || 3,
+        scope: 'gym',
+        gym_id: validated.gymId,
+      };
+    } else if (validated.challengeType === 'milestone') {
+      criteria = {
+        type: 'drops',
+        operator: '>=',
+        value: validated.milestoneThreshold || 1000,
+        scope: 'gym',
+        gym_id: validated.gymId,
+        // No date_range for milestone (all-time)
+      };
+    } else {
+      // daily, weekly, monthly
+      criteria = {
+        type: 'drops',
+        operator: '>=',
+        value: validated.targetDrops || 100,
+        scope: 'gym',
+        gym_id: validated.gymId,
+        date_range: {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        },
+      };
+    }
+
     // Build insert object for challenge
     const insertData: any = {
       gym_id: validated.gymId,
@@ -102,10 +137,9 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       start_date: startDate.toISOString().split('T')[0], // DATE format
       end_date: endDate.toISOString().split('T')[0], // DATE format
       is_active: true,
-      challenge_type: validated.challengeType,
-      // For milestone: use milestone_threshold, target_drops is not used
-      // For streak: target_drops is required by constraint but not used (streak_days is used instead)
-      // For daily/weekly/monthly: use target_drops
+      challenge_type: validated.challengeType, // Keep for backward compatibility
+      criteria: criteria, // New JSONB field
+      // Legacy fields (kept for backward compatibility)
       target_drops: validated.challengeType === 'milestone' 
         ? 0  // Dummy value for milestone (not used, constraint requires it)
         : validated.challengeType === 'streak'
@@ -128,7 +162,7 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
     }
     const { data, error } = await supabaseAdmin
-      .from('challenges')
+      .from('gym_challenges')
       .insert(insertData)
       .select()
       .single();
@@ -153,7 +187,7 @@ export async function deleteChallenge(challengeId: string, gymId: string) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
     }
     const { error } = await supabaseAdmin
-      .from('challenges')
+      .from('gym_challenges')
       .delete()
       .eq('id', challengeId)
       .eq('gym_id', gymId); // Security: ensure it belongs to the gym
@@ -175,7 +209,7 @@ export async function toggleChallengeStatus(challengeId: string, gymId: string, 
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
     }
     const { error } = await supabaseAdmin
-      .from('challenges')
+      .from('gym_challenges')
       // @ts-expect-error - Supabase type inference issue
       .update({ is_active: isActive } as any)
       .eq('id', challengeId)
