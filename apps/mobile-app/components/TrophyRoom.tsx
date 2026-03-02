@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
@@ -12,6 +13,16 @@ import { theme } from '@/lib/theme';
 import BackButton from './BackButton';
 import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BENTO_GAP = 12;
@@ -35,24 +46,18 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
 
   const loading = badgesLoading || allBadgesLoading;
 
-  // Combine all badges with progress data
   const allBadgesWithProgress = useMemo((): BadgeWithProgress[] => {
     const badges: BadgeWithProgress[] = [];
 
-    // Add global achievements
     globalAchievements.forEach((achievement) => {
       const earnedBadge = earnedBadges.find(
         (b) => b.badge_type === 'global' && b.badge_name === achievement.name
       );
       const progress = userProgress.find((p) => p.global_achievement_id === achievement.id);
-      
-      // Calculate progress percentage (simplified - would need to evaluate criteria)
+
       let progressPercent = 0;
       if (progress) {
-        // Extract progress from progress_data JSONB
-        const progressData = progress.progress_data || {};
-        // This is a simplified calculation - actual criteria evaluation would be more complex
-        progressPercent = progress.is_completed ? 100 : 50; // Placeholder
+        progressPercent = progress.is_completed ? 100 : 50;
       }
 
       badges.push({
@@ -69,19 +74,15 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       });
     });
 
-    // Add gym challenges
     gymChallenges.forEach((challenge) => {
       const earnedBadge = earnedBadges.find(
         (b) => b.badge_type === 'gym' && b.badge_name === challenge.name
       );
       const progress = userProgress.find((p) => p.gym_challenge_id === challenge.id);
-      
-      // Calculate progress percentage
+
       let progressPercent = 0;
       if (progress) {
-        const progressData = progress.progress_data || {};
-        // Simplified calculation
-        progressPercent = progress.is_completed ? 100 : 50; // Placeholder
+        progressPercent = progress.is_completed ? 100 : 50;
       }
 
       badges.push({
@@ -90,7 +91,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         description: challenge.description,
         badge_image_url: challenge.badge_image_url,
         badge_type: 'gym',
-        gym_name: null, // Would need to fetch gym name
+        gym_name: null,
         is_earned: !!earnedBadge,
         earned_at: earnedBadge?.earned_at || null,
         progress: progressPercent,
@@ -101,16 +102,13 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     return badges;
   }, [globalAchievements, gymChallenges, earnedBadges, userProgress]);
 
-  // Filter and search badges
   const filteredBadges = useMemo(() => {
     let filtered = allBadgesWithProgress;
 
-    // Filter by type
     if (filterType !== 'all') {
       filtered = filtered.filter((badge) => badge.badge_type === filterType);
     }
 
-    // Search by name
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((badge) =>
@@ -122,18 +120,20 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     return filtered;
   }, [allBadgesWithProgress, filterType, searchQuery]);
 
-  // Separate into Global and Gym sections
   const globalBadges = filteredBadges.filter((b) => b.badge_type === 'global');
   const gymBadges = filteredBadges.filter((b) => b.badge_type === 'gym');
 
+  // Stats
+  const totalEarned = earnedBadges.length;
+  const totalAvailable = allBadgesWithProgress.length;
+
   const handleBadgePress = (badge: BadgeWithProgress) => {
-    if (!badge.is_earned) return; // Only show detail for earned badges
-    
-    // Find corresponding earned badge for detail modal
+    if (!badge.is_earned) return;
+
     const earnedBadge = earnedBadges.find(
       (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type
     );
-    
+
     if (earnedBadge) {
       setSelectedBadge(earnedBadge);
       setModalVisible(true);
@@ -165,7 +165,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       <View style={styles.header}>
         {onClose ? (
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={currentTheme.colors.text} />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
         ) : (
           <BackButton />
@@ -174,46 +174,64 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Filter and Search */}
-      <View style={styles.filterContainer}>
-        <View style={[styles.searchContainer, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
-          <Ionicons name="search" size={20} color={currentTheme.colors.textSecondary} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: currentTheme.colors.text }]}
-            placeholder="Search badges..."
-            placeholderTextColor={currentTheme.colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <Ionicons name="close-circle" size={20} color={currentTheme.colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.filterButtons}>
-          {(['all', 'global', 'gym'] as const).map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.filterButton,
-                filterType === type && { backgroundColor: branding.primary, borderColor: branding.primary },
-              ]}
-              onPress={() => setFilterType(type)}
-            >
-              <Text
-                style={[
-                  styles.filterButtonText,
-                  filterType === type && { color: branding.onPrimary },
-                ]}
-              >
-                {type === 'all' ? 'All' : type === 'global' ? 'Global' : 'Gym'}
+      {/* Stats bar */}
+      <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <View style={styles.statsBar}>
+          <View style={[styles.statsPill, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.statsPillBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <Ionicons name="trophy" size={16} color={branding.primary} />
+              <Text style={[styles.statsPillText, { color: branding.primary }]}>
+                {totalEarned} / {totalAvailable} earned
               </Text>
-            </TouchableOpacity>
-          ))}
+            </BlurView>
+          </View>
         </View>
-      </View>
+      </Animated.View>
+
+      {/* Search & Filter */}
+      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <View style={styles.filterContainer}>
+          <View style={[styles.searchContainer, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.searchBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search badges..."
+                placeholderTextColor={theme.colors.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                  <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </BlurView>
+          </View>
+
+          <View style={styles.filterButtons}>
+            {(['all', 'global', 'gym'] as const).map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.filterButton,
+                  filterType === type && { backgroundColor: branding.primary },
+                ]}
+                onPress={() => setFilterType(type)}
+              >
+                <Text
+                  style={[
+                    styles.filterButtonText,
+                    filterType === type && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
+                  ]}
+                >
+                  {type === 'all' ? 'All' : type === 'global' ? 'Global' : 'Gym'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Animated.View>
 
       <ScrollView
         style={styles.scrollView}
@@ -222,7 +240,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       >
         {filteredBadges.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={64} color={currentTheme.colors.textSecondary} />
+            <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
             <Text style={styles.emptyTitle}>No badges found</Text>
             <Text style={styles.emptyText}>
               {searchQuery ? 'Try adjusting your search' : 'Complete challenges to earn badges!'}
@@ -230,78 +248,84 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           </View>
         ) : (
           <>
-            {/* Global Achievements Section */}
+            {/* Global Achievements */}
             {globalBadges.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="globe" size={24} color={branding.primary} />
-                  <Text style={[styles.sectionTitle, { color: branding.primary }]}>
-                    Global Achievements
-                  </Text>
+              <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="globe" size={20} color={branding.primary} />
+                    <Text style={[styles.sectionTitle, { color: branding.primary }]}>
+                      Global Achievements
+                    </Text>
+                    <Text style={styles.sectionCount}>{globalBadges.length}</Text>
+                  </View>
+                  <View style={styles.bentoGrid}>
+                    {globalBadges.map((badge) => {
+                      const earnedBadge = earnedBadges.find(
+                        (b) => b.badge_name === badge.name && b.badge_type === 'global'
+                      );
+                      return (
+                        <BadgeCard
+                          key={`global-${badge.id}`}
+                          badge={earnedBadge || {
+                            badge_id: badge.id,
+                            badge_name: badge.name,
+                            badge_description: badge.description,
+                            badge_image_url: badge.badge_image_url,
+                            earned_at: badge.earned_at || '',
+                            badge_type: 'global',
+                            gym_name: null,
+                          }}
+                          isLocked={!badge.is_earned}
+                          progress={badge.progress}
+                          onPress={() => handleBadgePress(badge)}
+                          size="medium"
+                        />
+                      );
+                    })}
+                  </View>
                 </View>
-                <View style={styles.bentoGrid}>
-                  {globalBadges.map((badge) => {
-                    const earnedBadge = earnedBadges.find(
-                      (b) => b.badge_name === badge.name && b.badge_type === 'global'
-                    );
-                    return (
-                      <BadgeCard
-                        key={`global-${badge.id}`}
-                        badge={earnedBadge || {
-                          badge_id: badge.id,
-                          badge_name: badge.name,
-                          badge_description: badge.description,
-                          badge_image_url: badge.badge_image_url,
-                          earned_at: badge.earned_at || '',
-                          badge_type: 'global',
-                          gym_name: null,
-                        }}
-                        isLocked={!badge.is_earned}
-                        progress={badge.progress}
-                        onPress={() => handleBadgePress(badge)}
-                        size="medium"
-                      />
-                    );
-                  })}
-                </View>
-              </View>
+              </Animated.View>
             )}
 
-            {/* Club Challenges Section */}
+            {/* Club Challenges */}
             {gymBadges.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="business" size={24} color={branding.primary} />
-                  <Text style={[styles.sectionTitle, { color: branding.primary }]}>
-                    Club Challenges
-                  </Text>
+              <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="business" size={20} color={branding.primary} />
+                    <Text style={[styles.sectionTitle, { color: branding.primary }]}>
+                      Club Challenges
+                    </Text>
+                    <Text style={styles.sectionCount}>{gymBadges.length}</Text>
+                  </View>
+                  <View style={styles.bentoGrid}>
+                    {gymBadges.map((badge) => {
+                      const earnedBadge = earnedBadges.find(
+                        (b) => b.badge_name === badge.name && b.badge_type === 'gym'
+                      );
+                      return (
+                        <BadgeCard
+                          key={`gym-${badge.id}`}
+                          badge={earnedBadge || {
+                            badge_id: badge.id,
+                            badge_name: badge.name,
+                            badge_description: badge.description,
+                            badge_image_url: badge.badge_image_url,
+                            earned_at: badge.earned_at || '',
+                            badge_type: 'gym',
+                            gym_name: badge.gym_name,
+                          }}
+                          isLocked={!badge.is_earned}
+                          progress={badge.progress}
+                          onPress={() => handleBadgePress(badge)}
+                          size="medium"
+                        />
+                      );
+                    })}
+                  </View>
                 </View>
-                <View style={styles.bentoGrid}>
-                  {gymBadges.map((badge) => {
-                    const earnedBadge = earnedBadges.find(
-                      (b) => b.badge_name === badge.name && b.badge_type === 'gym'
-                    );
-                    return (
-                      <BadgeCard
-                        key={`gym-${badge.id}`}
-                        badge={earnedBadge || {
-                          badge_id: badge.id,
-                          badge_name: badge.name,
-                          badge_description: badge.description,
-                          badge_image_url: badge.badge_image_url,
-                          earned_at: badge.earned_at || '',
-                          badge_type: 'gym',
-                          gym_name: badge.gym_name,
-                        }}
-                        isLocked={!badge.is_earned}
-                        progress={badge.progress}
-                        onPress={() => handleBadgePress(badge)}
-                        size="medium"
-                      />
-                    );
-                  })}
-                </View>
-              </View>
+              </Animated.View>
             )}
           </>
         )}
@@ -335,44 +359,77 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: theme.spacing.md,
   },
   backButton: {
-    padding: theme.spacing.sm,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     letterSpacing: 0.5,
+    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
   },
-  filterContainer: {
+  /* Stats bar */
+  statsBar: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: theme.spacing.md,
+    alignItems: 'center',
   },
-  searchContainer: {
+  statsPill: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  statsPillBlur: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.md,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
   },
-  searchIcon: {
-    marginRight: theme.spacing.sm,
+  statsPillText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    letterSpacing: 0.3,
+  },
+  /* Search & Filter */
+  filterContainer: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  searchContainer: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  searchBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm + 2,
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
   },
   searchInput: {
     flex: 1,
     fontSize: theme.typography.fontSize.base,
+    color: theme.colors.text,
   },
   clearButton: {
     padding: theme.spacing.xs,
@@ -387,33 +444,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   filterButtonText: {
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.medium,
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
   },
+  /* Content */
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: BENTO_PADDING,
+    paddingBottom: theme.spacing['3xl'],
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: theme.spacing['3xl'],
+    gap: theme.spacing.md,
   },
   emptyTitle: {
     fontSize: theme.typography.fontSize.xl,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.sm,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   emptyText: {
     fontSize: theme.typography.fontSize.base,
@@ -431,9 +491,15 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: theme.typography.fontSize.xl,
+    fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+    flex: 1,
+  },
+  sectionCount: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+    fontWeight: theme.typography.fontWeight.medium,
   },
   bentoGrid: {
     flexDirection: 'row',

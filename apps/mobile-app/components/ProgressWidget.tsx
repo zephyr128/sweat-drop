@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useAnimatedStyle,
@@ -104,7 +105,7 @@ export const ProgressWidget: React.FC = () => {
         onPress={() => router.push('/trophy-room')}
         activeOpacity={0.8}
       >
-        <View style={styles.cardBlur}>
+        <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
           <View style={styles.content}>
             <View style={styles.header}>
               <Ionicons name="trophy" size={20} color={branding.primary} />
@@ -136,7 +137,7 @@ export const ProgressWidget: React.FC = () => {
               <Ionicons name="arrow-forward" size={16} color={branding.primary} />
             </View>
           </View>
-        </View>
+        </BlurView>
       </TouchableOpacity>
     </View>
   );
@@ -159,6 +160,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     height: '100%',
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    overflow: 'hidden',
   },
   content: {
     gap: theme.spacing.sm,
