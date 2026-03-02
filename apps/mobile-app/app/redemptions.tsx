@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Clipboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Clipboard } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
@@ -10,6 +10,16 @@ import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useBranding } from '@/lib/contexts/ThemeContext';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function RedemptionsScreen() {
   const { session } = useSession();
@@ -66,13 +76,13 @@ export default function RedemptionsScreen() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return theme.colors.warning || '#FF9100';
-      case 'confirmed': return branding.primary;
+      case 'confirmed': return theme.colors.secondary;
       case 'cancelled': return theme.colors.textSecondary;
       default: return theme.colors.textSecondary;
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string): keyof typeof Ionicons.glyphMap => {
     switch (status) {
       case 'pending': return 'time-outline';
       case 'confirmed': return 'checkmark-circle';
@@ -115,87 +125,103 @@ export default function RedemptionsScreen() {
             <Text style={styles.emptySubtext}>Redeem rewards from the store to see them here</Text>
           </View>
         ) : (
-          redemptions.map((redemption) => {
+          redemptions.map((redemption, index) => {
             const statusColor = getStatusColor(redemption.status);
             const statusIcon = getStatusIcon(redemption.status);
 
             return (
-              <View key={redemption.id} style={styles.redemptionCard}>
-                <View style={styles.redemptionHeader}>
-                  <View style={styles.redemptionIconContainer}>
-                    <Text style={styles.redemptionEmoji}>
-                      {getRewardEmoji(redemption.rewards?.reward_type || '')}
-                    </Text>
-                  </View>
-                  <View style={styles.redemptionInfo}>
-                    <Text style={styles.redemptionName} numberOfLines={1}>
-                      {redemption.rewards?.name || 'Unknown Reward'}
-                    </Text>
-                    <Text style={styles.redemptionGym} numberOfLines={1}>
-                      {redemption.gyms?.name || 'Unknown Gym'}
-                    </Text>
-                  </View>
-                  <View style={[styles.statusBadge, { borderColor: statusColor + '40', backgroundColor: statusColor + '15' }]}>
-                    <Ionicons name={statusIcon as any} size={16} color={statusColor} />
-                    <Text style={[styles.statusText, { color: statusColor }]}>
-                      {redemption.status.charAt(0).toUpperCase() + redemption.status.slice(1)}
-                    </Text>
-                  </View>
-                </View>
+              <Animated.View key={redemption.id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
+                <View style={[styles.redemptionCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                  <BlurView intensity={50} tint="dark" style={[styles.redemptionBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                    {/* Header Row */}
+                    <View style={styles.redemptionHeader}>
+                      <View style={[styles.emojiContainer, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                        <Text style={styles.redemptionEmoji}>
+                          {getRewardEmoji(redemption.rewards?.reward_type || '')}
+                        </Text>
+                      </View>
+                      <View style={styles.redemptionInfo}>
+                        <Text style={styles.redemptionName} numberOfLines={1}>
+                          {redemption.rewards?.name || 'Unknown Reward'}
+                        </Text>
+                        <Text style={styles.redemptionGym} numberOfLines={1}>
+                          {redemption.gyms?.name || 'Unknown Gym'}
+                        </Text>
+                      </View>
+                      <View style={[styles.statusBadge, { borderColor: statusColor + '30', backgroundColor: statusColor + '10' }]}>
+                        <Ionicons name={statusIcon} size={14} color={statusColor} />
+                        <Text style={[styles.statusText, { color: statusColor }]}>
+                          {redemption.status.charAt(0).toUpperCase() + redemption.status.slice(1)}
+                        </Text>
+                      </View>
+                    </View>
 
-                <View style={styles.redemptionDetails}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Redemption Code</Text>
-                    <TouchableOpacity
-                      style={styles.codeContainer}
-                      onPress={() => {
-                        if (redemption.redemption_code) {
-                          Clipboard.setString(redemption.redemption_code);
-                          Alert.alert('Copied!', 'Redemption code copied to clipboard');
-                        }
-                      }}
-                      disabled={!redemption.redemption_code}
-                    >
-                      <Text style={[styles.redemptionCode, { color: branding.primary }]}>{redemption.redemption_code || 'N/A'}</Text>
-                      {redemption.status === 'pending' && redemption.redemption_code && (
-                        <Ionicons name="copy-outline" size={16} color={branding.primary} />
+                    {/* Details */}
+                    <View style={styles.redemptionDetails}>
+                      {/* Code */}
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Code</Text>
+                        <TouchableOpacity
+                          style={styles.codeContainer}
+                          onPress={() => {
+                            if (redemption.redemption_code) {
+                              Clipboard.setString(redemption.redemption_code);
+                              Alert.alert('Copied!', 'Redemption code copied to clipboard');
+                            }
+                          }}
+                          disabled={!redemption.redemption_code}
+                        >
+                          <Text style={[styles.redemptionCode, { color: branding.primary }]}>
+                            {redemption.redemption_code || 'N/A'}
+                          </Text>
+                          {redemption.status === 'pending' && redemption.redemption_code && (
+                            <Ionicons name="copy-outline" size={14} color={branding.primary} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Drops Spent */}
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Drops Spent</Text>
+                        <View style={styles.dropsContainer}>
+                          <Ionicons name="water" size={14} color={branding.primary} />
+                          <Text style={[styles.dropsAmount, getNumberStyle(14), { color: branding.primary }]}>
+                            {redemption.drops_spent}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Date */}
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Date</Text>
+                        <Text style={styles.detailValue}>
+                          {new Date(redemption.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+
+                      {/* Confirmed date */}
+                      {redemption.status === 'confirmed' && redemption.confirmed_at && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Confirmed</Text>
+                          <Text style={styles.detailValue}>
+                            {new Date(redemption.confirmed_at).toLocaleDateString()}
+                          </Text>
+                        </View>
                       )}
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Drops Spent</Text>
-                    <View style={styles.dropsContainer}>
-                      <Ionicons name="water" size={16} color="#00E5FF" />
-                      <Text style={[styles.dropsAmount, getNumberStyle(16), { color: '#00E5FF' }]}>
-                        {redemption.drops_spent}
-                      </Text>
                     </View>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Date</Text>
-                    <Text style={styles.detailValue}>
-                      {new Date(redemption.created_at).toLocaleDateString()} {new Date(redemption.created_at).toLocaleTimeString()}
-                    </Text>
-                  </View>
-                  {redemption.status === 'confirmed' && redemption.confirmed_at && (
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Confirmed</Text>
-                      <Text style={styles.detailValue}>
-                        {new Date(redemption.confirmed_at).toLocaleDateString()} {new Date(redemption.confirmed_at).toLocaleTimeString()}
-                      </Text>
-                    </View>
-                  )}
-                </View>
 
-                {redemption.status === 'pending' && (
-                  <View style={styles.pendingNote}>
-                    <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning || '#FF9100'} />
-                    <Text style={styles.pendingNoteText}>
-                      Show your redemption code to gym staff to claim your reward
-                    </Text>
-                  </View>
-                )}
-              </View>
+                    {/* Pending note */}
+                    {redemption.status === 'pending' && (
+                      <View style={styles.pendingNote}>
+                        <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning || '#FF9100'} />
+                        <Text style={styles.pendingNoteText}>
+                          Show your code to gym staff to claim
+                        </Text>
+                      </View>
+                    )}
+                  </BlurView>
+                </View>
+              </Animated.View>
             );
           })
         )}
@@ -230,7 +256,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     letterSpacing: 0.5,
-    pointerEvents: 'none', // Don't block touch events
+    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
@@ -240,6 +266,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
   },
   emptyState: {
     padding: theme.spacing['3xl'],
@@ -258,13 +285,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.3,
   },
+  /* Card */
   redemptionCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
+    overflow: 'hidden',
     marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  redemptionBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
   },
   redemptionHeader: {
     flexDirection: 'row',
@@ -272,16 +303,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     marginBottom: theme.spacing.md,
   },
-  redemptionIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  emojiContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   redemptionEmoji: {
-    fontSize: 32,
+    fontSize: 26,
   },
   redemptionInfo: {
     flex: 1,
@@ -292,24 +322,24 @@ const styles = StyleSheet.create({
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     letterSpacing: 0.3,
-    marginBottom: theme.spacing.xs,
+    marginBottom: 2,
   },
   redemptionGym: {
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 4,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
   },
   statusText: {
-    fontSize: theme.typography.fontSize.xs,
+    fontSize: 10,
     fontWeight: theme.typography.fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -317,8 +347,8 @@ const styles = StyleSheet.create({
   redemptionDetails: {
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
   detailRow: {
     flexDirection: 'row',
@@ -342,7 +372,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   redemptionCode: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: theme.typography.fontSize.sm,
     fontFamily: 'Courier',
     fontWeight: theme.typography.fontWeight.bold,
     letterSpacing: 1,
@@ -350,7 +380,7 @@ const styles = StyleSheet.create({
   dropsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 4,
   },
   dropsAmount: {
     fontWeight: theme.typography.fontWeight.bold,
@@ -361,10 +391,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
     padding: theme.spacing.md,
-    backgroundColor: 'rgba(255, 145, 0, 0.1)',
+    backgroundColor: 'rgba(255, 145, 0, 0.08)',
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 145, 0, 0.3)',
+    borderColor: 'rgba(255, 145, 0, 0.2)',
   },
   pendingNoteText: {
     flex: 1,

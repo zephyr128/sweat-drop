@@ -3,12 +3,23 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme } from '@/lib/theme';
-import { useTheme } from '@/lib/contexts/ThemeContext';
+import { theme, getNumberStyle } from '@/lib/theme';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 interface WorkoutPlan {
   id: string;
@@ -37,15 +48,12 @@ export default function PlanDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const planId = params.planId as string;
-  
+
   const { session } = useSession();
-  const { theme: currentTheme } = useTheme();
+  const branding = useBranding();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
-
-  console.log('[PlanDetail] Component rendered, planId:', planId);
-  console.log('[PlanDetail] params:', params);
 
   useEffect(() => {
     if (planId && session?.user) {
@@ -53,7 +61,6 @@ export default function PlanDetailScreen() {
     } else if (!planId) {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planId, session?.user]);
 
   const loadPlanDetails = async () => {
@@ -62,49 +69,34 @@ export default function PlanDetailScreen() {
       return;
     }
 
-    console.log('[PlanDetail] Loading plan with ID:', planId);
-
     try {
       const { data: planData, error: planError } = await supabase
         .from('workout_plans')
         .select(`
-          id,
-          name,
-          description,
-          difficulty_level,
-          estimated_duration_minutes,
-          category,
+          id, name, description, difficulty_level,
+          estimated_duration_minutes, category,
           items:workout_plan_items(*)
         `)
         .eq('id', planId)
         .eq('is_active', true)
         .single();
 
-      console.log('[PlanDetail] Plan query result:', { planData, planError });
-
       if (planError) {
         console.error('[PlanDetail] Error loading plan:', planError);
-        console.error('[PlanDetail] Error code:', planError.code);
-        console.error('[PlanDetail] Error message:', planError.message);
         setLoading(false);
         return;
       }
 
       if (!planData) {
-        console.warn('[PlanDetail] Plan data is null for planId:', planId);
         setLoading(false);
         return;
       }
 
-      // Sort items by order_index
-      const sortedItems = (planData.items || []).sort((a: WorkoutPlanItem, b: WorkoutPlanItem) => 
-        a.order_index - b.order_index
+      const sortedItems = (planData.items || []).sort(
+        (a: WorkoutPlanItem, b: WorkoutPlanItem) => a.order_index - b.order_index
       );
 
-      setPlan({
-        ...planData,
-        items: sortedItems,
-      });
+      setPlan({ ...planData, items: sortedItems });
     } catch (error) {
       console.error('Error loading plan details:', error);
     } finally {
@@ -117,7 +109,6 @@ export default function PlanDetailScreen() {
 
     setSubscribing(true);
     try {
-      // Check if user already has an active subscription
       const { data: existingSubscription } = await supabase
         .from('active_subscriptions')
         .select('id, current_exercise_index')
@@ -130,7 +121,6 @@ export default function PlanDetailScreen() {
       let currentExerciseIndex = existingSubscription?.current_exercise_index || 0;
 
       if (!existingSubscription) {
-        // Create new subscription
         const { data: newSubscription, error: subscribeError } = await supabase
           .from('active_subscriptions')
           .insert({
@@ -152,16 +142,13 @@ export default function PlanDetailScreen() {
         currentExerciseIndex = newSubscription?.current_exercise_index || 0;
       }
 
-      // Get current plan item based on current_exercise_index
-      const currentPlanItem = plan?.items?.find(item => item.order_index === currentExerciseIndex);
-      
+      const currentPlanItem = plan?.items?.find((item) => item.order_index === currentExerciseIndex);
+
       if (!currentPlanItem) {
         console.error('Current plan item not found for index:', currentExerciseIndex);
         return;
       }
 
-      // Navigate to scan screen with plan parameters - user needs to scan QR code on machine to start workout
-      // Pass plan parameters so ScannerScreen knows this is a plan-based workout
       router.push({
         pathname: '/scan',
         params: {
@@ -181,11 +168,16 @@ export default function PlanDetailScreen() {
   const formatExercise = (item: WorkoutPlanItem) => {
     const machineType = item.target_machine_type === 'bike' ? 'Bike' : 'Treadmill';
     const value = item.target_value;
-    const unit = item.target_unit || 
-      (item.target_metric === 'time' ? 'min' : 
-       item.target_metric === 'distance' ? 'km' : 
-       item.target_metric === 'reps' ? 'reps' : '');
-    
+    const unit =
+      item.target_unit ||
+      (item.target_metric === 'time'
+        ? 'min'
+        : item.target_metric === 'distance'
+        ? 'km'
+        : item.target_metric === 'reps'
+        ? 'reps'
+        : '');
+
     if (item.target_metric === 'time') {
       return `${machineType}: ${value} ${unit} session`;
     } else if (item.target_metric === 'distance') {
@@ -199,22 +191,17 @@ export default function PlanDetailScreen() {
 
   const getDifficultyColor = (difficulty: string | null) => {
     switch (difficulty) {
-      case 'beginner':
-        return '#4ade80';
-      case 'intermediate':
-        return '#facc15';
-      case 'advanced':
-        return '#f87171';
-      case 'expert':
-        return '#ef4444';
-      default:
-        return currentTheme.colors.primary;
+      case 'beginner': return '#4ade80';
+      case 'intermediate': return '#facc15';
+      case 'advanced': return '#f87171';
+      case 'expert': return '#ef4444';
+      default: return branding.primary;
     }
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <LinearGradient
           colors={['#000000', '#0A0E1A', '#000000']}
           start={{ x: 0.5, y: 0 }}
@@ -222,7 +209,7 @@ export default function PlanDetailScreen() {
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={currentTheme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
         </View>
       </SafeAreaView>
     );
@@ -230,7 +217,7 @@ export default function PlanDetailScreen() {
 
   if (!plan) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <LinearGradient
           colors={['#000000', '#0A0E1A', '#000000']}
           start={{ x: 0.5, y: 0 }}
@@ -240,9 +227,10 @@ export default function PlanDetailScreen() {
         <View style={styles.header}>
           <BackButton />
           <Text style={styles.headerTitle}>Plan Details</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>Plan not found</Text>
         </View>
       </SafeAreaView>
@@ -250,7 +238,7 @@ export default function PlanDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -258,110 +246,125 @@ export default function PlanDetailScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <ScrollView 
-        style={styles.scrollView} 
+      {/* Header */}
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.headerTitle} numberOfLines={1}>{plan.name}</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {plan.name}
-          </Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        {/* Plan Info */}
-        <View style={styles.planInfo}>
-          {plan.description && (
-            <Text style={styles.planDescription}>{plan.description}</Text>
-          )}
-
-          <View style={styles.planMetadata}>
-            {plan.difficulty_level && (
-              <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(plan.difficulty_level) + '20' }]}>
-                <Text style={[styles.difficultyText, { color: getDifficultyColor(plan.difficulty_level) }]}>
-                  {plan.difficulty_level}
-                </Text>
+        {/* Plan Info Card */}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <View style={[styles.planInfoCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.planInfoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              {plan.description && (
+                <Text style={styles.planDescription}>{plan.description}</Text>
+              )}
+              <View style={styles.planMetadata}>
+                {plan.difficulty_level && (
+                  <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(plan.difficulty_level) + '20' }]}>
+                    <Text style={[styles.difficultyText, { color: getDifficultyColor(plan.difficulty_level) }]}>
+                      {plan.difficulty_level}
+                    </Text>
+                  </View>
+                )}
+                {plan.estimated_duration_minutes && (
+                  <View style={styles.metadataItem}>
+                    <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} />
+                    <Text style={styles.metadataText}>{plan.estimated_duration_minutes} min</Text>
+                  </View>
+                )}
+                {plan.category && (
+                  <View style={styles.metadataItem}>
+                    <Ionicons name="pricetag-outline" size={16} color={theme.colors.textSecondary} />
+                    <Text style={styles.metadataText}>{plan.category}</Text>
+                  </View>
+                )}
               </View>
-            )}
-            {plan.estimated_duration_minutes && (
-              <View style={styles.metadataItem}>
-                <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} />
-                <Text style={styles.metadataText}>
-                  {plan.estimated_duration_minutes} min
-                </Text>
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* Exercises Section */}
+        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+          <View style={styles.exercisesSection}>
+            <Text style={styles.sectionTitle}>
+              Exercises <Text style={{ color: theme.colors.textSecondary }}>({plan.items.length})</Text>
+            </Text>
+
+            {plan.items.length === 0 ? (
+              <View style={styles.emptyExercises}>
+                <Text style={styles.emptyExercisesText}>No exercises defined</Text>
               </View>
-            )}
-            {plan.category && (
-              <View style={styles.metadataItem}>
-                <Ionicons name="pricetag-outline" size={16} color={theme.colors.textSecondary} />
-                <Text style={styles.metadataText}>{plan.category}</Text>
+            ) : (
+              <View style={styles.exercisesList}>
+                {plan.items.map((item, index) => (
+                  <Animated.View key={item.id} entering={FadeInDown.delay(300 + index * 60).duration(400)}>
+                    <View style={[styles.exerciseItem, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+                      <BlurView intensity={50} tint="dark" style={[styles.exerciseBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                        <View style={[styles.exerciseNumber, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                          <Text style={[styles.exerciseNumberText, getNumberStyle(14), { color: branding.primary }]}>
+                            {index + 1}
+                          </Text>
+                        </View>
+                        <View style={styles.exerciseContent}>
+                          <Text style={styles.exerciseName}>{item.exercise_name}</Text>
+                          <Text style={[styles.exerciseDetail, { color: branding.primary }]}>
+                            {formatExercise(item)}
+                          </Text>
+                          {item.exercise_description && (
+                            <Text style={styles.exerciseDescription}>{item.exercise_description}</Text>
+                          )}
+                          {item.rest_seconds > 0 && (
+                            <View style={[styles.restBadge, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                              <Ionicons name="pause-outline" size={12} color={branding.primary} />
+                              <Text style={[styles.restText, { color: branding.primary }]}>
+                                {item.rest_seconds}s rest
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </BlurView>
+                    </View>
+                  </Animated.View>
+                ))}
               </View>
             )}
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Exercises List */}
-        <View style={styles.exercisesSection}>
-          <Text style={styles.sectionTitle}>Exercises ({plan.items.length})</Text>
-          
-          {plan.items.length === 0 ? (
-            <View style={styles.emptyExercises}>
-              <Text style={styles.emptyExercisesText}>No exercises defined</Text>
-            </View>
-          ) : (
-            <View style={styles.exercisesList}>
-              {plan.items.map((item, index) => (
-                <View key={item.id} style={styles.exerciseItem}>
-                  <View style={styles.exerciseNumber}>
-                    <Text style={styles.exerciseNumberText}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.exerciseContent}>
-                    <Text style={styles.exerciseName}>{item.exercise_name}</Text>
-                    <Text style={styles.exerciseDetail}>{formatExercise(item)}</Text>
-                    {item.exercise_description && (
-                      <Text style={styles.exerciseDescription}>{item.exercise_description}</Text>
-                    )}
-                    {item.rest_seconds > 0 && (
-                      <View style={styles.restBadge}>
-                        <Ionicons name="pause-outline" size={12} color={theme.colors.primary} />
-                        <Text style={styles.restText}>
-                          {item.rest_seconds}s rest
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Subscribe Button */}
-        <TouchableOpacity
-          style={[styles.subscribeButton, subscribing && styles.subscribeButtonDisabled]}
-          onPress={handleSubscribe}
-          disabled={subscribing}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={[currentTheme.colors.primary, currentTheme.colors.primaryDark || currentTheme.colors.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.subscribeButtonGradient}
+        {/* Start Button */}
+        <Animated.View entering={FadeInDown.delay(600).duration(400)}>
+          <TouchableOpacity
+            style={[styles.startButton, subscribing && styles.startButtonDisabled]}
+            onPress={handleSubscribe}
+            disabled={subscribing}
+            activeOpacity={0.8}
           >
-            {subscribing ? (
-              <ActivityIndicator size="small" color="#000000" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#000000" />
-                <Text style={styles.subscribeButtonText}>Start This Plan</Text>
-              </>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient
+              colors={[branding.primary, hexToRgba(branding.primary, 0.8)]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.startButtonGradient}
+            >
+              {subscribing ? (
+                <ActivityIndicator size="small" color={branding.onPrimary} />
+              ) : (
+                <>
+                  <Ionicons name="play-circle" size={22} color={branding.onPrimary} />
+                  <Text style={[styles.startButtonText, { color: branding.onPrimary }]}>
+                    Start This Plan
+                  </Text>
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -376,8 +379,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing['3xl'],
   },
   loadingContainer: {
     flex: 1,
@@ -388,44 +391,58 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    position: 'relative',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    fontSize: theme.typography.fontSize['2xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 60,
+    right: 60,
     textAlign: 'center',
-    pointerEvents: 'none', // Don't block touch events
-    flex: 1,
+    letterSpacing: 0.5,
+    pointerEvents: 'none',
   },
-  planInfo: {
-    marginBottom: 24,
-    gap: 12,
+  headerSpacer: {
+    width: 40,
+  },
+  /* Plan Info Card */
+  planInfoCard: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.xl,
+    borderWidth: 1,
+  },
+  planInfoBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.xl,
+    gap: theme.spacing.md,
   },
   planDescription: {
-    fontSize: 16,
+    fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     lineHeight: 24,
+    letterSpacing: 0.3,
   },
   planMetadata: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: theme.spacing.md,
     flexWrap: 'wrap',
   },
   difficultyBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: theme.spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: theme.borderRadius.md,
   },
   difficultyText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: theme.typography.fontSize.xs,
+    fontWeight: theme.typography.fontWeight.semibold,
     textTransform: 'capitalize',
+    letterSpacing: 0.3,
   },
   metadataItem: {
     flexDirection: 'row',
@@ -433,115 +450,124 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   metadataText: {
-    fontSize: 14,
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
   },
+  /* Exercises */
   exercisesSection: {
-    marginBottom: 24,
+    marginBottom: theme.spacing.xl,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 16,
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.lg,
+    letterSpacing: 0.3,
   },
   exercisesList: {
-    gap: 12,
+    gap: theme.spacing.sm,
   },
   exerciseItem: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 229, 255, 0.05)',
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.1)',
+  },
+  exerciseBlur: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
   },
   exerciseNumber: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: theme.colors.primary + '20',
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   exerciseNumberText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
+    fontWeight: theme.typography.fontWeight.bold,
   },
   exerciseContent: {
     flex: 1,
     gap: 4,
   },
   exerciseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
   },
   exerciseDetail: {
-    fontSize: 14,
-    color: theme.colors.primary,
-    fontWeight: '500',
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.medium,
+    letterSpacing: 0.3,
   },
   exerciseDescription: {
-    fontSize: 13,
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginTop: 4,
     lineHeight: 18,
+    letterSpacing: 0.3,
   },
   restBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 6,
+    marginTop: theme.spacing.xs,
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: theme.colors.primary + '10',
+    borderRadius: theme.borderRadius.sm,
   },
   restText: {
-    fontSize: 12,
-    color: theme.colors.primary,
-    fontWeight: '500',
+    fontSize: theme.typography.fontSize.xs,
+    fontWeight: theme.typography.fontWeight.medium,
+    letterSpacing: 0.3,
   },
   emptyExercises: {
-    padding: 24,
+    padding: theme.spacing.xl,
     alignItems: 'center',
   },
   emptyExercisesText: {
-    fontSize: 14,
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: theme.spacing['3xl'],
+    gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
   },
-  subscribeButton: {
-    borderRadius: 16,
+  /* Start Button */
+  startButton: {
+    borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
-    marginTop: 8,
   },
-  subscribeButtonDisabled: {
+  startButtonDisabled: {
     opacity: 0.6,
   },
-  subscribeButtonGradient: {
-    padding: 16,
+  startButtonGradient: {
+    padding: theme.spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
-  subscribeButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000',
+  startButtonText: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.bold,
+    letterSpacing: 0.5,
   },
 });
