@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -10,11 +11,11 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
-// Helper function to add alpha to hex color
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
   const r = parseInt(result[1], 16);
   const g = parseInt(result[2], 16);
   const b = parseInt(result[3], 16);
@@ -33,7 +34,6 @@ export default function ChallengeDetailScreen() {
   const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load challenge progress for this specific challenge
   const { challenges: allChallenges } = useChallengeProgress(gymId || null, null);
   const challengeProgress = allChallenges.find((c) => c.challenge_id === challengeId);
 
@@ -62,7 +62,6 @@ export default function ChallengeDetailScreen() {
 
       setChallenge(challengeData);
 
-      // Load user progress for this challenge
       const { data: progressData, error: progressError } = await supabase
         .from('challenge_progress')
         .select('*')
@@ -71,7 +70,6 @@ export default function ChallengeDetailScreen() {
         .single();
 
       if (progressError && progressError.code !== 'PGRST116') {
-        // PGRST116 = no rows returned, which is fine
         console.error('Error loading progress:', progressError);
       } else if (progressData) {
         setProgress(progressData);
@@ -101,31 +99,32 @@ export default function ChallengeDetailScreen() {
 
   const getChallengeTypeLabel = (challengeType: string) => {
     switch (challengeType) {
-      case 'daily':
-        return 'Daily Challenge';
-      case 'weekly':
-        return 'Weekly Challenge';
-      case 'monthly':
-        return 'Monthly Challenge';
-      case 'streak':
-        return 'Streak Challenge';
-      case 'milestone':
-        return 'Milestone Challenge';
-      default:
-        return 'Challenge';
+      case 'daily': return 'Daily Challenge';
+      case 'weekly': return 'Weekly Challenge';
+      case 'monthly': return 'Monthly Challenge';
+      case 'streak': return 'Streak Challenge';
+      case 'milestone': return 'Milestone Challenge';
+      default: return 'Challenge';
+    }
+  };
+
+  const getChallengeIcon = (type: string): keyof typeof Ionicons.glyphMap => {
+    switch (type) {
+      case 'daily': return 'sunny-outline';
+      case 'weekly': return 'calendar-outline';
+      case 'monthly': return 'trophy-outline';
+      case 'streak': return 'flame-outline';
+      case 'milestone': return 'flag-outline';
+      default: return 'star-outline';
     }
   };
 
   const getMachineTypeLabel = (machineType: string) => {
     switch (machineType) {
-      case 'treadmill':
-        return 'Treadmill';
-      case 'bike':
-        return 'Bike';
-      case 'any':
-        return 'Any Machine';
-      default:
-        return machineType;
+      case 'treadmill': return 'Treadmill';
+      case 'bike': return 'Bike';
+      case 'any': return 'Any Machine';
+      default: return machineType;
     }
   };
 
@@ -148,14 +147,13 @@ export default function ChallengeDetailScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centerContent}>
+          <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>Challenge not found</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Use progress from hook if available, otherwise use local state
-  // Calculate target based on challenge type
   let target = 0;
   if (challenge?.challenge_type === 'milestone') {
     target = challenge.milestone_threshold || 0;
@@ -164,22 +162,21 @@ export default function ChallengeDetailScreen() {
   } else {
     target = challenge?.target_drops || 0;
   }
-  
-  // Calculate current progress based on challenge type
+
   let current = 0;
   if (challenge?.challenge_type === 'streak') {
     current = challengeProgress?.current_streak_days || progress?.current_streak_days || 0;
   } else {
     current = challengeProgress?.current_drops || progress?.current_drops || 0;
   }
-  
+
   const isCompleted = challengeProgress?.is_completed || progress?.is_completed || false;
   const progressRatio = target > 0 ? Math.min(current / target, 1) : 0;
   const rewardDrops = challenge?.reward_drops || 0;
+  const unit = challenge.challenge_type === 'streak' ? 'days' : 'drops';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Radial gradient background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -195,171 +192,129 @@ export default function ChallengeDetailScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Challenge Card */}
-        <View style={styles.challengeCard}>
-          <LinearGradient
-            colors={['#0A1A2E', '#1A1A2E', '#0F0F1E']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.challengeGradient}
-          >
-            <View style={styles.challengeContent}>
-              {/* Challenge Type Badge */}
-              <View style={[
-                styles.challengeTypeBadge,
-                {
-                  backgroundColor: branding.primaryLight,
-                  borderColor: hexToRgba(branding.primary, 0.3),
-                }
-              ]}>
-                <Text style={[styles.challengeTypeText, { color: branding.primary }]}>
-                  {getChallengeTypeLabel(challenge.challenge_type || 'daily')}
-                </Text>
+        {/* Main Challenge Card */}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <View style={[styles.challengeCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              {/* Type Badge + Icon */}
+              <View style={styles.cardTop}>
+                <View style={[styles.typeIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                  <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={22} color={branding.primary} />
+                </View>
+                <View style={[styles.typeBadge, { backgroundColor: hexToRgba(branding.primary, 0.1), borderColor: hexToRgba(branding.primary, 0.2) }]}>
+                  <Text style={[styles.typeText, { color: branding.primary }]}>
+                    {getChallengeTypeLabel(challenge.challenge_type || 'daily')}
+                  </Text>
+                </View>
               </View>
 
-              {/* Challenge Name */}
+              {/* Name */}
               <Text style={styles.challengeName}>{challenge.name}</Text>
 
-              {/* Challenge Description */}
+              {/* Description */}
               {challenge.description && (
                 <Text style={styles.challengeDescription}>{challenge.description}</Text>
               )}
 
-              {/* Challenge Info */}
-              <View style={styles.challengeInfo}>
-                <View style={styles.infoRow}>
-                  <Ionicons name="trophy-outline" size={18} color={branding.primary} />
-                  <Text style={styles.infoText}>
-                    {target} {challenge.challenge_type === 'streak' ? 'days' : 'drops'} needed
-                  </Text>
+              {/* Info pills */}
+              <View style={styles.infoPills}>
+                <View style={[styles.infoPill, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                  <Ionicons name="trophy-outline" size={16} color={branding.primary} />
+                  <Text style={styles.infoPillText}>{target} {unit} needed</Text>
                 </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="water" size={18} color="#00E5FF" />
-                  <Text style={styles.infoText}>
-                    {rewardDrops} drops reward
-                  </Text>
+                <View style={[styles.infoPill, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                  <Ionicons name="water" size={16} color={branding.primary} />
+                  <Text style={styles.infoPillText}>{rewardDrops} drops reward</Text>
                 </View>
                 {challenge.end_date && (
-                  <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={18} color={branding.primary} />
-                    <Text style={styles.infoText}>
-                      {getTimeRemaining(challenge.end_date)}
-                    </Text>
+                  <View style={[styles.infoPill, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
+                    <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} />
+                    <Text style={styles.infoPillText}>{getTimeRemaining(challenge.end_date)}</Text>
                   </View>
                 )}
               </View>
+            </BlurView>
+          </View>
+        </Animated.View>
 
-              {/* Progress Section */}
-              <View style={styles.progressSection}>
-                <View style={styles.progressHeader}>
-                  <Text style={styles.progressTitle}>Your Progress</Text>
-                  <Text style={[styles.progressPercentage, { color: branding.primary }]}>
-                    {Math.round(progressRatio * 100)}%
-                  </Text>
-                </View>
-
-                {/* Progress Bar */}
-                <View style={[styles.progressBar, { backgroundColor: branding.primaryLight }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${progressRatio * 100}%`,
-                        backgroundColor: isCompleted
-                          ? theme.colors.secondary
-                          : branding.primary,
-                      },
-                    ]}
-                  />
-                </View>
-
-                {/* Progress Text */}
-                <View style={styles.progressTextContainer}>
-                  <Text style={styles.progressText}>
-                    <Text style={[getNumberStyle(24), { color: branding.primary }]}>
-                      {current}
-                    </Text>
-                    {' / '}
-                    <Text style={[getNumberStyle(24), { color: branding.primary }]}>
-                      {target}
-                    </Text>
-                    {' '}
-                    {challenge.challenge_type === 'streak' ? 'days' : 'drops'}
-                  </Text>
-                </View>
-
-                {/* Remaining */}
-                {!isCompleted && (
-                  <Text style={styles.remainingText}>
-                    {Math.max(target - current, 0)} {challenge.challenge_type === 'streak' ? 'days' : 'drops'} remaining
-                  </Text>
-                )}
+        {/* Progress Card */}
+        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+          <View style={[styles.progressCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.progressBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressTitle}>Your Progress</Text>
+                <Text style={[styles.progressPercentage, getNumberStyle(20), { color: branding.primary }]}>
+                  {Math.round(progressRatio * 100)}%
+                </Text>
               </View>
 
-              {/* Completed Badge */}
+              {/* Progress Bar */}
+              <View style={styles.progressBarTrack}>
+                <LinearGradient
+                  colors={isCompleted
+                    ? [theme.colors.secondary, theme.colors.secondary]
+                    : [branding.primary, hexToRgba(branding.primary, 0.6)]
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.progressFill, { width: `${progressRatio * 100}%` }]}
+                />
+              </View>
+
+              {/* Progress numbers */}
+              <View style={styles.progressNumbers}>
+                <Text style={[styles.progressCurrent, getNumberStyle(32), { color: branding.primary }]}>
+                  {current}
+                </Text>
+                <Text style={styles.progressDivider}> / </Text>
+                <Text style={[styles.progressTarget, getNumberStyle(32)]}>
+                  {target}
+                </Text>
+                <Text style={styles.progressUnit}> {unit}</Text>
+              </View>
+
+              {!isCompleted && (
+                <Text style={styles.remainingText}>
+                  {Math.max(target - current, 0)} {unit} remaining
+                </Text>
+              )}
+
+              {/* Completed */}
               {isCompleted && (
                 <View style={styles.completedBadge}>
                   <Ionicons name="checkmark-circle" size={24} color={theme.colors.secondary} />
-                  <Text style={styles.completedText}>
-                    Challenge Completed! 🎉
-                  </Text>
-                  <Text style={styles.completedSubtext}>
-                    You earned {rewardDrops} drops
-                  </Text>
+                  <View>
+                    <Text style={styles.completedText}>Challenge Completed!</Text>
+                    <Text style={styles.completedSubtext}>You earned {rewardDrops} drops</Text>
+                  </View>
                 </View>
               )}
-            </View>
-          </LinearGradient>
-        </View>
+            </BlurView>
+          </View>
+        </Animated.View>
 
         {/* How to Participate */}
-        <View style={styles.howToSection}>
-          <Text style={styles.howToTitle}>How to Participate</Text>
-          <View style={styles.howToSteps}>
-            <View style={styles.step}>
-              <View style={[
-                styles.stepNumber,
-                {
-                  backgroundColor: branding.primaryLight,
-                  borderColor: hexToRgba(branding.primary, 0.3),
-                }
-              ]}>
-                <Text style={[styles.stepNumberText, { color: branding.primary }]}>1</Text>
+        <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+          <View style={[styles.howToCard, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.howToBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <Text style={styles.howToTitle}>How to Participate</Text>
+              <View style={styles.howToSteps}>
+                {[
+                  `Scan a QR code on a ${getMachineTypeLabel(challenge.machine_type || 'any').toLowerCase()} machine`,
+                  'Start your workout and exercise for the required time',
+                  `Complete the challenge to earn ${rewardDrops} drops`,
+                ].map((stepText, idx) => (
+                  <View key={idx} style={styles.step}>
+                    <View style={[styles.stepNumber, { backgroundColor: hexToRgba(branding.primary, 0.1), borderColor: hexToRgba(branding.primary, 0.2) }]}>
+                      <Text style={[styles.stepNumberText, getNumberStyle(14), { color: branding.primary }]}>{idx + 1}</Text>
+                    </View>
+                    <Text style={styles.stepText}>{stepText}</Text>
+                  </View>
+                ))}
               </View>
-              <Text style={styles.stepText}>
-                Scan a QR code on a {getMachineTypeLabel(challenge.machine_type || 'any').toLowerCase()} machine
-              </Text>
-            </View>
-            <View style={styles.step}>
-              <View style={[
-                styles.stepNumber,
-                {
-                  backgroundColor: branding.primaryLight,
-                  borderColor: hexToRgba(branding.primary, 0.3),
-                }
-              ]}>
-                <Text style={[styles.stepNumberText, { color: branding.primary }]}>2</Text>
-              </View>
-              <Text style={styles.stepText}>
-                Start your workout and exercise for the required time
-              </Text>
-            </View>
-            <View style={styles.step}>
-              <View style={[
-                styles.stepNumber,
-                {
-                  backgroundColor: branding.primaryLight,
-                  borderColor: hexToRgba(branding.primary, 0.3),
-                }
-              ]}>
-                <Text style={[styles.stepNumberText, { color: branding.primary }]}>3</Text>
-              </View>
-              <Text style={styles.stepText}>
-                Complete the challenge to earn {rewardDrops} drops
-              </Text>
-            </View>
+            </BlurView>
           </View>
-        </View>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -386,7 +341,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     letterSpacing: 0.5,
-    pointerEvents: 'none', // Don't block touch events
+    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
@@ -395,9 +350,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: theme.typography.fontSize.lg,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },
@@ -408,33 +364,40 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing['3xl'],
   },
+  /* Main Challenge Card */
   challengeCard: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  challengeGradient: {
+  challengeBlur: {
     borderRadius: theme.borderRadius.xl,
-  },
-  challengeContent: {
+    overflow: 'hidden',
     padding: theme.spacing.xl,
   },
-  challengeTypeBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
+  typeIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typeBadge: {
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.md,
-    marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.3)',
   },
-  challengeTypeText: {
+  typeText: {
     fontSize: theme.typography.fontSize.xs,
     fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -452,31 +415,41 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     letterSpacing: 0.3,
   },
-  challengeInfo: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl,
-  },
-  infoRow: {
+  infoPills: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
-  infoText: {
-    fontSize: theme.typography.fontSize.base,
+  infoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+  },
+  infoPillText: {
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
-  progressSection: {
-    marginTop: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  /* Progress Card */
+  progressCard: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+  },
+  progressBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.xl,
   },
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   progressTitle: {
     fontSize: theme.typography.fontSize.lg,
@@ -485,29 +458,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   progressPercentage: {
-    fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.primary,
-    letterSpacing: 0.3,
   },
-  progressBar: {
-    height: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: theme.borderRadius.md,
-    marginBottom: theme.spacing.md,
+  progressBarTrack: {
+    height: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 5,
     overflow: 'hidden',
+    marginBottom: theme.spacing.lg,
   },
   progressFill: {
     height: '100%',
-    borderRadius: theme.borderRadius.md,
+    borderRadius: 5,
   },
-  progressTextContainer: {
-    alignItems: 'center',
+  progressNumbers: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
     marginBottom: theme.spacing.sm,
   },
-  progressText: {
-    fontSize: theme.typography.fontSize.lg,
-    color: theme.colors.text,
+  progressCurrent: {
+    fontWeight: theme.typography.fontWeight.bold,
+  },
+  progressDivider: {
+    fontSize: theme.typography.fontSize.xl,
+    color: theme.colors.textSecondary,
+  },
+  progressTarget: {
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.textSecondary,
+  },
+  progressUnit: {
+    fontSize: theme.typography.fontSize.base,
+    color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },
   remainingText: {
@@ -517,14 +500,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
     marginTop: theme.spacing.lg,
     padding: theme.spacing.lg,
-    backgroundColor: 'rgba(0, 255, 127, 0.1)',
-    borderRadius: theme.borderRadius.md,
+    backgroundColor: 'rgba(0, 255, 127, 0.08)',
+    borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(0, 255, 127, 0.3)',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
+    borderColor: 'rgba(0, 255, 127, 0.2)',
   },
   completedText: {
     fontSize: theme.typography.fontSize.lg,
@@ -533,19 +517,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   completedSubtext: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
+    marginTop: 2,
   },
-  howToSection: {
-    marginTop: theme.spacing.lg,
+  /* How-To Card */
+  howToCard: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  howToBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.xl,
   },
   howToTitle: {
-    fontSize: theme.typography.fontSize.xl,
+    fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     marginBottom: theme.spacing.lg,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   howToSteps: {
     gap: theme.spacing.lg,
@@ -559,17 +552,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(0, 229, 255, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
   },
   stepNumberText: {
-    fontSize: theme.typography.fontSize.base,
     fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.primary,
   },
   stepText: {
     flex: 1,
@@ -577,5 +566,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     lineHeight: 22,
     letterSpacing: 0.3,
+    paddingTop: 5,
   },
 });

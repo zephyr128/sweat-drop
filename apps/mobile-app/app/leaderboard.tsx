@@ -3,17 +3,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useBranding } from '@/lib/contexts/ThemeContext';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
-// Helper function to add alpha to hex color
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
   const r = parseInt(result[1], 16);
   const g = parseInt(result[2], 16);
   const b = parseInt(result[3], 16);
@@ -46,7 +47,6 @@ export default function LeaderboardScreen() {
     setLoading(true);
 
     if (leaderboardType === 'local') {
-      // Local leaderboard: ranked by local_drops_balance for the active gym
       if (!activeGymId) {
         setLeaderboard([]);
         setLoading(false);
@@ -74,16 +74,10 @@ export default function LeaderboardScreen() {
 
         setLeaderboard(leaderboardData);
 
-        // Find current user rank
         const userIndex = leaderboardData.findIndex((entry) => entry.user_id === session.user.id);
-        if (userIndex !== -1) {
-          setCurrentUserRank(userIndex + 1);
-        } else {
-          setCurrentUserRank(null);
-        }
+        setCurrentUserRank(userIndex !== -1 ? userIndex + 1 : null);
       }
     } else {
-      // Global leaderboard: ranked by total_drops from profiles
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username, total_drops')
@@ -102,35 +96,27 @@ export default function LeaderboardScreen() {
 
         setLeaderboard(leaderboardData);
 
-        // Find current user rank
         const userIndex = leaderboardData.findIndex((entry) => entry.user_id === session.user.id);
-        if (userIndex !== -1) {
-          setCurrentUserRank(userIndex + 1);
-        } else {
-          setCurrentUserRank(null);
-        }
+        setCurrentUserRank(userIndex !== -1 ? userIndex + 1 : null);
       }
     }
 
     setLoading(false);
   };
 
-  const getRankEmoji = (rank: number) => {
-    if (rank === 0) return '🥇';
-    if (rank === 1) return '🥈';
-    if (rank === 2) return '🥉';
-    return `${rank + 1}.`;
+  const getRankDisplay = (rank: number) => {
+    if (rank === 0) return { emoji: '🥇', isTop: true };
+    if (rank === 1) return { emoji: '🥈', isTop: true };
+    if (rank === 2) return { emoji: '🥉', isTop: true };
+    return { emoji: `${rank + 1}`, isTop: false };
   };
 
-  const isCurrentUser = (userId: string) => {
-    return session?.user?.id === userId;
-  };
+  const isCurrentUser = (userId: string) => session?.user?.id === userId;
 
   const currentUserEntry = leaderboard.find((entry) => isCurrentUser(entry.user_id));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Radial gradient background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -146,65 +132,59 @@ export default function LeaderboardScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.filters}>
-          {/* Local/Global Tabs */}
-          <View style={styles.typeFilter}>
-            {(['local', 'global'] as LeaderboardType[]).map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.typeTab,
-                  leaderboardType === type && [
-                    styles.typeTabActive,
-                    {
-                      backgroundColor: branding.primaryLight,
-                      borderColor: hexToRgba(branding.primary, 0.4),
-                    }
-                  ],
-                ]}
-                onPress={() => setLeaderboardType(type)}
-              >
-                <Text
+        {/* Type Toggle */}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <View style={[styles.typeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.typeToggleBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              {(['local', 'global'] as LeaderboardType[]).map((type) => (
+                <TouchableOpacity
+                  key={type}
                   style={[
-                    styles.typeTabText,
-                    leaderboardType === type && [
-                      styles.typeTabTextActive,
-                      { color: branding.primary }
-                    ],
+                    styles.typeTab,
+                    leaderboardType === type && {
+                      backgroundColor: hexToRgba(branding.primary, 0.15),
+                      borderColor: hexToRgba(branding.primary, 0.3),
+                      borderWidth: 1,
+                    },
                   ]}
+                  onPress={() => setLeaderboardType(type)}
                 >
-                  {type === 'local' ? 'Local' : 'Global'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Ionicons
+                    name={type === 'local' ? 'location' : 'globe-outline'}
+                    size={16}
+                    color={leaderboardType === type ? branding.primary : theme.colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.typeTabText,
+                      leaderboardType === type && { color: branding.primary, fontWeight: theme.typography.fontWeight.bold },
+                    ]}
+                  >
+                    {type === 'local' ? 'Local Gym' : 'Global'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </BlurView>
           </View>
+        </Animated.View>
 
-          {/* Period Filter (only for historical data if needed) */}
-          {leaderboardType === 'local' && (
+        {/* Period Filter */}
+        {leaderboardType === 'local' && (
+          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <View style={styles.periodFilter}>
-              <Text style={styles.filterLabel}>Period:</Text>
               {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
                 <TouchableOpacity
                   key={p}
                   style={[
-                    styles.filterButton, 
-                    period === p && [
-                      styles.filterButtonActive,
-                      {
-                        backgroundColor: branding.primary,
-                        borderColor: branding.primary,
-                      }
-                    ]
+                    styles.periodButton,
+                    period === p && { backgroundColor: branding.primary },
                   ]}
                   onPress={() => setPeriod(p)}
                 >
                   <Text
                     style={[
-                      styles.filterButtonText,
-                      period === p && [
-                        styles.filterButtonTextActive,
-                        { color: branding.onPrimary }
-                      ],
+                      styles.periodButtonText,
+                      period === p && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
                     ]}
                   >
                     {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -212,8 +192,8 @@ export default function LeaderboardScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          )}
-        </View>
+          </Animated.View>
+        )}
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -221,51 +201,130 @@ export default function LeaderboardScreen() {
           </View>
         ) : leaderboard.length === 0 ? (
           <View style={styles.emptyState}>
+            <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
             <Text style={styles.emptyText}>No data available</Text>
+            <Text style={styles.emptySubtext}>
+              {leaderboardType === 'local' ? 'Start working out to earn drops!' : 'Be the first on the board!'}
+            </Text>
           </View>
         ) : (
           <>
-            <View style={styles.leaderboard}>
-              {leaderboard.slice(0, 100).map((entry, index) => (
-                <View
-                  key={entry.user_id}
-                  style={[
-                    styles.leaderboardItem,
-                    isCurrentUser(entry.user_id) && [
-                      styles.leaderboardItemCurrent,
-                      {
-                        backgroundColor: branding.primaryLight,
-                        borderLeftColor: branding.primary,
-                      }
-                    ],
-                  ]}
-                >
-                  <Text style={styles.rank}>{getRankEmoji(index)}</Text>
-                  <View style={styles.userInfo}>
-                    <Text style={styles.username}>
-                      {entry.username}
-                      {isCurrentUser(entry.user_id) && ' (You)'}
-                    </Text>
-                  </View>
-                  <View style={styles.dropsContainer}>
-                    <Ionicons name="water" size={16} color="#00E5FF" />
-                    <Text style={[styles.drops, getNumberStyle(16), { color: '#00E5FF' }]}>
-                      {entry.drops}
-                    </Text>
-                  </View>
+            {/* Top 3 Podium */}
+            {leaderboard.length >= 3 && (
+              <Animated.View entering={FadeInDown.delay(250).duration(500)}>
+                <View style={styles.podium}>
+                  {[1, 0, 2].map((podiumIndex) => {
+                    const entry = leaderboard[podiumIndex];
+                    if (!entry) return null;
+                    const isFirst = podiumIndex === 0;
+                    return (
+                      <View
+                        key={entry.user_id}
+                        style={[styles.podiumItem, isFirst && styles.podiumItemFirst]}
+                      >
+                        <View
+                          style={[
+                            styles.podiumAvatar,
+                            isFirst && { borderColor: branding.primary, borderWidth: 2 },
+                            isCurrentUser(entry.user_id) && {
+                              backgroundColor: hexToRgba(branding.primary, 0.15),
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
+                            {getRankDisplay(podiumIndex).emoji}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.podiumName,
+                            isCurrentUser(entry.user_id) && { color: branding.primary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {entry.username}
+                        </Text>
+                        <View style={styles.podiumDrops}>
+                          <Ionicons name="water" size={14} color={branding.primary} />
+                          <Text style={[styles.podiumDropsText, getNumberStyle(14), { color: branding.primary }]}>
+                            {entry.drops}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
-              ))}
-            </View>
+              </Animated.View>
+            )}
 
-            {/* Sticky Footer - Current User Position */}
-            {currentUserEntry && currentUserRank !== null && currentUserRank > 100 && (
-              <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.5) }]}>
-                  <Text style={styles.stickyFooterText}>
-                    Rank {currentUserRank} - {currentUserEntry.username} -{' '}
-                    <Text style={[getNumberStyle(16), { color: '#00E5FF' }]}>{currentUserEntry.drops}</Text>{' '}
-                    <Ionicons name="water" size={16} color="#00E5FF" />
-                  </Text>
+            {/* Full Leaderboard List */}
+            <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+              <View style={[styles.listContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                <BlurView intensity={50} tint="dark" style={[styles.listBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  {leaderboard.map((entry, index) => {
+                    const rank = getRankDisplay(index);
+                    const isCurrent = isCurrentUser(entry.user_id);
+                    return (
+                      <View
+                        key={entry.user_id}
+                        style={[
+                          styles.listItem,
+                          index < leaderboard.length - 1 && styles.listItemBorder,
+                          isCurrent && {
+                            backgroundColor: hexToRgba(branding.primary, 0.08),
+                            borderLeftWidth: 3,
+                            borderLeftColor: branding.primary,
+                          },
+                        ]}
+                      >
+                        <View style={styles.rankContainer}>
+                          <Text style={[
+                            styles.rankText,
+                            rank.isTop && styles.rankTextTop,
+                            getNumberStyle(rank.isTop ? 20 : 16),
+                          ]}>
+                            {rank.emoji}
+                          </Text>
+                        </View>
+                        <View style={styles.userInfo}>
+                          <Text style={[styles.username, isCurrent && { color: branding.primary }]}>
+                            {entry.username}
+                            {isCurrent && ' (You)'}
+                          </Text>
+                        </View>
+                        <View style={styles.dropsContainer}>
+                          <Ionicons name="water" size={16} color={isCurrent ? branding.primary : theme.colors.accent} />
+                          <Text style={[
+                            styles.dropsText,
+                            getNumberStyle(16),
+                            { color: isCurrent ? branding.primary : theme.colors.accent },
+                          ]}>
+                            {entry.drops}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </BlurView>
               </View>
+            </Animated.View>
+
+            {/* Sticky footer for user outside top 100 */}
+            {currentUserEntry && currentUserRank !== null && currentUserRank > 100 && (
+              <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+                <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+                  <BlurView intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                    <Text style={styles.stickyFooterRank}>#{currentUserRank}</Text>
+                    <Text style={styles.stickyFooterName}>{currentUserEntry.username}</Text>
+                    <View style={styles.dropsContainer}>
+                      <Ionicons name="water" size={16} color={branding.primary} />
+                      <Text style={[styles.dropsText, getNumberStyle(16), { color: branding.primary }]}>
+                        {currentUserEntry.drops}
+                      </Text>
+                    </View>
+                  </BlurView>
+                </View>
+              </Animated.View>
             )}
           </>
         )}
@@ -295,7 +354,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     letterSpacing: 0.5,
-    pointerEvents: 'none', // Don't block touch events
+    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
@@ -307,36 +366,29 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
   },
-  filters: {
-    marginBottom: theme.spacing.lg,
-    gap: theme.spacing.md,
-  },
-  periodFilter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  typeFilter: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
+  /* Type Toggle */
+  typeToggle: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
     marginBottom: theme.spacing.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+  },
+  typeToggleBlur: {
+    flexDirection: 'row',
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
     padding: 4,
   },
   typeTab: {
     flex: 1,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  typeTabActive: {
-    backgroundColor: theme.colors.primary + '20',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm + 2,
+    borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.primary + '40',
+    borderColor: 'transparent',
   },
   typeTabText: {
     fontSize: theme.typography.fontSize.sm,
@@ -344,39 +396,28 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     letterSpacing: 0.5,
   },
-  typeTabTextActive: {
-    color: theme.colors.primary,
-    fontWeight: theme.typography.fontWeight.bold,
+  /* Period Filter */
+  periodFilter: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
-  filterLabel: {
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.text,
-    marginRight: theme.spacing.sm,
-    letterSpacing: 0.3,
-  },
-  filterButton: {
-    paddingHorizontal: theme.spacing.md,
+  periodButton: {
+    flex: 1,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.borderRadius.md,
+    alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  filterButtonActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  filterButtonText: {
+  periodButtonText: {
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     fontWeight: theme.typography.fontWeight.medium,
     letterSpacing: 0.3,
   },
-  filterButtonTextActive: {
-    color: '#000000',
-    fontWeight: theme.typography.fontWeight.semibold,
-  },
+  /* Loading / Empty */
   loadingContainer: {
     padding: theme.spacing['3xl'],
     alignItems: 'center',
@@ -384,35 +425,100 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: theme.spacing['3xl'],
     alignItems: 'center',
+    gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
-  },
-  leaderboard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  leaderboardItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  leaderboardItemCurrent: {
-    borderLeftWidth: 3,
-  },
-  rank: {
     fontSize: theme.typography.fontSize.xl,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    width: 40,
-    fontFamily: theme.typography.fontFamily.monospace,
+    letterSpacing: 0.3,
+  },
+  emptySubtext: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  /* Podium */
+  podium: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
+    gap: theme.spacing.md,
+  },
+  podiumItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingTop: theme.spacing.lg,
+  },
+  podiumItemFirst: {
+    paddingTop: 0,
+  },
+  podiumAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  podiumEmoji: {
+    fontSize: 22,
+  },
+  podiumEmojiFirst: {
+    fontSize: 28,
+  },
+  podiumName: {
+    fontSize: theme.typography.fontSize.xs,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    maxWidth: 80,
+  },
+  podiumDrops: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  podiumDropsText: {
+    fontWeight: theme.typography.fontWeight.semibold,
+  },
+  /* List */
+  listContainer: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  listBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  listItemBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  rankContainer: {
+    width: 36,
+    alignItems: 'center',
+  },
+  rankText: {
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.textSecondary,
+  },
+  rankTextTop: {
+    fontSize: 20,
   },
   userInfo: {
     flex: 1,
@@ -429,22 +535,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  drops: {
-    color: theme.colors.primary,
+  dropsText: {
     fontWeight: theme.typography.fontWeight.semibold,
   },
+  /* Sticky Footer */
   stickyFooter: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    padding: theme.spacing.md,
     borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
     marginTop: theme.spacing.md,
     borderWidth: 1,
   },
-  stickyFooterText: {
+  stickyFooterBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  stickyFooterRank: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
+    width: 50,
+    fontFamily: theme.typography.fontFamily.monospace,
+  },
+  stickyFooterName: {
+    flex: 1,
     fontSize: theme.typography.fontSize.base,
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
-    textAlign: 'center',
     letterSpacing: 0.3,
   },
 });

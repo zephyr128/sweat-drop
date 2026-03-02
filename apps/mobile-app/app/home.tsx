@@ -21,6 +21,12 @@ import { GymSelectorModal } from '@/components/GymSelectorModal';
 import { LockedOverlay } from '@/components/LockedOverlay';
 import { UserSettingsSheet } from '@/components/UserSettingsSheet';
 import { ProgressWidget } from '@/components/ProgressWidget';
+import { HeroDropsRing } from '@/components/HeroDropsRing';
+import { LeaderboardPreview } from '@/components/LeaderboardPreview';
+import { QuickStatsRow } from '@/components/QuickStatsRow';
+import { ClosestRewardBanner } from '@/components/ClosestRewardBanner';
+import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
+import { useHomeStats } from '@/hooks/useHomeStats';
 import { Gym } from '@/lib/stores/useGymStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -38,12 +44,11 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 // Bottom cards row: two cards with gap between them
 const BOTTOM_CARDS_GAP = 16;
-const BOTTOM_CARD_WIDTH = (SCREEN_WIDTH - (CARD_PADDING * 2) - BOTTOM_CARDS_GAP) / 2; // Each card takes half of available width minus gap
-const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP; // Width of both bottom cards plus gap between them
-// Challenge cards use same width as SmartCoach card
+const BOTTOM_CARD_WIDTH = (SCREEN_WIDTH - (CARD_PADDING * 2) - BOTTOM_CARDS_GAP) / 2;
+const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP;
 const CHALLENGE_CARD_WIDTH = SMARTCOACH_CARD_WIDTH;
-const CHALLENGE_CARD_HEIGHT = 200; // Fixed height for cards
-const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN; // Width + margin for snap
+const CHALLENGE_CARD_HEIGHT = 200;
+const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -59,11 +64,9 @@ export default function HomeScreen() {
   const fadeOpacity = useSharedValue(0);
   const [hasAnimated, setHasAnimated] = useState(false);
   
-  // Trigger fade-in animation when screen is focused (first time only)
   useFocusEffect(
     useCallback(() => {
       if (!hasAnimated) {
-        // Start fade-in animation
         fadeOpacity.value = withTiming(1, {
           duration: 400,
           easing: Easing.out(Easing.ease),
@@ -80,21 +83,19 @@ export default function HomeScreen() {
   });
   
   const [profile, setProfile] = useState<any>(null);
-  const [dailyChallenge, setDailyChallenge] = useState<any>(null);
-  const [challengeProgress, setChallengeProgress] = useState<any>(null);
-  const [topRewards, setTopRewards] = useState<any[]>([]);
-  const [leaderboardRank, setLeaderboardRank] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [gymSelectorVisible, setGymSelectorVisible] = useState(false);
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
+  const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId, localDrops);
 
   // Badge notifications with confetti
   const { newBadge, clearNewBadge } = useBadgeNotifications({
     onBadgeEarned: (badge) => {
       console.log('Badge earned!', badge);
       setShowConfetti(true);
-      // Auto-hide confetti after 3 seconds
       setTimeout(() => {
         setShowConfetti(false);
         clearNewBadge();
@@ -104,32 +105,19 @@ export default function HomeScreen() {
 
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading, refresh: refreshChallenges } = useChallengeProgress(activeGymId, null);
-  
-  // RPC function already filters by is_active = true and date range
-  // Show all challenges returned by RPC (they are all active)
   const activeChallenges = allChallenges;
-  
-  // Show all challenges in horizontal scroll, plus "View All" button to see all challenges screen
   const displayedChallenges = activeChallenges;
   
-  // Debug: Log challenges data
+  // Debug log
   useEffect(() => {
     if (__DEV__) {
       console.log('[Home] Challenges state:', {
         activeGymId,
         challengesLoading,
         allChallengesCount: allChallenges.length,
-        activeChallengesCount: activeChallenges.length,
-        displayedChallengesCount: displayedChallenges.length,
-        challenges: allChallenges,
-        shouldShowChallenges: !challengesLoading && displayedChallenges.length > 0,
       });
     }
-  }, [activeGymId, challengesLoading, allChallenges, activeChallenges, displayedChallenges]);
-  
-  // For backward compatibility with existing code, keep primaryWeeklyChallenge
-  const weeklyChallenges = allChallenges.filter((c) => c.challenge_type === 'weekly');
-  const primaryWeeklyChallenge = weeklyChallenges[0] || null;
+  }, [activeGymId, challengesLoading, allChallenges]);
 
   // Glow animation for QR button
   const glowAnim = useSharedValue(0);
@@ -147,9 +135,7 @@ export default function HomeScreen() {
 
   const glowStyle = useAnimatedStyle(() => {
     const opacity = interpolate(glowAnim.value, [0, 1], [0.4, 0.8]);
-    return {
-      opacity,
-    };
+    return { opacity };
   });
 
   // Load data when session or active gym changes
@@ -160,13 +146,14 @@ export default function HomeScreen() {
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
 
-  // Refresh challenges when screen is focused (to update progress after workout)
+  // Refresh challenges + stats when screen is focused
   useFocusEffect(
     useCallback(() => {
-      if (activeGymId && session?.user && refreshChallenges) {
-        refreshChallenges();
+      if (activeGymId && session?.user) {
+        refreshChallenges?.();
+        refreshStats?.();
       }
-    }, [activeGymId, session?.user, refreshChallenges])
+    }, [activeGymId, session?.user, refreshChallenges, refreshStats])
   );
 
   const loadData = async () => {
@@ -174,7 +161,6 @@ export default function HomeScreen() {
     setLoading(true);
 
     try {
-      // Load profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -184,58 +170,6 @@ export default function HomeScreen() {
       if (profileData) {
         setProfile(profileData);
       }
-
-      // Get active gym ID
-      const activeGymId = getActiveGymId();
-
-      if (activeGymId) {
-        const today = new Date().toISOString().split('T')[0];
-        const { data: challengeData } = await supabase
-          .from('gym_challenges')
-          .select('*')
-          .eq('gym_id', activeGymId)
-          .eq('challenge_type', 'daily')
-          .eq('is_active', true)
-          .lte('start_date', today)
-          .gte('end_date', today)
-          .limit(1)
-          .single();
-
-        if (challengeData) {
-          setDailyChallenge(challengeData);
-
-          // Load progress (if exists)
-          // NOTE: Progress is automatically created when add_drops() is called during workout
-          // Frontend should NOT insert directly into challenge_progress
-          const { data: progressData } = await supabase
-            .from('challenge_progress')
-            .select('*')
-            .eq('user_id', session.user.id)
-            .eq('challenge_id', challengeData.id)
-            .single();
-
-          if (progressData) {
-            setChallengeProgress(progressData);
-          } else {
-            // Progress doesn't exist yet - it will be created automatically when user earns drops
-            // Set to null to show 0 progress in UI
-            setChallengeProgress(null);
-          }
-        }
-
-        // Load top rewards
-        const { data: rewardsData } = await supabase
-          .from('rewards')
-          .select('*')
-          .eq('gym_id', activeGymId)
-          .limit(3)
-          .order('price', { ascending: true });
-
-        setTopRewards(rewardsData || []);
-
-        // Load leaderboard rank (mock for now - TODO: implement actual ranking)
-        setLeaderboardRank(12);
-      }
     } catch (error) {
       console.error('Error loading home data:', error);
     } finally {
@@ -244,44 +178,7 @@ export default function HomeScreen() {
   };
 
   const handleQRPress = async () => {
-    // Always navigate to scanner, regardless of unlock status or gym
     router.push('/scan');
-    return;
-
-    // OLD CODE - DISABLED
-    /* const sessionData: any = {
-      user_id: session.user.id,
-      gym_id: activeGymId,
-      started_at: new Date().toISOString(),
-      is_active: true,
-    };
-
-    // Add machine_id if machine found, otherwise use equipment_id
-    if (machine) {
-      sessionData.machine_id = machine.id;
-    } else if (equipment) {
-      sessionData.equipment_id = equipment.id;
-    }
-
-    const { data: newSession, error: sessionError } = await supabase
-      .from('sessions')
-      .insert(sessionData)
-      .select('id')
-      .single();
-
-    if (sessionError) {
-      console.error('Error creating session:', sessionError);
-      Alert.alert('Error', `Failed to start workout: ${sessionError.message}`);
-      return;
-    }
-
-    if (newSession) {
-      router.push({
-        pathname: '/workout',
-        params: { sessionId: newSession.id },
-      });
-    }
-    */
   };
 
   const handleGymSelect = (gym: Gym) => {
@@ -291,7 +188,6 @@ export default function HomeScreen() {
 
   const handleSetAsHomeGym = async () => {
     if (!activeGym) return;
-
     Alert.alert(
       'Set as Home Gym?',
       `Do you want to set "${activeGym.name}" as your home gym?`,
@@ -302,8 +198,6 @@ export default function HomeScreen() {
           onPress: async () => {
             try {
               await updateHomeGym(activeGym.id);
-              // No need for alert - the UI will update automatically
-              // The overlay will disappear because isUnlocked will become true
             } catch (error) {
               Alert.alert('Error', 'Failed to update home gym. Please try again.');
             }
@@ -312,11 +206,6 @@ export default function HomeScreen() {
       ]
     );
   };
-
-  // Get background gradient colors from gym or default
-  const backgroundColors = activeGym?.background_url
-    ? ['#000000', '#0A0E1A', '#000000'] // Keep dark gradient even with background image
-    : ['#000000', '#0A0E1A', '#000000'];
 
   if (loading) {
     return (
@@ -328,8 +217,13 @@ export default function HomeScreen() {
     );
   }
 
-  // Global drops for header (total_drops from profiles)
+  // Drops
   const totalDrops = profile?.total_drops || 0;
+  // Global progress: cap at 10 000 for a full ring (tunable)
+  const globalProgress = totalDrops > 0 ? Math.min(totalDrops / 10000, 1) : 0;
+  // Local progress: local / total ratio
+  const localProgressRatio =
+    totalDrops > 0 ? Math.min(localDrops / Math.max(totalDrops, 1), 1) : 0;
 
   return (
     <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]}>
@@ -342,13 +236,13 @@ export default function HomeScreen() {
           resizeMode="cover"
         >
           <LinearGradient
-            colors={['rgba(0,0,0,0.8)', 'rgba(10,14,26,0.9)', 'rgba(0,0,0,0.8)']}
+            colors={['rgba(0,0,0,0.85)', 'rgba(8,8,8,0.92)', 'rgba(0,0,0,0.88)']}
             style={StyleSheet.absoluteFillObject}
           />
         </ImageBackground>
       ) : (
         <LinearGradient
-          colors={backgroundColors as any}
+          colors={['#080808', '#0A0E1A', '#080808'] as any}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
@@ -356,15 +250,17 @@ export default function HomeScreen() {
       )}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* ═══════════════════════════════════════════ */}
+        {/* DYNAMIC HEADER                              */}
+        {/* ═══════════════════════════════════════════ */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerLeft}
             onPress={() => setSettingsSheetVisible(true)}
             activeOpacity={0.7}
           >
-            <View style={[styles.avatarContainer, { borderColor: theme.colors.primary + '30' }]}>
-              <Text style={[styles.avatarText, { color: theme.colors.primary }]}>
+            <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+              <Text style={[styles.avatarText, { color: branding.primary }]}>
                 {profile?.username?.charAt(0).toUpperCase() || 'U'}
               </Text>
             </View>
@@ -372,9 +268,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerRight}>
-            {/* Gym Selector Chip */}
+            {/* Gym Selector Pill */}
             <TouchableOpacity
-              style={[styles.gymSelectorChip, { borderColor: theme.colors.primary + '40' }]}
+              style={[styles.gymSelectorChip, { borderColor: hexToRgba(branding.primary, 0.4) }]}
               onPress={() => setGymSelectorVisible(true)}
               activeOpacity={0.8}
             >
@@ -385,44 +281,88 @@ export default function HomeScreen() {
                   resizeMode="contain"
                 />
               ) : (
-                <Ionicons name="fitness" size={14} color={theme.colors.primary} />
+                <Ionicons name="fitness" size={14} color={branding.primary} />
               )}
-              <Text style={[styles.gymSelectorText, { color: theme.colors.primary }]} numberOfLines={1} ellipsizeMode="tail">
+              <Text style={[styles.gymSelectorText, { color: branding.primary }]} numberOfLines={1} ellipsizeMode="tail">
                 {activeGym?.name || 'Gym'}
               </Text>
-              <Ionicons name="chevron-down" size={12} color={theme.colors.primary} />
+              <Ionicons name="chevron-down" size={12} color={branding.primary} />
             </TouchableOpacity>
 
-            {/* Wallet Widget */}
-            <TouchableOpacity
-              style={[styles.walletWidget, { borderColor: hexToRgba(theme.colors.primary, 0.3) }]}
-              onPress={() => router.push('/wallet')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.walletBlur, { borderColor: hexToRgba(theme.colors.primary, 0.3) }]}>
-                <Ionicons name="water" size={16} color="#00E5FF" />
-                <Text style={[styles.walletAmount, getNumberStyle(16), { color: theme.colors.text }]}>
-                  {totalDrops.toLocaleString()}
-                </Text>
-              </View>
-            </TouchableOpacity>
           </View>
         </View>
 
+        {/* ═══════════════════════════════════════════ */}
+        {/* DUAL-PROGRESS HERO SECTION                  */}
+        {/* ═══════════════════════════════════════════ */}
+        <View style={styles.heroSection}>
+          <HeroDropsRing
+            localDrops={localDrops}
+            totalDrops={totalDrops}
+            globalProgress={globalProgress}
+            localProgress={localProgressRatio}
+            size={240}
+            onPress={() => router.push('/wallet')}
+          />
+          {/* Gym name under hero */}
+          <Text style={[styles.heroGymName, { color: hexToRgba(branding.primary, 0.6) }]}>
+            {activeGym?.name || ''}
+          </Text>
+        </View>
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* QUICK STATS ROW                              */}
+        {/* ═══════════════════════════════════════════ */}
+        <QuickStatsRow
+          streak={homeStats.streak}
+          todayDrops={homeStats.todayDrops}
+          lastWorkout={homeStats.lastWorkout}
+          brandPrimary={branding.primary}
+        />
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* WEEKLY ACTIVITY CHART                        */}
+        {/* ═══════════════════════════════════════════ */}
+        {homeStats.weeklyActivity.length > 0 && (
+          <WeeklyActivityChart
+            data={homeStats.weeklyActivity}
+            activeDays={homeStats.activeDaysThisWeek}
+            brandPrimary={branding.primary}
+          />
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* CLOSEST REWARD BANNER                        */}
+        {/* ═══════════════════════════════════════════ */}
+        {homeStats.closestReward && isUnlocked && (
+          <ClosestRewardBanner
+            reward={homeStats.closestReward}
+            brandPrimary={branding.primary}
+            onPress={() => router.push('/store')}
+          />
+        )}
+
         {/* Cards Container with Overlay */}
         <View style={styles.cardsContainer}>
-          {/* Single Locked Overlay for all cards (if in preview mode) */}
+          {/* Locked Overlay (preview mode) */}
           {!isUnlocked && (
             <View style={styles.cardsOverlayContainer}>
               <LockedOverlay onSetAsHomeGym={handleSetAsHomeGym} />
             </View>
           )}
 
-          {/* Challenges Horizontal Scroll */}
+          {/* ═══════════════════════════════════════════ */}
+          {/* LEADERBOARD PREVIEW                         */}
+          {/* ═══════════════════════════════════════════ */}
+          <LeaderboardPreview gymId={activeGymId} isUnlocked={isUnlocked} />
+
+          {/* ═══════════════════════════════════════════ */}
+          {/* ACTIVE CHALLENGES - Horizontal Scroll       */}
+          {/* ═══════════════════════════════════════════ */}
           {challengesLoading && (
             <View style={styles.challengesSection}>
-              <View style={styles.challengesSectionHeader}>
-                <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Active Challenges</Text>
               </View>
               <ScrollView
                 horizontal
@@ -431,26 +371,25 @@ export default function HomeScreen() {
                 style={styles.challengesScrollView}
                 scrollEnabled={false}
               >
-                {/* Skeleton Loaders */}
                 {[1, 2].map((index) => (
                   <View
                     key={`skeleton-${index}`}
-                    style={[styles.horizontalChallengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
+                    style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
                   >
-                    <View style={styles.horizontalChallengeCardSkeleton}>
+                    <View style={[styles.challengeCardSkeleton, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
                       <LinearGradient
-                        colors={['#0A1A2E', '#1A1A2E', '#0F0F1E']}
+                        colors={[hexToRgba(branding.primary, 0.04), hexToRgba(branding.primary, 0.02), 'rgba(15, 15, 30, 1)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={styles.horizontalChallengeGradient}
+                        style={styles.challengeGradient}
                       >
-                        <View style={styles.horizontalChallengeContent}>
-                          <View style={styles.horizontalChallengeHeader}>
-                            <View style={[styles.skeletonBadge, { backgroundColor: branding.primaryLight + '40' }]} />
+                        <View style={styles.challengeContent}>
+                          <View style={styles.challengeHeader}>
+                            <View style={[styles.skeletonBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]} />
                             <View style={[styles.skeletonTitle, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
                           </View>
-                          <View style={styles.horizontalChallengeProgress}>
-                            <View style={[styles.horizontalProgressBar, { backgroundColor: branding.primaryLight + '20' }]} />
+                          <View style={styles.challengeProgress}>
+                            <View style={[styles.progressBar, { backgroundColor: hexToRgba(branding.primary, 0.08) }]} />
                             <View style={[styles.skeletonProgressText, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
                           </View>
                           <View style={[styles.skeletonReward, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
@@ -465,8 +404,8 @@ export default function HomeScreen() {
 
           {!challengesLoading && displayedChallenges.length > 0 && (
             <View style={styles.challengesSection}>
-              <View style={styles.challengesSectionHeader}>
-                <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Active Challenges</Text>
               </View>
               <ScrollView
                 horizontal
@@ -479,41 +418,24 @@ export default function HomeScreen() {
                 pagingEnabled={false}
               >
                 {displayedChallenges.map((challenge) => {
-                  // Calculate progress based on challenge type
                   const progressRatio = challenge.progress_percentage / 100 || 0;
                   
-                  // Get challenge type label
                   const getChallengeTypeLabel = () => {
                     switch (challenge.challenge_type) {
-                      case 'daily':
-                        return 'Daily';
-                      case 'weekly':
-                        return 'Weekly';
-                      case 'monthly':
-                        return 'Monthly';
-                      case 'streak':
-                        return 'Streak';
-                      case 'milestone':
-                        return 'Milestone';
-                      default:
-                        return 'Challenge';
+                      case 'daily': return 'Daily';
+                      case 'weekly': return 'Weekly';
+                      case 'monthly': return 'Monthly';
+                      case 'streak': return 'Streak';
+                      case 'milestone': return 'Milestone';
+                      default: return 'Challenge';
                     }
                   };
 
-                  // Get progress label based on challenge type
                   const getProgressLabel = () => {
                     if (challenge.challenge_type === 'streak') {
-                      return {
-                        current: challenge.current_streak_days,
-                        target: challenge.target_drops,
-                        unit: 'days',
-                      };
+                      return { current: challenge.current_streak_days, target: challenge.target_drops, unit: 'days' };
                     } else {
-                      return {
-                        current: challenge.current_drops,
-                        target: challenge.target_drops,
-                        unit: 'drops',
-                      };
+                      return { current: challenge.current_drops, target: challenge.target_drops, unit: 'drops' };
                     }
                   };
 
@@ -522,79 +444,75 @@ export default function HomeScreen() {
                   return (
                     <View
                       key={challenge.challenge_id}
-                      style={[styles.horizontalChallengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
+                      style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
                     >
                       <TouchableOpacity
-                        style={styles.horizontalChallengeCard}
+                        style={[styles.challengeCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}
                         onPress={() => {
                           if (!isUnlocked) return;
                           router.push({
                             pathname: '/challenge-detail',
-                            params: {
-                              challengeId: challenge.challenge_id,
-                              gymId: activeGymId || '',
-                            },
+                            params: { challengeId: challenge.challenge_id, gymId: activeGymId || '' },
                           });
                         }}
                         activeOpacity={isUnlocked ? 0.9 : 1}
                         disabled={!isUnlocked}
                       >
-                      <LinearGradient
-                        colors={['#0A1A2E', '#1A1A2E', '#0F0F1E']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.horizontalChallengeGradient}
-                      >
-                        <View style={styles.horizontalChallengeContent}>
-                          <View style={styles.horizontalChallengeHeader}>
-                            <Text style={[styles.horizontalChallengeType, { color: branding.primary }]}>
-                              {getChallengeTypeLabel()}
-                            </Text>
-                            <Text style={styles.horizontalChallengeName} numberOfLines={2}>
-                              {challenge.challenge_name}
-                            </Text>
-                          </View>
+                        <BlurView intensity={50} tint="dark" style={styles.challengeBlur}>
+                          <LinearGradient
+                            colors={[hexToRgba(branding.primary, 0.06), 'rgba(20, 20, 35, 0.9)', hexToRgba(branding.primary, 0.03)]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.challengeGradient}
+                          >
+                            <View style={styles.challengeContent}>
+                              <View style={styles.challengeHeader}>
+                                <Text style={[styles.challengeType, { color: branding.primary }]}>
+                                  {getChallengeTypeLabel()}
+                                </Text>
+                                <Text style={styles.challengeName} numberOfLines={2}>
+                                  {challenge.challenge_name}
+                                </Text>
+                              </View>
 
-                          <View style={styles.horizontalChallengeProgress}>
-                            <View style={[
-                              styles.horizontalProgressBar,
-                              { backgroundColor: branding.primaryLight }
-                            ]}>
-                              <View
-                                style={[
-                                  styles.horizontalProgressBarFill,
-                                  {
-                                    width: `${progressRatio * 100}%`,
-                                    backgroundColor: challenge.is_completed
-                                      ? theme.colors.secondary
-                                      : branding.primary,
-                                  },
-                                ]}
-                              />
+                              <View style={styles.challengeProgress}>
+                                <View style={[styles.progressBar, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                                  <View
+                                    style={[
+                                      styles.progressBarFill,
+                                      {
+                                        width: `${Math.min(progressRatio * 100, 100)}%`,
+                                        backgroundColor: challenge.is_completed
+                                          ? theme.colors.secondary
+                                          : branding.primary,
+                                      },
+                                    ]}
+                                  />
+                                </View>
+                                <Text style={styles.progressText}>
+                                  <Text style={[getNumberStyle(12), { color: branding.primary }]}>
+                                    {progressLabel.current}
+                                  </Text>
+                                  {' / '}
+                                  <Text style={[getNumberStyle(12), { color: branding.primary }]}>
+                                    {progressLabel.target}
+                                  </Text>
+                                  {' '}
+                                  <Text style={[getNumberStyle(12), { color: branding.primary }]}>
+                                    {progressLabel.unit}
+                                  </Text>
+                                </Text>
+                              </View>
+
+                              <View style={styles.challengeReward}>
+                                <Ionicons name="water" size={14} color={branding.primary} />
+                                <Text style={[styles.challengeRewardText, { color: branding.primary }]}>
+                                  {challenge.reward_drops} drops
+                                </Text>
+                              </View>
                             </View>
-                            <Text style={styles.horizontalProgressText}>
-                              <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                {progressLabel.current}
-                              </Text>
-                              {' / '}
-                              <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                {progressLabel.target}
-                              </Text>
-                              {' '}
-                              <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                {progressLabel.unit}
-                              </Text>
-                            </Text>
-                          </View>
-
-                          <View style={styles.horizontalChallengeReward}>
-                            <Ionicons name="water" size={14} color="#00E5FF" />
-                            <Text style={[styles.horizontalChallengeRewardText, { color: branding.primary }]}>
-                              {challenge.reward_drops} drops
-                            </Text>
-                          </View>
-                        </View>
-                      </LinearGradient>
+                          </LinearGradient>
+                        </BlurView>
                       </TouchableOpacity>
                     </View>
                   );
@@ -618,7 +536,7 @@ export default function HomeScreen() {
                       style={styles.viewAllGradient}
                     >
                       <View style={styles.viewAllContent}>
-                        <View style={[styles.viewAllIconContainer, { backgroundColor: branding.primary }]}>
+                        <View style={[styles.viewAllIconContainer, { backgroundColor: hexToRgba(branding.onPrimary, 0.2) }]}>
                           <Ionicons name="list" size={40} color={branding.onPrimary} />
                         </View>
                         <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>View All</Text>
@@ -632,79 +550,25 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* No Active Challenges Card with View All */}
+          {/* No Active Challenges — slim empty state */}
           {!challengesLoading && displayedChallenges.length === 0 && activeGymId && (
-            <View style={styles.challengesSection}>
-              <View style={styles.challengesSectionHeader}>
-                <Text style={styles.challengesSectionTitle}>Active Challenges</Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.challengesScrollContent}
-                style={styles.challengesScrollView}
-                snapToInterval={SNAP_INTERVAL}
-                snapToAlignment="start"
-                decelerationRate="fast"
-                pagingEnabled={false}
-              >
-                {/* No Active Challenges Card */}
-                <View style={[styles.horizontalChallengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-                  <View style={styles.noChallengesCard}>
-                    <LinearGradient
-                      colors={['#0A1A2E', '#1A1A2E', '#0F0F1E']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.horizontalChallengeGradient}
-                    >
-                      <View style={styles.noChallengesContent}>
-                        <Ionicons name="trophy-outline" size={48} color={theme.colors.primary} style={styles.noChallengesIcon} />
-                        <Text style={styles.noChallengesTitle}>No Active Challenges</Text>
-                        <Text style={styles.noChallengesSubtitle}>
-                          There are no active challenges at your gym right now. Check back soon!
-                        </Text>
-                      </View>
-                    </LinearGradient>
-                  </View>
-                </View>
-
-                {/* View All Button */}
-                <View style={[styles.viewAllCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-                  <TouchableOpacity
-                    style={styles.viewAllCard}
-                    onPress={() => {
-                      if (!isUnlocked) return;
-                      router.push('/challenges');
-                    }}
-                    activeOpacity={isUnlocked ? 0.9 : 1}
-                    disabled={!isUnlocked}
-                  >
-                    <LinearGradient
-                      colors={[branding.primary, branding.primaryDark, branding.primary]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.viewAllGradient}
-                    >
-                      <View style={styles.viewAllContent}>
-                        <View style={[styles.viewAllIconContainer, { backgroundColor: branding.primary }]}>
-                          <Ionicons name="list" size={40} color={branding.onPrimary} />
-                        </View>
-                        <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>View All</Text>
-                        <Text style={[styles.viewAllSubtext, { color: branding.onPrimary + 'CC' }]}>See all challenges</Text>
-                        <Ionicons name="arrow-forward-circle" size={24} color={branding.onPrimary} style={styles.viewAllArrow} />
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
+            <View style={styles.emptyChallengesBanner}>
+              <BlurView intensity={50} tint="dark" style={styles.emptyChallengesBlur}>
+                <Ionicons name="trophy-outline" size={20} color={hexToRgba(branding.primary, 0.5)} />
+                <Text style={styles.emptyChallengesText}>
+                  No active challenges right now — check back soon!
+                </Text>
+              </BlurView>
             </View>
           )}
 
-          {/* Progress Widget - Next Badge */}
+          {/* ═══════════════════════════════════════════ */}
+          {/* NEXT BADGE / PROGRESS WIDGET               */}
+          {/* ═══════════════════════════════════════════ */}
           {isUnlocked && (
             <View style={styles.challengesSection}>
-              <View style={styles.challengesSectionHeader}>
-                <Text style={styles.challengesSectionTitle}>Next Badge</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Next Badge</Text>
               </View>
               <View style={styles.progressWidgetContainer}>
                 <ProgressWidget />
@@ -712,15 +576,9 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* SmartCoach Card - Only show if smartcoach_enabled is true for active gym */}
-          {/* AGENT NOTE: [2025-01-27] - mobile-coder
-              CHANGE: Added conditional rendering based on activeGym?.smartcoach_enabled
-              REASON: Hide SmartCoach card when feature is disabled for the active gym
-              AFFECTS: SmartCoach card visibility on home screen
-              RELATED FILES:
-              - backend/supabase/migrations/20250127130000_disable_smartcoach_per_gym.sql
-              - apps/mobile-app/lib/stores/useGymStore.ts (Gym interface updated)
-          */}
+          {/* ═══════════════════════════════════════════ */}
+          {/* SMARTCOACH CARD (Conditional)               */}
+          {/* ═══════════════════════════════════════════ */}
           {activeGym?.smartcoach_enabled && (
             <View style={styles.smartCoachSection}>
               <TouchableOpacity
@@ -728,7 +586,7 @@ export default function HomeScreen() {
                   styles.smartCoachCard, 
                   { 
                     width: SMARTCOACH_CARD_WIDTH,
-                    borderColor: hexToRgba(branding.primary, 0.3), // rgba(primaryColor, 0.3)
+                    borderColor: hexToRgba(branding.primary, 0.3),
                   }
                 ]}
                 onPress={() => {
@@ -738,124 +596,123 @@ export default function HomeScreen() {
                 activeOpacity={isUnlocked ? 0.9 : 1}
                 disabled={!isUnlocked}
               >
-                <LinearGradient
-                  colors={[branding.primaryLight, branding.primaryLight, branding.primaryLight]} // Use primaryLight for subtle background
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.smartCoachGradient}
-                >
-                  <View style={styles.smartCoachContent}>
-                    <View style={styles.smartCoachHeader}>
-                      <View style={styles.smartCoachIconContainer}>
-                        <Ionicons name="fitness" size={32} color={branding.primary} />
+                <BlurView intensity={50} tint="dark" style={styles.smartCoachBlur}>
+                  <LinearGradient
+                    colors={[hexToRgba(branding.primary, 0.1), hexToRgba(branding.primary, 0.05), hexToRgba(branding.primary, 0.08)]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.smartCoachGradient}
+                  >
+                    <View style={styles.smartCoachContent}>
+                      <View style={styles.smartCoachHeaderRow}>
+                        <View style={[styles.smartCoachIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.2) }]}>
+                          <Ionicons name="fitness" size={32} color={branding.primary} />
+                        </View>
+                        <View style={styles.smartCoachTextContainer}>
+                          <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
+                          <Text style={[styles.smartCoachSubtitle, { color: hexToRgba(branding.primary, 0.7) }]} numberOfLines={2}>
+                            Follow workout plans from your gym
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[{ backgroundColor: branding.primary, borderRadius: 20, padding: 4 }]}
+                        >
+                          <Ionicons name="arrow-forward-circle" size={28} color={branding.onPrimary} />
+                        </TouchableOpacity>
                       </View>
-                      <View style={styles.smartCoachTextContainer}>
-                        <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
-                        <Text style={[styles.smartCoachSubtitle, { color: branding.primary + 'CC' }]} numberOfLines={2}>
-                          Follow workout plans from your gym
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          {
-                            backgroundColor: branding.primary,
-                            borderRadius: 20,
-                            padding: 4,
-                          }
-                        ]}
-                      >
-                        <Ionicons name="arrow-forward-circle" size={28} color={branding.onPrimary} />
-                      </TouchableOpacity>
                     </View>
-                  </View>
-                </LinearGradient>
+                  </LinearGradient>
+                </BlurView>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Bottom Cards Row */}
+          {/* ═══════════════════════════════════════════ */}
+          {/* BENTO GRID - Bottom Cards Row              */}
+          {/* ═══════════════════════════════════════════ */}
           <View style={styles.bottomCardsRow}>
-          {/* Rewards Store Card */}
-          <View style={styles.featureCardWrapper}>
-            <TouchableOpacity
-              style={styles.featureCard}
-              onPress={() => {
-                if (!isUnlocked) return;
-                router.push('/store');
-              }}
-              activeOpacity={isUnlocked ? 0.9 : 1}
-              disabled={!isUnlocked}
-            >
-              <View style={styles.featureCardBlur}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Rewards Store</Text>
-                  <Text 
-                    style={styles.cardSubtitle}
-                    numberOfLines={2}
-                    adjustsFontSizeToFit={true}
-                    minimumFontScale={0.8}
-                  >
-                    Redeem your drops for exclusive rewards
-                  </Text>
-                </View>
-                <View style={styles.cardFooter}>
-                  <Text style={[styles.cardAction, { color: theme.colors.primary }]}>View Store</Text>
-                  <Ionicons name="arrow-forward" size={16} color={theme.colors.primary} />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
+            {/* Rewards Store Card */}
+            <View style={styles.featureCardWrapper}>
+              <TouchableOpacity
+                style={[styles.featureCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}
+                onPress={() => {
+                  if (!isUnlocked) return;
+                  router.push('/store');
+                }}
+                activeOpacity={isUnlocked ? 0.9 : 1}
+                disabled={!isUnlocked}
+              >
+                <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
+                  <View style={styles.cardHeader}>
+                    <Ionicons name="gift-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
+                    <Text style={styles.cardTitle}>Rewards Store</Text>
+                    <Text 
+                      style={styles.cardSubtitle}
+                      numberOfLines={2}
+                      adjustsFontSizeToFit={true}
+                      minimumFontScale={0.8}
+                    >
+                      Redeem your drops for exclusive rewards
+                    </Text>
+                  </View>
+                  <View style={styles.cardFooter}>
+                    <Text style={[styles.cardAction, { color: branding.primary }]}>View Store</Text>
+                    <Ionicons name="arrow-forward" size={16} color={branding.primary} />
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+            </View>
 
-          {/* Leaderboards Card */}
-          <View style={styles.featureCardWrapper}>
-            <TouchableOpacity
-              style={styles.featureCard}
-              onPress={() => {
-                if (!isUnlocked) return;
-                router.push('/leaderboard');
-              }}
-              activeOpacity={isUnlocked ? 0.9 : 1}
-              disabled={!isUnlocked}
-            >
-              <View style={styles.featureCardBlur}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Leaderboards</Text>
-                  <Text 
-                    style={styles.cardSubtitle}
-                    numberOfLines={2}
-                    adjustsFontSizeToFit={true}
-                    minimumFontScale={0.8}
-                  >
-                    Compete with others in your gym
-                  </Text>
-                </View>
-                <View style={styles.cardFooter}>
-                  <Text style={[styles.cardAction, { color: theme.colors.primary }]}>View Rankings</Text>
-                  <Ionicons name="arrow-forward" size={16} color={theme.colors.primary} />
-                </View>
-              </View>
-            </TouchableOpacity>
+            {/* Trophy Room Card */}
+            <View style={styles.featureCardWrapper}>
+              <TouchableOpacity
+                style={[styles.featureCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}
+                onPress={() => {
+                  if (!isUnlocked) return;
+                  router.push('/trophy-room');
+                }}
+                activeOpacity={isUnlocked ? 0.9 : 1}
+                disabled={!isUnlocked}
+              >
+                <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
+                  <View style={styles.cardHeader}>
+                    <Ionicons name="trophy-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
+                    <Text style={styles.cardTitle}>Trophy Room</Text>
+                    <Text 
+                      style={styles.cardSubtitle}
+                      numberOfLines={2}
+                      adjustsFontSizeToFit={true}
+                      minimumFontScale={0.8}
+                    >
+                      View your earned badges & achievements
+                    </Text>
+                  </View>
+                  <View style={styles.cardFooter}>
+                    <Text style={[styles.cardAction, { color: branding.primary }]}>View Badges</Text>
+                    <Ionicons name="arrow-forward" size={16} color={branding.primary} />
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+            </View>
           </View>
-
-        </View>
         </View>
       </ScrollView>
 
       {/* QR Scanner FAB with Glow */}
       <View style={styles.fabContainer}>
-        <Animated.View style={[styles.fabGlow, glowStyle, { backgroundColor: theme.colors.primary }]} />
+        <Animated.View style={[styles.fabGlow, glowStyle, { backgroundColor: branding.primary }]} />
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { shadowColor: branding.primary }]}
           onPress={handleQRPress}
           activeOpacity={0.9}
         >
           <LinearGradient
-            colors={[theme.colors.primary, theme.colors.primaryDark]}
+            colors={[branding.primary, branding.primaryDark]}
             style={styles.fabGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Ionicons name="qr-code" size={48} color={theme.colors.background} />
+            <Ionicons name="qr-code" size={48} color={branding.onPrimary} />
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -890,28 +747,31 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  /* ─── Layout ────────────────────────────── */
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#080808',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: '#080808',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 140, // Space for QR button
+    paddingBottom: 140,
   },
+
+  /* ─── Header ────────────────────────────── */
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
     gap: 12,
   },
   headerLeft: {
@@ -919,7 +779,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
-    minWidth: 0, // Allow shrinking
+    minWidth: 0,
   },
   headerRight: {
     flexDirection: 'row',
@@ -975,139 +835,21 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
-  walletWidget: {
-    borderRadius: 9999,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  walletBlur: {
-    flexDirection: 'row',
+  /* ─── Hero Section ──────────────────────── */
+  heroSection: {
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-  },
-  walletAmount: {
-    fontWeight: 'bold',
-  },
-  challengeCardWrapper: {
-    borderRadius: 20,
-    marginBottom: 24, // theme.spacing.lg
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  challengeCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  challengeGradient: {
-    borderRadius: 20,
-  },
-  cardBlur: {
-    borderRadius: 20,
-    padding: 32,
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  challengeHeader: {
-    marginBottom: 24,
-  },
-  challengeTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  challengeSubtitle: {
-    fontSize: 14,
-    color: '#B0B0B0',
-    letterSpacing: 0.3,
-  },
-  challengeContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 24,
-  },
-  dropIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 120,
-  },
-  dropIconWrapper: {
-    position: 'relative',
-    width: 80,
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dollarSignContainer: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    height: '100%',
-  },
-  dollarSign: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    fontFamily: 'Courier',
-  },
-  challengeStats: {
-    flex: 1,
-    gap: 16,
-    minWidth: 0,
-  },
-  milestoneContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingHorizontal: 16,
+    marginBottom: 32,
     paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
   },
-  milestoneText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-    flexWrap: 'wrap',
-    flexShrink: 1,
+  heroGymName: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginTop: 8,
   },
-  challengeProgressBarContainer: {
-    marginVertical: 16,
-  },
-  challengeProgressBar: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  challengeProgressBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressText: {
-    fontSize: 14,
-    color: '#B0B0B0',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  progressNumber: {
-    // Color applied inline
-  },
-  bottomCardsRow: {
-    flexDirection: 'row',
-    gap: 16,
-    alignItems: 'stretch', // Ensure both cards have same height
-    position: 'relative',
-  },
+
+  /* ─── Cards Container ───────────────────── */
   cardsContainer: {
     position: 'relative',
     zIndex: 1,
@@ -1119,125 +861,118 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 10,
-    pointerEvents: 'auto', // Block touches to cards, but QR button is outside this container
+    pointerEvents: 'auto',
   },
-  featureCardWrapper: {
-    flex: 1,
-    position: 'relative',
-    height: 160, // Fixed height for consistency
-    borderRadius: 20,
-    overflow: 'hidden',
-    zIndex: 1,
-  },
-  featureCard: {
-    flex: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    height: '100%',
-  },
-  featureCardBlur: {
-    borderRadius: 20,
-    padding: 16, // theme.spacing.md
-    flex: 1,
-    justifyContent: 'space-between',
-    height: '100%',
-  },
-  cardHeader: {
-    marginBottom: 8,
-    flex: 1,
-    justifyContent: 'flex-start',
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: '#B0B0B0',
-    letterSpacing: 0.3,
-    lineHeight: 16,
-    minHeight: 32, // Reserve space for 2 lines
-  },
-  cardFooter: {
+
+  /* ─── Section Headers ───────────────────── */
+  sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 4,
-  },
-  cardAction: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  fabContainer: {
-    position: 'absolute',
-    bottom: 32,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20, // Above overlay
-  },
-  fabGlow: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    opacity: 0.4,
-  },
-  fab: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    overflow: 'hidden',
-    shadowColor: '#00E5FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  fabGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  challengesSection: {
-    marginBottom: 24,
-  },
-  challengesSectionHeader: {
     marginBottom: 16,
   },
-  challengesSectionTitle: {
+  sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  progressWidgetContainer: {
-    alignItems: 'flex-start',
+
+  /* ─── Challenges ────────────────────────── */
+  challengesSection: {
+    marginBottom: 24,
   },
   challengesScrollView: {
-    marginHorizontal: -16, // Offset parent padding
-    maxHeight: 204, // Fixed height (200 + 4 buffer)
+    marginHorizontal: -16,
+    maxHeight: 204,
   },
   challengesScrollContent: {
     paddingHorizontal: 16,
-    paddingRight: 28, // Extra padding at end for last card (16 + 12)
+    paddingRight: 28,
   },
-  horizontalChallengeCardSkeleton: {
+  challengeCardWrapper: {
+    marginRight: 12,
+    height: 200,
+  },
+  challengeCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    height: '100%',
+    width: '100%',
+  },
+  challengeBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: '100%',
+    width: '100%',
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+  },
+  challengeCardSkeleton: {
     width: '100%',
     height: CHALLENGE_CARD_HEIGHT,
     borderRadius: 16,
     overflow: 'hidden',
     opacity: 0.6,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  challengeGradient: {
+    borderRadius: 16,
+    height: '100%',
+    width: '100%',
+  },
+  challengeContent: {
+    padding: 16,
+    height: '100%',
+    justifyContent: 'space-between',
+  },
+  challengeHeader: {
+    marginBottom: 12,
+  },
+  challengeType: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  challengeName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    lineHeight: 18,
+  },
+  challengeProgress: {
+    marginBottom: 12,
+  },
+  progressBar: {
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: 11,
+    color: '#B0B0B0',
+    letterSpacing: 0.3,
+  },
+  challengeReward: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  challengeRewardText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   skeletonBadge: {
     width: 60,
@@ -1263,79 +998,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginTop: 12,
   },
-  horizontalChallengeCardWrapper: {
-    marginRight: 12,
-    height: 200,
-  },
-  horizontalChallengeCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    height: '100%',
-    width: '100%',
-  },
-  horizontalChallengeGradient: {
-    borderRadius: 16,
-    height: '100%',
-    width: '100%',
-  },
-  horizontalChallengeContent: {
-    padding: 16,
-    height: '100%',
-    justifyContent: 'space-between',
-  },
-  horizontalChallengeHeader: {
-    marginBottom: 12,
-  },
-  horizontalChallengeType: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#00E5FF',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  horizontalChallengeName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-    lineHeight: 18,
-  },
-  horizontalChallengeProgress: {
-    marginBottom: 12,
-  },
-  horizontalProgressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 2,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  horizontalProgressBarFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  horizontalProgressText: {
-    fontSize: 11,
-    color: '#B0B0B0',
-    letterSpacing: 0.3,
-  },
-  horizontalChallengeReward: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  horizontalChallengeRewardText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#00E5FF',
-    letterSpacing: 0.3,
-  },
+
+  /* ─── View All ──────────────────────────── */
   viewAllCardWrapper: {
     marginRight: 12,
     height: 200,
@@ -1364,7 +1028,6 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(0, 229, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -1372,12 +1035,10 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   viewAllSubtext: {
     fontSize: 12,
-    color: '#B0B0B0',
     letterSpacing: 0.3,
     textAlign: 'center',
   },
@@ -1385,51 +1046,52 @@ const styles = StyleSheet.create({
     marginTop: 8,
     opacity: 0.8,
   },
-  noChallengesCard: {
-    borderRadius: 16,
+
+  /* ─── Empty Challenges Banner (slim) ─────── */
+  emptyChallengesBanner: {
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    height: '100%',
-    width: '100%',
+    borderColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 24,
   },
-  noChallengesContent: {
-    padding: 16,
-    height: '100%',
-    justifyContent: 'center',
+  emptyChallengesBlur: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
   },
-  noChallengesIcon: {
-    opacity: 0.6,
-    marginBottom: 8,
+  emptyChallengesText: {
+    fontSize: 13,
+    color: '#808080',
+    letterSpacing: 0.2,
+    flex: 1,
   },
-  noChallengesTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-    textAlign: 'center',
+
+  /* ─── Progress Widget ───────────────────── */
+  progressWidgetContainer: {
+    alignItems: 'flex-start',
   },
-  noChallengesSubtitle: {
-    fontSize: 12,
-    color: '#B0B0B0',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: 8,
-  },
+
+  /* ─── SmartCoach ────────────────────────── */
   smartCoachSection: {
     marginBottom: 24,
-    paddingHorizontal: CARD_PADDING,
-    alignItems: 'center', // Center the card
+    alignItems: 'center',
   },
   smartCoachCard: {
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(147, 51, 234, 0.3)',
     height: 120,
+  },
+  smartCoachBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: '100%',
+    width: '100%',
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
   },
   smartCoachGradient: {
     borderRadius: 16,
@@ -1441,7 +1103,7 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
   },
-  smartCoachHeader: {
+  smartCoachHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
@@ -1450,7 +1112,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1461,13 +1122,107 @@ const styles = StyleSheet.create({
   smartCoachTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   smartCoachSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
     letterSpacing: 0.3,
     lineHeight: 18,
+  },
+
+  /* ─── Bottom Bento Grid ─────────────────── */
+  bottomCardsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'stretch',
+    position: 'relative',
+  },
+  featureCardWrapper: {
+    flex: 1,
+    position: 'relative',
+    height: 170,
+    borderRadius: 20,
+    overflow: 'hidden',
+    zIndex: 1,
+  },
+  featureCard: {
+    flex: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    height: '100%',
+  },
+  featureCardBlur: {
+    borderRadius: 20,
+    padding: 16,
+    flex: 1,
+    justifyContent: 'space-between',
+    height: '100%',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+  },
+  cardHeader: {
+    marginBottom: 8,
+    flex: 1,
+    justifyContent: 'flex-start',
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: '#B0B0B0',
+    letterSpacing: 0.3,
+    lineHeight: 16,
+    minHeight: 32,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardAction: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+
+  /* ─── QR FAB ────────────────────────────── */
+  fabContainer: {
+    position: 'absolute',
+    bottom: 32,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  fabGlow: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    opacity: 0.4,
+  },
+  fab: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

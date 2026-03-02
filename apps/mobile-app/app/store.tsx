@@ -4,16 +4,29 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
+import { useBranding } from '@/lib/contexts/ThemeContext';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function StoreScreen() {
   const router = useRouter();
   const { session } = useSession();
+  const branding = useBranding();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
@@ -89,7 +102,6 @@ export default function StoreScreen() {
   const redeemReward = async (reward: any) => {
     if (!session?.user || !activeGymId) return;
 
-    // Pre-check local balance (client-side validation)
     if (localDrops < reward.price_drops) {
       Alert.alert(
         'Insufficient Drops',
@@ -98,7 +110,6 @@ export default function StoreScreen() {
       return;
     }
 
-    // Pre-check stock (client-side validation)
     if (reward.stock !== null && reward.stock <= 0) {
       Alert.alert('Out of Stock', 'This reward is currently unavailable.');
       return;
@@ -113,7 +124,6 @@ export default function StoreScreen() {
           text: 'Redeem',
           onPress: async () => {
             try {
-              // Use secure create_redemption function (handles everything atomically)
               const { data, error } = await supabase.rpc('create_redemption', {
                 p_user_id: session.user.id,
                 p_reward_id: reward.id,
@@ -135,7 +145,6 @@ export default function StoreScreen() {
 
               const redemption = data[0];
 
-              // Show success with redemption code
               Alert.alert(
                 'Redemption Successful! 🎉',
                 `Your redemption code:\n\n${redemption.redemption_code}\n\nShow this code to gym staff to claim your reward.`,
@@ -165,18 +174,13 @@ export default function StoreScreen() {
     );
   };
 
-  const getRewardEmoji = (type: string) => {
+  const getRewardIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
-      case 'coffee':
-        return '☕';
-      case 'protein':
-        return '🥤';
-      case 'discount':
-        return '💳';
-      case 'merch':
-        return '👕';
-      default:
-        return '🎁';
+      case 'coffee': return 'cafe-outline';
+      case 'protein': return 'nutrition-outline';
+      case 'discount': return 'pricetag-outline';
+      case 'merch': return 'shirt-outline';
+      default: return 'gift-outline';
     }
   };
 
@@ -186,7 +190,7 @@ export default function StoreScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
         </View>
       </SafeAreaView>
     );
@@ -194,7 +198,7 @@ export default function StoreScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Radial gradient background */}
+      {/* Gradient background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -210,75 +214,90 @@ export default function StoreScreen() {
           onPress={() => router.push('/redemptions')}
           style={styles.headerButton}
         >
-          <Ionicons name="receipt-outline" size={24} color={theme.colors.primary} />
+          <Ionicons name="receipt-outline" size={24} color={branding.primary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.balanceCard}>
-          <Ionicons name="water" size={24} color={theme.colors.primary} />
-          <Text style={[styles.balanceText, getNumberStyle(18)]}>
-            {localDrops} drops
-          </Text>
-          <Text style={styles.balanceLabel}>Available at this gym</Text>
-        </View>
+        {/* Balance Card */}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <View style={[styles.balanceCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.balanceBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <Ionicons name="water" size={22} color={branding.primary} />
+              <Text style={[styles.balanceText, getNumberStyle(18), { color: branding.primary }]}>
+                {localDrops} drops
+              </Text>
+              <Text style={styles.balanceLabel}>Available at this gym</Text>
+            </BlurView>
+          </View>
+        </Animated.View>
 
         {rewards.length === 0 ? (
           <View style={styles.emptyState}>
+            <Ionicons name="gift-outline" size={64} color={theme.colors.textSecondary} />
             <Text style={styles.emptyText}>No rewards available</Text>
+            <Text style={styles.emptySubtext}>Check back soon for new rewards!</Text>
           </View>
         ) : (
-          rewards.map((reward) => {
+          rewards.map((reward, index) => {
             const affordable = canAfford(reward.price_drops);
             return (
-              <TouchableOpacity
-                key={reward.id}
-                style={[
-                  styles.rewardCard,
-                  !affordable && styles.rewardCardDisabled,
-                ]}
-                onPress={() => affordable && redeemReward(reward)}
-                activeOpacity={affordable ? 0.7 : 1}
-              >
-                <View style={styles.rewardContent}>
-                  {reward.image_url ? (
-                    <Image
-                      source={{ uri: reward.image_url }}
-                      style={styles.rewardImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={styles.rewardEmoji}>
-                      {getRewardEmoji(reward.reward_type)}
-                    </Text>
-                  )}
-                  <View style={styles.rewardInfo}>
-                    <Text style={styles.rewardName}>{reward.name}</Text>
-                    {reward.description && (
-                      <Text style={styles.rewardDescription}>
-                        {reward.description}
-                      </Text>
-                    )}
-                    <View style={styles.rewardFooter}>
-                      <View style={styles.priceContainer}>
-                        <Ionicons name="water" size={16} color={affordable ? theme.colors.primary : theme.colors.textSecondary} />
-                        <Text style={[
-                          styles.rewardPrice,
-                          getNumberStyle(18),
-                          !affordable && styles.rewardPriceDisabled,
-                        ]}>
-                          {reward.price_drops}
-                        </Text>
-                      </View>
-                      {reward.stock !== null && (
-                        <Text style={styles.rewardStock}>
-                          {reward.stock} left
-                        </Text>
+              <Animated.View key={reward.id} entering={FadeInDown.delay(200 + index * 80).duration(400)}>
+                <TouchableOpacity
+                  style={[
+                    styles.rewardCard,
+                    { borderColor: hexToRgba(branding.primary, affordable ? 0.2 : 0.08) },
+                    !affordable && styles.rewardCardDisabled,
+                  ]}
+                  onPress={() => affordable && redeemReward(reward)}
+                  activeOpacity={affordable ? 0.8 : 1}
+                >
+                  <BlurView intensity={50} tint="dark" style={[styles.rewardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                    <View style={styles.rewardContent}>
+                      {reward.image_url ? (
+                        <Image
+                          source={{ uri: reward.image_url }}
+                          style={[styles.rewardImage, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.rewardIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                          <Ionicons
+                            name={getRewardIcon(reward.reward_type)}
+                            size={28}
+                            color={affordable ? branding.primary : theme.colors.textSecondary}
+                          />
+                        </View>
                       )}
+                      <View style={styles.rewardInfo}>
+                        <Text style={styles.rewardName}>{reward.name}</Text>
+                        {reward.description && (
+                          <Text style={styles.rewardDescription} numberOfLines={2}>
+                            {reward.description}
+                          </Text>
+                        )}
+                        <View style={styles.rewardFooter}>
+                          <View style={styles.priceContainer}>
+                            <Ionicons name="water" size={16} color={affordable ? branding.primary : theme.colors.textSecondary} />
+                            <Text style={[
+                              styles.rewardPrice,
+                              getNumberStyle(18),
+                              { color: affordable ? branding.primary : theme.colors.textSecondary },
+                            ]}>
+                              {reward.price_drops}
+                            </Text>
+                          </View>
+                          {reward.stock !== null && (
+                            <Text style={styles.rewardStock}>
+                              {reward.stock} left
+                            </Text>
+                          )}
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
+                  </BlurView>
+                </TouchableOpacity>
+              </Animated.View>
             );
           })
         )}
@@ -308,7 +327,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     letterSpacing: 0.5,
-    pointerEvents: 'none', // Don't block touch events
+    pointerEvents: 'none',
   },
   headerButton: {
     width: 40,
@@ -328,18 +347,20 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   balanceCard: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+  },
+  balanceBlur: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
     padding: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   balanceText: {
-    color: theme.colors.primary,
     fontWeight: theme.typography.fontWeight.bold,
   },
   balanceLabel: {
@@ -350,41 +371,56 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: theme.spacing['3xl'],
     alignItems: 'center',
+    gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
+  },
+  emptySubtext: {
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
+    textAlign: 'center',
     letterSpacing: 0.3,
   },
   rewardCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
+    overflow: 'hidden',
     marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   rewardCardDisabled: {
     opacity: 0.5,
+  },
+  rewardBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
   },
   rewardContent: {
     flexDirection: 'row',
     gap: theme.spacing.md,
   },
-  rewardEmoji: {
-    fontSize: 48,
+  rewardIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: theme.borderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   rewardImage: {
     width: 64,
     height: 64,
     borderRadius: theme.borderRadius.lg,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
   },
   rewardInfo: {
     flex: 1,
   },
   rewardName: {
-    fontSize: theme.typography.fontSize.xl,
+    fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     marginBottom: theme.spacing.xs,
@@ -407,11 +443,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   rewardPrice: {
-    color: theme.colors.primary,
     fontWeight: theme.typography.fontWeight.semibold,
-  },
-  rewardPriceDisabled: {
-    color: theme.colors.textSecondary,
   },
   rewardStock: {
     fontSize: theme.typography.fontSize.sm,

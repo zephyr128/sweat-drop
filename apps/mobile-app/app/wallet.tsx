@@ -1,15 +1,28 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
+import { useBranding } from '@/lib/contexts/ThemeContext';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(0, 229, 255, ${alpha})`;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function WalletScreen() {
   const { session } = useSession();
+  const branding = useBranding();
   const [profile, setProfile] = useState<any>(null);
   const [todayDrops, setTodayDrops] = useState(0);
   const [weekDrops, setWeekDrops] = useState(0);
@@ -82,7 +95,7 @@ export default function WalletScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Radial gradient background */}
+      {/* Gradient background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -98,43 +111,70 @@ export default function WalletScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>Total Balance</Text>
-          <View style={styles.totalRow}>
-            <Ionicons name="water" size={48} color={theme.colors.primary} />
-            <Text style={[styles.totalValue, getNumberStyle(48)]}>
-              {profile?.total_drops || 0}
-            </Text>
+        {/* Total Balance Card */}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <View style={[styles.totalCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.totalCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <LinearGradient
+                colors={[hexToRgba(branding.primary, 0.08), 'rgba(20, 20, 35, 0.9)', hexToRgba(branding.primary, 0.04)]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.totalCardGradient}
+              >
+                <Text style={styles.totalLabel}>Total Balance</Text>
+                <View style={styles.totalRow}>
+                  <Ionicons name="water" size={40} color={branding.primary} />
+                  <Text style={[styles.totalValue, getNumberStyle(48), { color: branding.primary }]}>
+                    {profile?.total_drops || 0}
+                  </Text>
+                </View>
+                <Text style={[styles.totalSubLabel, { color: hexToRgba(branding.primary, 0.5) }]}>drops</Text>
+              </LinearGradient>
+            </BlurView>
           </View>
-        </View>
+        </Animated.View>
 
-        <View style={styles.statsContainer}>
-          <Text style={styles.sectionTitle}>Earned Drops</Text>
+        {/* Earned Drops Section */}
+        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+          <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <Text style={styles.sectionTitle}>Earned Drops</Text>
 
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Today</Text>
-            <View style={styles.statValueContainer}>
-              <Ionicons name="water" size={20} color={theme.colors.primary} />
-              <Text style={[styles.statValue, getNumberStyle(18)]}>{todayDrops}</Text>
-            </View>
+              <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
+                <View style={styles.statLabelRow}>
+                  <Ionicons name="today-outline" size={18} color={branding.primary} />
+                  <Text style={styles.statLabel}>Today</Text>
+                </View>
+                <View style={styles.statValueContainer}>
+                  <Ionicons name="water" size={18} color={branding.primary} />
+                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{todayDrops}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
+                <View style={styles.statLabelRow}>
+                  <Ionicons name="calendar-outline" size={18} color={branding.primary} />
+                  <Text style={styles.statLabel}>This Week</Text>
+                </View>
+                <View style={styles.statValueContainer}>
+                  <Ionicons name="water" size={18} color={branding.primary} />
+                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{weekDrops}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
+                <View style={styles.statLabelRow}>
+                  <Ionicons name="stats-chart-outline" size={18} color={branding.primary} />
+                  <Text style={styles.statLabel}>This Month</Text>
+                </View>
+                <View style={styles.statValueContainer}>
+                  <Ionicons name="water" size={18} color={branding.primary} />
+                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{monthDrops}</Text>
+                </View>
+              </View>
+            </BlurView>
           </View>
-
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>This Week</Text>
-            <View style={styles.statValueContainer}>
-              <Ionicons name="water" size={20} color={theme.colors.primary} />
-              <Text style={[styles.statValue, getNumberStyle(18)]}>{weekDrops}</Text>
-            </View>
-          </View>
-
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>This Month</Text>
-            <View style={styles.statValueContainer}>
-              <Ionicons name="water" size={20} color={theme.colors.primary} />
-              <Text style={[styles.statValue, getNumberStyle(18)]}>{monthDrops}</Text>
-            </View>
-          </View>
-        </View>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -161,7 +201,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     letterSpacing: 0.5,
-    pointerEvents: 'none', // Don't block touch events
+    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
@@ -173,19 +213,26 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   totalCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xl,
+    overflow: 'hidden',
     marginBottom: theme.spacing.lg,
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  totalCardBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+  },
+  totalCardGradient: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
   },
   totalLabel: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
-    letterSpacing: 0.3,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   totalRow: {
     flexDirection: 'row',
@@ -193,18 +240,27 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   totalValue: {
-    color: theme.colors.primary,
     fontWeight: theme.typography.fontWeight.bold,
   },
+  totalSubLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginTop: theme.spacing.xs,
+    fontWeight: theme.typography.fontWeight.semibold,
+  },
   statsContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  statsBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: theme.typography.fontSize.xl,
+    fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     marginBottom: theme.spacing.lg,
@@ -216,7 +272,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  statLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   statLabel: {
     fontSize: theme.typography.fontSize.base,
@@ -229,7 +289,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   statValue: {
-    color: theme.colors.primary,
     fontWeight: theme.typography.fontWeight.semibold,
   },
 });
