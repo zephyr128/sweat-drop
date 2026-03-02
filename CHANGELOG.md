@@ -29,6 +29,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2025-03-02] - mobile-coder: Complete Mobile App UI/UX Redesign
+
+### Overview
+
+Full redesign of every screen in the mobile app to establish a **premium fitness app** aesthetic with:
+- **Dynamic gym branding** — primary/secondary colors from `currentGym` propagate across the entire UI
+- **Glassmorphism** — `BlurView` (intensity 50) + semi-transparent dark background on all cards
+- **Staggered entrance animations** — `react-native-reanimated` `FadeInDown` on all screens
+- **Consistent design language** — unified border radius, color system, spacing, and typography
+
+### Design System Established
+
+**Core Visual Principles:**
+- Background: `ImageBackground` from `activeGym.background_image_url` when available, else `LinearGradient` dark fallback (`#000000` → `#0A0E1A`)
+- Card treatment: `BlurView intensity={50} tint="dark"` + `backgroundColor: 'rgba(20, 20, 30, 0.75)'` + `borderColor: hexToRgba(branding.primary, 0.12–0.15)` + `borderWidth: 1`
+- Branding colors: `branding.primary` for interactive accents, progress bars, icons, active states, CTAs
+- Original SweatDrop colors preserved for: difficulty levels (green/yellow/red), status indicators, base text hierarchy
+- Animations: `FadeInDown` from `react-native-reanimated` with staggered delays per card/row
+
+**Key Hooks & Contexts:**
+- `useBranding()` — derives `primary`, `primaryLight`, `primaryDark`, `onPrimary` from `activeGym.primary_color`
+- `useTheme()` — provides animated theme values via `ThemeContext`
+- `useHomeStats()` — fetches streak, today's drops, last workout, closest reward, weekly activity
+
+### Added (New Components)
+
+- **`apps/mobile-app/components/HeroDropsRing.tsx`** — Dual-progress SVG circle (outer: global drops, inner: local drops), dynamic branding, press-to-navigate to wallet, pulsating glow
+- **`apps/mobile-app/components/QuickStatsRow.tsx`** — Row of 3 glassmorphic pills (streak, today's drops, last workout)
+- **`apps/mobile-app/components/ClosestRewardBanner.tsx`** — Banner showing nearest redeemable reward with progress
+- **`apps/mobile-app/components/WeeklyActivityChart.tsx`** — 7-day sparkline bar chart (SVG + animated bars)
+- **`apps/mobile-app/hooks/useHomeStats.ts`** — Hook fetching home screen stats from Supabase
+
+### Changed (Redesigned Screens — 12 files)
+
+| # | File | Key Changes |
+|---|------|-------------|
+| 1 | `apps/mobile-app/app/home.tsx` | Dynamic `ImageBackground`, dual-progress `HeroDropsRing`, `QuickStatsRow`, `WeeklyActivityChart`, `ClosestRewardBanner`, Trophy Room card replacing Leaderboards, skeleton loader for challenges, BlurView on all cards |
+| 2 | `apps/mobile-app/components/UserSettingsSheet.tsx` | Complete redesign: profile hero, quick stats pills, inline editable username, home gym display, notifications toggle, app version, delete account, all glassmorphic cards, dynamic branding |
+| 3 | `apps/mobile-app/app/wallet.tsx` | `ImageBackground`, BlurView on balance & transaction cards, branding colors replacing hardcoded `#00E5FF`, staggered `FadeInDown` |
+| 4 | `apps/mobile-app/app/store.tsx` | `ImageBackground`, BlurView on reward cards, branded progress bars & accents |
+| 5 | `apps/mobile-app/app/leaderboard.tsx` | `ImageBackground`, BlurView on items & sticky footer, branded tab/button states |
+| 6 | `apps/mobile-app/app/challenges.tsx` | `ImageBackground`, BlurView on challenge cards, branded progress fill & type badges |
+| 7 | `apps/mobile-app/app/challenge-detail.tsx` | BlurView replacing inner gradient, branded icons & progress |
+| 8 | `apps/mobile-app/app/redemptions.tsx` | `ImageBackground`, BlurView on redemption cards, branded drops icons |
+| 9 | `apps/mobile-app/app/session-summary.tsx` | BlurView on stat/equipment/badge cards, branded "Collect & Close" button |
+| 10 | `apps/mobile-app/app/smartcoach.tsx` | BlurView on gym cards, branded icons replacing hardcoded cyan |
+| 11 | `apps/mobile-app/app/gym-plans.tsx` | BlurView on plan cards, branded plan count & icons, difficulty colors preserved |
+| 12 | `apps/mobile-app/app/plan-detail.tsx` | BlurView on info card & exercise items, branded number badges, rest badges, start button gradient, staggered animations |
+
+### Changed (Redesigned Components — 4 files)
+
+| # | File | Key Changes |
+|---|------|-------------|
+| 1 | `apps/mobile-app/components/TrophyRoom.tsx` | BlurView on search & filter buttons, branded section titles & icons |
+| 2 | `apps/mobile-app/components/LeaderboardPreview.tsx` | BlurView intensity increased to 50, dark backgroundColor added |
+| 3 | `apps/mobile-app/components/ProgressWidget.tsx` | BlurView intensity increased to 50, dark backgroundColor added |
+| 4 | `apps/mobile-app/components/BackButton.tsx` | Dynamic branding border color via `hexToRgba(branding.primary, 0.15)` |
+
+### Fixed
+- **Card visibility on dark backgrounds** — Increased `BlurView` intensity from 15–20 to 50 and added `backgroundColor: 'rgba(20, 20, 30, 0.75)'` across all glassmorphic cards (resolves issue when gym has black background + white primary color)
+- **Border visibility** — Increased border opacity from `0.08` to `0.12–0.25` across all branded borders
+- **Home screen flickering** — Added skeleton loader for challenges section to prevent layout jump during data loading
+- **ProgressWidget hooks order** — Moved early return after all hooks to prevent React hook order errors
+- **ProgressWidget easing** — Replaced custom easing with `Easing.out(Easing.ease)` from reanimated to fix worklet error
+
+### Breaking Changes
+- None (all changes are UI-only within `apps/mobile-app/`)
+
+### Impact on Other Agents
+
+- **architect:** Mobile app now has a complete design system. Future screens should follow the glassmorphism + dynamic branding pattern documented in this entry. Consider adding a `docs/plans/mobile_design_system.md` reference.
+- **admin-coder:** No impact. Admin panel uses separate Tailwind-based design.
+- **supabase-dba:** No impact. No database changes required.
+- **reviewer:** All screens now use `useBranding()` hook for colors. When reviewing, verify:
+  - No hardcoded `#00E5FF` remains (should use `branding.primary`)
+  - All `BlurView` uses `intensity={50}` and has `backgroundColor: 'rgba(20, 20, 30, 0.75)'`
+  - All cards have `borderColor: hexToRgba(branding.primary, 0.12)` minimum
+  - `ImageBackground` conditional on `activeGym.background_image_url`
+
+### Data Dependencies (Supabase Queries Used)
+
+- `profiles.total_drops` — Global drops count for HeroDropsRing outer ring
+- `gym_memberships.local_drops_balance` — Local drops for HeroDropsRing inner ring
+- `drops_transactions` — Today's drops, weekly activity chart
+- `sessions` — Last workout info, streak calculation
+- `rewards` — Closest reward banner
+- `gym_challenges` — Active challenges display
+- `gyms.primary_color`, `gyms.secondary_color`, `gyms.logo_url`, `gyms.background_image_url` — Dynamic branding
+
+---
+
 ## [2025-01-27] - Initial Setup
 
 ### Added

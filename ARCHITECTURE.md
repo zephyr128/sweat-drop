@@ -125,10 +125,13 @@ apps/admin-panel/
 - Sweat Drops earning and tracking
 - Wallet (drops balance)
 - Rewards store (redeem drops)
-- Challenges (daily/weekly/streak)
+- Challenges (daily/weekly/streak/monthly/milestone)
 - Leaderboards (gym/city/country, daily/weekly/monthly)
 - Gym selection and preview
 - Session summaries with percentile rankings
+- Trophy Room (gamification badges)
+- Dynamic gym branding (colors, logos, backgrounds)
+- Settings screen with profile management
 
 **Environment Variables:**
 - `EXPO_PUBLIC_SUPABASE_URL`
@@ -138,12 +141,95 @@ apps/admin-panel/
 ```
 apps/mobile-app/
 ├── app/                   # Expo Router pages
+│   ├── home.tsx           # Home screen (HeroDropsRing, stats, challenges)
+│   ├── wallet.tsx         # Wallet screen (drops balance, transactions)
+│   ├── store.tsx          # Rewards store
+│   ├── leaderboard.tsx    # Leaderboard rankings
+│   ├── challenges.tsx     # Challenge list
+│   ├── challenge-detail.tsx # Challenge detail
+│   ├── session-summary.tsx  # Workout summary
+│   ├── redemptions.tsx    # Redemption history
+│   ├── smartcoach.tsx     # SmartCoach gym selection (feature flagged)
+│   ├── gym-plans.tsx      # Workout plans for a gym
+│   ├── plan-detail.tsx    # Plan detail with exercises
+│   ├── trophy-room.tsx    # Badge/achievement grid
+│   └── _layout.tsx        # Root layout with navigation
 ├── components/            # React Native components
+│   ├── HeroDropsRing.tsx  # Dual-progress SVG ring (global/local drops)
+│   ├── QuickStatsRow.tsx  # 3 stat pills (streak, drops, workout)
+│   ├── WeeklyActivityChart.tsx # 7-day SVG bar chart
+│   ├── ClosestRewardBanner.tsx # Nearest reward progress
+│   ├── LeaderboardPreview.tsx  # Top 3 users widget
+│   ├── ProgressWidget.tsx # Next badge progress card
+│   ├── TrophyRoom.tsx     # Badge grid with search/filter
+│   ├── UserSettingsSheet.tsx  # Settings screen
+│   ├── BackButton.tsx     # Back navigation with dynamic border
+│   └── BadgeCard.tsx      # Badge card (locked/unlocked states)
 ├── lib/                   # Utilities, Supabase client, stores
-│   └── stores/            # Zustand stores (useGymStore, etc.)
+│   ├── stores/            # Zustand stores (useGymStore, etc.)
+│   ├── contexts/          # React contexts
+│   │   └── ThemeContext.tsx   # Dynamic branding context & useTheme()
+│   ├── hooks/
+│   │   └── useBranding.ts    # Branding color derivation from activeGym
+│   ├── theme.ts           # Base theme (fallback colors, typography, spacing)
+│   └── supabase.ts        # Supabase client configuration
 ├── hooks/                 # Custom React hooks
+│   ├── useHomeStats.ts    # Home screen stats fetcher
+│   ├── useSession.ts      # Auth session hook
+│   └── useGymData.ts      # Gym membership data
 └── assets/                # Images, fonts, etc.
 ```
+
+### Mobile App Design System
+
+**Established:** 2025-03-02
+
+All mobile app screens follow a unified design system for a premium fitness app aesthetic:
+
+**Background:**
+```typescript
+// If gym has a background image
+<ImageBackground source={{ uri: activeGym.background_image_url }} style={StyleSheet.absoluteFillObject}>
+  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
+  {/* content */}
+</ImageBackground>
+
+// Fallback: dark gradient
+<LinearGradient colors={['#000000', '#0A0E1A', '#000000']} style={StyleSheet.absoluteFillObject} />
+```
+
+**Cards (Glassmorphism):**
+```typescript
+<View style={{ borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: hexToRgba(branding.primary, 0.12) }}>
+  <BlurView intensity={50} tint="dark" style={{ backgroundColor: 'rgba(20, 20, 30, 0.75)', padding: 16 }}>
+    {/* card content */}
+  </BlurView>
+</View>
+```
+
+**Dynamic Branding:**
+```typescript
+const branding = useBranding();
+// branding.primary    — main brand color (from activeGym.primary_color or fallback #00E5FF)
+// branding.primaryLight — lighter variant
+// branding.primaryDark  — darker variant
+// branding.onPrimary  — text color on primary (white or black based on contrast)
+```
+
+**Entrance Animations:**
+```typescript
+import Animated, { FadeInDown } from 'react-native-reanimated';
+<Animated.View entering={FadeInDown.delay(100 + index * 60).duration(400)}>
+  {/* staggered card */}
+</Animated.View>
+```
+
+**Color Usage Rules:**
+- `branding.primary` — interactive accents, progress bars, icons, active states, CTAs
+- `branding.primaryDark` — gradients, subtle borders
+- `branding.primaryLight` — hover/active backgrounds at low opacity
+- Original SweatDrop colors — difficulty levels (`#4ade80`, `#facc15`, `#f87171`), status indicators, base text hierarchy
+- Never hardcode `#00E5FF` — always use `branding.primary`
 
 ---
 
@@ -430,11 +516,16 @@ backend/supabase/
 
 ### Mobile App
 
-**Framework:** React Native StyleSheet API
+**Framework:** React Native StyleSheet API + Dynamic Branding
 
 - `StyleSheet.create()` for component styles
-- Inline styles for simple cases
-- Theme context for dynamic branding (gym colors)
+- Inline styles for dynamic/branding-dependent values
+- `useBranding()` hook for gym-specific colors (primary, primaryLight, primaryDark, onPrimary)
+- `useTheme()` context for animated theme transitions
+- `BlurView` (expo-blur) for glassmorphic card surfaces
+- `react-native-reanimated` for entrance animations (`FadeInDown`)
+- `react-native-svg` for custom charts and progress rings
+- `ImageBackground` for dynamic gym backgrounds
 - No CSS files, no Tailwind (unless NativeWind explicitly configured)
 
 ---
@@ -562,5 +653,5 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ---
 
-**Last Updated:** 2025-01-27  
+**Last Updated:** 2025-03-02  
 **Maintained By:** SWEATDROP Engineering Team

@@ -1,27 +1,33 @@
 # SWEATDROP - State of the App
 
-**Last Updated:** 2025-01-27
+**Last Updated:** 2025-03-02
 
 ---
 
 ## 🎯 Current Focus
 
-**Implementing Bluetooth BLE Scanner for Magene Sensors in Mobile App**
+**Mobile App UI/UX Redesign Complete — Preparing for Production Polish**
 
-The mobile app is currently being enhanced to support real-time Bluetooth Low Energy (BLE) communication with Magene fitness sensors. This is a critical component of the MVP Sweat Drops economy, as sensors track workout intensity and calculate drops earned.
+The mobile app has undergone a **complete UI/UX redesign** establishing a premium fitness app aesthetic with dynamic gym branding, glassmorphism, and consistent design language across all 12+ screens. The BLE sensor integration remains in progress as a parallel track.
 
-**Key Tasks:**
-- BLE service implementation (`apps/mobile-app/lib/ble-service.ts`)
-- Sensor pairing flow in admin panel
-- Real-time RPM (revolutions per minute) data collection
-- Workout screen integration for live sensor data
-- Auto-pause functionality when sensor detects inactivity (RPM = 0 for 30+ seconds)
+**Completed:**
+- ✅ Full mobile app redesign (all screens)
+- ✅ Dynamic branding system (gym colors propagate to entire UI)
+- ✅ Glassmorphism design system (BlurView + dark backgrounds)
+- ✅ Home screen with dual-progress ring, stats, activity chart
+- ✅ Settings screen redesign with premium UX
+- ✅ Gamification system (badges, trophy room, challenges)
+
+**In Progress:**
+- 🔄 BLE sensor integration (Magene/SHUA)
+- 🔄 Production testing and QA across different gym brandings
 
 **Related Files:**
 - `apps/mobile-app/lib/ble-service.ts` (BLE service implementation)
 - `apps/mobile-app/app/workout.tsx` (Workout screen with BLE integration)
-- `apps/mobile-app/MAGENE_BLE_SETUP.md` (Setup documentation)
-- `apps/admin-panel/app/dashboard/gym/[id]/machines/page.tsx` (Machine pairing UI)
+- `apps/mobile-app/lib/contexts/ThemeContext.tsx` (Dynamic branding context)
+- `apps/mobile-app/lib/hooks/useBranding.ts` (Branding color derivation)
+- `apps/mobile-app/hooks/useHomeStats.ts` (Home screen stats hook)
 
 ---
 
@@ -53,16 +59,33 @@ The mobile app is currently being enhanced to support real-time Bluetooth Low En
 
 ### Mobile App Features
 - ✅ **Onboarding flow** - Email/Apple/Google auth, username setup
-- ✅ **Home screen** - Dashboard with drops balance, challenges, leaderboard preview
+- ✅ **Home screen** - Redesigned with dual-progress ring (global/local drops), quick stats row, weekly activity chart, closest reward banner, dynamic gym branding
 - ✅ **QR code scanning** - Scan machine QR codes to start workouts
 - ✅ **Workout screen** - Real-time drops counter, session tracking (BLE integration in progress)
-- ✅ **Session summary** - Workout results, percentile rankings
-- ✅ **Wallet screen** - Drops balance (today, this week, this month)
-- ✅ **Store screen** - Browse and redeem rewards with drops
-- ✅ **Challenges screen** - View and participate in challenges
-- ✅ **Leaderboard screen** - Rankings by period and scope
+- ✅ **Session summary** - Workout results, percentile rankings, glassmorphic stat cards
+- ✅ **Wallet screen** - Drops balance with glassmorphic cards, dynamic branding
+- ✅ **Store screen** - Browse and redeem rewards, branded progress bars
+- ✅ **Challenges screen** - View and participate in challenges, branded progress fills
+- ✅ **Challenge detail** - Full challenge view with glassmorphic cards
+- ✅ **Leaderboard screen** - Rankings by period and scope, branded active states
 - ✅ **Gym selection** - Home gym setup, gym preview (locked/unlocked)
 - ✅ **State management** - Zustand stores for gym selection, user preferences
+- ✅ **Settings screen** - Redesigned with profile hero, quick stats, inline username edit, home gym, notifications toggle, app version
+- ✅ **Trophy Room** - Badge grid with search/filter, glassmorphic cards, dynamic branding
+- ✅ **Redemptions history** - Glassmorphic redemption cards with branded status indicators
+- ✅ **SmartCoach screens** - Gym cards, plan detail with exercise list (feature flagged)
+
+### Mobile App Design System (NEW)
+- ✅ **Dynamic gym branding** - `useBranding()` hook derives colors from `activeGym.primary_color`
+- ✅ **Theme context** - `useTheme()` provides animated theme values
+- ✅ **Glassmorphism** - `BlurView intensity={50}` + `backgroundColor: rgba(20,20,30,0.75)` on all cards
+- ✅ **ImageBackground** - Dynamic gym backgrounds with dark gradient fallback
+- ✅ **Staggered animations** - `FadeInDown` from `react-native-reanimated` on all screens
+- ✅ **HeroDropsRing** - Dual concentric SVG progress rings with pulsating glow
+- ✅ **QuickStatsRow** - 3 stat pills (streak, today's drops, last workout)
+- ✅ **WeeklyActivityChart** - 7-day SVG sparkline bar chart
+- ✅ **ClosestRewardBanner** - Progress toward nearest redeemable reward
+- ✅ **BackButton** - Dynamic branding border color
 
 ### SmartCoach System (Feature Flagged)
 - ✅ **Database schema** - `workout_plans`, `workout_plan_items`, `coach_profiles` tables
@@ -74,9 +97,10 @@ The mobile app is currently being enhanced to support real-time Bluetooth Low En
 
 ## 🐛 Known Bugs
 
-**None currently.**
+**None critical.**
 
-All critical bugs have been resolved. The app is in active development with focus on BLE integration.
+- ⚠️ **Card visibility edge case** - When a gym has very bright primary color AND very dark background, borders may need higher opacity. Current minimum is `hexToRgba(branding.primary, 0.12)`. If new edge cases are found, increase to `0.20+`.
+- ⚠️ **Typography on small screens** - `HeroDropsRing` has dynamic font sizing for drop counts but may need testing on very small devices (iPhone SE).
 
 ---
 
@@ -97,7 +121,14 @@ Development is proceeding smoothly. No external dependencies or technical blocke
    - Integrate RPM data into workout screen
    - Implement auto-pause on inactivity
 
-2. **Machine Pairing UI Polish**
+2. **QA: Test Design System Across Gym Brandings**
+   - Test with light primary colors on dark backgrounds
+   - Test with dark primary colors on light backgrounds
+   - Test with no gym background image (gradient fallback)
+   - Verify `HeroDropsRing` glow/pulse on different color combos
+   - Test on both iOS and Android
+
+3. **Machine Pairing UI Polish**
    - Improve BLE device scanning in admin panel
    - Add connection status indicators
    - Error handling for pairing failures
@@ -113,6 +144,11 @@ Development is proceeding smoothly. No external dependencies or technical blocke
    - Export functionality (CSV/PDF)
    - Bulk operations for rewards/challenges
 
+3. **Admin Panel: Global Achievements Management**
+   - Superadmin UI to create/edit global achievements
+   - Badge image upload to `global-achievement-badges` storage bucket
+   - Achievement criteria editor (JSONB)
+
 ### Long Term
 1. **SmartCoach Re-enablement**
    - Implement feature flag in database
@@ -120,14 +156,15 @@ Development is proceeding smoothly. No external dependencies or technical blocke
    - Enable UI components
 
 2. **Performance Optimization**
-   - Optimize Supabase queries
-   - Implement caching strategies
+   - Optimize Supabase queries (especially `useHomeStats` hook)
+   - Implement caching strategies for branding data
    - Reduce bundle sizes
 
 3. **Testing & QA**
    - Unit tests for critical functions
    - Integration tests for BLE flow
    - E2E tests for workout flow
+   - Visual regression tests for design system
 
 ---
 
@@ -186,6 +223,13 @@ Development is proceeding smoothly. No external dependencies or technical blocke
 - Use React hooks for component state
 - Always check `session` before making Supabase queries
 - Use `useGymStore` for gym-related state
+- **DESIGN SYSTEM:** All new screens MUST follow the established design system:
+  - Use `useBranding()` for dynamic colors (never hardcode `#00E5FF`)
+  - Use `BlurView intensity={50} tint="dark"` + `backgroundColor: 'rgba(20, 20, 30, 0.75)'` for cards
+  - Use `hexToRgba(branding.primary, 0.12)` for card borders
+  - Use `ImageBackground` from `activeGym.background_image_url` (with `LinearGradient` fallback)
+  - Use `FadeInDown` from `react-native-reanimated` for entrance animations
+  - See `CHANGELOG.md [2025-03-02]` for full design system reference
 
 ### When Working on Database
 - All migrations must be timestamped: `YYYYMMDDHHMMSS_description.sql`
