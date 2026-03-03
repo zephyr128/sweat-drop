@@ -46,6 +46,11 @@ export const metadata: Metadata = {
   authors: [{ name: 'SweatDrop' }],
   creator: 'SweatDrop',
   publisher: 'SweatDrop',
+  icons: {
+    icon: '/appicon.png',
+    apple: '/appicon.png',
+    shortcut: '/appicon.png',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',

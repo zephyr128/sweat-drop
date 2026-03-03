@@ -80,8 +80,8 @@ export const Pricing = memo(function Pricing() {
   };
 
   return (
-    <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 relative bg-bg-card">
-      <div className="container mx-auto max-w-7xl">
+    <section id="pricing" className="py-24 relative bg-bg-card">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <p className="mono text-[10px] uppercase tracking-[3px] text-accent mb-4" style={{ fontFamily: 'var(--font-mono)' }}>
             {t.pricing.badge}
@@ -119,9 +119,12 @@ export const Pricing = memo(function Pricing() {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Plans Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 items-stretch">
+      {/* Plans Grid - Full width on mobile */}
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="container mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-12 items-stretch">
           {plans.map((plan) => {
             const price = isAnnual ? plan.price.annual : plan.price.monthly;
             
@@ -131,11 +134,11 @@ export const Pricing = memo(function Pricing() {
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="flex"
+                className="flex w-full"
               >
                 <GlassCard
                   variant={plan.highlight ? 'featured' : 'pricing'}
-                  className="p-6 relative"
+                  className="p-6 relative w-full"
                 >
                 {plan.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -196,9 +199,12 @@ export const Pricing = memo(function Pricing() {
               </motion.div>
             );
           })}
+          </div>
         </div>
+      </div>
 
-        {/* Enterprise Callout */}
+      {/* Enterprise Callout */}
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center border-t border-border pt-12">
           <p className="text-text-2 mb-2">
             {t.pricing.enterprise.text}
