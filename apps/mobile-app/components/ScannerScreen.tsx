@@ -43,8 +43,9 @@ interface MachineStatus {
   machine_id: string;
   machine_name: string;
   gym_id: string;
-  machine_type: 'treadmill' | 'bike';
+  machine_type: 'treadmill' | 'bike' | 'elliptical';
   sensor_id: string | null;
+  ble_protocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | null;
   is_busy: boolean;
   current_user_id: string | null;
   is_active: boolean;
@@ -487,6 +488,7 @@ export function ScannerScreen() {
           gymId: machine.gym_id,
           machineType: machine.machine_type,
           sensorId: machine.sensor_id || '',
+          bleProtocol: machine.ble_protocol || '',
           ...(planParams ? {
             planId: planParams.planId,
             subscriptionId: planParams.subscriptionId,

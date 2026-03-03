@@ -64,11 +64,7 @@ export const ProgressWidget: React.FC = () => {
     const unearnedBadges = allBadges
       .filter((b) => !b.is_earned)
       .map((b) => {
-        const progressPercent = b.progress
-          ? b.progress.is_completed
-            ? 100
-            : 50 // Simplified - would need criteria evaluation
-          : 0;
+        const progressPercent = b.progress?.progress_percent ?? 0;
         return { ...b, progressPercent };
       })
       .sort((a, b) => b.progressPercent - a.progressPercent);

@@ -15,6 +15,13 @@ import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+// AGENT NOTE: [2026-03-03] - mobile-coder
+// Redesigned TrophyRoom to Apple Fitness Awards style:
+// - Clean 3-column grid layout
+// - Earned badges at the top, locked badges below
+// - Minimal chrome, focus on the badges themselves
+// - Category color-coding like Apple Fitness rings
+
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return `rgba(0, 229, 255, ${alpha})`;
@@ -25,8 +32,6 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BENTO_GAP = 12;
-const BENTO_PADDING = 16;
 
 interface TrophyRoomProps {
   userId?: string;
@@ -39,7 +44,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const { badges: earnedBadges, loading: badgesLoading } = useUserBadges(userId);
   const { globalAchievements, gymChallenges, loading: allBadgesLoading } = useAllBadges();
   const { progress: userProgress, isCompleted } = useUserProgress(userId);
-  const [filterType, setFilterType] = useState<'all' | 'global' | 'gym'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'this_gym' | 'earned' | 'locked'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -53,12 +58,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       const earnedBadge = earnedBadges.find(
         (b) => b.badge_type === 'global' && b.badge_name === achievement.name
       );
-      const progress = userProgress.find((p) => p.global_achievement_id === achievement.id);
-
-      let progressPercent = 0;
-      if (progress) {
-        progressPercent = progress.is_completed ? 100 : 50;
-      }
+      const prog = userProgress.find((p) => p.global_achievement_id === achievement.id);
+      // Earned if badge row exists OR progress says criteria is met
+      const earned = !!earnedBadge || prog?.is_completed === true;
 
       badges.push({
         id: achievement.id,
@@ -67,10 +69,10 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         badge_image_url: achievement.badge_image_url,
         badge_type: 'global',
         gym_name: null,
-        is_earned: !!earnedBadge,
+        is_earned: earned,
         earned_at: earnedBadge?.earned_at || null,
-        progress: progressPercent,
-        progress_data: progress?.progress_data,
+        progress: earned ? 100 : (prog?.progress_percent ?? 0),
+        progress_data: prog?.progress_data,
       });
     });
 
@@ -78,12 +80,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       const earnedBadge = earnedBadges.find(
         (b) => b.badge_type === 'gym' && b.badge_name === challenge.name
       );
-      const progress = userProgress.find((p) => p.gym_challenge_id === challenge.id);
-
-      let progressPercent = 0;
-      if (progress) {
-        progressPercent = progress.is_completed ? 100 : 50;
-      }
+      const prog = userProgress.find((p) => p.gym_challenge_id === challenge.id);
+      // Earned if badge row exists OR progress says criteria is met
+      const earned = !!earnedBadge || prog?.is_completed === true;
 
       badges.push({
         id: challenge.id,
@@ -91,13 +90,32 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         description: challenge.description,
         badge_image_url: challenge.badge_image_url,
         badge_type: 'gym',
-        gym_name: null,
-        is_earned: !!earnedBadge,
+        gym_name: challenge.gym_name,
+        is_earned: earned,
         earned_at: earnedBadge?.earned_at || null,
-        progress: progressPercent,
-        progress_data: progress?.progress_data,
+        progress: earned ? 100 : (prog?.progress_percent ?? 0),
+        progress_data: prog?.progress_data,
       });
     });
+
+    // Merge orphan earned gym badges not covered by gymChallenges
+    // (e.g. from deleted challenges or gyms we no longer have membership for)
+    const coveredGymBadgeNames = new Set(gymChallenges.map((c) => c.name));
+    earnedBadges
+      .filter((b) => b.badge_type === 'gym' && !coveredGymBadgeNames.has(b.badge_name))
+      .forEach((b) => {
+        badges.push({
+          id: b.badge_id,
+          name: b.badge_name,
+          description: b.badge_description,
+          badge_image_url: b.badge_image_url,
+          badge_type: 'gym',
+          gym_name: b.gym_name,
+          is_earned: true,
+          earned_at: b.earned_at,
+          progress: 100,
+        });
+      });
 
     return badges;
   }, [globalAchievements, gymChallenges, earnedBadges, userProgress]);
@@ -105,8 +123,12 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const filteredBadges = useMemo(() => {
     let filtered = allBadgesWithProgress;
 
-    if (filterType !== 'all') {
-      filtered = filtered.filter((badge) => badge.badge_type === filterType);
+    if (filterType === 'this_gym') {
+      filtered = filtered.filter((badge) => badge.badge_type === 'gym');
+    } else if (filterType === 'earned') {
+      filtered = filtered.filter((badge) => badge.is_earned);
+    } else if (filterType === 'locked') {
+      filtered = filtered.filter((badge) => !badge.is_earned);
     }
 
     if (searchQuery.trim()) {
@@ -120,8 +142,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     return filtered;
   }, [allBadgesWithProgress, filterType, searchQuery]);
 
-  const globalBadges = filteredBadges.filter((b) => b.badge_type === 'global');
-  const gymBadges = filteredBadges.filter((b) => b.badge_type === 'gym');
+  // Separate earned and locked for display
+  const earnedFiltered = filteredBadges.filter((b) => b.is_earned);
+  const lockedFiltered = filteredBadges.filter((b) => !b.is_earned);
 
   // Stats
   const totalEarned = earnedBadges.length;
@@ -138,6 +161,30 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       setSelectedBadge(earnedBadge);
       setModalVisible(true);
     }
+  };
+
+  const renderBadgeItem = (badge: BadgeWithProgress) => {
+    const earnedBadge = earnedBadges.find(
+      (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type
+    );
+    return (
+      <BadgeCard
+        key={`${badge.badge_type}-${badge.id}`}
+        badge={earnedBadge || {
+          badge_id: badge.id,
+          badge_name: badge.name,
+          badge_description: badge.description,
+          badge_image_url: badge.badge_image_url,
+          earned_at: badge.earned_at || '',
+          badge_type: badge.badge_type,
+          gym_name: badge.gym_name,
+        }}
+        isLocked={!badge.is_earned}
+        progress={badge.progress}
+        onPress={() => handleBadgePress(badge)}
+        size="medium"
+      />
+    );
   };
 
   if (loading) {
@@ -170,65 +217,71 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         ) : (
           <BackButton />
         )}
-        <Text style={styles.headerTitle}>Trophy Room</Text>
+        <Text style={styles.headerTitle}>Awards</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Stats bar */}
+      {/* Summary pill */}
       <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-        <View style={styles.statsBar}>
-          <View style={[styles.statsPill, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.statsPillBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <Ionicons name="trophy" size={16} color={branding.primary} />
-              <Text style={[styles.statsPillText, { color: branding.primary }]}>
-                {totalEarned} / {totalAvailable} earned
-              </Text>
-            </BlurView>
+        <View style={styles.summaryBar}>
+          <View style={[styles.summaryPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <Ionicons name="trophy" size={15} color={branding.primary} />
+            <Text style={[styles.summaryText, { color: branding.primary }]}>
+              {totalEarned}
+            </Text>
+            <Text style={styles.summaryLabel}>
+              of {totalAvailable} earned
+            </Text>
           </View>
         </View>
       </Animated.View>
 
-      {/* Search & Filter */}
-      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-        <View style={styles.filterContainer}>
-          <View style={[styles.searchContainer, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.searchBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search badges..."
-                placeholderTextColor={theme.colors.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                  <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </BlurView>
-          </View>
-
-          <View style={styles.filterButtons}>
-            {(['all', 'global', 'gym'] as const).map((type) => (
+      {/* Filter tabs */}
+      <Animated.View entering={FadeInDown.delay(150).duration(400)}>
+        <View style={styles.filterRow}>
+          {(['all', 'this_gym', 'earned', 'locked'] as const).map((type) => {
+            const isActive = filterType === type;
+            const labelMap = { all: 'All', this_gym: 'This Gym', earned: 'Earned', locked: 'Locked' };
+            return (
               <TouchableOpacity
                 key={type}
                 style={[
-                  styles.filterButton,
-                  filterType === type && { backgroundColor: branding.primary },
+                  styles.filterTab,
+                  isActive && { backgroundColor: branding.primary },
                 ]}
                 onPress={() => setFilterType(type)}
               >
                 <Text
                   style={[
-                    styles.filterButtonText,
-                    filterType === type && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
+                    styles.filterTabText,
+                    isActive && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
                   ]}
                 >
-                  {type === 'all' ? 'All' : type === 'global' ? 'Global' : 'Gym'}
+                  {labelMap[type]}
                 </Text>
               </TouchableOpacity>
-            ))}
+            );
+          })}
+        </View>
+      </Animated.View>
+
+      {/* Search */}
+      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <View style={styles.searchWrapper}>
+          <View style={[styles.searchBox, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
+            <Ionicons name="search" size={16} color="rgba(255,255,255,0.3)" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search badges..."
+              placeholderTextColor="rgba(255,255,255,0.25)"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Animated.View>
@@ -240,89 +293,47 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       >
         {filteredBadges.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
+            <Ionicons name="trophy-outline" size={56} color="rgba(255,255,255,0.15)" />
             <Text style={styles.emptyTitle}>No badges found</Text>
             <Text style={styles.emptyText}>
-              {searchQuery ? 'Try adjusting your search' : 'Complete challenges to earn badges!'}
+              {searchQuery ? 'Try adjusting your search' : 'Complete workouts to earn badges!'}
             </Text>
           </View>
         ) : (
           <>
-            {/* Global Achievements */}
-            {globalBadges.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+            {/* Earned section */}
+            {earnedFiltered.length > 0 && (
+              <Animated.View entering={FadeInDown.delay(250).duration(400)}>
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Ionicons name="globe" size={20} color={branding.primary} />
-                    <Text style={[styles.sectionTitle, { color: branding.primary }]}>
-                      Global Achievements
-                    </Text>
-                    <Text style={styles.sectionCount}>{globalBadges.length}</Text>
+                    <Text style={styles.sectionTitle}>Earned</Text>
+                    <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                      <Text style={[styles.sectionCountText, { color: branding.primary }]}>
+                        {earnedFiltered.length}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.bentoGrid}>
-                    {globalBadges.map((badge) => {
-                      const earnedBadge = earnedBadges.find(
-                        (b) => b.badge_name === badge.name && b.badge_type === 'global'
-                      );
-                      return (
-                        <BadgeCard
-                          key={`global-${badge.id}`}
-                          badge={earnedBadge || {
-                            badge_id: badge.id,
-                            badge_name: badge.name,
-                            badge_description: badge.description,
-                            badge_image_url: badge.badge_image_url,
-                            earned_at: badge.earned_at || '',
-                            badge_type: 'global',
-                            gym_name: null,
-                          }}
-                          isLocked={!badge.is_earned}
-                          progress={badge.progress}
-                          onPress={() => handleBadgePress(badge)}
-                          size="medium"
-                        />
-                      );
-                    })}
+                  <View style={styles.badgeGrid}>
+                    {earnedFiltered.map(renderBadgeItem)}
                   </View>
                 </View>
               </Animated.View>
             )}
 
-            {/* Club Challenges */}
-            {gymBadges.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+            {/* Locked section */}
+            {lockedFiltered.length > 0 && (
+              <Animated.View entering={FadeInDown.delay(350).duration(400)}>
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Ionicons name="business" size={20} color={branding.primary} />
-                    <Text style={[styles.sectionTitle, { color: branding.primary }]}>
-                      Club Challenges
-                    </Text>
-                    <Text style={styles.sectionCount}>{gymBadges.length}</Text>
+                    <Text style={styles.sectionTitle}>In Progress</Text>
+                    <View style={styles.sectionCountPill}>
+                      <Text style={styles.sectionCountText}>
+                        {lockedFiltered.length}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.bentoGrid}>
-                    {gymBadges.map((badge) => {
-                      const earnedBadge = earnedBadges.find(
-                        (b) => b.badge_name === badge.name && b.badge_type === 'gym'
-                      );
-                      return (
-                        <BadgeCard
-                          key={`gym-${badge.id}`}
-                          badge={earnedBadge || {
-                            badge_id: badge.id,
-                            badge_name: badge.name,
-                            badge_description: badge.description,
-                            badge_image_url: badge.badge_image_url,
-                            earned_at: badge.earned_at || '',
-                            badge_type: 'gym',
-                            gym_name: badge.gym_name,
-                          }}
-                          isLocked={!badge.is_earned}
-                          progress={badge.progress}
-                          onPress={() => handleBadgePress(badge)}
-                          size="medium"
-                        />
-                      );
-                    })}
+                  <View style={styles.badgeGrid}>
+                    {lockedFiltered.map(renderBadgeItem)}
                   </View>
                 </View>
               </Animated.View>
@@ -354,12 +365,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  /* Header */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   backButton: {
     width: 40,
@@ -368,143 +380,144 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: theme.typography.fontSize['2xl'],
+    fontSize: 20,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     position: 'absolute',
     left: 0,
     right: 0,
     textAlign: 'center',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
   },
-  /* Stats bar */
-  statsBar: {
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
+  /* Summary pill */
+  summaryBar: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
     alignItems: 'center',
   },
-  statsPill: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  statsPillBlur: {
+  summaryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-  },
-  statsPillText: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
-    letterSpacing: 0.3,
-  },
-  /* Search & Filter */
-  filterContainer: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
-    gap: theme.spacing.md,
-  },
-  searchContainer: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
     borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
-  searchBlur: {
+  summaryText: {
+    fontSize: 14,
+    fontWeight: theme.typography.fontWeight.bold,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontWeight: theme.typography.fontWeight.medium,
+  },
+  /* Filter row */
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 10,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: 'rgba(255, 255, 255, 0.5)',
+    letterSpacing: 0.2,
+  },
+  /* Search */
+  searchWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm + 2,
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
   searchInput: {
     flex: 1,
-    fontSize: theme.typography.fontSize.base,
+    fontSize: 14,
     color: theme.colors.text,
+    padding: 0,
   },
-  clearButton: {
-    padding: theme.spacing.xs,
-  },
-  filterButtons: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  filterButtonText: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.medium,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
-  },
-  /* Content */
+  /* Scroll content */
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: BENTO_PADDING,
-    paddingBottom: theme.spacing['3xl'],
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 64,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: theme.spacing['3xl'],
-    gap: theme.spacing.md,
-  },
-  emptyTitle: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.text,
-    letterSpacing: 0.3,
-  },
-  emptyText: {
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
+  /* Sections */
   section: {
-    marginBottom: theme.spacing['2xl'],
+    marginBottom: 28,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    marginBottom: 12,
+    gap: 8,
   },
   sectionTitle: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 0.3,
-    flex: 1,
+    fontSize: 16,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: 'rgba(255, 255, 255, 0.7)',
+    letterSpacing: 0.2,
   },
-  sectionCount: {
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.typography.fontWeight.medium,
+  sectionCountPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
-  bentoGrid: {
+  sectionCountText: {
+    fontSize: 12,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  /* Badge grid — 3 columns */
+  badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: BENTO_GAP,
-    justifyContent: 'space-between',
+  },
+  /* Empty state */
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.4)',
+    textAlign: 'center',
   },
 });
