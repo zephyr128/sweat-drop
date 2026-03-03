@@ -6,11 +6,10 @@
  *   - apps/mobile-app (Expo/React Native)
  *   - backend/supabase (Edge Functions)
  *
- * IMPORTANT: These types represent the TARGET schema after all MVP migrations
- * are applied. If a column doesn't exist yet in the DB, the corresponding
- * property is marked with a JSDoc comment: @pending-migration
+ * These types represent the schema after all Phase 0–2 migrations are applied.
  *
  * Generated: 2026-03-02
+ * Updated:   2026-03-02 (Phase 1 & 2 complete — all @pending-migration resolved)
  * Reference: docs/plans/mvp_full_audit_and_build_plan.md
  */
 
@@ -21,13 +20,13 @@
 /** Database enum: public.user_role */
 export type UserRole = 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user';
 
-/** @pending-migration — needs CHECK constraint on gyms.subscription_plan */
+/** CHECK constraint on gyms.subscription_plan */
 export type SubscriptionPlan = 'starter' | 'growth' | 'pro' | 'elite';
 
-/** Database CHECK constraint on machines.type — needs expansion */
+/** CHECK constraint on machines.type */
 export type MachineType = 'treadmill' | 'bike' | 'elliptical' | 'weight';
 
-/** @pending-migration — needs CHECK constraint on machines.ble_protocol */
+/** CHECK constraint on machines.ble_protocol */
 export type BLEProtocol = 'ftms' | 'fitshow' | 'magene' | 'ksfit';
 
 /** Database enum or CHECK on drops_transactions.transaction_type */
@@ -40,16 +39,21 @@ export type TransactionType =
   | 'manual'
   | 'expiry';
 
-/** Status for reward claims / redemptions */
-export type ClaimStatus = 'pending' | 'confirmed' | 'cancelled' | 'expired';
+/** Status for reward claims / redemptions.
+ *  'claimed' = user claimed, awaiting staff verification
+ *  'redeemed' = staff verified / handed over
+ *  'cancelled' = claim cancelled by user or system
+ *  'expired' = claim expired without redemption */
+export type ClaimStatus = 'claimed' | 'redeemed' | 'cancelled' | 'expired';
 
 /** Challenge category */
 export type ChallengeType = 'individual' | 'group' | 'streak';
 
-/** What metric the challenge tracks */
-export type ScoringModel = 'total_drops' | 'distance_km' | 'days_visited';
+/** What metric the challenge tracks.
+ *  CHECK constraint on gym_challenges.scoring_model */
+export type ScoringModel = 'total_drops' | 'distance_km' | 'days_visited' | 'streak_days';
 
-/** Leaderboard time period */
+/** Leaderboard time period (TEXT parameter, replaces old ENUM) */
 export type LeaderboardPeriod = 'weekly' | 'monthly' | 'all_time';
 
 /** Push notification event types */
@@ -58,12 +62,19 @@ export type NotificationTrigger =
   | 'badge_earned'
   | 'rank_overtaken'
   | 'reward_claimed'
+  | 'streak_reminder'
   | 'streak_at_risk'
   | 'weekly_results'
-  | 'inactive_7d'
-  | 'inactive_14d'
-  | 'drops_expiring_30d'
-  | 'drops_expiring_7d';
+  | 'reengagement_7d'
+  | 'reengagement_14d'
+  | 'drops_expiry_30d'
+  | 'drops_expiry_7d';
+
+/** Tier levels for challenges */
+export type TierLevel = 'bronze' | 'silver' | 'gold';
+
+/** Source of calories data */
+export type CaloriesSource = 'device' | 'estimated';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  CORE MODELS
@@ -79,11 +90,10 @@ export interface Gym {
   logo_url: string | null;
   primary_color: string | null;
   background_image_url: string | null;
-  /** @pending-migration — 4-digit alphanumeric join code */
+  /** 4-digit alphanumeric join code — NOT used in MVP (Blocker 3) */
   code: string | null;
-  /** @pending-migration */
   subscription_plan: SubscriptionPlan;
-  /** @pending-migration — replaces is_suspended */
+  /** Replaces is_suspended */
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -103,25 +113,25 @@ export interface Profile {
   // ── Drops & Economy ──
   /** All-time drops earned (never decreases). Used for leaderboard ranking. */
   total_drops: number;
-  /** @pending-migration — Spendable wallet balance (decreases on reward claim). */
+  /** Spendable wallet balance (decreases on reward claim). Backfilled = total_drops. */
   available_drops: number;
-  /** @pending-migration — Resets every Monday 00:00. */
+  /** Resets every Monday 00:00 Belgrade time. */
   weekly_drops: number;
-  /** @pending-migration — Resets 1st of every month. */
+  /** Resets 1st of every month. */
   monthly_drops: number;
 
   // ── Streaks & Activity ──
-  /** @pending-migration — Consecutive days of training. */
+  /** Consecutive days of training. */
   streak_days: number;
-  /** @pending-migration — Date of last completed session. */
+  /** Date of last completed session (YYYY-MM-DD). */
   last_visit_date: string | null;
 
   // ── Push Notifications ──
-  /** @pending-migration — Expo push token for notifications. */
+  /** Expo push token for notifications. */
   expo_push_token: string | null;
 
   // ── Status ──
-  /** @pending-migration — True for first 30 days after signup. */
+  /** True for first 30 days after signup. Cron flips to false. */
   is_newcomer: boolean;
 
   created_at: string;
@@ -140,11 +150,9 @@ export interface Machine {
   is_active: boolean;
 
   // ── BLE ──
-  /** @pending-migration */
   ble_protocol: BLEProtocol | null;
-  /** @pending-migration */
   protocol_verified: boolean;
-  /** @pending-migration — Floor zone or area label */
+  /** Floor zone or area label */
   zone: string | null;
 
   // ── Machine Locking ──
@@ -153,9 +161,7 @@ export interface Machine {
   last_heartbeat: string | null;
 
   // ── Registration ──
-  /** @pending-migration */
   registered_by: string | null;
-  /** @pending-migration */
   registered_at: string | null;
 
   created_at: string;
@@ -174,11 +180,11 @@ export interface Session {
   drops_earned: number;
   is_active: boolean;
 
-  /** @pending-migration — Estimated calories burned */
+  /** Calories burned (device-reported or estimated) */
   calories: number | null;
-  /** @pending-migration — Multiplier applied (streak × challenge × gym boost) */
+  /** Multiplier applied (streak bonus) */
   multiplier: number;
-  /** @pending-migration — Raw BLE data for server-side calculation */
+  /** Raw BLE data for server-side calculation */
   raw_metrics: RawMetrics | null;
 }
 
@@ -193,6 +199,8 @@ export interface RawMetrics {
   max_incline?: number;
   avg_power?: number;
   max_power?: number;
+  /** Whether calories came from device or were estimated */
+  calories_source?: CaloriesSource;
 }
 
 /** public.drops_transactions (maps to spec's "drops_ledger") */
@@ -205,11 +213,10 @@ export interface DropsTransaction {
   description: string | null;
   created_at: string;
 
-  /** @pending-migration */
   gym_id: string | null;
-  /** @pending-migration — Profile.available_drops snapshot after this transaction */
+  /** Profile.available_drops snapshot after this transaction */
   balance_after: number | null;
-  /** @pending-migration — Null = never expires */
+  /** Null = never expires. Session drops expire after 90 days. */
   expires_at: string | null;
 }
 
@@ -231,7 +238,8 @@ export interface GymMembership {
 export interface Reward {
   id: string;
   gym_id: string;
-  name: string;
+  /** Display name — column is `title` in some migrations, `name` in others */
+  title: string;
   description: string | null;
   reward_type: string;
   price_drops: number;
@@ -239,14 +247,12 @@ export interface Reward {
   image_url: string | null;
   is_active: boolean;
 
-  /** @pending-migration */
   sponsor_name: string | null;
-  /** @pending-migration */
   sponsor_logo: string | null;
-  /** @pending-migration */
   available_from: string | null;
-  /** @pending-migration */
   available_until: string | null;
+  /** If true, each user can claim only ONCE ever. */
+  is_one_time: boolean;
 
   created_at: string;
 }
@@ -258,7 +264,9 @@ export interface Redemption {
   reward_id: string;
   gym_id: string;
   drops_spent: number;
+  /** 'claimed' = pending verification, 'redeemed' = confirmed by staff */
   status: ClaimStatus;
+  /** 4-char unique code for staff verification */
   redemption_code: string | null;
   confirmed_by: string | null;
   confirmed_at: string | null;
@@ -288,15 +296,12 @@ export interface GymChallenge {
   streak_days: number | null;
   criteria: Record<string, unknown> | null;
 
-  /** @pending-migration */
+  /** What metric the challenge tracks */
   scoring_model: ScoringModel;
-  /** @pending-migration — Array of {label, target, drops} tier definitions */
+  /** Array of {label, target, drops} tier definitions */
   tiers: ChallengeTier[] | null;
-  /** @pending-migration */
   sponsor_name: string | null;
-  /** @pending-migration */
   sponsor_logo: string | null;
-  /** @pending-migration */
   prize_description: string | null;
 
   created_at: string;
@@ -321,11 +326,11 @@ export interface ChallengeProgress {
   is_completed: boolean;
   completed_at: string | null;
 
-  /** @pending-migration — Generic value for non-drops scoring models */
+  /** Generic value for non-drops scoring models */
   current_value: number;
-  /** @pending-migration — Which tier has been reached */
-  tier_achieved: string | null;
-  /** @pending-migration — Prevent double-awarding */
+  /** Which tier has been reached (bronze/silver/gold) */
+  tier_achieved: TierLevel | null;
+  /** Prevent double-awarding */
   drops_awarded: boolean;
 }
 
@@ -355,13 +360,15 @@ export interface BadgeCondition {
   gym_id?: string;
 }
 
-/** public.user_badges (maps to spec's "member_badges") */
+/** public.user_badges (maps to spec's "member_badges")
+ *  Created by evaluate_badges() function. */
 export interface UserBadge {
   id: string;
   user_id: string;
-  /** Polymorphic — references global_achievements or gym_challenges */
-  badge_source_type: 'achievement' | 'challenge';
-  badge_source_id: string;
+  /** References global_achievements.id */
+  global_achievement_id: string;
+  /** The session that triggered badge earning */
+  session_id: string | null;
   earned_at: string;
 }
 
@@ -369,6 +376,7 @@ export interface UserBadge {
 //  LEADERBOARD
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+/** Return type from get_local_leaderboard() and get_global_leaderboard() */
 export interface LeaderboardEntry {
   user_id: string;
   username: string | null;
@@ -376,6 +384,7 @@ export interface LeaderboardEntry {
   drops: number;
   rank: number;
   is_newcomer: boolean;
+  streak_days: number;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -426,18 +435,29 @@ export interface ClaimRewardResult {
   error_message: string | null;
 }
 
-/** Response from supabase.rpc('join_gym_by_code', { p_code }) */
-export interface JoinGymResult {
-  success: boolean;
-  gym: Pick<Gym, 'id' | 'name' | 'city' | 'logo_url'> | null;
-  error_message: string | null;
-}
+// NOTE: join_gym_by_code RPC removed from MVP scope (Blocker 3).
+// Gym joining happens automatically on first machine QR scan.
 
 /** Parameters for get_local_leaderboard RPC */
-export interface LeaderboardParams {
+export interface LocalLeaderboardParams {
   p_gym_id: string;
-  p_period: LeaderboardPeriod;
+  p_period?: LeaderboardPeriod;
   p_limit?: number;
+  p_newcomer_only?: boolean;
+}
+
+/** Parameters for get_global_leaderboard RPC */
+export interface GlobalLeaderboardParams {
+  p_period?: LeaderboardPeriod;
+  p_limit?: number;
+  p_newcomer_only?: boolean;
+}
+
+/** Parameters for claim_reward RPC */
+export interface ClaimRewardParams {
+  p_user_id: string;
+  p_reward_id: string;
+  p_gym_id: string;
 }
 
 /** Parameters for get_gym_analytics RPC */
@@ -449,6 +469,20 @@ export interface GymAnalyticsParams {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  PUSH NOTIFICATION PAYLOADS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Input to the send-push Edge Function */
+export interface SendPushRequest {
+  tokens: string[];
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+}
+
+/** Output from the send-push Edge Function */
+export interface SendPushResponse {
+  sent: number;
+  result: unknown;
+}
 
 export interface PushNotificationPayload {
   trigger: NotificationTrigger;
@@ -480,7 +514,28 @@ export interface RankOvertakenNotification extends PushNotificationPayload {
   data: {
     new_rank: string;
     gym_id: string;
-    period: LeaderboardPeriod;
+    period: string;
+  };
+}
+
+export interface StreakReminderNotification extends PushNotificationPayload {
+  trigger: 'streak_reminder';
+  data: {
+    type: 'streak_reminder';
+  };
+}
+
+export interface ReEngagementNotification extends PushNotificationPayload {
+  trigger: 'reengagement_7d' | 'reengagement_14d';
+  data: {
+    type: 'reengagement_7d' | 'reengagement_14d';
+  };
+}
+
+export interface DropsExpiryNotification extends PushNotificationPayload {
+  trigger: 'drops_expiry_30d' | 'drops_expiry_7d';
+  data: {
+    type: 'drops_expiry_30d' | 'drops_expiry_7d';
   };
 }
 
@@ -488,7 +543,33 @@ export interface RankOvertakenNotification extends PushNotificationPayload {
 //  BLE PROTOCOL INTERFACES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/** Abstract BLE data coming from any protocol */
+/** Normalized workout metrics from any BLE protocol.
+ *  INTERFACE CONTRACT: All BLE handlers output this shape. */
+export interface WorkoutMetrics {
+  /** Instantaneous speed in km/h */
+  speed?: number;
+  /** RPM */
+  cadence?: number;
+  /** Cumulative distance in km */
+  distance?: number;
+  /** Incline percentage */
+  incline?: number;
+  /** Cumulative calories */
+  calories?: number;
+  /** Whether calories came from device or were estimated */
+  caloriesSource: CaloriesSource;
+}
+
+/** Abstract BLE protocol handler.
+ *  INTERFACE CONTRACT: All BLE handlers implement this. */
+export interface BLEProtocolHandler {
+  connect(deviceId: string): Promise<void>;
+  startMonitoring(callback: (metrics: WorkoutMetrics) => void): void;
+  stopMonitoring(): void;
+  disconnect(): void;
+}
+
+/** Full BLE data point (superset — for internal use / raw logging) */
 export interface BLEWorkoutData {
   /** Instantaneous speed in km/h */
   speed: number | null;
@@ -527,3 +608,27 @@ export const FTMS_CHARACTERISTICS = {
   CROSS_TRAINER_DATA: '00002ace-0000-1000-8000-00805f9b34fb',
   TRAINING_STATUS: '00002ad3-0000-1000-8000-00805f9b34fb',
 } as const;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  FEATURE GATE HELPER (Q7)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Feature IDs for future gating */
+export type FeatureId =
+  | 'challenges'
+  | 'leaderboard'
+  | 'rewards_store'
+  | 'push_notifications'
+  | 'machine_registration'
+  | 'analytics_advanced'
+  | 'custom_branding';
+
+/**
+ * Check if a gym has access to a feature based on subscription plan.
+ * For MVP: always returns true (all pilot gyms get full PRO features).
+ * Post-MVP: implement actual plan-based gating here.
+ */
+export function checkFeatureAccess(_gym: Pick<Gym, 'subscription_plan'>, _feature: FeatureId): boolean {
+  // Q7: Always true for MVP. Easy to wire up post-MVP.
+  return true;
+}

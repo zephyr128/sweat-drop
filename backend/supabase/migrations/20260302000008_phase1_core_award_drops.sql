@@ -314,11 +314,27 @@ BEGIN
       AND NOT v_progress.is_completed
       AND v_new_value >= v_challenge.target_drops
     THEN
+      -- Mark challenge as completed FIRST
       UPDATE public.challenge_progress
       SET is_completed = true,
           completed_at = NOW()
       WHERE challenge_id = v_challenge.id
         AND user_id = p_user_id;
+
+      -- CRITICAL: Create badge entry in user_badges when challenge is completed
+      -- This must happen regardless of whether drops are awarded
+      -- Trophy Room requires this badge entry to display the completed challenge
+      IF NOT EXISTS (
+        SELECT 1 FROM public.user_badges
+        WHERE user_id = p_user_id
+          AND gym_challenge_id = v_challenge.id
+      ) THEN
+        INSERT INTO public.user_badges
+          (user_id, gym_challenge_id, earned_at)
+        VALUES
+          (p_user_id, v_challenge.id, NOW())
+        ON CONFLICT (user_id, global_achievement_id, gym_challenge_id) DO NOTHING;
+      END IF;
 
       -- Award challenge reward drops (if not already awarded)
       IF NOT v_progress.drops_awarded AND v_challenge.reward_drops > 0 THEN
@@ -410,6 +426,20 @@ BEGIN
         UPDATE public.challenge_progress
         SET drops_awarded = true, is_completed = true, completed_at = NOW()
         WHERE challenge_id = v_challenge.id AND user_id = p_user_id;
+
+        -- CRITICAL: Create badge entry in user_badges when challenge is fully completed (gold tier)
+        -- This is required for Trophy Room to display the badge
+        IF NOT EXISTS (
+          SELECT 1 FROM public.user_badges
+          WHERE user_id = p_user_id
+            AND gym_challenge_id = v_challenge.id
+        ) THEN
+          INSERT INTO public.user_badges
+            (user_id, gym_challenge_id, earned_at)
+          VALUES
+            (p_user_id, v_challenge.id, NOW())
+          ON CONFLICT (user_id, global_achievement_id, gym_challenge_id) DO NOTHING;
+        END IF;
       END IF;
     END IF;
 
