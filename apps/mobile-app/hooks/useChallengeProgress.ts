@@ -166,13 +166,13 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
   }, [session?.user?.id, gymId, machineType]);
 
   // Note: updateProgress is no longer needed as challenge progress is automatically
-  // updated via add_drops() function when drops are earned during workout.
+  // updated via award_drops() function when drops are earned during workout.
   // This function is kept for backward compatibility but does nothing.
   const updateProgress = useCallback(
     async (minutes: number) => {
-      // Challenge progress is now automatically updated via add_drops() function
+      // Challenge progress is now automatically updated via award_drops() function
       // when drops are earned. This function is deprecated but kept for compatibility.
-      console.log('[useChallengeProgress] updateProgress called but challenge progress is now automatic via add_drops()');
+      console.log('[useChallengeProgress] updateProgress called but challenge progress is now automatic via award_drops()');
       
       // Reload challenges to get updated progress
       await loadChallenges();

@@ -18,6 +18,7 @@ export interface GlobalAchievement {
 export interface GymChallenge {
   id: string;
   gym_id: string;
+  gym_name: string | null;
   name: string;
   description: string | null;
   badge_image_url: string | null;
@@ -80,15 +81,12 @@ export function useAllBadges() {
     }
 
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
+      // Only fetch challenges for the active (home) gym
+      // No date filter — show all challenges including expired for trophy context
       const { data, error: fetchError } = await supabase
         .from('gym_challenges')
-        .select('*')
+        .select('*, gyms:gym_id(name)')
         .eq('gym_id', activeGymId)
-        .eq('is_active', true)
-        .lte('start_date', today)
-        .gte('end_date', today)
         .order('created_at', { ascending: false });
 
       if (fetchError) {
@@ -97,7 +95,22 @@ export function useAllBadges() {
         return;
       }
 
-      if (isMountedRef.current) setGymChallenges(data || []);
+      // Map gym name from the joined gyms relation
+      const challenges: GymChallenge[] = (data || []).map((c: any) => ({
+        id: c.id,
+        gym_id: c.gym_id,
+        gym_name: c.gyms?.name || null,
+        name: c.name,
+        description: c.description,
+        badge_image_url: c.badge_image_url,
+        criteria: c.criteria,
+        reward_drops: c.reward_drops,
+        is_active: c.is_active,
+        start_date: c.start_date,
+        end_date: c.end_date,
+      }));
+
+      if (isMountedRef.current) setGymChallenges(challenges);
     } catch (err: any) {
       console.error('Error in loadGymChallenges:', err);
       if (isMountedRef.current) setError(err.message);
