@@ -84,7 +84,7 @@ export const ProposalForm = memo(function ProposalForm() {
               Proposal Request Received
             </h3>
             <p className="text-text-2 mb-6">
-              We'll be in touch within 24 hours.
+              {"We'll be in touch within 24 hours."}
               <br />
               No sales pressure. Just numbers.
             </p>
@@ -102,7 +102,7 @@ export const ProposalForm = memo(function ProposalForm() {
             YOUR CUSTOMERS ARE ALREADY AT THE GYM.
           </h2>
           <p className="text-lg text-text-2">
-            Request a proposal and we'll send you projected numbers specific to your target audience and budget.
+            {"Request a proposal and we'll send you projected numbers specific to your target audience and budget."}
             <br />
             No commitment. Response within 24 hours.
           </p>
