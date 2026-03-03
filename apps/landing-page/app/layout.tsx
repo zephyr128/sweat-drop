@@ -1,20 +1,29 @@
 import type { Metadata } from 'next';
 import React from 'react';
-import { Space_Grotesk, Inter } from 'next/font/google';
+import { Bebas_Neue, DM_Sans, Space_Mono } from 'next/font/google';
 import './globals.css';
 import { LanguageProvider } from '@/lib/use-language';
+import { ModalProvider } from '@/lib/modal-context';
 
-const spaceGrotesk = Space_Grotesk({
+const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
-  variable: '--font-space-grotesk',
+  variable: '--font-display',
+  display: 'swap',
+  weight: ['400'],
+});
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-body',
   display: 'swap',
   weight: ['400', '500', '600', '700'],
 });
 
-const inter = Inter({
+const spaceMono = Space_Mono({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-mono',
   display: 'swap',
+  weight: ['400', '700'],
 });
 
 export const metadata: Metadata = {
@@ -85,9 +94,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable}`} suppressHydrationWarning>
-      <body className="bg-background text-white antialiased">
-        <LanguageProvider>{children}</LanguageProvider>
+    <html lang="en" className={`${bebasNeue.variable} ${dmSans.variable} ${spaceMono.variable}`} suppressHydrationWarning>
+      <body className="bg-background text-text antialiased">
+        <LanguageProvider>
+          <ModalProvider>{children}</ModalProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

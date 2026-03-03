@@ -8,25 +8,70 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // High-end Dark Mode Color Palette
-        primary: {
-          DEFAULT: '#00E5FF', // Cyan (legacy)
-          dark: '#00B8CC',
-          light: '#33EBFF',
+        // Apple-style Dark Design System
+        bg: {
+          DEFAULT: '#000000', // Pure black (Apple style)
+          elevated: '#0a0a0a',
+          card: 'rgba(255, 255, 255, 0.04)',
+          'card-hover': 'rgba(255, 255, 255, 0.07)',
+          'card-active': 'rgba(0, 229, 204, 0.06)',
         },
-        // Volt Green for Cardio (High-energy, vibrant)
+        border: {
+          subtle: 'rgba(255, 255, 255, 0.06)',
+          medium: 'rgba(255, 255, 255, 0.10)',
+          accent: 'rgba(0, 229, 204, 0.20)',
+          strong: 'rgba(255, 255, 255, 0.15)',
+          DEFAULT: 'rgba(255, 255, 255, 0.06)',
+          2: 'rgba(255, 255, 255, 0.10)',
+        },
+        accent: {
+          DEFAULT: '#00E5FF',
+          dim: 'rgba(0,229,204,0.08)',
+          glow: 'rgba(0,229,204,0.15)',
+        },
+        lime: {
+          DEFAULT: '#C8FF00',
+          dim: 'rgba(200,255,0,0.08)',
+        },
+        orange: {
+          DEFAULT: '#FF5500',
+        },
+        text: {
+          DEFAULT: '#F5F5F7', // Apple's primary text white
+          2: '#86868B', // Apple's secondary grey
+          3: '#515154', // Apple's tertiary grey
+        },
+        // Legacy aliases for compatibility
+        primary: {
+          DEFAULT: '#00E5FF',
+          dark: '#00E5FF',
+          light: '#00E5FF',
+        },
+        drops: {
+          DEFAULT: '#00E5FF',
+          dark: '#A0CC00',
+          light: '#D9FF33',
+        },
+        urgency: {
+          DEFAULT: '#FF5500',
+          dark: '#CC4400',
+          light: '#FF7733',
+        },
+        background: {
+          DEFAULT: '#070709',
+          dark: '#000000',
+        },
+        textSecondary: '#8889A0',
+        // Legacy colors for compatibility (will phase out)
         voltGreen: {
-          DEFAULT: '#CEFF00', // Pure Volt Green
+          DEFAULT: '#CEFF00',
           dark: '#A8CC00',
           light: '#E5FF33',
-          glow: '#CEFF00',
         },
-        // Deep Blue for AI (Intelligent, futuristic)
         deepBlue: {
-          DEFAULT: '#0066FF', // Deep Blue
+          DEFAULT: '#0066FF',
           dark: '#004DB8',
           light: '#3385FF',
-          glow: '#0066FF',
         },
         secondary: {
           DEFAULT: '#FF9100',
@@ -34,18 +79,8 @@ module.exports = {
           light: '#FFA733',
         },
         error: '#FF5252',
-        background: {
-          DEFAULT: '#000000',
-          dark: '#000000',
-        },
-        anthracite: {
-          DEFAULT: '#1A1A1A', // Anthracite gray
-          dark: '#0F0F0F',
-          light: '#2A2A2A',
-        },
         surface: '#0A0A0A',
         surfaceElevated: '#1A1A1A',
-        text: '#FFFFFF',
         textSecondary: '#B0B0B0',
         textTertiary: '#808080',
         purple: {
@@ -64,8 +99,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-space-grotesk)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-dm-sans)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-bebas-neue)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-space-mono)', 'monospace'],
       },
       animation: {
         'drop-glow': 'dropGlow 2s ease-in-out infinite',

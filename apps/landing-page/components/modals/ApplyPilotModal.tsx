@@ -11,6 +11,7 @@ import { useLanguage } from '@/lib/use-language';
 interface ApplyPilotModalProps {
   isOpen: boolean;
   onClose: () => void;
+  selectedPlan?: string | null;
 }
 
 interface FormData {
@@ -33,7 +34,7 @@ interface FormErrors {
   whyJoin?: string;
 }
 
-export const ApplyPilotModal = memo(function ApplyPilotModal({ isOpen, onClose }: ApplyPilotModalProps) {
+export const ApplyPilotModal = memo(function ApplyPilotModal({ isOpen, onClose, selectedPlan }: ApplyPilotModalProps) {
   const { t } = useLanguage();
   const [formData, setFormData] = useState<FormData>({
     fullName: '',
@@ -103,7 +104,10 @@ export const ApplyPilotModal = memo(function ApplyPilotModal({ isOpen, onClose }
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          selectedPlan: selectedPlan || null,
+        }),
       });
 
       if (response.ok) {
@@ -167,7 +171,7 @@ export const ApplyPilotModal = memo(function ApplyPilotModal({ isOpen, onClose }
             </svg>
           </div>
           <p className="text-xl text-white/90 mb-6">{t.applyPilot.success}</p>
-          <Button onClick={handleClose} variant="primary">
+          <Button onClick={handleClose} variant="primary" className="w-full">
             {t.applyPilot.close}
           </Button>
         </div>

@@ -145,7 +145,7 @@ export const RequestDemoModal = memo(function RequestDemoModal({ isOpen, onClose
             </svg>
           </div>
           <p className="text-xl text-white/90 mb-6">{t.requestDemo.success}</p>
-          <Button onClick={handleClose} variant="primary">
+          <Button onClick={handleClose} variant="primary" className="w-full">
             {t.requestDemo.close}
           </Button>
         </div>

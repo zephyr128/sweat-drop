@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       cardioMachines: sanitizeString(body.cardioMachines),
       multipleLocations: sanitizeString(body.multipleLocations),
       whyJoin: sanitizeString(body.whyJoin),
+      selectedPlan: body.selectedPlan ? sanitizeString(body.selectedPlan) : null,
     };
 
     // Send email

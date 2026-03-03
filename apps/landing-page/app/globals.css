@@ -3,14 +3,241 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+
   body {
-    @apply bg-background text-white;
+    background-color: #000000;
+    color: #F5F5F7;
+    font-family: var(--font-body), system-ui, sans-serif;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+    position: relative;
+  }
+
+  /* Subtle noise texture overlay (Apple style) */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  h1, h2, h3, h4, h5, h6, .display {
+    font-family: var(--font-display), system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: #F5F5F7;
+  }
+
+  /* Hero headlines — bigger and bolder */
+  .hero-headline {
+    font-family: var(--font-display), sans-serif;
+    font-size: clamp(64px, 10vw, 120px);
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+    color: #F5F5F7;
+  }
+
+  /* Section headlines */
+  .section-headline {
+    font-family: var(--font-display), sans-serif;
+    font-size: clamp(40px, 6vw, 72px);
+    line-height: 1.0;
+    letter-spacing: 0.02em;
+    color: #F5F5F7;
+  }
+
+  /* Card titles */
+  .card-title {
+    font-family: var(--font-display), sans-serif;
+    font-size: 24px;
+    letter-spacing: 1px;
+    color: #F5F5F7;
+  }
+
+  /* Body text — Apple uses slightly larger body */
+  .body-large {
+    font-family: var(--font-body), sans-serif;
+    font-size: 19px;
+    line-height: 1.6;
+    color: #86868B;
+    font-weight: 400;
+  }
+
+  .body-default {
+    font-family: var(--font-body), sans-serif;
+    font-size: 17px;
+    line-height: 1.6;
+    color: #86868B;
+  }
+
+  /* Labels */
+  .label {
+    font-family: var(--font-mono), monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #515154;
+  }
+
+  .label-accent {
+    font-family: var(--font-mono), monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #00E5CC;
+  }
+
+  code, pre, .mono {
+    font-family: var(--font-mono), monospace;
   }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .glow-teal {
+    box-shadow: 0 0 40px rgba(0, 229, 204, 0.08);
+  }
+
+  /* Glassmorphism card system */
+  .glass-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 0.5rem; /* rounded-lg */
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0; /* Prevent flex items from overflowing */
+  }
+
+  /* Prevent buttons inside cards from changing width on hover */
+  .glass-card button.w-full:hover {
+    transform: none !important; /* Prevent scale transforms on full-width buttons inside cards */
+  }
+
+  .glass-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.15);
+    border-radius: 0.5rem; /* rounded-lg - maintain on hover */
+    /* Removed translateY to maintain height */
+  }
+
+  .glass-card-teal {
+    background: rgba(0, 229, 204, 0.10);
+    border: 1px solid rgba(0, 229, 204, 0.20);
+    border-radius: 0.5rem; /* rounded-lg */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glass-card-teal:hover {
+    background: rgba(0, 229, 204, 0.14);
+    border-color: rgba(0, 229, 204, 0.30);
+    border-radius: 0.5rem; /* rounded-lg - maintain on hover */
+  }
+
+  .glass-card-orange {
+    background: rgba(255, 85, 0, 0.10);
+    border: 1px solid rgba(255, 85, 0, 0.20);
+    border-radius: 0.5rem; /* rounded-lg */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glass-card-orange:hover {
+    background: rgba(255, 85, 0, 0.14);
+    border-color: rgba(255, 85, 0, 0.30);
+    border-radius: 0.5rem; /* rounded-lg - maintain on hover */
+  }
+
+  .glass-card-lime {
+    background: rgba(200, 255, 0, 0.08);
+    border: 1px solid rgba(200, 255, 0, 0.18);
+    border-radius: 0.5rem; /* rounded-lg */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glass-card-lime:hover {
+    background: rgba(200, 255, 0, 0.12);
+    border-color: rgba(200, 255, 0, 0.25);
+    border-radius: 0.5rem; /* rounded-lg - maintain on hover */
+  }
+
+  .glass-card-pricing {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 0.5rem; /* rounded-lg */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glass-card-pricing:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.15);
+    border-radius: 0.5rem; /* rounded-lg - maintain on hover */
+  }
+
+  .glass-card-featured {
+    background: rgba(0, 229, 204, 0.12);
+    border: 1px solid rgba(0, 229, 204, 0.30);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 0.5rem; /* rounded-lg */
+    box-shadow: 
+      0 0 0 1px rgba(0, 229, 204, 0.15),
+      0 20px 40px rgba(0, 0, 0, 0.4),
+      0 0 80px rgba(0, 229, 204, 0.06);
+    display: flex;
+    flex-direction: column;
+    /* Removed scale transform to maintain same height as other cards */
+  }
+
+  .glass-card-featured:hover {
+    background: rgba(0, 229, 204, 0.16);
+    border-color: rgba(0, 229, 204, 0.35);
+    border-radius: 0.5rem; /* rounded-lg - maintain on hover */
+  }
+
+  /* Legacy card class for compatibility */
+  .card {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 20px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* Section fade dividers */
+  .section-fade-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06) 20%,
+      rgba(255, 255, 255, 0.06) 80%,
+      transparent
+    );
   }
 }

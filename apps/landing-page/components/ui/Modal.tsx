@@ -45,19 +45,22 @@ export const Modal = memo(function Modal({ isOpen, onClose, title, children, cla
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[8px]"
             aria-hidden="true"
           />
 
           {/* Modal */}
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none overflow-y-auto">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', duration: 0.3 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              onClick={(e) => e.stopPropagation()}
               className={cn(
-                'relative w-full max-w-2xl bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl pointer-events-auto overflow-hidden my-auto',
+                'relative w-full max-w-[520px] pointer-events-auto overflow-hidden my-auto',
+                'bg-[rgba(15,15,15,0.95)] border border-[rgba(255,255,255,0.10)]',
+                'backdrop-blur-[40px] rounded-3xl shadow-2xl',
                 className
               )}
               role="dialog"
@@ -65,25 +68,25 @@ export const Modal = memo(function Modal({ isOpen, onClose, title, children, cla
               aria-labelledby="modal-title"
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
+              <div className="flex items-center justify-between p-10 pb-6 flex-shrink-0">
                 <h2
                   id="modal-title"
-                  className="text-2xl font-bold text-white"
-                  style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                  className="text-2xl font-semibold text-text"
+                  style={{ fontFamily: 'var(--font-body)' }}
                 >
                   {title}
                 </h2>
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                  className="p-2 rounded-full hover:bg-white/5 transition-colors"
                   aria-label="Close modal"
                 >
-                  <X className="w-5 h-5 text-white/70" />
+                  <X className="w-5 h-5 text-text-2" />
                 </button>
               </div>
 
               {/* Content - Scrollable */}
-              <div className="p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+              <div className="px-10 pb-10 overflow-y-auto max-h-[calc(100vh-200px)]">
                 {children}
               </div>
             </motion.div>
