@@ -1,25 +1,52 @@
 /**
- * BLE Service for Magene S3+ Sensor
- * Cycling Speed and Cadence Service (0x1816)
- * 
+ * BLE Service — Multi-Protocol Support
+ *
  * Supports both iOS (react-native-ble-plx) and Android (react-native-ble-manager)
- * 
- * Magene S3+ Specific:
- * - Service UUID: 0x1816 (Cycling Speed and Cadence)
- * - Characteristic UUID: 0x2A5B (CSC Measurement)
- * - Cadence Mode: Sensor must be in Cadence mode (red light) for proper readings
- * - RPM Formula: RPM = ((CrankRev_now - CrankRev_prev) × 1024 × 60) / (EventTime_now - EventTime_prev)
+ *
+ * Protocols:
+ * - CSC (0x1816): Cycling Speed and Cadence — Magene S3+
+ * - FTMS (0x1826): Fitness Machine Service — Life Fitness, Technogym, Matrix, Horizon
+ *
+ * AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.4)
+ * Added FTMS protocol support alongside existing CSC. Protocol is auto-detected
+ * at connection time based on available services, or forced via setProtocol().
  */
 
 import { Platform } from 'react-native';
 import BleManager from 'react-native-ble-manager';
 import { BleManager as BleManagerIOS, Device, Characteristic } from 'react-native-ble-plx';
 
-// BLE Service UUIDs
-const CSC_SERVICE_UUID = '1816'; // Cycling Speed and Cadence (Cadence mode)
-const CSC_SPEED_SERVICE_UUID = '1818'; // Cycling Speed and Cadence (Speed mode)
-const CSC_MEASUREMENT_CHARACTERISTIC_UUID = '2A5B'; // CSC Measurement
-const CSC_FEATURE_CHARACTERISTIC_UUID = '2A5C'; // CSC Feature
+import {
+  type BLEProtocolType,
+  type FTMSMachineType,
+  type BLEMeasurement,
+  CSC_SERVICE_UUID,
+  CSC_SPEED_SERVICE_UUID,
+  CSC_MEASUREMENT_CHAR_UUID,
+  CSC_FEATURE_CHAR_UUID,
+  FTMS_SERVICE_UUID,
+  FTMS_TREADMILL_DATA_CHAR_UUID,
+  FTMS_INDOOR_BIKE_CHAR_UUID,
+  FTMS_CROSS_TRAINER_CHAR_UUID,
+  ALL_SCAN_SERVICE_UUIDS,
+  createCSCMeasurement,
+  createFTMSMeasurement,
+} from '@/lib/ble-protocol';
+
+import {
+  parseIndoorBikeData,
+  parseTreadmillData,
+  parseCrossTrainerData,
+  estimateStepsPerMinuteFromSpeed,
+} from '@/lib/ble-ftms';
+
+// Re-export types for backward compatibility
+export type { BLEMeasurement } from '@/lib/ble-protocol';
+export { type CSCMeasurement } from '@/lib/ble-protocol';
+
+// Legacy constants (kept for any external references)
+const CSC_MEASUREMENT_CHARACTERISTIC_UUID = CSC_MEASUREMENT_CHAR_UUID;
+const CSC_FEATURE_CHARACTERISTIC_UUID = CSC_FEATURE_CHAR_UUID;
 
 /**
  * Normalize UUID to 4-character format for comparison
@@ -66,20 +93,11 @@ export interface BLEDevice {
   rssi: number | null;
 }
 
-export interface CSCMeasurement {
-  wheelRevolutions: number;
-  lastWheelEventTime: number; // 1/1024 seconds
-  crankRevolutions: number;
-  lastCrankEventTime: number; // 1/1024 seconds
-  rpm: number; // Calculated RPM using Magene S3+ formula
-  timestamp: number;
-}
-
 export class BLEService {
   private device: Device | string | null = null; // Device for iOS, device ID string for Android
   private deviceId: string | null = null; // Always store device ID as string for reconnect
   private isConnected: boolean = false;
-  private measurementCallback: ((measurement: CSCMeasurement) => void) | null = null;
+  private measurementCallback: ((measurement: BLEMeasurement) => void) | null = null;
   private lastWheelRevolutions: number = 0;
   private lastCrankRevolutions: number = 0;
   private lastWheelEventTime: number = 0;
@@ -96,6 +114,13 @@ export class BLEService {
   private onReconnectCallback: (() => Promise<boolean>) | null = null;
   private onStatusCallback: ((status: string) => void) | null = null; // UI status callback
 
+  // ── FTMS Protocol Support ──
+  private activeProtocol: BLEProtocolType = 'csc';       // Currently active protocol
+  private ftmsMachineType: FTMSMachineType = 'bike';     // FTMS machine type hint
+  private forcedProtocol: BLEProtocolType | null = null;  // If set, skip auto-detection
+  private syntheticCrankCounter: number = 0;              // Monotonic counter for FTMS→CSC compat
+  private ftmsNotificationSubscriptions: any[] = [];      // FTMS can have multiple char subscriptions
+
   constructor() {
     if (Platform.OS === 'ios') {
       this.bleManagerIOS = new BleManagerIOS();
@@ -110,7 +135,32 @@ export class BLEService {
   }
 
   /**
-   * Scan for BLE devices with Cycling Speed and Cadence service
+   * Set the expected BLE protocol (forces protocol instead of auto-detection).
+   * Call before connectToDevice() to skip auto-detection.
+   * @param protocol - 'csc' for Magene S3+, 'ftms' for gym equipment
+   * @param machineType - FTMS machine type hint (default: 'bike')
+   */
+  setProtocol(protocol: BLEProtocolType, machineType?: FTMSMachineType): void {
+    this.forcedProtocol = protocol;
+    if (machineType) {
+      this.ftmsMachineType = machineType;
+    }
+    console.log(`[BLE] Protocol forced to: ${protocol}${machineType ? ` (${machineType})` : ''}`);
+  }
+
+  /** Get the currently active protocol */
+  getActiveProtocol(): BLEProtocolType {
+    return this.activeProtocol;
+  }
+
+  /** Set the FTMS machine type hint (affects which characteristic to subscribe to) */
+  setFTMSMachineType(type: FTMSMachineType): void {
+    this.ftmsMachineType = type;
+    console.log(`[BLE] FTMS machine type set to: ${type}`);
+  }
+
+  /**
+   * Scan for BLE devices with any supported service (CSC + FTMS)
    */
   async scanForDevices(timeout: number = 5000): Promise<BLEDevice[]> {
     if (Platform.OS === 'ios') {
@@ -123,8 +173,8 @@ export class BLEService {
         const deviceMap = new Map<string, BLEDevice>(); // Use Map to avoid duplicates
         let scanTimeout: NodeJS.Timeout | null = null;
         
-        // Start device scan for both Cadence (0x1816) and Speed (0x1818) modes
-        this.bleManagerIOS!.startDeviceScan([CSC_SERVICE_UUID, CSC_SPEED_SERVICE_UUID], null, (error, device) => {
+        // Scan for CSC (0x1816, 0x1818) and FTMS (0x1826) services
+        this.bleManagerIOS!.startDeviceScan(ALL_SCAN_SERVICE_UUIDS, null, (error, device) => {
           if (error) {
             console.error('[BLE] Scan error:', error);
             this.bleManagerIOS?.stopDeviceScan();
@@ -158,15 +208,17 @@ export class BLEService {
         const devices: BLEDevice[] = [];
         const deviceMap = new Map<string, BLEDevice>(); // Use Map to avoid duplicates
         
-        // Scan for both Cadence (0x1816) and Speed (0x1818) modes
-        BleManager.scan([CSC_SERVICE_UUID, CSC_SPEED_SERVICE_UUID], timeout / 1000, false).then(() => {
+        // Scan for CSC (0x1816, 0x1818) and FTMS (0x1826) services
+        // @ts-expect-error - react-native-ble-manager types are incomplete, scan accepts service UUIDs array
+        BleManager.scan(ALL_SCAN_SERVICE_UUIDS, timeout / 1000, false).then(() => {
           console.log('[BLE] Scan started');
         }).catch((error) => {
           reject(error);
         });
 
         // Listen for discovered devices
-        const subscription = BleManager.addListener('BleManagerDiscoverPeripheral', (peripheral) => {
+        // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+        const subscription = BleManager.addListener('BleManagerDiscoverPeripheral', (peripheral: any) => {
           if (!deviceMap.has(peripheral.id)) {
             const bleDevice: BLEDevice = {
               id: peripheral.id,
@@ -217,7 +269,7 @@ export class BLEService {
   /**
    * Set measurement callback (for cleanup)
    */
-  setMeasurementCallback(callback: ((measurement: CSCMeasurement) => void) | null): void {
+  setMeasurementCallback(callback: ((measurement: BLEMeasurement) => void) | null): void {
     this.measurementCallback = callback;
   }
 
@@ -258,7 +310,7 @@ export class BLEService {
         const devices = await this.scanForDevices(5000);
         
         if (devices.length === 0) {
-          throw new Error('No CSC devices found. Please ensure sensor is powered on and in Cadence mode (red light).');
+          throw new Error('No BLE devices found. Please ensure sensor/machine is powered on and discoverable.');
         }
         
         // Sort by RSSI (strongest signal first)
@@ -322,31 +374,66 @@ export class BLEService {
           console.log(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
         });
 
-        // Try to find CSC Service (Cadence mode - 0x1816)
-        // Use normalized UUID comparison to handle both 128-bit and 16-bit formats
-        let cscService = services.find(s => {
-          return uuidMatches(s.uuid, CSC_SERVICE_UUID);
-        });
+        // ── PROTOCOL DETECTION ──
+        // Check for FTMS service first (more capable, used by most gym equipment)
+        const ftmsService = services.find(s => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
+        const cscCadenceService = services.find(s => uuidMatches(s.uuid, CSC_SERVICE_UUID));
+        const cscSpeedService = services.find(s => uuidMatches(s.uuid, CSC_SPEED_SERVICE_UUID));
 
-        // If not found, try Speed mode (0x1818)
-        if (!cscService) {
-          console.log('[BLE] CSC Service (0x1816) not found, checking for Speed mode (0x1818)...');
-          cscService = services.find(s => {
-            return uuidMatches(s.uuid, CSC_SPEED_SERVICE_UUID);
-          });
+        // Determine which protocol to use
+        const useFTMS = (this.forcedProtocol === 'ftms') ||
+          (!this.forcedProtocol && ftmsService) ||
+          (this.forcedProtocol !== 'csc' && ftmsService && !cscCadenceService);
 
-          if (cscService) {
-            const errorMsg = 'Senzor je u SPEED modu (zelena lampica). Molimo vas resetujte bateriju da prebacite u CADENCE mod (crvena lampica).';
-            console.error(`[BLE] ${errorMsg}`);
-            this.emitStatus('Wrong mode detected');
-            throw new Error(errorMsg);
+        if (useFTMS && ftmsService) {
+          console.log(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
+          this.emitStatus('Found FTMS service');
+          this.activeProtocol = 'ftms';
+          this.syntheticCrankCounter = 0;
+
+          // FTMS characteristic discovery happens in startMonitoring()
+          // Just validate the service has at least one data characteristic
+          const chars = await ftmsService.characteristics();
+          const hasTreadmill = chars.some(c => uuidMatches(c.uuid, FTMS_TREADMILL_DATA_CHAR_UUID));
+          const hasBike = chars.some(c => uuidMatches(c.uuid, FTMS_INDOOR_BIKE_CHAR_UUID));
+          const hasCrossTrainer = chars.some(c => uuidMatches(c.uuid, FTMS_CROSS_TRAINER_CHAR_UUID));
+
+          console.log(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
+
+          if (!hasTreadmill && !hasBike && !hasCrossTrainer) {
+            throw new Error('FTMS service found but no supported data characteristics (Treadmill/Bike/CrossTrainer).');
           }
+
+          // Auto-detect machine type from available characteristics
+          if (hasBike) this.ftmsMachineType = 'bike';
+          else if (hasTreadmill) this.ftmsMachineType = 'treadmill';
+          else if (hasCrossTrainer) this.ftmsMachineType = 'elliptical';
+
+          this.emitStatus(`Ready (FTMS ${this.ftmsMachineType})`);
+          this.device = device;
+          this.deviceId = device.id;
+          this.isConnected = true;
+          console.log(`[BLE] Connected via FTMS (${this.ftmsMachineType}) (iOS)`);
+          return true;
+        }
+
+        // ── CSC Protocol (existing logic) ──
+        this.activeProtocol = 'csc';
+
+        // Try to find CSC Service (Cadence mode - 0x1816)
+        let cscService = cscCadenceService;
+
+        // If not found, check Speed mode (0x1818) — wrong mode for Magene
+        if (!cscService && cscSpeedService) {
+          const errorMsg = 'Senzor je u SPEED modu (zelena lampica). Molimo vas resetujte bateriju da prebacite u CADENCE mod (crvena lampica).';
+          console.error(`[BLE] ${errorMsg}`);
+          this.emitStatus('Wrong mode detected');
+          throw new Error(errorMsg);
         }
 
         if (!cscService) {
-          // Log all service UUIDs for debugging
           const serviceUuids = services.map(s => s.uuid).join(', ');
-          throw new Error(`CSC Service (0x1816 or 0x1818) not found. Available services: ${serviceUuids}. Ensure sensor is in Cadence mode (red light).`);
+          throw new Error(`No supported BLE service found (CSC 0x1816 or FTMS 0x1826). Available: ${serviceUuids}`);
         }
 
         console.log(`[BLE] Found CSC Service: ${cscService.uuid} (normalized: ${normalizeUUID(cscService.uuid)})`);
@@ -360,35 +447,30 @@ export class BLEService {
         });
 
         // Get CSC Measurement Characteristic
-        // Use normalized UUID comparison to handle both 128-bit and 16-bit formats
         const measurementChar = characteristics.find(c => {
           return uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
         });
 
         if (!measurementChar) {
           const charUuids = characteristics.map(c => c.uuid).join(', ');
-          throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available characteristics: ${charUuids}`);
+          throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available: ${charUuids}`);
         }
 
-        console.log(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid} (normalized: ${normalizeUUID(measurementChar.uuid)})`);
+        console.log(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
         
-        // Check if characteristic supports notifications
-        // For iOS, check properties; for Android, we'll check in startNotification
-        const properties = measurementChar.properties || [];
+        const properties = (measurementChar as any).properties || [];
         const canNotify = properties.includes('notify') || properties.includes('indicate');
-        console.log(`[BLE] Characteristic properties: ${properties.join(', ')}, canNotify: ${canNotify}`);
         
         if (!canNotify) {
           console.warn('[BLE] Characteristic does not support notifications, but will attempt anyway');
         }
         
         this.emitStatus('Ready to monitor');
-
         this.device = device;
-        this.deviceId = device.id; // Store device ID for reconnect
+        this.deviceId = device.id;
         this.isConnected = true;
 
-        console.log('[BLE] Connected to Magene S3+ successfully (iOS)');
+        console.log('[BLE] Connected via CSC (Magene S3+) (iOS)');
         return true;
       } else {
         // Android connection
@@ -401,37 +483,68 @@ export class BLEService {
 
         // Get ALL services and log them
         console.log('[BLE] Android: Getting services...');
+        // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
         const services = await BleManager.getServices(deviceId);
         console.log(`[BLE] Found ${services.length} service(s):`);
-        services.forEach((service, index) => {
+        services.forEach((service: any, index: number) => {
           console.log(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
         });
 
-        // Try to find CSC Service (Cadence mode - 0x1816)
-        // Use normalized UUID comparison to handle both 128-bit and 16-bit formats
-        let cscService = services.find(s => {
-          return uuidMatches(s.uuid, CSC_SERVICE_UUID);
-        });
+        // ── PROTOCOL DETECTION ──
+        const ftmsService = services.find((s: any) => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
+        const cscCadenceService = services.find((s: any) => uuidMatches(s.uuid, CSC_SERVICE_UUID));
+        const cscSpeedService = services.find((s: any) => uuidMatches(s.uuid, CSC_SPEED_SERVICE_UUID));
 
-        // If not found, try Speed mode (0x1818)
-        if (!cscService) {
-          console.log('[BLE] CSC Service (0x1816) not found, checking for Speed mode (0x1818)...');
-          cscService = services.find(s => {
-            return uuidMatches(s.uuid, CSC_SPEED_SERVICE_UUID);
-          });
+        const useFTMS = (this.forcedProtocol === 'ftms') ||
+          (!this.forcedProtocol && ftmsService) ||
+          (this.forcedProtocol !== 'csc' && ftmsService && !cscCadenceService);
 
-          if (cscService) {
-            const errorMsg = 'Senzor je u SPEED modu (zelena lampica). Molimo vas resetujte bateriju da prebacite u CADENCE mod (crvena lampica).';
-            console.error(`[BLE] ${errorMsg}`);
-            this.emitStatus('Wrong mode detected');
-            throw new Error(errorMsg);
+        if (useFTMS && ftmsService) {
+          console.log(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
+          this.emitStatus('Found FTMS service');
+          this.activeProtocol = 'ftms';
+          this.syntheticCrankCounter = 0;
+
+          // Validate FTMS data characteristics
+          // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
+          const chars = await BleManager.getCharacteristics(deviceId, ftmsService.uuid);
+          const hasTreadmill = chars.some((c: any) => uuidMatches(c.uuid, FTMS_TREADMILL_DATA_CHAR_UUID));
+          const hasBike = chars.some((c: any) => uuidMatches(c.uuid, FTMS_INDOOR_BIKE_CHAR_UUID));
+          const hasCrossTrainer = chars.some((c: any) => uuidMatches(c.uuid, FTMS_CROSS_TRAINER_CHAR_UUID));
+
+          console.log(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
+
+          if (!hasTreadmill && !hasBike && !hasCrossTrainer) {
+            throw new Error('FTMS service found but no supported data characteristics.');
           }
+
+          if (hasBike) this.ftmsMachineType = 'bike';
+          else if (hasTreadmill) this.ftmsMachineType = 'treadmill';
+          else if (hasCrossTrainer) this.ftmsMachineType = 'elliptical';
+
+          this.device = deviceId;
+          this.deviceId = deviceId;
+          this.isConnected = true;
+          this.emitStatus(`Ready (FTMS ${this.ftmsMachineType})`);
+          console.log(`[BLE] Connected via FTMS (${this.ftmsMachineType}) (Android)`);
+          return true;
+        }
+
+        // ── CSC Protocol (existing logic) ──
+        this.activeProtocol = 'csc';
+
+        let cscService = cscCadenceService;
+
+        if (!cscService && cscSpeedService) {
+          const errorMsg = 'Senzor je u SPEED modu (zelena lampica). Molimo vas resetujte bateriju da prebacite u CADENCE mod (crvena lampica).';
+          console.error(`[BLE] ${errorMsg}`);
+          this.emitStatus('Wrong mode detected');
+          throw new Error(errorMsg);
         }
 
         if (!cscService) {
-          // Log all service UUIDs for debugging
-          const serviceUuids = services.map(s => s.uuid).join(', ');
-          throw new Error(`CSC Service (0x1816 or 0x1818) not found. Available services: ${serviceUuids}. Ensure sensor is in Cadence mode (red light).`);
+          const serviceUuids = services.map((s: any) => s.uuid).join(', ');
+          throw new Error(`No supported BLE service found (CSC 0x1816 or FTMS 0x1826). Available: ${serviceUuids}`);
         }
 
         console.log(`[BLE] Found CSC Service: ${cscService.uuid}`);
@@ -439,49 +552,42 @@ export class BLEService {
 
         // Get ALL characteristics and log them
         console.log('[BLE] Android: Getting characteristics...');
+        // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
         const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
         console.log(`[BLE] Found ${characteristics.length} characteristic(s) in CSC service:`);
-        characteristics.forEach((char, index) => {
+        characteristics.forEach((char: any, index: number) => {
           console.log(`  [${index + 1}] Characteristic UUID: ${char.uuid}`);
         });
 
-        // Get CSC Measurement Characteristic
-        // Use normalized UUID comparison to handle both 128-bit and 16-bit formats
-        const measurementChar = characteristics.find(c => {
+        const measurementChar = characteristics.find((c: any) => {
           return uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
         });
 
         if (!measurementChar) {
-          const charUuids = characteristics.map(c => c.uuid).join(', ');
-          throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available characteristics: ${charUuids}`);
+          const charUuids = characteristics.map((c: any) => c.uuid).join(', ');
+          throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available: ${charUuids}`);
         }
 
-        console.log(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid} (normalized: ${normalizeUUID(measurementChar.uuid)})`);
+        console.log(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
         
-        // Check if characteristic supports notifications
-        // For Android, check properties array
-        const properties = measurementChar.properties || [];
+        const properties = (measurementChar as any).properties || [];
         const canNotify = properties.includes('notify') || properties.includes('indicate');
-        console.log(`[BLE] Characteristic properties: ${properties.join(', ')}, canNotify: ${canNotify}`);
         
         this.device = deviceId;
-        this.deviceId = deviceId; // Store device ID for reconnect
+        this.deviceId = deviceId;
         this.isConnected = true;
 
         // Start notification immediately after connection if characteristic supports it (Android)
         if (canNotify) {
-          console.log('[BLE] Android: Starting notification immediately after connection...');
           try {
             await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
-            console.log('[BLE] Android: Notification started successfully');
+            console.log('[BLE] Android: CSC notification started successfully');
           } catch (notifError) {
-            console.warn('[BLE] Android: Could not start notification immediately, will start in startMonitoring:', notifError);
+            console.warn('[BLE] Android: Could not start notification immediately:', notifError);
           }
-        } else {
-          console.warn('[BLE] Android: Characteristic does not support notifications, will attempt in startMonitoring');
         }
 
-        console.log('[BLE] Connected to Magene S3+ successfully (Android)');
+        console.log('[BLE] Connected via CSC (Magene S3+) (Android)');
         return true;
       }
     } catch (error: any) {
@@ -494,10 +600,11 @@ export class BLEService {
   }
 
   /**
-   * Start monitoring CSC measurements with heartbeat detection
+   * Start monitoring BLE measurements with heartbeat detection.
+   * Automatically routes to CSC or FTMS based on activeProtocol set during connection.
    */
   async startMonitoring(
-    onMeasurement: (measurement: CSCMeasurement) => void,
+    onMeasurement: (measurement: BLEMeasurement) => void,
     onSleep?: () => void,
     onReconnect?: () => Promise<boolean>
   ): Promise<boolean> {
@@ -514,122 +621,11 @@ export class BLEService {
     this.lastMeasurementTime = Date.now();
 
     try {
-      if (Platform.OS === 'ios') {
-        const device = this.device as Device;
-        
-        // Monitor characteristic
-        // Use actual service UUID from device (normalized) instead of constant
-        const services = await device.services();
-        const cscService = services.find(s => uuidMatches(s.uuid, CSC_SERVICE_UUID));
-        if (!cscService) {
-          throw new Error('CSC Service not found for monitoring');
-        }
-        
-        const characteristics = await cscService.characteristics();
-        const measurementChar = characteristics.find(c => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
-        if (!measurementChar) {
-          throw new Error('CSC Measurement Characteristic not found for monitoring');
-        }
-        
-        // Check if characteristic supports notifications
-        const properties = measurementChar.properties || [];
-        const canNotify = properties.includes('notify') || properties.includes('indicate');
-        console.log(`[BLE] iOS: Characteristic properties: ${properties.join(', ')}, canNotify: ${canNotify}`);
-        
-        if (!canNotify) {
-          console.warn('[BLE] iOS: Characteristic does not support notifications, but will attempt anyway');
-        }
-        
-        console.log('[BLE] iOS: Starting characteristic monitoring...');
-        this.notificationSubscription = device.monitorCharacteristicForService(
-          cscService.uuid,
-          measurementChar.uuid,
-          (error, characteristic) => {
-            if (error) {
-              console.error('[BLE] Measurement error:', error);
-              console.log('[BLE] Device ID preserved for reconnect:', this.deviceId);
-              this.handleConnectionLoss();
-              return;
-            }
-
-            if (characteristic?.value) {
-              // Parse base64 value
-              const base64Value = characteristic.value;
-              const binaryString = atob(base64Value);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-              }
-              
-              // Battery Optimization: No logging in measurement callback
-              this.handleMeasurement(bytes.buffer);
-            }
-          }
-        );
-
-        console.log('[BLE] Monitoring started (iOS)');
+      // Route to protocol-specific monitoring
+      if (this.activeProtocol === 'ftms') {
+        await this.startFTMSMonitoring();
       } else {
-        const deviceId = this.device as string;
-        
-        // Start notifications - MUST wait for connection to complete
-        // Get actual service and characteristic UUIDs from device
-        const services = await BleManager.getServices(deviceId);
-        const cscService = services.find(s => uuidMatches(s.uuid, CSC_SERVICE_UUID));
-        if (!cscService) {
-          throw new Error('CSC Service not found for monitoring');
-        }
-        
-        const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
-        const measurementChar = characteristics.find(c => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
-        if (!measurementChar) {
-          throw new Error('CSC Measurement Characteristic not found for monitoring');
-        }
-        
-        // Check if characteristic supports notifications
-        const properties = measurementChar.properties || [];
-        const canNotify = properties.includes('notify') || properties.includes('indicate');
-        
-        // Battery Optimization: Only log critical errors
-        try {
-          await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
-        } catch (notifError) {
-          console.error('[BLE] Android: Failed to start notification:', notifError);
-          throw notifError;
-        }
-
-        // Listen for notifications
-        this.notificationSubscription = BleManager.addListener(
-          'BleManagerDidUpdateValueForCharacteristic',
-          (data) => {
-            // Check if this is the CSC Measurement characteristic
-            // Use normalized UUID comparison to handle both 128-bit and 16-bit formats
-            const isCSCMeasurement = data.characteristic && uuidMatches(data.characteristic, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
-            
-            if (data.peripheral === deviceId && isCSCMeasurement) {
-              if (data.value) {
-                // Parse base64 value
-                const binaryString = atob(data.value);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i);
-                }
-                
-                // Battery Optimization: No logging in measurement callback
-                this.handleMeasurement(bytes.buffer);
-              }
-            }
-          }
-        );
-
-        // Listen for disconnection
-        BleManager.addListener('BleManagerDisconnectPeripheral', (data) => {
-          if (data.peripheral === deviceId) {
-            console.log('[BLE] Device disconnected');
-            this.handleConnectionLoss();
-          }
-        });
-
-        console.log('[BLE] Monitoring started (Android)');
+        await this.startCSCMonitoring();
       }
 
       // Start heartbeat monitoring (check every 2 seconds)
@@ -639,6 +635,249 @@ export class BLEService {
     } catch (error) {
       console.error('[BLE] Failed to start monitoring:', error);
       return false;
+    }
+  }
+
+  /**
+   * Start CSC protocol monitoring (existing Magene S3+ logic)
+   */
+  private async startCSCMonitoring(): Promise<void> {
+    if (Platform.OS === 'ios') {
+      const device = this.device as Device;
+      
+      const services = await device.services();
+      const cscService = services.find(s => uuidMatches(s.uuid, CSC_SERVICE_UUID));
+      if (!cscService) {
+        throw new Error('CSC Service not found for monitoring');
+      }
+      
+      const characteristics = await cscService.characteristics();
+      const measurementChar = characteristics.find((c: any) => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
+      if (!measurementChar) {
+        throw new Error('CSC Measurement Characteristic not found for monitoring');
+      }
+      
+      const properties = (measurementChar as any).properties || [];
+      const canNotify = properties.includes('notify') || properties.includes('indicate');
+      
+      if (!canNotify) {
+        console.warn('[BLE] iOS: CSC characteristic does not support notifications, attempting anyway');
+      }
+      
+      console.log('[BLE] iOS: Starting CSC monitoring...');
+      this.notificationSubscription = device.monitorCharacteristicForService(
+        cscService.uuid,
+        measurementChar.uuid,
+        (error, characteristic) => {
+          if (error) {
+            console.error('[BLE] CSC measurement error:', error);
+            this.handleConnectionLoss();
+            return;
+          }
+
+            if (characteristic?.value) {
+              const bytes = this.base64ToBytes(characteristic.value);
+              if (bytes) {
+                this.handleCSCMeasurement(bytes.buffer as ArrayBuffer);
+              }
+            }
+          }
+        );
+
+      console.log('[BLE] CSC monitoring started (iOS)');
+    } else {
+      const deviceId = this.device as string;
+      
+      // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
+      const services = await BleManager.getServices(deviceId);
+      const cscService = services.find((s: any) => uuidMatches(s.uuid, CSC_SERVICE_UUID));
+      if (!cscService) {
+        throw new Error('CSC Service not found for monitoring');
+      }
+      
+      // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
+      const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
+      const measurementChar = characteristics.find((c: any) => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
+      if (!measurementChar) {
+        throw new Error('CSC Measurement Characteristic not found for monitoring');
+      }
+      
+      try {
+        await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
+      } catch (notifError) {
+        console.error('[BLE] Android: Failed to start CSC notification:', notifError);
+        throw notifError;
+      }
+
+      // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+      this.notificationSubscription = BleManager.addListener(
+        'BleManagerDidUpdateValueForCharacteristic',
+        (data: any) => {
+          const isCSCMeasurement = data.characteristic && uuidMatches(data.characteristic, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
+          
+          if (data.peripheral === deviceId && isCSCMeasurement) {
+            if (data.value) {
+              const bytes = this.base64ToBytes(data.value);
+              if (bytes) {
+                this.handleCSCMeasurement(bytes.buffer as ArrayBuffer);
+              }
+            }
+          }
+        }
+      );
+
+      // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+      BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
+        if (data.peripheral === deviceId) {
+          console.log('[BLE] Device disconnected');
+          this.handleConnectionLoss();
+        }
+      });
+
+      console.log('[BLE] CSC monitoring started (Android)');
+    }
+  }
+
+  /**
+   * Start FTMS protocol monitoring.
+   * Subscribes to the appropriate data characteristic based on machine type.
+   */
+  private async startFTMSMonitoring(): Promise<void> {
+    // Determine which FTMS characteristic(s) to monitor based on machine type
+    const charUUIDs: string[] = [];
+    switch (this.ftmsMachineType) {
+      case 'treadmill':
+        charUUIDs.push(FTMS_TREADMILL_DATA_CHAR_UUID);
+        break;
+      case 'elliptical':
+        charUUIDs.push(FTMS_CROSS_TRAINER_CHAR_UUID);
+        break;
+      case 'bike':
+      default:
+        charUUIDs.push(FTMS_INDOOR_BIKE_CHAR_UUID);
+        break;
+    }
+
+    console.log(`[BLE] Starting FTMS monitoring for ${this.ftmsMachineType}, chars: ${charUUIDs.join(', ')}`);
+
+    if (Platform.OS === 'ios') {
+      const device = this.device as Device;
+      const services = await device.services();
+      const ftmsService = services.find(s => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
+      if (!ftmsService) {
+        throw new Error('FTMS Service not found for monitoring');
+      }
+
+      const characteristics = await ftmsService.characteristics();
+
+      for (const targetCharUUID of charUUIDs) {
+        const dataChar = characteristics.find(c => uuidMatches(c.uuid, targetCharUUID));
+        if (!dataChar) {
+          console.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
+          continue;
+        }
+
+        console.log(`[BLE] iOS: Subscribing to FTMS characteristic ${dataChar.uuid}`);
+        const sub = device.monitorCharacteristicForService(
+          ftmsService.uuid,
+          dataChar.uuid,
+          (error, characteristic) => {
+            if (error) {
+              console.error('[BLE] FTMS measurement error:', error);
+              this.handleConnectionLoss();
+              return;
+            }
+
+            if (characteristic?.value) {
+              const bytes = this.base64ToBytes(characteristic.value);
+              if (bytes) {
+                this.handleFTMSMeasurement(bytes.buffer as ArrayBuffer, targetCharUUID);
+              }
+            }
+          }
+        );
+        this.ftmsNotificationSubscriptions.push(sub);
+      }
+
+      // Use the first subscription as the main one (for stopMonitoring compat)
+      if (this.ftmsNotificationSubscriptions.length > 0) {
+        this.notificationSubscription = this.ftmsNotificationSubscriptions[0];
+      }
+
+      console.log('[BLE] FTMS monitoring started (iOS)');
+    } else {
+      const deviceId = this.device as string;
+      // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
+      const services = await BleManager.getServices(deviceId);
+      const ftmsService = services.find((s: any) => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
+      if (!ftmsService) {
+        throw new Error('FTMS Service not found for monitoring');
+      }
+
+      // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
+      const characteristics = await BleManager.getCharacteristics(deviceId, ftmsService.uuid);
+
+      for (const targetCharUUID of charUUIDs) {
+        const dataChar = characteristics.find((c: any) => uuidMatches(c.uuid, targetCharUUID));
+        if (!dataChar) {
+          console.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
+          continue;
+        }
+
+        try {
+          await BleManager.startNotification(deviceId, ftmsService.uuid, dataChar.uuid);
+          console.log(`[BLE] Android: FTMS notification started for ${dataChar.uuid}`);
+        } catch (notifError) {
+          console.error(`[BLE] Android: Failed to start FTMS notification for ${targetCharUUID}:`, notifError);
+        }
+      }
+
+      // Listen for FTMS data notifications
+      // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+      this.notificationSubscription = BleManager.addListener(
+        'BleManagerDidUpdateValueForCharacteristic',
+        (data: any) => {
+          if (data.peripheral !== deviceId) return;
+          if (!data.value || !data.characteristic) return;
+
+          // Determine which FTMS characteristic this data came from
+          for (const targetCharUUID of charUUIDs) {
+            if (uuidMatches(data.characteristic, targetCharUUID)) {
+              const bytes = this.base64ToBytes(data.value);
+              if (bytes) {
+                this.handleFTMSMeasurement(bytes.buffer as ArrayBuffer, targetCharUUID);
+              }
+              break;
+            }
+          }
+        }
+      );
+
+      // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+      BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
+        if (data.peripheral === deviceId) {
+          console.log('[BLE] FTMS device disconnected');
+          this.handleConnectionLoss();
+        }
+      });
+
+      console.log('[BLE] FTMS monitoring started (Android)');
+    }
+  }
+
+  /**
+   * Convert base64 string to Uint8Array (shared utility for iOS/Android)
+   */
+  private base64ToBytes(base64: string): Uint8Array | null {
+    try {
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+    } catch {
+      return null;
     }
   }
 
@@ -744,7 +983,7 @@ export class BLEService {
       const devices = await this.scanForDevices(5000);
       
       if (devices.length === 0) {
-        throw new Error('No CSC devices found. Please ensure sensor is powered on and in Cadence mode (red light).');
+        throw new Error('No BLE devices found. Please ensure sensor/machine is powered on and discoverable.');
       }
       
       // Connect to strongest signal
@@ -778,7 +1017,7 @@ export class BLEService {
   }
 
   /**
-   * Stop monitoring
+   * Stop monitoring (CSC and FTMS)
    */
   async stopMonitoring(): Promise<void> {
     try {
@@ -788,22 +1027,51 @@ export class BLEService {
       }
 
       if (Platform.OS === 'ios') {
+        // Clean up main subscription
         if (this.notificationSubscription) {
           this.notificationSubscription.remove();
           this.notificationSubscription = null;
         }
+        // Clean up FTMS subscriptions (iOS uses separate subscription objects)
+        for (const sub of this.ftmsNotificationSubscriptions) {
+          try { sub.remove(); } catch { /* ignore */ }
+        }
+        this.ftmsNotificationSubscriptions = [];
       } else {
         if (this.device && this.notificationSubscription) {
           const deviceId = this.device as string;
           try {
-            // Get actual service and characteristic UUIDs for stopping notification
+            // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
             const services = await BleManager.getServices(deviceId);
-            const cscService = services.find(s => uuidMatches(s.uuid, CSC_SERVICE_UUID));
-            if (cscService) {
-              const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
-              const measurementChar = characteristics.find(c => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
-              if (measurementChar) {
-                await BleManager.stopNotification(deviceId, cscService.uuid, measurementChar.uuid);
+
+            if (this.activeProtocol === 'ftms') {
+              // Stop FTMS notifications
+              const ftmsService = services.find((s: any) => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
+              if (ftmsService) {
+                // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
+                const chars = await BleManager.getCharacteristics(deviceId, ftmsService.uuid);
+                for (const char of chars) {
+                  if (
+                    uuidMatches(char.uuid, FTMS_INDOOR_BIKE_CHAR_UUID) ||
+                    uuidMatches(char.uuid, FTMS_TREADMILL_DATA_CHAR_UUID) ||
+                    uuidMatches(char.uuid, FTMS_CROSS_TRAINER_CHAR_UUID)
+                  ) {
+                    try {
+                      await BleManager.stopNotification(deviceId, ftmsService.uuid, char.uuid);
+                    } catch { /* ignore */ }
+                  }
+                }
+              }
+            } else {
+              // Stop CSC notification
+              const cscService = services.find((s: any) => uuidMatches(s.uuid, CSC_SERVICE_UUID));
+              if (cscService) {
+                // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
+                const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
+                const measurementChar = characteristics.find((c: any) => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
+                if (measurementChar) {
+                  await BleManager.stopNotification(deviceId, cscService.uuid, measurementChar.uuid);
+                }
               }
             }
           } catch (error) {
@@ -824,21 +1092,16 @@ export class BLEService {
 
   /**
    * Handle CSC measurement data for Magene S3+
-   * Parses binary data according to Bluetooth CSC specification
-   * 
-   * Magene S3+ Specific:
-   * - Flags byte: bit 0 = wheel revolution present, bit 1 = crank revolution present
-   * - In Cadence mode (red light), bit 1 should be set
-   * - Cumulative Crank Revolutions: 16-bit little-endian (bytes 1-2)
-   * - Last Crank Event Time: 16-bit little-endian, 1/1024 seconds (bytes 3-4)
-   * - RPM Formula: RPM = ((CrankRev_now - CrankRev_prev) × 1024 × 60) / (EventTime_now - EventTime_prev)
-   */
-  /**
-   * Handle CSC measurement data for Magene S3+
    * Battery Optimization: 'Dumb' service - only passes raw data, no RPM decay logic
    * All RPM logic (watchdog timer, decay) handled in workout.tsx
+   *
+   * Magene S3+ Specific:
+   * - Flags byte: bit 0 = wheel revolution present, bit 1 = crank revolution present
+   * - Cumulative Crank Revolutions: 16-bit LE (bytes 1-2)
+   * - Last Crank Event Time: 16-bit LE, 1/1024 seconds (bytes 3-4)
+   * - RPM = ((CrankRev_now - CrankRev_prev) × 60) / timeDeltaSeconds
    */
-  private handleMeasurement(data: ArrayBuffer): void {
+  private handleCSCMeasurement(data: ArrayBuffer): void {
     const view = new DataView(data);
     let offset = 0;
 
@@ -981,26 +1244,102 @@ export class BLEService {
     this.lastCrankEventTime = lastCrankEventTime;
 
     // Precision Fix: Use raw float RPM value (not rounded) for smooth transitions
-    // Rounding happens in UI layer if needed, but raw value allows for smoother animations
     const rawRPM = rpm;
 
-    const measurement: CSCMeasurement = {
+    const measurement = createCSCMeasurement({
       wheelRevolutions,
       lastWheelEventTime,
       crankRevolutions,
       lastCrankEventTime,
-      rpm: rawRPM, // Raw float value for precision and smooth transitions
-      timestamp: Date.now(), // High precision timestamp
-    };
+      rpm: rawRPM,
+    });
 
     // Debug: Temporary log to diagnose stuck RPM issue
-    console.log('[BLE] handleMeasurement called, RPM:', measurement.rpm, 'Callback exists:', !!this.measurementCallback);
+    console.log('[BLE] CSC measurement, RPM:', measurement.rpm, 'Callback:', !!this.measurementCallback);
     
-    // Call callback
     if (this.measurementCallback) {
       this.measurementCallback(measurement);
     } else {
       console.warn('[BLE] measurementCallback is null!');
+    }
+  }
+
+  /**
+   * Handle FTMS measurement data.
+   * Routes to the appropriate parser based on characteristic UUID,
+   * then wraps parsed data into a BLEMeasurement via createFTMSMeasurement().
+   */
+  private handleFTMSMeasurement(data: ArrayBuffer, charUUID: string): void {
+    // Update last measurement time
+    this.lastMeasurementTime = Date.now();
+    this.emitStatus('Signal OK');
+
+    // Increment synthetic crank counter for CSC backward compat
+    this.syntheticCrankCounter++;
+
+    let rpm = 0;
+    let speed: number | null = null;
+    let power: number | null = null;
+    let distance: number | null = null;
+    let incline: number | null = null;
+    let calories: number | null = null;
+    let heartRate: number | null = null;
+    let resistance: number | null = null;
+    let steps: number | null = null;
+    let elapsedTime: number | null = null;
+
+    if (uuidMatches(charUUID, FTMS_INDOOR_BIKE_CHAR_UUID)) {
+      const bikeData = parseIndoorBikeData(data);
+      if (!bikeData) return;
+      rpm = bikeData.cadence;
+      speed = bikeData.speed;
+      power = bikeData.power;
+      distance = bikeData.distance;
+      resistance = bikeData.resistance;
+      calories = bikeData.totalEnergy;
+      heartRate = bikeData.heartRate;
+      elapsedTime = bikeData.elapsedTime;
+    } else if (uuidMatches(charUUID, FTMS_TREADMILL_DATA_CHAR_UUID)) {
+      const treadmillData = parseTreadmillData(data);
+      if (!treadmillData) return;
+      // Treadmills don't have cadence — estimate steps/min from speed
+      rpm = estimateStepsPerMinuteFromSpeed(treadmillData.speed);
+      speed = treadmillData.speed;
+      power = treadmillData.power;
+      distance = treadmillData.distance;
+      incline = treadmillData.incline;
+      calories = treadmillData.totalEnergy;
+      heartRate = treadmillData.heartRate;
+      elapsedTime = treadmillData.elapsedTime;
+    } else if (uuidMatches(charUUID, FTMS_CROSS_TRAINER_CHAR_UUID)) {
+      const crossTrainerData = parseCrossTrainerData(data);
+      if (!crossTrainerData) return;
+      // Cross trainers may report step count instead of cadence
+      rpm = crossTrainerData.stepCount ?? 0;
+      speed = crossTrainerData.speed;
+      power = crossTrainerData.power;
+      distance = crossTrainerData.distance;
+      incline = crossTrainerData.incline;
+      resistance = crossTrainerData.resistance;
+      calories = crossTrainerData.totalEnergy;
+      heartRate = crossTrainerData.heartRate;
+      elapsedTime = crossTrainerData.elapsedTime;
+    } else {
+      console.warn(`[BLE] Unknown FTMS characteristic: ${charUUID}`);
+      return;
+    }
+
+    // Sanity checks
+    if (rpm > 300) rpm = 0;  // FTMS max reasonable RPM
+    if (rpm < 0) rpm = 0;
+
+    const measurement = createFTMSMeasurement(
+      { rpm, speed, power, distance, incline, calories, heartRate, resistance, steps, elapsedTime },
+      this.syntheticCrankCounter,
+    );
+
+    if (this.measurementCallback) {
+      this.measurementCallback(measurement);
     }
   }
 
@@ -1024,7 +1363,10 @@ export class BLEService {
 
       this.isConnected = false;
       this.device = null;
-      this.deviceId = null; // Clear device ID on disconnect
+      this.deviceId = null;
+      this.activeProtocol = 'csc'; // Reset to default
+      this.syntheticCrankCounter = 0;
+      this.ftmsNotificationSubscriptions = [];
       
       console.log('[BLE] Disconnected from device');
     } catch (error) {

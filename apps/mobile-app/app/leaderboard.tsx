@@ -293,11 +293,11 @@ export default function LeaderboardScreen() {
                           </Text>
                         </View>
                         <View style={styles.dropsContainer}>
-                          <Ionicons name="water" size={16} color={isCurrent ? branding.primary : theme.colors.accent} />
+                          <Ionicons name="water" size={16} color={isCurrent ? branding.primary : theme.colors.textSecondary} />
                           <Text style={[
                             styles.dropsText,
                             getNumberStyle(16),
-                            { color: isCurrent ? branding.primary : theme.colors.accent },
+                            { color: isCurrent ? branding.primary : theme.colors.textSecondary },
                           ]}>
                             {entry.drops}
                           </Text>
