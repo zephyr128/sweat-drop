@@ -5,13 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { useBranding } from '@/lib/hooks/useBranding';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, getNumberStyle } from '@/lib/theme';
 
 interface LeaderboardEntry {
   user_id: string;
   username: string;
   drops: number;
+  score_label?: string;
 }
 
 interface LeaderboardPreviewProps {
@@ -47,31 +48,82 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     }
 
     try {
-      const { data, error } = await supabase
-        .from('gym_memberships')
-        .select('user_id, local_drops_balance, profiles:user_id(username)')
-        .eq('gym_id', gymId)
-        .order('local_drops_balance', { ascending: false })
-        .limit(50);
+      // Use generic get_leaderboard() RPC (Phase 3.1)
+      const { data, error } = await supabase.rpc('get_leaderboard', {
+        p_type: 'gym',
+        p_scope_id: gymId,
+        p_period: 'weekly',
+        p_limit: 50,
+        p_newcomer_only: false,
+      });
 
       if (error) {
-        console.error('[LeaderboardPreview] Error:', error);
+        // Try fallback RPC first
+        console.warn('[LeaderboardPreview] get_leaderboard RPC failed, trying fallback RPC...', error.message);
+        const { data: fallbackRpcData, error: fallbackRpcError } = await supabase.rpc('get_local_leaderboard', {
+          p_gym_id: gymId,
+          p_period: 'weekly',
+          p_limit: 50,
+          p_newcomer_only: false,
+        });
+
+        if (!fallbackRpcError && fallbackRpcData) {
+          const entries: LeaderboardEntry[] = (fallbackRpcData as any[]).map((entry) => ({
+            user_id: entry.user_id,
+            username: entry.username || 'Unknown',
+            drops: entry.drops || entry.score || 0,
+            score_label: entry.score_label,
+          }));
+
+          setTopUsers(entries.slice(0, 3));
+          const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
+          if (userIndex !== -1) {
+            setCurrentUserRank(userIndex + 1);
+            if (userIndex >= 3) setCurrentUserEntry(entries[userIndex]);
+          }
+          setLoading(false);
+          return;
+        }
+
+        // Final fallback: direct query
+        console.warn('[LeaderboardPreview] Fallback RPC also failed, using direct query...');
+        const { data: fallbackData } = await supabase
+          .from('gym_memberships')
+          .select('user_id, local_drops_balance, profiles:user_id(username)')
+          .eq('gym_id', gymId)
+          .order('local_drops_balance', { ascending: false })
+          .limit(50);
+
+        if (fallbackData) {
+          const entries: LeaderboardEntry[] = fallbackData
+            .map((entry: any) => ({
+              user_id: entry.user_id,
+              username: entry.profiles?.username || 'Unknown',
+              drops: entry.local_drops_balance || 0,
+            }))
+            .sort((a, b) => b.drops - a.drops);
+
+          setTopUsers(entries.slice(0, 3));
+          const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
+          if (userIndex !== -1) {
+            setCurrentUserRank(userIndex + 1);
+            if (userIndex >= 3) setCurrentUserEntry(entries[userIndex]);
+          }
+        }
         setLoading(false);
         return;
       }
 
       if (data) {
-        const entries: LeaderboardEntry[] = data
-          .map((entry: any) => ({
-            user_id: entry.user_id,
-            username: entry.profiles?.username || 'Unknown',
-            drops: entry.local_drops_balance || 0,
-          }))
-          .sort((a, b) => b.drops - a.drops);
+        const entries: LeaderboardEntry[] = (data as any[]).map((entry) => ({
+          user_id: entry.user_id,
+          username: entry.username || 'Unknown',
+          drops: entry.score || 0,
+          score_label: entry.score_label,
+        }));
 
         setTopUsers(entries.slice(0, 3));
 
-        // Find current user rank
         const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
         if (userIndex !== -1) {
           setCurrentUserRank(userIndex + 1);
@@ -91,7 +143,40 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     loadLeaderboard();
   }, [loadLeaderboard]);
 
-  if (loading || topUsers.length === 0) return null;
+  // Show loading state or empty state, but don't hide completely
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Leaderboard</Text>
+        </View>
+        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+          <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+            <View style={styles.row}>
+              <Text style={[styles.username, { color: theme.colors.textSecondary }]}>Loading...</Text>
+            </View>
+          </BlurView>
+        </View>
+      </View>
+    );
+  }
+
+  if (topUsers.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Leaderboard</Text>
+        </View>
+        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+          <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+            <View style={styles.row}>
+              <Text style={[styles.username, { color: theme.colors.textSecondary }]}>No leaderboard data yet</Text>
+            </View>
+          </BlurView>
+        </View>
+      </View>
+    );
+  }
 
   const isCurrentUser = (userId: string) => userId === session?.user?.id;
 
