@@ -1,8 +1,9 @@
 # SWEATDROP MVP — Full System Audit & Build Plan
 
 **Created:** 2026-03-02  
+**Updated:** 2026-03-02 — Phase 0, 1, 2 complete. Shared types updated.  
 **Author:** Lead System Architect  
-**Status:** AUDIT COMPLETE — Awaiting Human Review on Blockers
+**Status:** ✅ SUPABASE DBA PHASES 0–2 COMPLETE — READY FOR MOBILE & ADMIN AGENTS
 
 ---
 
@@ -1067,91 +1068,74 @@ export interface JoinGymResult {
 
 ---
 
-## 6. BLOCKERS — NEED HUMAN DECISION ⛔
+## 6. BLOCKERS — ✅ ALL RESOLVED
 
-### Blocker 1: Wallet Architecture — `total_drops` Column Rename
+### Blocker 1: Wallet Architecture ✅ RESOLVED → Option B
 
-**Decision Required:** The spec calls the all-time earned counter `total_drops_earned` and the wallet balance `available_drops`. Currently we have only `total_drops` which serves as both.
+**Decision:** Keep `total_drops` as-is. Add `available_drops` as new column.
+- `total_drops` = all-time earned counter, leaderboard score (never decreases)
+- `available_drops` = spendable wallet balance (reserved for future global spending)
+- On earn: increment BOTH `total_drops` AND `available_drops`
+- On spend: decrement `available_drops` ONLY — `total_drops` never changes
+- Backfill: `SET available_drops = total_drops` for existing users
+- **Do NOT rename `total_drops`.** Naming inconsistency accepted.
 
-**Options:**
-- **A) Rename `total_drops` → `total_drops_earned`, add `available_drops`**
-  - Pro: Matches spec exactly
-  - Con: Breaking change — ALL frontend code referencing `total_drops` must be updated
-  - Con: All existing leaderboard RPCs, home screen, wallet, etc. need updating
-  
-- **B) Keep `total_drops` as-is (never decreasing), add `available_drops` as new**
-  - Pro: No breaking changes to existing code
-  - Pro: `total_drops` already works correctly as leaderboard score
-  - Con: Naming inconsistency with spec
-  
-**Recommendation:** Option B. Keep `total_drops` as the all-time counter, add `available_drops` as the spendable wallet. Minimal disruption to working code.
+### Blocker 2: Drops Calculation ✅ RESOLVED → Option B (Hybrid)
 
-### Blocker 2: Client-Side vs Server-Side Drops Calculation
+**Decision:** Hybrid approach. Mobile shows estimated drops in real-time during workout. Server re-calculates authoritatively on session end.
+- During workout: mobile shows live estimated drops (same formula: `calories × 2.5 × multiplier`)
+- On session end: mobile saves `raw_metrics` to session, then calls `award_drops(p_session_id)`
+- Server re-calculates using its own formula → that value is final
+- Session summary shows server value. Small discrepancy is acceptable.
+- Add UI note: "Final drops calculated after session ends."
+- Mobile formula should mirror server formula as closely as possible.
 
-**Decision Required:** Currently the mobile app calculates drops and sends them to `end_session(session_id, drops_earned)`. Spec requires server-side only calculation.
+### Blocker 3: Gym Join ✅ RESOLVED → REMOVED FROM MVP
 
-**Options:**
-- **A) Full server-side** — Mobile sends only raw metrics (calories, duration, distance). Server computes drops via `award_drops()`.
-  - Pro: Secure, tamper-proof
-  - Con: Major refactor of workout.tsx (2900+ lines)
-  - Con: During workout, live drops counter becomes an ESTIMATE
+**Decision:** No gym join code screen. Remove from scope entirely.
+- Gym joining happens automatically on first machine QR scan (QR contains `gym_id + machine_id`)
+- Onboarding ends at: name + avatar (2 steps instead of 4)
+- ❌ Removed: `gyms.code` column (keep in schema but don't expose)
+- ❌ Removed: `join_gym_by_code()` RPC
+- ❌ Removed: Code entry screen in onboarding
+- ❌ Removed: Task 3.2 from mobile task list
 
-- **B) Hybrid** — Mobile calculates for live display, but server RE-CALCULATES and uses its own value when `award_drops()` is called.
-  - Pro: Best UX (live drops during workout)
-  - Pro: Secure (server value is authoritative)
-  - Con: Final drops may differ from what user saw during workout (slight discrepancy)
+### Blocker 4: available_drops Scope ✅ RESOLVED → Option A
 
-**Recommendation:** Option B (Hybrid). Show estimated drops during workout for engagement, but server always re-calculates and stores its own value. Show final (server) value on session summary.
+**Decision:** Gym-scoped spending only for MVP.
+- Rewards are gym-specific. Spend from `gym_memberships.local_drops_balance`
+- `available_drops` column kept in schema but NOT wired to spending logic
+- Set `available_drops = total_drops` and increment on earn, don't decrement on spend yet
+- Future: global rewards, cross-gym arenas will use `available_drops`
 
-### Blocker 3: Gym Join — Code vs Browser
+### Blocker 5: Session Abandonment Cleanup 🆕 ADDED
 
-**Decision Required:** Spec says 4-digit code. Current app has gym browser/selector.
-
-**Options:**
-- **A) Code only** — Remove gym browser, require code
-- **B) Code primary, browser fallback** — Default to code entry, "Browse gyms" link below
-- **C) Keep both** — Tab selector: "Enter Code" | "Browse Gyms"
-
-**Recommendation:** Option B. Code is the primary flow for MVP (controlled gym rollout), with browse as fallback for demo/testing.
-
-### Blocker 4: `profiles.total_drops` Current State
-
-**Decision Required:** Currently `total_drops` increments on earn but is NEVER decremented on spend. Spending only decrements `gym_memberships.local_drops_balance`. This means:
-- `total_drops` ≈ "total ever earned" (correct for leaderboard)
-- `local_drops_balance` = spendable at specific gym (correct for store)
-- BUT: There's no "global spendable balance"
-
-**Is `available_drops` needed at all?** If rewards can only be spent at specific gyms (local balance), then there's no global spending and `available_drops` is redundant.
-
-**Options:**
-- **A) Keep gym-scoped spending only** — Rewards are gym-specific, spend from `local_drops_balance`
-- **B) Add global spending** — `available_drops` for gym-agnostic rewards
-
-**Recommendation:** Option A for MVP. Rewards are gym-scoped. `available_drops` is nice-to-have but adds complexity. If we keep it, set `available_drops = total_drops - total_spent` and update it on each spend.
+**Problem:** If member starts session, phone dies/crashes, machine stays locked forever.
+**Solution:** Cron job every 5 minutes:
+```sql
+SELECT * FROM machines
+WHERE is_busy = true AND last_heartbeat < NOW() - INTERVAL '5 minutes'
+→ unlock_machine() on each
+→ end_session() with existing data
+→ award_drops() for partial session
+```
+- Mobile app sends heartbeat every 60 seconds during active session
+- Server auto-ends session after 5 min no heartbeat
+- Added to Phase 2 cron jobs
 
 ---
 
-## 7. QUESTIONS — NEED CLARIFICATION ❓
+## 7. QUESTIONS — ✅ ALL ANSWERED
 
-1. **BLE Protocol Priority:** Which gym brands are we deploying to first? This determines BLE protocol priority:
-   - If Life Fitness/Technogym → FTMS is priority
-   - If Chinese brands (Shua) → FitShow is priority
-   - If cycling studios → Magene CSC (already done)
-
-2. **Calories Tracking:** The spec uses `calories_burned × 2.5 = base_drops`. Where do calories come from?
-   - FTMS devices report calories
-   - CSC (current) devices do NOT — we'd need to estimate from RPM + duration
-   - Do we use a fixed formula as fallback?
-
-3. **Multi-Gym Members:** Can a member belong to multiple gyms? Currently `profiles.home_gym_id` is a single gym. But `gym_memberships` supports multiple. Which is the intended UX?
-
-4. **Reward Claim Uniqueness:** Spec has `unique(user_id, reward_id)`. This means a user can only claim each reward ONCE ever. Is that intended? What about monthly recurring rewards?
-
-5. **Newcomer Leaderboard:** Is the newcomer board a separate tab/view, or do newcomers compete on the main board with a "newcomer" badge?
-
-6. **Drop Expiry UX:** When drops expire, does the user get notified? Does the push notification trigger 30 days and 7 days before? This is in the spec but needs UX confirmation.
-
-7. **Subscription Plans:** Are feature gates enforced in code now (MVP), or is this post-MVP? The spec lists sensor/member limits per plan.
+| # | Question | Answer |
+|---|----------|--------|
+| Q1 | BLE Protocol Priority | **FTMS first** (Life Fitness, Technogym, Matrix, Horizon). Then FitShow (Shua V9, Vortex gym). Magene CSC already done. |
+| Q2 | Calories Tracking | **Fallback formula:** Treadmill: `duration_min × 8 × (avg_speed / 8.0)`. Bike/Elliptical: `duration_min × 7`. Show `~312 cal` (with tilde) for estimates. |
+| Q3 | Multi-Gym Members | **Yes.** `home_gym_id` = primary gym. `gym_memberships` = all gyms visited. On visiting new gym, prompt: "Switch gyms for this session?" |
+| Q4 | Reward Claim Uniqueness | **No global unique.** Add `rewards.is_one_time BOOLEAN DEFAULT false`. If `is_one_time`: once ever. Otherwise: can re-claim after previous is redeemed. Block duplicate pending claims only. |
+| Q5 | Newcomer Leaderboard | **Separate tab.** Visible only to members where `is_newcomer = true`. Tabs: Weekly \| Monthly \| All-Time \| Newcomer (conditional). After 30 days, tab disappears. |
+| Q6 | Drop Expiry UX | **Push at 30d and 7d.** Banner on home/wallet screen: "{X} drops expire in {Y} days → View Store". Expired drops shown grey in ledger. |
+| Q7 | Subscription Plans | **No feature gates for MVP.** All pilot gyms get full PRO. Add `checkFeatureAccess(gym, feature)` stub that always returns true. Enforce after first 3 paying gyms. |
 
 ---
 
@@ -1163,23 +1147,22 @@ Current migrations (67 files) — many are hotfixes for the same features. After
 
 ### Supabase DBA
 ```
-backend/supabase/migrations/  (8-12 new migration files)
-backend/supabase/functions/   (4-5 new Edge Functions)
-backend/types/sweatdrop.ts    (new shared types file)
+backend/supabase/migrations/  (7 new migration files — Phase 0)
+backend/supabase/functions/   (4-5 new Edge Functions — Phase 2)
+backend/types/sweatdrop.ts    (✅ CREATED — shared types)
 ```
 
 ### Mobile Agent
 ```
 apps/mobile-app/package.json             (add expo-notifications, expo-device, expo-sharing, react-native-view-shot)
 apps/mobile-app/app/_layout.tsx           (push notification registration)
-apps/mobile-app/app/workout.tsx           (remove client-side drops calc, add raw_metrics saving)
+apps/mobile-app/app/workout.tsx           (keep live estimate, add raw_metrics saving, call award_drops on end)
 apps/mobile-app/app/session-summary.tsx   (multiplier display, rank change, enhanced badge display)
-apps/mobile-app/app/(onboarding)/home-gym.tsx (gym code entry)
 apps/mobile-app/app/workout-history.tsx   (NEW — calendar view)
 apps/mobile-app/app/profile.tsx           (NEW — dedicated profile)
 apps/mobile-app/lib/ble-service.ts        (add FTMS, FitShow protocols)
 apps/mobile-app/lib/notifications.ts      (NEW — push notification module)
-apps/mobile-app/components/ShareableWorkoutCard.tsx (NEW)
+apps/mobile-app/components/ShareableWorkoutCard.tsx (NEW — low priority)
 ```
 
 ### Admin Agent
@@ -1191,7 +1174,7 @@ apps/admin-panel/components/modules/RetentionDashboard.tsx     (NEW)
 apps/admin-panel/components/modules/MemberList.tsx             (NEW)
 apps/admin-panel/components/modules/RedemptionVerifier.tsx     (NEW)
 apps/admin-panel/components/modules/ChallengesManager.tsx      (UPDATE — monitoring, tiers)
-apps/admin-panel/components/modules/RewardsManager.tsx         (UPDATE — sponsor, dates)
+apps/admin-panel/components/modules/RewardsManager.tsx         (UPDATE — sponsor, dates, is_one_time)
 apps/admin-panel/app/dashboard/super/machines/page.tsx         (UPDATE — Web Bluetooth)
 ```
 
@@ -1199,4 +1182,51 @@ apps/admin-panel/app/dashboard/super/machines/page.tsx         (UPDATE — Web B
 
 **END OF AUDIT**
 
-**Next Step:** Resolve the 4 Blockers above, then agents can begin executing Phase 0 → Phase 5 in order.
+**Execution Status:**
+
+### Supabase DBA Agent — ALL PHASES COMPLETE ✅
+
+| Phase | Task | Status | File |
+|-------|------|--------|------|
+| **Phase 0** | Migration 0.1 — Profile MVP Columns | ✅ APPLIED | `20260302000001_add_profile_mvp_columns.sql` |
+| **Phase 0** | Migration 0.2 — Extend Gyms Schema | ✅ APPLIED | `20260302000002_extend_gyms_schema.sql` |
+| **Phase 0** | Migration 0.3 — Extend Machines Schema | ✅ APPLIED | `20260302000003_extend_machines_schema.sql` |
+| **Phase 0** | Migration 0.4 — Extend Sessions Schema | ✅ APPLIED | `20260302000004_extend_sessions_schema.sql` |
+| **Phase 0** | Migration 0.5 — Extend Drops Transactions | ✅ APPLIED | `20260302000005_extend_drops_transactions.sql` |
+| **Phase 0** | Migration 0.6 — Extend Rewards Schema | ✅ APPLIED | `20260302000006_extend_rewards_schema.sql` |
+| **Phase 0** | Migration 0.7 — Extend Challenges Schema | ✅ APPLIED | `20260302000007_extend_challenges_schema.sql` |
+| **Phase 1** | Function 1.1 — `award_drops()` | ✅ CREATED | `20260302000008_phase1_core_award_drops.sql` |
+| **Phase 1** | Function 1.2 — `update_challenge_progress()` | ✅ CREATED | `20260302000008_phase1_core_award_drops.sql` |
+| **Phase 1** | Function 1.3 — `evaluate_badges()` | ✅ CREATED | `20260302000008_phase1_core_award_drops.sql` |
+| **Phase 1** | Function 1.4 — `claim_reward()` | ✅ CREATED | `20260302000009_phase1_claim_reward.sql` |
+| **Phase 1** | Function 1.5 — `get_local_leaderboard()` fix | ✅ CREATED | `20260302000010_phase1_fix_leaderboard_rpcs.sql` |
+| **Phase 1** | Function 1.6 — `get_global_leaderboard()` fix | ✅ CREATED | `20260302000010_phase1_fix_leaderboard_rpcs.sql` |
+| **Phase 2** | Helper — `cleanup_abandoned_sessions()` | ✅ CREATED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Helper — `expire_stale_drops()` | ✅ CREATED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Helper — `update_newcomer_status()` | ✅ CREATED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Cron 2.1 — Weekly drops reset | ✅ SCHEDULED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Cron 2.2 — Monthly drops reset | ✅ SCHEDULED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Cron 2.3 — Newcomer status update | ✅ SCHEDULED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Cron 2.4 — Drop expiry | ✅ SCHEDULED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Cron 2.5 — Session abandonment cleanup | ✅ SCHEDULED | `20260302000011_phase2_cron_jobs.sql` |
+| **Phase 2** | Edge Function 2.6 — `send-push` | ✅ CREATED | `functions/send-push/index.ts` |
+| **Phase 2** | Edge Function 2.7 — `streak-reminder` | ✅ CREATED | `functions/streak-reminder/index.ts` |
+| **Phase 2** | Edge Function 2.8 — `re-engagement` | ✅ CREATED | `functions/re-engagement/index.ts` |
+| **Phase 2** | Edge Function 2.9 — `drops-expiry-warning` | ✅ CREATED | `functions/drops-expiry-warning/index.ts` |
+| **Types** | `backend/types/sweatdrop.ts` | ✅ UPDATED | All interface contracts aligned |
+
+### Notes on Implementation Decisions
+
+1. **`cleanup_abandoned_sessions()`** — Created as a proper function (not inline cron SQL) to safely handle `award_drops()` calls with exception handling per stale machine. Uses `FOR UPDATE ... SKIP LOCKED` to avoid contention.
+
+2. **`get_local_leaderboard()` / `get_global_leaderboard()`** — Changed from `leaderboard_period` ENUM parameter to `TEXT` for backward compatibility and flexibility. Used `ROW_NUMBER()` instead of `RANK()` to guarantee unique rank ordering (tiebreak on username).
+
+3. **Cron scheduling** — Wrapped in `DO $$ ... $$` block with `pg_extension` check. If `pg_cron` is not enabled, migration completes with a WARNING instead of failing. Crons must then be manually scheduled or triggered via external scheduler.
+
+4. **Edge Functions** — All functions follow the same pattern: CORS preflight, service role client, delegation to `send-push` for actual delivery. The `drops-expiry-warning` function uses direct Supabase query (not custom RPC) for simplicity.
+
+5. **Shared types** — Removed all `@pending-migration` annotations. Added `WorkoutMetrics`, `BLEProtocolHandler`, `SendPushRequest/Response`, `checkFeatureAccess()` stub. Aligned `ClaimStatus` with actual `claim_reward()` function behavior (`'claimed'` not `'pending'`).
+
+### READY FOR NEXT AGENTS: YES
+
+Mobile Agent and Admin Agent can now start their tasks. All Supabase schema, RPCs, cron jobs, and Edge Functions are in place.
