@@ -27,6 +27,7 @@ import { QuickStatsRow } from '@/components/QuickStatsRow';
 import { ClosestRewardBanner } from '@/components/ClosestRewardBanner';
 import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
 import { useHomeStats } from '@/hooks/useHomeStats';
+import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { Gym } from '@/lib/stores/useGymStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -91,6 +92,9 @@ export default function HomeScreen() {
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId, localDrops);
 
+  // Available arenas
+  const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
+
   // Badge notifications with confetti
   const { newBadge, clearNewBadge } = useBadgeNotifications({
     onBadgeEarned: (badge) => {
@@ -146,14 +150,15 @@ export default function HomeScreen() {
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
 
-  // Refresh challenges + stats when screen is focused
+  // Refresh challenges + stats + arenas when screen is focused
   useFocusEffect(
     useCallback(() => {
       if (activeGymId && session?.user) {
         refreshChallenges?.();
         refreshStats?.();
+        refreshArenas?.();
       }
-    }, [activeGymId, session?.user, refreshChallenges, refreshStats])
+    }, [activeGymId, session?.user, refreshChallenges, refreshStats, refreshArenas])
   );
 
   const loadData = async () => {
@@ -559,6 +564,119 @@ export default function HomeScreen() {
                   No active challenges right now — check back soon!
                 </Text>
               </BlurView>
+            </View>
+          )}
+
+          {/* ═══════════════════════════════════════════ */}
+          {/* SWEAT ARENAS CAROUSEL                       */}
+          {/* ═══════════════════════════════════════════ */}
+          {isUnlocked && (
+            <View style={styles.challengesSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Arenas</Text>
+                {availableArenas && availableArenas.length > 0 && (
+                  <TouchableOpacity onPress={() => router.push('/leaderboard')} activeOpacity={0.7}>
+                    <Text style={[styles.seeAllText, { color: branding.primary }]}>See All</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {availableArenas && availableArenas.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.challengesScrollContent}
+                  style={styles.challengesScrollView}
+                  snapToInterval={SNAP_INTERVAL}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
+                >
+                  {availableArenas.map((arena) => {
+                    const daysLeft = Math.max(0, Math.ceil((new Date(arena.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                    const scoringIcons: Record<string, string> = { total_drops: '💧', days_visited: '📅', variety_score: '🏋️', streak_days: '🔥' };
+                    const scoringIcon = scoringIcons[arena.scoring_model] || '💧';
+
+                    return (
+                      <View key={arena.arena_id} style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
+                        <TouchableOpacity
+                          style={[styles.challengeCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                          onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
+                          activeOpacity={0.9}
+                        >
+                          <BlurView intensity={50} tint="dark" style={styles.challengeBlur}>
+                            <LinearGradient
+                              colors={[hexToRgba(branding.primary, 0.06), 'rgba(20, 20, 35, 0.9)', hexToRgba(branding.primary, 0.03)]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={styles.challengeGradient}
+                            >
+                              <View style={styles.challengeContent}>
+                                {/* Arena Header */}
+                                <View style={styles.challengeHeader}>
+                                  <View style={styles.arenaHeaderRow}>
+                                    {arena.sponsor_logo ? (
+                                      <Image source={{ uri: arena.sponsor_logo }} style={styles.arenaSponsorLogo} resizeMode="contain" />
+                                    ) : (
+                                      <View style={[styles.arenaSponsorPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                                        <Ionicons name="trophy" size={14} color={branding.primary} />
+                                      </View>
+                                    )}
+                                    <Text style={[styles.challengeType, { color: branding.primary }]}>{arena.sponsor_name}</Text>
+                                    <Text style={styles.arenaScoringIcon}>{scoringIcon}</Text>
+                                  </View>
+                                  <Text style={styles.challengeName} numberOfLines={2}>{arena.name}</Text>
+                                </View>
+
+                                {/* Arena Stats */}
+                                <View style={styles.arenaHomeStats}>
+                                  <Text style={styles.arenaHomeStat}>{arena.participant_count} participants</Text>
+                                  <Text style={[styles.arenaHomeStat, daysLeft <= 3 && { color: theme.colors.secondary }]}>
+                                    {daysLeft} days left
+                                  </Text>
+                                </View>
+
+                                {/* User rank or Join CTA */}
+                                <View style={[styles.challengeReward, { borderTopColor: 'rgba(255, 255, 255, 0.08)' }]}>
+                                  {arena.user_opted_in ? (
+                                    <>
+                                      <Text style={[styles.arenaRankLabel, { color: branding.primary }]}>
+                                        Your Rank: #{arena.user_rank ?? '—'}
+                                      </Text>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Ionicons name="add-circle-outline" size={16} color={branding.primary} />
+                                      <Text style={[styles.challengeRewardText, { color: branding.primary }]}>Join Arena</Text>
+                                    </>
+                                  )}
+                                </View>
+                              </View>
+                            </LinearGradient>
+                          </BlurView>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.arenaEmptyState, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                  onPress={() => router.push('/leaderboard')}
+                  activeOpacity={0.8}
+                >
+                  <BlurView intensity={40} tint="dark" style={styles.arenaEmptyBlur}>
+                    <View style={[styles.arenaEmptyIcon, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                      <Ionicons name="trophy-outline" size={28} color={branding.primary} />
+                    </View>
+                    <View style={styles.arenaEmptyTextContainer}>
+                      <Text style={styles.arenaEmptyTitle}>No Active Arenas</Text>
+                      <Text style={styles.arenaEmptySubtitle}>
+                        Sponsor-branded competitions with prizes will appear here
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
+                  </BlurView>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -997,6 +1115,83 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 4,
     marginTop: 12,
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  arenaHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  arenaSponsorLogo: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+  },
+  arenaSponsorPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arenaScoringIcon: {
+    fontSize: 14,
+    marginLeft: 'auto',
+  },
+  arenaHomeStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  arenaHomeStat: {
+    fontSize: 11,
+    color: '#B0B0B0',
+    letterSpacing: 0.2,
+  },
+  arenaRankLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'Courier',
+    letterSpacing: 0.3,
+  },
+  arenaEmptyState: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginHorizontal: 0,
+  },
+  arenaEmptyBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    gap: 12,
+  },
+  arenaEmptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arenaEmptyTextContainer: {
+    flex: 1,
+  },
+  arenaEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  arenaEmptySubtitle: {
+    fontSize: 11,
+    color: '#8E8E93',
+    lineHeight: 15,
   },
 
   /* ─── View All ──────────────────────────── */

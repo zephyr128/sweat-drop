@@ -84,6 +84,7 @@ function StackNavigator() {
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
       <Stack.Screen name="workout-history" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
+      <Stack.Screen name="arena" options={{ headerShown: false }} />
     </Stack>
   );
 }
