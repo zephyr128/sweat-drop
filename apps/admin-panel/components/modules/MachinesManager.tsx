@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine } from '@/lib/actions/machine-actions';
+import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine, registerBLEDevice } from '@/lib/actions/machine-actions';
 import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save, Eye } from 'lucide-react';
 import { UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase-client';
@@ -33,6 +33,8 @@ interface Machine {
   maintenance_notes?: string;
   sensor_id?: string | null;
   sensor_paired_at?: string | null;
+  ble_protocol?: string | null;
+  protocol_verified?: boolean;
   created_at: string;
   updated_at: string;
   gyms?: {
@@ -63,6 +65,14 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   const [editingType, setEditingType] = useState<'treadmill' | 'bike'>('treadmill');
   const [pairingMachineId, setPairingMachineId] = useState<string | null>(null);
   const [isPairing, setIsPairing] = useState(false);
+  const [bleRegistrationModal, setBleRegistrationModal] = useState<string | null>(null);
+  const [bleStatus, setBleStatus] = useState<{
+    step: 'idle' | 'scanning' | 'connecting' | 'detecting' | 'testing' | 'done' | 'error';
+    deviceName?: string;
+    protocol?: 'ftms' | 'fitshow' | 'magene' | 'ksfit';
+    dataReceived?: boolean;
+    error?: string;
+  }>({ step: 'idle' });
   const [gyms, setGyms] = useState<Array<{ id: string; name: string; city: string | null; country: string | null }>>([]);
   const [selectedGymId, setSelectedGymId] = useState<string>(gymId || '');
   const [loadingGyms, setLoadingGyms] = useState(false);
@@ -268,120 +278,183 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
     }
   };
 
-  const handlePairSensor = async (machineId: string) => {
+  // BLE Protocol UUIDs
+  const BLE_SERVICES = {
+    FTMS: 0x1826,       // Fitness Machine Service
+    CSC: 0x1816,        // Cycling Speed and Cadence (Magene)
+    RSC: 0x1814,        // Running Speed and Cadence
+    HEART_RATE: 0x180D,  // Heart Rate
+  };
+
+  const handleBLERegistration = async (machineId: string) => {
     if (!('bluetooth' in navigator)) {
-      toast.error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
+      toast.error('Web Bluetooth is not supported. Use Chrome or Edge.');
       return;
     }
 
-    setIsPairing(true);
-    setPairingMachineId(machineId);
+    setBleRegistrationModal(machineId);
+    setBleStatus({ step: 'scanning' });
 
     try {
-      // Request Bluetooth device with Cycling Speed and Cadence service (0x1816)
-      // Magene Gemini 210 uses this service
+      // Scan for BLE devices with fitness-related services
       const device = await (navigator as any).bluetooth.requestDevice({
         filters: [
-          { services: [0x1816] }, // Cycling Speed and Cadence Service
+          { services: [BLE_SERVICES.FTMS] },
+          { services: [BLE_SERVICES.CSC] },
+          { services: [BLE_SERVICES.RSC] },
         ],
         optionalServices: [
           'battery_service',
           'device_information',
           'generic_access',
+          BLE_SERVICES.FTMS,
+          BLE_SERVICES.CSC,
+          BLE_SERVICES.RSC,
         ],
       });
 
-      // IMPORTANT: Show warning about Cadence mode before pairing
-      const confirmCadenceMode = confirm(
-        '⚠️ VAŽNO: Magene S3+ Sensor\n\n' +
-        'Pre nego što nastavite, proverite da li je senzor u CADENCE MODU:\n\n' +
-        '✅ Senzor mora biti u Cadence modu (CRVENO SVETLO)\n' +
-        '✅ Ako je u Speed modu (plavo svetlo), pritisnite dugme na senzoru da prebacite u Cadence mod\n\n' +
-        'Da li je senzor u Cadence modu (crveno svetlo)?'
-      );
-
-      if (!confirmCadenceMode) {
-        toast.error('Pairing otkazan. Proverite da li je senzor u Cadence modu.');
-        setIsPairing(false);
-        setPairingMachineId(null);
-        return;
-      }
-
-      toast.info('Connecting to sensor...');
+      const deviceName = device.name || device.id || `BLE-${Date.now()}`;
+      setBleStatus({ step: 'connecting', deviceName });
 
       // Connect to GATT server
       const server = await device.gatt.connect();
-      
-      // Get device identifier
-      // Use device.id (unique identifier) or device.name as sensor_id
-      // device.id is typically a MAC address or unique identifier
-      let sensorId = device.id;
-      
-      // If device.id is not available, try to get device name
-      if (!sensorId) {
+      setBleStatus({ step: 'detecting', deviceName });
+
+      // Protocol detection — try FTMS first, then CSC (Magene), then others
+      let detectedProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' = 'magene';
+      let dataReceived = false;
+
+      // Try FTMS (Fitness Machine Service) — most standard
+      try {
+        const ftmsService = await server.getPrimaryService(BLE_SERVICES.FTMS);
+        if (ftmsService) {
+          detectedProtocol = 'ftms';
+          setBleStatus({ step: 'testing', deviceName, protocol: 'ftms' });
+
+          // Try to read a characteristic to confirm data stream
+          try {
+            // Indoor Bike Data characteristic (0x2AD2) or Treadmill Data (0x2ACD)
+            const chars = await ftmsService.getCharacteristics();
+            if (chars.length > 0) {
+              // Try to start notifications on the first data characteristic
+              for (const char of chars) {
+                try {
+                  if (char.properties.notify) {
+                    await char.startNotifications();
+                    // Wait briefly for data
+                    await new Promise<void>((resolve) => {
+                      const handler = () => {
+                        dataReceived = true;
+                        char.removeEventListener('characteristicvaluechanged', handler);
+                        resolve();
+                      };
+                      char.addEventListener('characteristicvaluechanged', handler);
+                      setTimeout(() => {
+                        char.removeEventListener('characteristicvaluechanged', handler);
+                        resolve();
+                      }, 3000);
+                    });
+                    if (dataReceived) break;
+                  }
+                } catch { /* continue to next characteristic */ }
+              }
+            }
+          } catch (e) {
+            console.warn('FTMS data read failed:', e);
+          }
+        }
+      } catch {
+        // FTMS not available
+      }
+
+      // If not FTMS, try CSC (Magene-style sensors)
+      if (detectedProtocol !== 'ftms') {
         try {
-          const nameService = await server.getPrimaryService('generic_access');
-          const nameCharacteristic = await nameService.getCharacteristic('gap.device_name');
-          const nameValue = await nameCharacteristic.readValue();
-          const decoder = new TextDecoder('utf-8');
-          sensorId = decoder.decode(nameValue);
-        } catch (e) {
-          console.warn('Could not read device name:', e);
+          const cscService = await server.getPrimaryService(BLE_SERVICES.CSC);
+          if (cscService) {
+            detectedProtocol = 'magene';
+            setBleStatus({ step: 'testing', deviceName, protocol: 'magene' });
+
+            try {
+              // CSC Measurement characteristic (0x2A5B)
+              const measurement = await cscService.getCharacteristic(0x2A5B);
+              if (measurement.properties.notify) {
+                await measurement.startNotifications();
+                await new Promise<void>((resolve) => {
+                  const handler = () => {
+                    dataReceived = true;
+                    measurement.removeEventListener('characteristicvaluechanged', handler);
+                    resolve();
+                  };
+                  measurement.addEventListener('characteristicvaluechanged', handler);
+                  setTimeout(() => {
+                    measurement.removeEventListener('characteristicvaluechanged', handler);
+                    resolve();
+                  }, 3000);
+                });
+              }
+            } catch (e) {
+              console.warn('CSC data read failed:', e);
+            }
+          }
+        } catch {
+          // CSC not available
         }
       }
 
-      // Fallback to device name or generate ID
-      if (!sensorId) {
-        sensorId = device.name || `MAGENE-S3+-${Date.now()}`;
+      // Check device name for FitShow/KSFit hints
+      const nameLower = deviceName.toLowerCase();
+      if (nameLower.includes('fitshow') || nameLower.includes('fs-')) {
+        detectedProtocol = 'fitshow';
+      } else if (nameLower.includes('ksfit') || nameLower.includes('ks-')) {
+        detectedProtocol = 'ksfit';
       }
 
-      toast.info(`Sensor found: ${sensorId}`);
+      setBleStatus({
+        step: 'done',
+        deviceName,
+        protocol: detectedProtocol,
+        dataReceived,
+      });
 
-      // Pair sensor to machine via server action
-      const result = await pairSensorToMachine(machineId, sensorId);
+      // Save to database
+      const result = await registerBLEDevice(
+        machineId,
+        deviceName,
+        detectedProtocol,
+        dataReceived
+      );
 
       if (result.success) {
-        // Refresh machines to get updated qr_uuid
-        const { data: updatedMachine } = await supabase
-          .from('machines')
-          .select('*')
-          .eq('id', machineId)
-          .single();
-
-        if (updatedMachine) {
-          setMachines(
-            machines.map((m) =>
-              m.id === machineId
-                ? { ...m, sensor_id: sensorId, sensor_paired_at: new Date().toISOString(), qr_uuid: updatedMachine.qr_uuid }
-                : m
-            )
-          );
-        } else {
-          setMachines(
-            machines.map((m) =>
-              m.id === machineId
-                ? { ...m, sensor_id: sensorId, sensor_paired_at: new Date().toISOString() }
-                : m
-            )
-          );
-        }
-        toast.success('Sensor paired successfully');
+        setMachines(
+          machines.map((m) =>
+            m.id === machineId
+              ? {
+                  ...m,
+                  sensor_id: deviceName,
+                  sensor_paired_at: new Date().toISOString(),
+                  ble_protocol: detectedProtocol,
+                  protocol_verified: dataReceived,
+                }
+              : m
+          )
+        );
+        toast.success(`BLE device registered: ${detectedProtocol.toUpperCase()}${dataReceived ? ' ✓ Data confirmed' : ''}`);
       } else {
-        toast.error(`Failed to pair sensor: ${result.error}`);
+        toast.error(`Failed to save: ${result.error}`);
       }
 
       // Disconnect
       device.gatt.disconnect();
     } catch (error: any) {
-      if (error.name === 'NotFoundError') {
-        toast.error('No Bluetooth device selected or device not found');
-      } else if (error.name === 'SecurityError') {
-        toast.error('Bluetooth permission denied. Please allow Bluetooth access.');
-      } else if (error.name === 'NetworkError') {
-        toast.error('Failed to connect to device. Make sure the sensor is powered on and nearby.');
-      } else {
-        toast.error(`Bluetooth error: ${error.message}`);
-      }
+      const errorMsg =
+        error.name === 'NotFoundError' ? 'No device selected' :
+        error.name === 'SecurityError' ? 'Bluetooth permission denied' :
+        error.name === 'NetworkError' ? 'Connection failed — ensure device is powered on' :
+        error.message;
+
+      setBleStatus({ step: 'error', error: errorMsg });
+      toast.error(errorMsg);
       console.error('Bluetooth pairing error:', error);
     } finally {
       setIsPairing(false);
@@ -533,8 +606,17 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                           )}
                         </div>
                         {isSuperAdmin && machine.sensor_id && (
-                          <div className="mt-2 text-xs text-[#808080]">
-                            Sensor: <span className="text-[#00E5FF]">{machine.sensor_id}</span>
+                          <div className="mt-2 text-xs text-[#808080] flex items-center gap-2">
+                            <span>BLE: <span className="text-[#00E5FF]">{machine.sensor_id}</span></span>
+                            {machine.ble_protocol && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                                machine.protocol_verified 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                  : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                              }`}>
+                                {machine.ble_protocol.toUpperCase()}{machine.protocol_verified ? ' ✓' : ' ?'}
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -615,13 +697,14 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                               {isSuperAdmin && (
                                 <>
                                   <button
-                                    onClick={() => handlePairSensor(machine.id)}
+                                    onClick={() => handleBLERegistration(machine.id)}
                                     disabled={isPairing && pairingMachineId === machine.id}
                                     className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors disabled:opacity-50"
-                                    title={machine.sensor_id ? 'Re-pair sensor' : 'Pair BLE sensor'}
+                                    title={machine.sensor_id ? `${machine.ble_protocol?.toUpperCase() || 'BLE'} ${machine.protocol_verified ? '✓' : '?'} — Click to re-pair` : 'Register BLE device'}
                                   >
                                     <Bluetooth
                                       className={`w-4 h-4 ${
+                                        machine.protocol_verified ? 'text-emerald-400' :
                                         machine.sensor_id ? 'text-[#00E5FF]' : ''
                                       }`}
                                     />
@@ -944,6 +1027,172 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BLE Registration Modal */}
+      {bleRegistrationModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Bluetooth className="w-5 h-5 text-[#00E5FF]" />
+                BLE Device Registration
+              </h3>
+              {(bleStatus.step === 'done' || bleStatus.step === 'error' || bleStatus.step === 'idle') && (
+                <button
+                  onClick={() => {
+                    setBleRegistrationModal(null);
+                    setBleStatus({ step: 'idle' });
+                  }}
+                  className="text-[#808080] hover:text-white transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {/* Machine info */}
+              <p className="text-sm text-[#808080]">
+                Machine: {machines.find(m => m.id === bleRegistrationModal)?.name || 'Unknown'}
+              </p>
+
+              {/* Step indicator */}
+              <div className="space-y-3">
+                {/* Step 1: Scanning */}
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  bleStatus.step === 'scanning' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
+                  ['connecting', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
+                }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    bleStatus.step === 'scanning' ? 'bg-[#00E5FF] text-black animate-pulse' :
+                    ['connecting', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
+                  }`}>
+                    {['connecting', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? '✓' : '1'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Scan for Device</p>
+                    <p className="text-xs text-[#808080]">
+                      {bleStatus.step === 'scanning' ? 'Waiting for device selection...' : 
+                       bleStatus.deviceName ? `Found: ${bleStatus.deviceName}` : 'Select a nearby BLE device'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2: Connecting */}
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  bleStatus.step === 'connecting' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
+                  ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
+                }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    bleStatus.step === 'connecting' ? 'bg-[#00E5FF] text-black animate-pulse' :
+                    ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
+                  }`}>
+                    {['detecting', 'testing', 'done'].includes(bleStatus.step) ? '✓' : '2'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Connect via GATT</p>
+                    <p className="text-xs text-[#808080]">
+                      {bleStatus.step === 'connecting' ? 'Establishing connection...' :
+                       ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'Connected' : 'Connect to device'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 3: Protocol Detection */}
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  bleStatus.step === 'detecting' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
+                  ['testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
+                }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    bleStatus.step === 'detecting' ? 'bg-[#00E5FF] text-black animate-pulse' :
+                    ['testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
+                  }`}>
+                    {['testing', 'done'].includes(bleStatus.step) ? '✓' : '3'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Detect Protocol</p>
+                    <p className="text-xs text-[#808080]">
+                      {bleStatus.step === 'detecting' ? 'Checking FTMS, CSC, FitShow, KSFit...' :
+                       bleStatus.protocol ? `Detected: ${bleStatus.protocol.toUpperCase()}` : 'Identify BLE protocol'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 4: Data Stream Test */}
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  bleStatus.step === 'testing' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
+                  bleStatus.step === 'done' ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
+                }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    bleStatus.step === 'testing' ? 'bg-[#00E5FF] text-black animate-pulse' :
+                    bleStatus.step === 'done' ? (bleStatus.dataReceived ? 'bg-emerald-500 text-white' : 'bg-yellow-500 text-black') : 'bg-[#2A2A2A] text-[#808080]'
+                  }`}>
+                    {bleStatus.step === 'done' ? (bleStatus.dataReceived ? '✓' : '!') : '4'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Verify Data Stream</p>
+                    <p className="text-xs text-[#808080]">
+                      {bleStatus.step === 'testing' ? 'Listening for data (3s)...' :
+                       bleStatus.step === 'done' ? (bleStatus.dataReceived ? 'Data stream confirmed' : 'No data received — manual verification needed') :
+                       'Confirm live data from device'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error state */}
+              {bleStatus.step === 'error' && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                    <p className="text-sm font-medium text-red-400">Registration Failed</p>
+                  </div>
+                  <p className="text-xs text-[#808080]">{bleStatus.error}</p>
+                </div>
+              )}
+
+              {/* Success state */}
+              {bleStatus.step === 'done' && (
+                <div className={`${bleStatus.dataReceived ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-yellow-500/10 border-yellow-500/30'} border rounded-lg p-4`}>
+                  <p className={`text-sm font-medium ${bleStatus.dataReceived ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                    {bleStatus.dataReceived ? '✓ Device registered & verified' : '⚠ Device registered (unverified)'}
+                  </p>
+                  <p className="text-xs text-[#808080] mt-1">
+                    {bleStatus.deviceName} — {bleStatus.protocol?.toUpperCase()}
+                    {!bleStatus.dataReceived && ' — Start pedaling/walking to verify data stream'}
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                {bleStatus.step === 'error' && (
+                  <button
+                    onClick={() => {
+                      setBleStatus({ step: 'idle' });
+                      handleBLERegistration(bleRegistrationModal);
+                    }}
+                    className="flex-1 px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+                {(bleStatus.step === 'done' || bleStatus.step === 'error' || bleStatus.step === 'idle') && (
+                  <button
+                    onClick={() => {
+                      setBleRegistrationModal(null);
+                      setBleStatus({ step: 'idle' });
+                    }}
+                    className="flex-1 px-4 py-2 bg-[#1A1A1A] text-white rounded-lg hover:bg-[#2A2A2A] transition-colors"
+                  >
+                    Close
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -4,19 +4,31 @@ import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+const tierSchema = z.object({
+  label: z.string().min(1),
+  target: z.number().int().positive(),
+  drops: z.number().int().min(0),
+});
+
 const createChallengeSchema = z.object({
   gymId: z.string().uuid(),
   name: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   challengeType: z.enum(['daily', 'weekly', 'monthly', 'streak', 'milestone']),
-  // Conditional fields based on challengeType
-  targetDrops: z.number().int().positive().optional(), // For daily/weekly/monthly
-  milestoneThreshold: z.number().int().positive().optional(), // For milestone
-  streakDays: z.number().int().positive().optional(), // For streak
+  targetDrops: z.number().int().positive().optional(),
+  milestoneThreshold: z.number().int().positive().optional(),
+  streakDays: z.number().int().positive().optional(),
   rewardDrops: z.number().int().min(0),
   badgeImageUrl: z.string().url().optional().or(z.literal('')),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+  // New enhanced fields
+  categoryType: z.enum(['individual', 'group', 'streak']).optional(),
+  scoringModel: z.enum(['total_drops', 'distance_km', 'days_visited', 'streak_days']).optional(),
+  tiers: z.array(tierSchema).optional(),
+  sponsorName: z.string().optional(),
+  sponsorLogo: z.string().url().optional().or(z.literal('')),
+  prizeDescription: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Conditional validation with specific field errors
   if (data.challengeType === 'daily' || data.challengeType === 'weekly' || data.challengeType === 'monthly') {
@@ -155,6 +167,14 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       badge_image_url: validated.badgeImageUrl && validated.badgeImageUrl.trim() !== '' 
         ? validated.badgeImageUrl.trim() 
         : null,
+      // Enhanced fields
+      scoring_model: validated.scoringModel || 'total_drops',
+      tiers: validated.tiers && validated.tiers.length > 0 ? validated.tiers : null,
+      sponsor_name: validated.sponsorName || null,
+      sponsor_logo: validated.sponsorLogo && validated.sponsorLogo.trim() !== ''
+        ? validated.sponsorLogo.trim()
+        : null,
+      prize_description: validated.prizeDescription || null,
     };
 
     const supabaseAdmin = getAdminClient();
@@ -221,6 +241,123 @@ export async function toggleChallengeStatus(challengeId: string, gymId: string, 
     return { success: true };
   } catch (error: any) {
     // Error toggling challenge status
+    return { success: false, error: error.message };
+  }
+}
+
+// Get detailed challenge progress with participant list
+export async function getChallengeDetailedProgress(challengeId: string, gymId: string) {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    // Fetch challenge info
+    const { data: challenge, error: challengeError } = await supabaseAdmin
+      .from('gym_challenges')
+      .select('*')
+      .eq('id', challengeId)
+      .eq('gym_id', gymId)
+      .single();
+
+    if (challengeError) throw challengeError;
+    if (!challenge) return { success: false, error: 'Challenge not found' };
+
+    // Fetch all progress records for this challenge
+    const { data: progressRecords, error: progressError } = await supabaseAdmin
+      .from('challenge_progress')
+      .select(`
+        user_id,
+        current_value,
+        is_completed,
+        completed_at,
+        profiles:user_id (
+          id,
+          username,
+          avatar_url
+        )
+      `)
+      .eq('challenge_id', challengeId);
+
+    if (progressError) throw progressError;
+
+    const participants = ((progressRecords || []) as any[]).map((p) => ({
+      user_id: p.user_id,
+      username: p.profiles?.username || 'Unknown',
+      avatar_url: p.profiles?.avatar_url || null,
+      current_value: p.current_value || 0,
+      is_completed: p.is_completed || false,
+      completed_at: p.completed_at,
+    }));
+
+    // Determine target for the challenge
+    const target = (challenge as any).challenge_type === 'streak'
+      ? (challenge as any).streak_days || 0
+      : (challenge as any).challenge_type === 'milestone'
+      ? (challenge as any).milestone_threshold || 0
+      : (challenge as any).target_drops || 0;
+
+    const totalParticipants = participants.length;
+    const completedCount = participants.filter((p) => p.is_completed).length;
+    const completionPercentage = totalParticipants > 0
+      ? Math.round((completedCount / totalParticipants) * 100)
+      : 0;
+    const avgProgress = totalParticipants > 0 && target > 0
+      ? Math.round(
+          (participants.reduce((sum, p) => sum + Math.min(p.current_value / target, 1), 0) /
+            totalParticipants) *
+            100
+        )
+      : 0;
+
+    // Sort: completed last, then by progress desc
+    participants.sort((a, b) => {
+      if (a.is_completed && !b.is_completed) return 1;
+      if (!a.is_completed && b.is_completed) return -1;
+      return b.current_value - a.current_value;
+    });
+
+    return {
+      success: true,
+      data: {
+        challenge,
+        target,
+        totalParticipants,
+        completedCount,
+        completionPercentage,
+        avgProgress,
+        participants: participants.slice(0, 50), // Limit
+      },
+    };
+  } catch (error: any) {
+    console.error('[getChallengeDetailedProgress] Error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Close challenge early (deactivate and set end_date to now)
+export async function closeChallenge(challengeId: string, gymId: string) {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+
+    const { error } = await supabaseAdmin
+      .from('gym_challenges')
+      // @ts-expect-error - Supabase type inference issue
+      .update({ is_active: false, end_date: now } as any)
+      .eq('id', challengeId)
+      .eq('gym_id', gymId);
+
+    if (error) throw error;
+
+    revalidatePath(`/dashboard/gym/${gymId}/challenges`);
+    return { success: true };
+  } catch (error: any) {
     return { success: false, error: error.message };
   }
 }

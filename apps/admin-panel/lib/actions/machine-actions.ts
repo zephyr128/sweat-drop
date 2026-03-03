@@ -215,6 +215,50 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
   }
 }
 
+export async function registerBLEDevice(
+  machineId: string,
+  bleDeviceName: string,
+  bleProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit',
+  protocolVerified: boolean
+) {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can register BLE devices' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('machines')
+      // @ts-expect-error - Supabase type inference issue
+      .update({
+        sensor_id: bleDeviceName,
+        sensor_paired_at: new Date().toISOString(),
+        ble_protocol: bleProtocol,
+        protocol_verified: protocolVerified,
+      } as any)
+      .eq('id', machineId)
+      .select('gym_id, name, type, ble_protocol, protocol_verified')
+      .single();
+
+    if (error) throw error;
+
+    if (data) {
+      const machineData = data as { gym_id: string; [key: string]: any };
+      revalidatePath(`/dashboard/gym/${machineData.gym_id}/machines`);
+      revalidatePath(`/dashboard/super/machines`);
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function lockMachine(machineId: string, userId: string) {
   try {
     const supabaseAdmin = getAdminClient();

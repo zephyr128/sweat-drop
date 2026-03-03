@@ -8,7 +8,7 @@ import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import { createStoreItem, deleteStoreItem, updateStoreItem } from '@/lib/actions/store-actions';
 import { uploadFile } from '@/lib/utils/storage';
-import { X, Trash2, Edit2, Droplet } from 'lucide-react';
+import { X, Trash2, Edit2, Droplet, Smartphone, Building2, Calendar } from 'lucide-react';
 
 const storeItemSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -16,6 +16,10 @@ const storeItemSchema = z.object({
   priceDrops: z.number().int().positive('Price must be greater than 0'),
   stock: z.number().int().min(0).optional(),
   imageUrl: z.string().url().optional().or(z.literal('')),
+  sponsorName: z.string().optional(),
+  sponsorLogo: z.string().url().optional().or(z.literal('')),
+  availableFrom: z.string().optional(),
+  availableUntil: z.string().optional(),
 });
 
 type StoreItemFormData = z.infer<typeof storeItemSchema>;
@@ -28,6 +32,10 @@ interface StoreItem {
   stock: number | null;
   image_url: string | null;
   is_active: boolean;
+  sponsor_name?: string | null;
+  sponsor_logo?: string | null;
+  available_from?: string | null;
+  available_until?: string | null;
 }
 
 interface StoreManagerProps {
@@ -41,7 +49,10 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
   const [editingItem, setEditingItem] = useState<StoreItem | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadingSponsorLogo, setUploadingSponsorLogo] = useState(false);
+  const [sponsorLogoPreview, setSponsorLogoPreview] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const {
     register,
@@ -77,15 +88,43 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
     },
   });
 
+  const sponsorLogoDropzone = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.svg'],
+    },
+    maxFiles: 1,
+    onDrop: async (acceptedFiles) => {
+      if (acceptedFiles.length === 0) return;
+
+      setUploadingSponsorLogo(true);
+      try {
+        const file = acceptedFiles[0];
+        const result = await uploadFile(file, 'images', gymId);
+        setValue('sponsorLogo', result.url);
+        setSponsorLogoPreview(result.url);
+        toast.success('Sponsor logo uploaded');
+      } catch (error: any) {
+        toast.error(`Failed to upload logo: ${error.message}`);
+      } finally {
+        setUploadingSponsorLogo(false);
+      }
+    },
+  });
+
   const openEditModal = (item: StoreItem) => {
     setEditingItem(item);
     setImagePreview(item.image_url);
+    setSponsorLogoPreview(item.sponsor_logo || null);
     reset({
       name: item.name,
       description: item.description || '',
       priceDrops: item.price_drops,
       stock: item.stock ?? undefined,
       imageUrl: item.image_url || '',
+      sponsorName: item.sponsor_name || '',
+      sponsorLogo: item.sponsor_logo || '',
+      availableFrom: item.available_from || '',
+      availableUntil: item.available_until || '',
     });
     setIsModalOpen(true);
   };
@@ -94,6 +133,8 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
     setIsModalOpen(false);
     setEditingItem(null);
     setImagePreview(null);
+    setSponsorLogoPreview(null);
+    setShowPreview(false);
     reset();
   };
 
@@ -116,7 +157,11 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
         const result = await createStoreItem({
           ...data,
           gymId,
-          rewardType: 'physical', // Default reward type
+          rewardType: 'physical',
+          sponsorName: data.sponsorName,
+          sponsorLogo: data.sponsorLogo,
+          availableFrom: data.availableFrom,
+          availableUntil: data.availableUntil,
         }) as {
           success: boolean;
           data?: StoreItem;
@@ -210,6 +255,24 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                   </p>
                   {item.stock !== null && (
                     <p className="text-sm text-[#808080]">Stock: {item.stock}</p>
+                  )}
+                  {item.sponsor_name && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      {item.sponsor_logo ? (
+                        <img src={item.sponsor_logo} alt="" className="h-4 w-4 object-contain" />
+                      ) : (
+                        <Building2 className="w-3 h-3 text-[#808080]" />
+                      )}
+                      <span className="text-xs text-[#808080]">by {item.sponsor_name}</span>
+                    </div>
+                  )}
+                  {(item.available_from || item.available_until) && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Calendar className="w-3 h-3 text-[#808080]" />
+                      <span className="text-xs text-[#808080]">
+                        {item.available_from || '...'} — {item.available_until || '...'}
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -346,10 +409,105 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                 </div>
               </div>
 
+              {/* Availability Dates */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="w-4 h-4 text-[#808080]" />
+                  <label className="text-sm font-medium text-white">Availability Window</label>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-[#808080] mb-1">Available From</label>
+                    <input
+                      type="date"
+                      {...register('availableFrom')}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#808080] mb-1">Available Until</label>
+                    <input
+                      type="date"
+                      {...register('availableUntil')}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-[#808080]">Leave empty for always available</p>
+              </div>
+
+              {/* Sponsor Section */}
+              <div className="border-t border-[#1A1A1A] pt-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Building2 className="w-4 h-4 text-[#808080]" />
+                  <label className="text-sm font-medium text-white">Sponsor (Optional)</label>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-[#808080] mb-1">Sponsor Name</label>
+                    <input
+                      {...register('sponsorName')}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                      placeholder="E.g., GymShark, MyProtein"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[#808080] mb-1">Sponsor Logo</label>
+                    <div
+                      {...sponsorLogoDropzone.getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+                        sponsorLogoDropzone.isDragActive
+                          ? 'border-[#00E5FF] bg-[#00E5FF]/10'
+                          : 'border-[#333] hover:border-[#00E5FF]/50'
+                      }`}
+                    >
+                      <input {...sponsorLogoDropzone.getInputProps()} />
+                      {sponsorLogoPreview ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <img src={sponsorLogoPreview} alt="Sponsor logo" className="h-10 object-contain" />
+                          <span className="text-xs text-[#808080]">Click to replace</span>
+                        </div>
+                      ) : uploadingSponsorLogo ? (
+                        <p className="text-sm text-[#00E5FF]">Uploading...</p>
+                      ) : (
+                        <p className="text-sm text-[#808080]">Drop sponsor logo or click to select</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile Preview Toggle */}
+              <div className="border-t border-[#1A1A1A] pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex items-center gap-2 text-sm text-[#00E5FF] hover:underline"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  {showPreview ? 'Hide Mobile Preview' : 'Show Mobile Preview'}
+                </button>
+
+                {showPreview && (
+                  <div className="mt-4 flex justify-center">
+                    <MobileRewardPreview
+                      name={_watch('name') || 'Reward Name'}
+                      description={_watch('description') || ''}
+                      priceDrops={_watch('priceDrops') || 0}
+                      imageUrl={imagePreview}
+                      sponsorName={_watch('sponsorName') || ''}
+                      sponsorLogo={sponsorLogoPreview}
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  disabled={isSubmitting || uploading}
+                  disabled={isSubmitting || uploading || uploadingSponsorLogo}
                   className="flex-1 px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting
@@ -372,6 +530,73 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Mini preview of how the reward card looks in the mobile app */
+function MobileRewardPreview({
+  name,
+  description,
+  priceDrops,
+  imageUrl,
+  sponsorName,
+  sponsorLogo,
+}: {
+  name: string;
+  description: string;
+  priceDrops: number;
+  imageUrl: string | null;
+  sponsorName: string;
+  sponsorLogo: string | null;
+}) {
+  return (
+    <div className="w-[240px] bg-[#111] border border-[#333] rounded-2xl overflow-hidden shadow-lg">
+      {/* Phone frame header */}
+      <div className="h-5 bg-[#1A1A1A] flex items-center justify-center">
+        <div className="w-10 h-1.5 bg-[#333] rounded-full" />
+      </div>
+
+      {/* Card content */}
+      <div className="p-0">
+        {imageUrl ? (
+          <div className="h-28 bg-[#1A1A1A] overflow-hidden">
+            <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="h-28 bg-gradient-to-br from-[#00E5FF]/10 to-[#00B8CC]/5 flex items-center justify-center">
+            <Droplet className="w-10 h-10 text-[#00E5FF]/30" />
+          </div>
+        )}
+
+        <div className="p-4">
+          <h4 className="text-sm font-bold text-white truncate">{name}</h4>
+          {description && (
+            <p className="text-xs text-[#808080] mt-1 line-clamp-2">{description}</p>
+          )}
+
+          {sponsorName && (
+            <div className="flex items-center gap-1.5 mt-2">
+              {sponsorLogo ? (
+                <img src={sponsorLogo} alt="" className="h-4 w-4 object-contain" />
+              ) : (
+                <Building2 className="w-3 h-3 text-[#808080]" />
+              )}
+              <span className="text-[10px] text-[#808080]">by {sponsorName}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-1">
+              <span className="text-lg font-bold text-[#00E5FF]">{priceDrops}</span>
+              <Droplet className="w-3.5 h-3.5 text-[#00E5FF]" />
+            </div>
+            <button className="px-3 py-1 bg-[#00E5FF] text-black text-xs font-bold rounded-full">
+              Claim
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

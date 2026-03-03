@@ -12,6 +12,10 @@ const createStoreItemSchema = z.object({
   stock: z.number().int().min(0).optional(),
   imageUrl: z.string().url().optional(),
   rewardType: z.string().default('physical'),
+  sponsorName: z.string().optional(),
+  sponsorLogo: z.string().url().optional().or(z.literal('')),
+  availableFrom: z.string().optional(),
+  availableUntil: z.string().optional(),
 });
 
 export async function createStoreItem(input: z.infer<typeof createStoreItemSchema>) {
@@ -33,6 +37,10 @@ export async function createStoreItem(input: z.infer<typeof createStoreItemSchem
         image_url: validated.imageUrl || null,
         reward_type: validated.rewardType,
         is_active: true,
+        sponsor_name: validated.sponsorName || null,
+        sponsor_logo: validated.sponsorLogo || null,
+        available_from: validated.availableFrom || null,
+        available_until: validated.availableUntil || null,
       } as any) as any)
       .select()
       .single();
@@ -63,6 +71,10 @@ export async function updateStoreItem(
     if (input.priceDrops !== undefined) updateData.price_drops = input.priceDrops;
     if (input.stock !== undefined) updateData.stock = input.stock;
     if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl;
+    if (input.sponsorName !== undefined) updateData.sponsor_name = input.sponsorName || null;
+    if (input.sponsorLogo !== undefined) updateData.sponsor_logo = input.sponsorLogo || null;
+    if (input.availableFrom !== undefined) updateData.available_from = input.availableFrom || null;
+    if (input.availableUntil !== undefined) updateData.available_until = input.availableUntil || null;
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
