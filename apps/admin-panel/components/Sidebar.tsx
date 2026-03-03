@@ -20,6 +20,8 @@ import {
   Award,
   ShieldCheck,
   HeartPulse,
+  Swords,
+  History,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -89,6 +91,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     { href: '/dashboard/super/owners', label: 'Owners', icon: Users },
     { href: '/dashboard/super/machines', label: 'Global Machines', icon: Cpu },
     { href: '/dashboard/super/achievements', label: 'Achievements', icon: Award },
+    { href: '/dashboard/arenas', label: 'Arenas', icon: Swords },
     { href: '/dashboard/super/health', label: 'System Health', icon: Activity },
   ];
 
@@ -106,6 +109,8 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
         { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
         { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
         { href: `${base}/machines`, label: 'Machines', icon: Cpu },
+        { href: `${base}/arenas`, label: 'Local Arenas', icon: Swords },
+        { href: `${base}/leaderboard-history`, label: 'Leaderboard History', icon: History },
       ],
       operations: [
         { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
@@ -135,6 +140,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
       management: [
         { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
         { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
+        { href: `${base}/leaderboard-history`, label: 'Leaderboard History', icon: History },
       ],
       operations: [
         { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
