@@ -6,10 +6,10 @@
  *   - apps/mobile-app (Expo/React Native)
  *   - backend/supabase (Edge Functions)
  *
- * These types represent the schema after all Phase 0–2 migrations are applied.
+ * These types represent the schema after all Phase 0–3 migrations are applied.
  *
  * Generated: 2026-03-02
- * Updated:   2026-03-02 (Phase 1 & 2 complete — all @pending-migration resolved)
+ * Updated:   2026-03-03 (Phase 3 complete — Arenas + Unified Leaderboard)
  * Reference: docs/plans/mvp_full_audit_and_build_plan.md
  */
 
@@ -45,6 +45,18 @@ export type TransactionType =
  *  'cancelled' = claim cancelled by user or system
  *  'expired' = claim expired without redemption */
 export type ClaimStatus = 'claimed' | 'redeemed' | 'cancelled' | 'expired';
+
+/** Source of a redemption entry */
+export type RedemptionSourceType = 'reward_store' | 'arena_prize' | 'leaderboard_prize';
+
+/** Leaderboard query type for generic get_leaderboard() RPC */
+export type LeaderboardType = 'gym' | 'global' | 'challenge' | 'arena';
+
+/** Arena scope */
+export type ArenaScope = 'local' | 'regional' | 'network';
+
+/** Arena scoring models */
+export type ArenaScoringModel = 'total_drops' | 'days_visited' | 'variety_score' | 'streak_days';
 
 /** Challenge category */
 export type ChallengeType = 'individual' | 'group' | 'streak';
@@ -257,20 +269,27 @@ export interface Reward {
   created_at: string;
 }
 
-/** public.redemptions (maps to spec's "reward_claims") */
+/** public.redemptions (maps to spec's "reward_claims")
+ *  Now supports multiple source types: reward_store, arena_prize, leaderboard_prize */
 export interface Redemption {
   id: string;
   user_id: string;
-  reward_id: string;
+  /** NULL for arena/leaderboard prizes */
+  reward_id: string | null;
   gym_id: string;
   drops_spent: number;
   /** 'claimed' = pending verification, 'redeemed' = confirmed by staff */
   status: ClaimStatus;
-  /** 4-char unique code for staff verification */
+  /** 6-char unique code for staff verification */
   redemption_code: string | null;
   confirmed_by: string | null;
   confirmed_at: string | null;
+  /** Origin of this redemption */
+  source_type: RedemptionSourceType;
+  /** Human-readable description (used for arena/leaderboard prizes) */
+  description: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -376,15 +395,18 @@ export interface UserBadge {
 //  LEADERBOARD
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/** Return type from get_local_leaderboard() and get_global_leaderboard() */
+/** Return type from generic get_leaderboard() RPC */
 export interface LeaderboardEntry {
-  user_id: string;
-  username: string | null;
-  avatar_url: string | null;
-  drops: number;
   rank: number;
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+  score: number;
+  /** Pre-formatted display string: "1,240 💧" | "🔥 21 days" */
+  score_label: string;
   is_newcomer: boolean;
   streak_days: number;
+  gym_name: string | null;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -403,17 +425,30 @@ export interface GymBranding {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  LEADERBOARD REWARDS
+//  LEADERBOARD REWARDS & SNAPSHOTS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export interface LeaderboardReward {
   id: string;
   gym_id: string;
-  period: LeaderboardPeriod;
   rank_position: number;
-  reward_drops: number;
+  reward_name: string;
   reward_description: string | null;
+  reward_type: string;
+  value: string | null;
   is_active: boolean;
+  period: LeaderboardPeriod;
+}
+
+export interface LeaderboardSnapshot {
+  id: string;
+  gym_id: string;
+  period: LeaderboardPeriod;
+  period_start: string;
+  period_end: string;
+  rankings: Array<{ rank: number; user_id: string; username: string; drops: number }>;
+  prizes_distributed: boolean;
+  created_at: string;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -438,16 +473,10 @@ export interface ClaimRewardResult {
 // NOTE: join_gym_by_code RPC removed from MVP scope (Blocker 3).
 // Gym joining happens automatically on first machine QR scan.
 
-/** Parameters for get_local_leaderboard RPC */
-export interface LocalLeaderboardParams {
-  p_gym_id: string;
-  p_period?: LeaderboardPeriod;
-  p_limit?: number;
-  p_newcomer_only?: boolean;
-}
-
-/** Parameters for get_global_leaderboard RPC */
-export interface GlobalLeaderboardParams {
+/** Parameters for generic get_leaderboard() RPC */
+export interface LeaderboardParams {
+  p_type: LeaderboardType;
+  p_scope_id: string | null;
   p_period?: LeaderboardPeriod;
   p_limit?: number;
   p_newcomer_only?: boolean;
@@ -540,6 +569,94 @@ export interface DropsExpiryNotification extends PushNotificationPayload {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  SWEAT ARENAS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** public.sweat_arenas — sponsor-branded competitions */
+export interface SweatArena {
+  id: string;
+  name: string;
+  description: string | null;
+  arena_scope: ArenaScope;
+  scoring_model: ArenaScoringModel;
+  sponsor_name: string;
+  sponsor_logo: string | null;
+  sponsor_contact_email: string | null;
+  prizes: ArenaPrize[];
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_finalized: boolean;
+  finalized_at: string | null;
+  sponsor_fee_cents: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** JSONB element in sweat_arenas.prizes */
+export interface ArenaPrize {
+  rank: number;
+  prize: string;
+  value?: string;
+}
+
+/** public.arena_gyms — gyms participating in an arena */
+export interface ArenaGym {
+  id: string;
+  arena_id: string;
+  gym_id: string;
+  approved_by: string | null;
+  approved_at: string | null;
+}
+
+/** public.arena_participants — user opt-in + live score */
+export interface ArenaParticipant {
+  id: string;
+  arena_id: string;
+  user_id: string;
+  gym_id: string;
+  current_score: number;
+  opted_in_at: string;
+}
+
+/** public.arena_results — finalized rankings with redemption links */
+export interface ArenaResult {
+  id: string;
+  arena_id: string;
+  user_id: string;
+  final_rank: number;
+  final_score: number;
+  prize_description: string | null;
+  /** FK to redemptions table */
+  redemption_id: string | null;
+  created_at: string;
+}
+
+/** Return type from get_available_arenas() RPC */
+export interface AvailableArena {
+  arena_id: string;
+  name: string;
+  description: string | null;
+  sponsor_name: string;
+  sponsor_logo: string | null;
+  scoring_model: ArenaScoringModel;
+  start_date: string;
+  end_date: string;
+  participant_count: number;
+  user_opted_in: boolean;
+  user_rank: number | null;
+  user_score: number | null;
+  prizes: ArenaPrize[];
+}
+
+/** Result from opt_into_arena() RPC */
+export interface OptIntoArenaResult {
+  success: boolean;
+  error?: string;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  BLE PROTOCOL INTERFACES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -621,7 +738,8 @@ export type FeatureId =
   | 'push_notifications'
   | 'machine_registration'
   | 'analytics_advanced'
-  | 'custom_branding';
+  | 'custom_branding'
+  | 'arenas';
 
 /**
  * Check if a gym has access to a feature based on subscription plan.
