@@ -5,7 +5,17 @@ import { Line } from 'react-chartjs-2';
 import { Clock } from 'lucide-react';
 import '@/lib/chart-setup';
 
-export function PopularHoursWidget({ hourlyTraffic }: any) {
+interface HourlyTrafficItem {
+  hour: number;
+  scan_count?: number | null;
+}
+
+type TrafficPoint = {
+  hour: string;
+  scans: number;
+};
+
+export function PopularHoursWidget({ hourlyTraffic }: { hourlyTraffic: HourlyTrafficItem[] }) {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -18,20 +28,20 @@ export function PopularHoursWidget({ hourlyTraffic }: any) {
   }
 
   // 2. Process data
-  const chartData = hourlyTraffic.map((item: any) => ({
+  const chartData: TrafficPoint[] = hourlyTraffic.map((item) => ({
     hour: `${String(item.hour).padStart(2, '0')}:00`,
     scans: Number(item.scan_count || 0),
   }));
 
-  const hasData = chartData.some(item => item.scans > 0);
+  const hasData = chartData.some((item) => item.scans > 0);
 
   // 3. Chart.js data configuration
   const data = {
-    labels: chartData.map(item => item.hour),
+    labels: chartData.map((item) => item.hour),
     datasets: [
       {
         label: 'Scans',
-        data: chartData.map(item => item.scans),
+        data: chartData.map((item) => item.scans),
         borderColor: '#00E5FF',
         backgroundColor: 'rgba(0, 229, 255, 0.1)',
         fill: true,
@@ -50,7 +60,7 @@ export function PopularHoursWidget({ hourlyTraffic }: any) {
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
-      mode: 'index',
+      mode: 'index' as const,
       intersect: false, // KLJUČNO: Ne mora da se pogodi tačka mišem
     },
     plugins: {

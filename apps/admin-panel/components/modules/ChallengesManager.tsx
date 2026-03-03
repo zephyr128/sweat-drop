@@ -5,10 +5,16 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { createChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats } from '@/lib/actions/challenge-actions';
-import { X, Trash2, Power, Droplet, Upload, Image } from 'lucide-react';
+import { createChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats, getChallengeDetailedProgress, closeChallenge } from '@/lib/actions/challenge-actions';
+import { X, Trash2, Power, Droplet, Upload, Image, BarChart3, Users, CheckCircle2, XCircle, Building2, Plus, Minus } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
+
+interface TierInput {
+  label: string;
+  target: number;
+  drops: number;
+}
 
 const challengeSchema = z.object({
   name: z.string().min(1, 'Title is required'),
@@ -22,6 +28,12 @@ const challengeSchema = z.object({
   badgeImageUrl: z.string().url().optional().or(z.literal('')), // Optional badge image URL
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+  // New fields for enhancement
+  categoryType: z.enum(['individual', 'group', 'streak']).optional(),
+  scoringModel: z.enum(['total_drops', 'distance_km', 'days_visited', 'streak_days']).optional(),
+  sponsorName: z.string().optional(),
+  sponsorLogo: z.string().url().optional().or(z.literal('')),
+  prizeDescription: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Conditional validation with specific field errors
   if (data.challengeType === 'daily' || data.challengeType === 'weekly' || data.challengeType === 'monthly') {
@@ -68,6 +80,12 @@ interface Challenge {
   milestone_threshold: number | null;
   streak_days: number | null;
   badge_image_url: string | null;
+  scoring_model?: string | null;
+  tiers?: TierInput[] | null;
+  sponsor_name?: string | null;
+  sponsor_logo?: string | null;
+  prize_description?: string | null;
+  category_type?: string | null;
   // Legacy fields (deprecated)
   frequency?: string;
   required_minutes?: number;
@@ -87,7 +105,23 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   const [uploadingBadge, setUploadingBadge] = useState(false);
   const [badgePreview, setBadgePreview] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState<Record<string, boolean>>({});
-  const [challengeStats, setChallengeStats] = useState<Record<string, { total_completions: number }>>({});
+  type ChallengeCompletionStats = {
+    total_completions: number;
+  };
+
+  const [challengeStats, setChallengeStats] = useState<Record<string, ChallengeCompletionStats>>({});
+  const [monitorId, setMonitorId] = useState<string | null>(null);
+  const [monitorData, setMonitorData] = useState<any>(null);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [tiers, setTiers] = useState<TierInput[]>([
+    { label: 'Bronze', target: 100, drops: 25 },
+    { label: 'Silver', target: 250, drops: 75 },
+    { label: 'Gold', target: 500, drops: 200 },
+  ]);
+  const [enableTiers, setEnableTiers] = useState(false);
+  const [sponsorLogoPreview, setSponsorLogoPreview] = useState<string | null>(null);
+  const [uploadingSponsorLogo, setUploadingSponsorLogo] = useState(false);
 
   const {
     register,
@@ -104,6 +138,11 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
       streakDays: 3,
       milestoneThreshold: 1000,
       badgeImageUrl: '',
+      categoryType: 'individual',
+      scoringModel: 'total_drops',
+      sponsorName: '',
+      sponsorLogo: '',
+      prizeDescription: '',
     },
   });
 
@@ -146,11 +185,35 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
     },
   });
 
+  // Sponsor logo dropzone for challenges
+  const challengeSponsorDropzone = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.svg'],
+    },
+    maxFiles: 1,
+    onDrop: async (acceptedFiles) => {
+      if (acceptedFiles.length === 0) return;
+      setUploadingSponsorLogo(true);
+      try {
+        const file = acceptedFiles[0];
+        const result = await uploadFile(file, 'images', gymId);
+        reset({ ...watch(), sponsorLogo: result.url });
+        setSponsorLogoPreview(result.url);
+        toast.success('Sponsor logo uploaded');
+      } catch (error: any) {
+        toast.error(`Failed to upload logo: ${error.message}`);
+      } finally {
+        setUploadingSponsorLogo(false);
+      }
+    },
+  });
+
   const onSubmit = async (data: ChallengeFormData) => {
     try {
       const submitData: any = {
         ...data,
         gymId,
+        tiers: enableTiers ? tiers : undefined,
       };
 
       const result = await createChallenge(submitData) as {
@@ -164,6 +227,13 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         toast.success('Challenge created successfully');
         reset();
         setBadgePreview(null);
+        setSponsorLogoPreview(null);
+        setEnableTiers(false);
+        setTiers([
+          { label: 'Bronze', target: 100, drops: 25 },
+          { label: 'Silver', target: 250, drops: 75 },
+          { label: 'Gold', target: 500, drops: 200 },
+        ]);
         setIsModalOpen(false);
       } else {
         toast.error(`Failed to create challenge: ${result.error}`);
@@ -219,15 +289,67 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
     try {
       const result = await getChallengeCompletionStats(challengeId, gymId);
       if (result.success && result.data) {
+        // Backend returns aggregate stats; derive total_completions from completed_users
+        const { completed_users } = result.data as {
+          total_users: number;
+          completed_users: number;
+          completion_percentage: number;
+        };
+
+        const stats: ChallengeCompletionStats = {
+          total_completions: completed_users,
+        };
+
         setChallengeStats((prev) => ({
           ...prev,
-          [challengeId]: result.data as { total_completions: number },
+          [challengeId]: stats,
         }));
       }
     } catch (error: any) {
       console.error('Error loading challenge stats:', error);
     } finally {
       setStatsLoading((prev) => ({ ...prev, [challengeId]: false }));
+    }
+  };
+
+  const openMonitor = async (challengeId: string) => {
+    setMonitorId(challengeId);
+    setMonitorLoading(true);
+    setMonitorData(null);
+    try {
+      const result = await getChallengeDetailedProgress(challengeId, gymId);
+      if (result.success && result.data) {
+        setMonitorData(result.data);
+      } else {
+        toast.error(result.error || 'Failed to load progress');
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setMonitorLoading(false);
+    }
+  };
+
+  const handleCloseChallenge = async (challengeId: string) => {
+    if (!confirm('End this challenge early? It will be deactivated immediately.')) return;
+    setClosingId(challengeId);
+    try {
+      const result = await closeChallenge(challengeId, gymId);
+      if (result.success) {
+        setChallenges(
+          challenges.map((c) =>
+            c.id === challengeId ? { ...c, is_active: false } : c
+          )
+        );
+        toast.success('Challenge ended successfully');
+        setMonitorId(null);
+      } else {
+        toast.error(result.error || 'Failed to close challenge');
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setClosingId(null);
     }
   };
 
@@ -336,6 +458,13 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openMonitor(challenge.id)}
+                          className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                          title="View Progress"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() =>
                             handleToggleStatus(challenge.id, challenge.is_active)
@@ -522,6 +651,179 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 )}
               </div>
 
+              {/* Category Type */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Category
+                </label>
+                <select
+                  {...register('categoryType')}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                >
+                  <option value="individual">Individual</option>
+                  <option value="group">Group</option>
+                  <option value="streak">Streak</option>
+                </select>
+                <p className="mt-1 text-xs text-[#808080]">
+                  Individual: personal progress • Group: gym-wide collective • Streak: consecutive days
+                </p>
+              </div>
+
+              {/* Scoring Model */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Scoring Model
+                </label>
+                <select
+                  {...register('scoringModel')}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                >
+                  <option value="total_drops">Total Drops</option>
+                  <option value="distance_km">Distance (km)</option>
+                  <option value="days_visited">Days Visited</option>
+                  <option value="streak_days">Streak Days</option>
+                </select>
+              </div>
+
+              {/* Tiers Editor */}
+              <div className="border-t border-[#1A1A1A] pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-white">Tiers (Optional)</label>
+                  <button
+                    type="button"
+                    onClick={() => setEnableTiers(!enableTiers)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      enableTiers
+                        ? 'bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30'
+                        : 'bg-[#1A1A1A] text-[#808080] border border-[#333]'
+                    }`}
+                  >
+                    {enableTiers ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+
+                {enableTiers && (
+                  <div className="space-y-3">
+                    {tiers.map((tier, idx) => (
+                      <div key={idx} className="flex items-center gap-3 bg-[#1A1A1A] rounded-lg p-3">
+                        <input
+                          type="text"
+                          value={tier.label}
+                          onChange={(e) => {
+                            const newTiers = [...tiers];
+                            newTiers[idx].label = e.target.value;
+                            setTiers(newTiers);
+                          }}
+                          className="flex-1 px-3 py-2 bg-[#0A0A0A] border border-[#333] rounded-lg text-white text-sm focus:border-[#00E5FF] focus:outline-none"
+                          placeholder="Tier name"
+                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={tier.target}
+                            onChange={(e) => {
+                              const newTiers = [...tiers];
+                              newTiers[idx].target = parseInt(e.target.value) || 0;
+                              setTiers(newTiers);
+                            }}
+                            className="w-20 px-2 py-2 bg-[#0A0A0A] border border-[#333] rounded-lg text-white text-sm text-center focus:border-[#00E5FF] focus:outline-none"
+                            placeholder="Target"
+                            min={1}
+                          />
+                          <span className="text-xs text-[#808080]">target</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={tier.drops}
+                            onChange={(e) => {
+                              const newTiers = [...tiers];
+                              newTiers[idx].drops = parseInt(e.target.value) || 0;
+                              setTiers(newTiers);
+                            }}
+                            className="w-20 px-2 py-2 bg-[#0A0A0A] border border-[#333] rounded-lg text-white text-sm text-center focus:border-[#00E5FF] focus:outline-none"
+                            placeholder="Drops"
+                            min={0}
+                          />
+                          <Droplet className="w-3 h-3 text-[#00E5FF]" />
+                        </div>
+                        {tiers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setTiers(tiers.filter((_, i) => i !== idx))}
+                            className="p-1 text-[#808080] hover:text-[#FF5252] transition-colors"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTiers([...tiers, { label: `Tier ${tiers.length + 1}`, target: 0, drops: 0 }])
+                      }
+                      className="flex items-center gap-1 text-sm text-[#00E5FF] hover:underline"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Tier
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Prize Description */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Prize Description
+                </label>
+                <textarea
+                  {...register('prizeDescription')}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none resize-none"
+                  placeholder="E.g., Gold tier winners receive a free 3-month membership"
+                />
+              </div>
+
+              {/* Sponsor Section */}
+              <div className="border-t border-[#1A1A1A] pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Building2 className="w-4 h-4 text-[#808080]" />
+                  <label className="text-sm font-medium text-white">Sponsor (Optional)</label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-[#808080] mb-1">Sponsor Name</label>
+                    <input
+                      {...register('sponsorName')}
+                      className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
+                      placeholder="E.g., Nike"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#808080] mb-1">Sponsor Logo</label>
+                    <div
+                      {...challengeSponsorDropzone.getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                        challengeSponsorDropzone.isDragActive
+                          ? 'border-[#00E5FF] bg-[#00E5FF]/10'
+                          : 'border-[#333] hover:border-[#00E5FF]/50'
+                      }`}
+                    >
+                      <input {...challengeSponsorDropzone.getInputProps()} />
+                      {sponsorLogoPreview ? (
+                        <img src={sponsorLogoPreview} alt="" className="h-8 mx-auto object-contain" />
+                      ) : uploadingSponsorLogo ? (
+                        <p className="text-xs text-[#00E5FF]">Uploading...</p>
+                      ) : (
+                        <p className="text-xs text-[#808080]">Drop logo</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
                   Badge Image
@@ -628,6 +930,168 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Challenge Monitor Modal */}
+      {monitorId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">Challenge Progress</h2>
+              <button
+                onClick={() => {
+                  setMonitorId(null);
+                  setMonitorData(null);
+                }}
+                className="text-[#808080] hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {monitorLoading ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-20 bg-[#1A1A1A] rounded-lg animate-pulse" />
+                  ))}
+                </div>
+                <div className="h-40 bg-[#1A1A1A] rounded-lg animate-pulse" />
+              </div>
+            ) : monitorData ? (
+              <div className="space-y-6">
+                {/* Stats Cards */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-[#1A1A1A] rounded-lg p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <Users className="w-4 h-4 text-[#808080]" />
+                      <p className="text-xs text-[#808080] uppercase">Participants</p>
+                    </div>
+                    <p className="text-2xl font-bold text-white">{monitorData.totalParticipants}</p>
+                  </div>
+                  <div className="bg-[#1A1A1A] rounded-lg p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <p className="text-xs text-[#808080] uppercase">Completed</p>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-400">
+                      {monitorData.completedCount}
+                      <span className="text-sm text-[#808080] ml-1">({monitorData.completionPercentage}%)</span>
+                    </p>
+                  </div>
+                  <div className="bg-[#1A1A1A] rounded-lg p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <BarChart3 className="w-4 h-4 text-[#00E5FF]" />
+                      <p className="text-xs text-[#808080] uppercase">Avg Progress</p>
+                    </div>
+                    <p className="text-2xl font-bold text-[#00E5FF]">{monitorData.avgProgress}%</p>
+                  </div>
+                </div>
+
+                {/* Completion Bar */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-[#808080]">Overall Progress</p>
+                    <p className="text-sm text-white font-medium">{monitorData.completionPercentage}%</p>
+                  </div>
+                  <div className="w-full h-3 bg-[#1A1A1A] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#00E5FF] to-[#00B8CC] rounded-full transition-all duration-500"
+                      style={{ width: `${monitorData.completionPercentage}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Participant List */}
+                <div>
+                  <h3 className="text-sm font-medium text-white mb-3">Participants</h3>
+                  {monitorData.participants.length === 0 ? (
+                    <div className="bg-[#1A1A1A] rounded-lg p-6 text-center">
+                      <Users className="w-8 h-8 text-[#808080] mx-auto mb-2" />
+                      <p className="text-sm text-[#808080]">No participants yet</p>
+                    </div>
+                  ) : (
+                    <div className="bg-[#1A1A1A] rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-[#333]">
+                            <th className="text-left px-4 py-2 text-xs text-[#808080] uppercase">Member</th>
+                            <th className="text-left px-4 py-2 text-xs text-[#808080] uppercase">Progress</th>
+                            <th className="text-left px-4 py-2 text-xs text-[#808080] uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#333]">
+                          {monitorData.participants.map((p: any) => {
+                            const pct = monitorData.target > 0
+                              ? Math.min(Math.round((p.current_value / monitorData.target) * 100), 100)
+                              : 0;
+                            return (
+                              <tr key={p.user_id} className="hover:bg-[#222] transition-colors">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full bg-[#333] flex items-center justify-center">
+                                      <span className="text-xs font-bold text-[#808080]">
+                                        {p.username.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <span className="text-sm text-white">{p.username}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-2 bg-[#333] rounded-full overflow-hidden min-w-[80px]">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${
+                                          p.is_completed ? 'bg-emerald-400' : 'bg-[#00E5FF]'
+                                        }`}
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-[#808080] w-12 text-right">
+                                      {p.current_value}/{monitorData.target}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {p.is_completed ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      Done
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-[#808080]">{pct}%</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Close Challenge Button */}
+                {challenges.find((c) => c.id === monitorId)?.is_active && (
+                  <div className="pt-4 border-t border-[#1A1A1A]">
+                    <button
+                      onClick={() => handleCloseChallenge(monitorId!)}
+                      disabled={closingId === monitorId}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#FF5252]/10 border border-[#FF5252]/30 text-[#FF5252] rounded-lg font-medium hover:bg-[#FF5252]/20 transition-colors disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      {closingId === monitorId ? 'Ending...' : 'End Challenge Early'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-[#808080]">Failed to load challenge data</p>
+              </div>
+            )}
           </div>
         </div>
       )}

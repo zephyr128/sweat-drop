@@ -18,6 +18,8 @@ import {
   Settings,
   Activity,
   Award,
+  ShieldCheck,
+  HeartPulse,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -96,6 +98,8 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     return {
       core: [
         { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+        { href: `${base}/members`, label: 'Members', icon: Users },
+        { href: `${base}/retention`, label: 'Retention', icon: HeartPulse },
         { href: `${base}/workout-plans`, label: 'Workout Plans', icon: Dumbbell },
       ],
       management: [
@@ -105,6 +109,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
       ],
       operations: [
         { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
+        { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
         { href: `${base}/team`, label: 'Team', icon: Users },
       ],
     };
@@ -123,6 +128,8 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     return {
       core: [
         { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+        { href: `${base}/members`, label: 'Members', icon: Users },
+        { href: `${base}/retention`, label: 'Retention', icon: HeartPulse },
         { href: `${base}/workout-plans`, label: 'Workout Plans', icon: Dumbbell },
       ],
       management: [
@@ -131,6 +138,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
       ],
       operations: [
         { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
+        { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
       ],
     };
   };
@@ -140,13 +148,21 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return {
       operations: [
+        { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
         { href: `${base}/redemptions`, label: 'Redemption Terminal', icon: Ticket },
         { href: `${base}/dashboard`, label: 'Live Feed', icon: LayoutDashboard },
       ],
     };
   };
 
-  const getLinks = () => {
+  type CoreLinks = { href: string; label: string; icon: any }[];
+  type LinkGroups = {
+    core?: CoreLinks;
+    management?: CoreLinks;
+    operations?: CoreLinks;
+  };
+
+  const getLinks = (): LinkGroups => {
     if (role === 'superadmin') {
       return { core: superadminLinks };
     } else if (role === 'gym_owner') {

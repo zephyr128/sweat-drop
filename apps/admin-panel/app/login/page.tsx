@@ -13,10 +13,17 @@ function getParam(params: SearchParams | null | undefined, key: string): string 
   return typeof v === 'string' ? v : Array.isArray(v) && v[0] ? String(v[0]) : null;
 }
 
-export default function LoginPage({ searchParams }: { searchParams?: SearchParams }) {
-  const redirectUrl = getParam(searchParams, 'redirect');
-  const emailParam = getParam(searchParams, 'email') || '';
-  const errorParam = getParam(searchParams, 'error');
+// Match Next.js generated PageProps where searchParams is a Promise
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
+  const redirectUrl = getParam(resolvedSearchParams, 'redirect');
+  const emailParam = getParam(resolvedSearchParams, 'email') || '';
+  const errorParam = getParam(resolvedSearchParams, 'error');
 
   return (
     <LoginForm

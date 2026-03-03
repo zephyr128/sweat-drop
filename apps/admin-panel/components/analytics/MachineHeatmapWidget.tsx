@@ -49,7 +49,7 @@ export function MachineHeatmapWidget({ machineUsage }: any) {
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
-      mode: 'index',
+      mode: 'index' as const,
       intersect: false, // KLJUČNO: Ne mora da se pogodi tačka mišem
     },
     plugins: {
