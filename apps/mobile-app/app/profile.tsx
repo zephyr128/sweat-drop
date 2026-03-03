@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,9 +9,18 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { theme, getNumberStyle } from '@/lib/theme';
-import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import Animated, { FadeInDown, FadeIn, SlideInRight } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withTiming,
+  interpolate,
+  Easing,
+} from 'react-native-reanimated';
+import Constants from 'expo-constants';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.6)
 // Dedicated Profile screen with hero, stats grid, recent badges, quick links.
@@ -56,7 +65,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
-  const { badges, loading: badgesLoading } = useUserBadges();
+  const { badges } = useUserBadges();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
@@ -144,8 +153,113 @@ export default function ProfileScreen() {
     loadProfile();
   };
 
-  // Recent badges (max 6)
-  const recentBadges = badges.slice(0, 6);
+  // Highest badge (most recently earned = first in sorted list)
+  const highestBadge: UserBadge | null = badges.length > 0 ? badges[0] : null;
+
+  // ── Avatar ↔ Badge flip animation ──
+  const isFlippedRef = useRef(false);
+  const flipProgress = useSharedValue(0);
+  const flipScale = useSharedValue(1);
+
+  const handleAvatarFlip = useCallback(() => {
+    if (!highestBadge) return;
+    isFlippedRef.current = !isFlippedRef.current;
+
+    // Bounce scale for juicy feel
+    flipScale.value = withSequence(
+      withTiming(0.9, { duration: 100, easing: Easing.out(Easing.quad) }),
+      withSpring(1, { damping: 8, stiffness: 200 }),
+    );
+
+    // 3D rotation
+    flipProgress.value = withSpring(isFlippedRef.current ? 1 : 0, {
+      damping: 14,
+      stiffness: 90,
+      mass: 0.8,
+    });
+  }, [highestBadge]);
+
+  const frontAnimatedStyle = useAnimatedStyle(() => {
+    const rotateY = interpolate(flipProgress.value, [0, 1], [0, 180]);
+    return {
+      transform: [
+        { perspective: 1200 },
+        { rotateY: `${rotateY}deg` },
+        { scale: flipScale.value },
+      ],
+    };
+  });
+
+  const backAnimatedStyle = useAnimatedStyle(() => {
+    const rotateY = interpolate(flipProgress.value, [0, 1], [180, 360]);
+    return {
+      transform: [
+        { perspective: 1200 },
+        { rotateY: `${rotateY}deg` },
+        { scale: flipScale.value },
+      ],
+    };
+  });
+
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await supabase.auth.signOut();
+              router.replace('/(onboarding)/auth');
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to log out');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all associated data. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'All your drops, badges, and workout history will be lost forever.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      // Sign out — actual account deletion handled server-side
+                      await supabase.auth.signOut();
+                      router.replace('/(onboarding)/auth');
+                    } catch (error: any) {
+                      Alert.alert('Error', error.message || 'Failed to delete account');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
 
   // Quick links
   const quickLinks = [
@@ -184,7 +298,14 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <BackButton />
+        <TouchableOpacity
+          style={[styles.backButton, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -209,21 +330,61 @@ export default function ProfileScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.heroGradient}
               >
-                {/* Avatar */}
-                <View style={[styles.avatarContainer, { borderColor: branding.primary }]}>
-                  {profile?.avatar_url ? (
-                    <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-                  ) : (
-                    <LinearGradient
-                      colors={[branding.primary, branding.primaryDark]}
-                      style={styles.avatarPlaceholder}
-                    >
-                      <Text style={[styles.avatarInitial, { color: branding.onPrimary }]}>
-                        {profile?.username?.charAt(0).toUpperCase() || '?'}
-                      </Text>
-                    </LinearGradient>
-                  )}
-                </View>
+                {/* Avatar ↔ Badge Flip Card */}
+                <TouchableOpacity
+                  onPress={handleAvatarFlip}
+                  activeOpacity={0.95}
+                  style={styles.flipCardContainer}
+                  disabled={!highestBadge}
+                >
+                  {/* Front — Avatar */}
+                  <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
+                    <View style={[styles.avatarContainer, { borderColor: branding.primary }]}>
+                      {profile?.avatar_url ? (
+                        <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+                      ) : (
+                        <LinearGradient
+                          colors={[branding.primary, branding.primaryDark]}
+                          style={styles.avatarPlaceholder}
+                        >
+                          <Text style={[styles.avatarInitial, { color: branding.onPrimary }]}>
+                            {profile?.username?.charAt(0).toUpperCase() || '?'}
+                          </Text>
+                        </LinearGradient>
+                      )}
+                    </View>
+                    {/* Badge peek indicator */}
+                    {highestBadge && (
+                      <View style={[styles.badgePeekIndicator, { backgroundColor: branding.primaryDark, borderColor: 'rgba(255, 215, 0, 0.6)' }]}>
+                        <Ionicons name="trophy" size={12} color="#FFD700" />
+                      </View>
+                    )}
+                  </Animated.View>
+
+                  {/* Back — Highest Badge */}
+                  <Animated.View style={[styles.flipCardFace, styles.flipCardBack, backAnimatedStyle]}>
+                    <View style={[styles.avatarContainer, { borderColor: '#FFD700', borderWidth: 2.5 }]}>
+                      {highestBadge?.badge_image_url ? (
+                        <Image source={{ uri: highestBadge.badge_image_url }} style={styles.avatar} />
+                      ) : (
+                        <LinearGradient
+                          colors={['#2A1F00', '#1A1200']}
+                          style={styles.avatarPlaceholder}
+                        >
+                          <Ionicons name="trophy" size={36} color="#FFD700" />
+                        </LinearGradient>
+                      )}
+                    </View>
+                    {/* Badge name label */}
+                    {highestBadge && (
+                      <View style={styles.badgeNameChip}>
+                        <Text style={styles.badgeNameChipText} numberOfLines={1}>
+                          {highestBadge.badge_name}
+                        </Text>
+                      </View>
+                    )}
+                  </Animated.View>
+                </TouchableOpacity>
 
                 {/* Username */}
                 <Text style={styles.username}>{profile?.username || 'User'}</Text>
@@ -313,47 +474,9 @@ export default function ProfileScreen() {
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
-        {/* RECENT BADGES                               */}
-        {/* ═══════════════════════════════════════════ */}
-        {recentBadges.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(400).duration(400)}>
-            <View style={styles.badgesSection}>
-              <View style={styles.sectionRow}>
-                <Text style={styles.sectionTitle}>Recent Badges</Text>
-                <TouchableOpacity onPress={() => router.push('/trophy-room')} activeOpacity={0.7}>
-                  <Text style={[styles.seeAll, { color: branding.primary }]}>See All →</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.badgesScroll}
-              >
-                {recentBadges.map((badge: UserBadge, i: number) => (
-                  <Animated.View key={badge.badge_id} entering={SlideInRight.delay(450 + i * 80).duration(350)}>
-                    <View style={[styles.badgeCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                      <BlurView intensity={30} tint="dark" style={[styles.badgeCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-                        {badge.badge_image_url ? (
-                          <Image source={{ uri: badge.badge_image_url }} style={styles.badgeImage} />
-                        ) : (
-                          <View style={[styles.badgeIconFallback, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                            <Ionicons name="trophy" size={24} color={branding.primary} />
-                          </View>
-                        )}
-                        <Text style={styles.badgeName} numberOfLines={2}>{badge.badge_name}</Text>
-                      </BlurView>
-                    </View>
-                  </Animated.View>
-                ))}
-              </ScrollView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* ═══════════════════════════════════════════ */}
         {/* QUICK LINKS                                 */}
         {/* ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
             <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
               {quickLinks.map((link, i) => (
@@ -377,6 +500,48 @@ export default function ProfileScreen() {
           </View>
         </Animated.View>
 
+        {/* ═══════════════════════════════════════════ */}
+        {/* ACCOUNT ACTIONS                             */}
+        {/* ═══════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+          <View style={[styles.accountActionsCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
+            <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+              {/* Log Out */}
+              <TouchableOpacity
+                style={[styles.linkRow, { borderBottomColor: hexToRgba(branding.primary, 0.06), borderBottomWidth: 1 }]}
+                onPress={handleLogout}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.linkIcon, { backgroundColor: 'rgba(255, 145, 0, 0.1)' }]}>
+                  <Ionicons name="log-out-outline" size={20} color={theme.colors.secondary} />
+                </View>
+                <Text style={[styles.linkLabel, { color: theme.colors.secondary }]}>Log Out</Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+              </TouchableOpacity>
+
+              {/* Delete Account */}
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={handleDeleteAccount}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.linkIcon, { backgroundColor: 'rgba(255, 59, 48, 0.1)' }]}>
+                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                </View>
+                <Text style={[styles.linkLabel, { color: '#FF3B30' }]}>Delete Account</Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+              </TouchableOpacity>
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* VERSION NUMBER                              */}
+        {/* ═══════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(550).duration(300)}>
+          <Text style={styles.versionText}>SweatDrop v{appVersion}</Text>
+        </Animated.View>
+
         {/* Bottom spacer */}
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -397,17 +562,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    zIndex: 10,
+  },
   headerTitle: {
+    flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    position: 'absolute',
-    left: 0,
-    right: 0,
     textAlign: 'center',
   },
   headerSpacer: {
@@ -437,13 +609,58 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: theme.spacing.lg,
   },
+
+  // ── Flip Card ──
+  flipCardContainer: {
+    width: 88,
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  flipCardFace: {
+    alignItems: 'center',
+    backfaceVisibility: 'hidden',
+  },
+  flipCardBack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  badgePeekIndicator: {
+    position: 'absolute',
+    bottom: 8,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    zIndex: 10,
+  },
+  badgeNameChip: {
+    marginTop: 4,
+    backgroundColor: 'rgba(255, 215, 0, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    maxWidth: 88,
+  },
+  badgeNameChipText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFD700',
+    textAlign: 'center',
+  },
   avatarContainer: {
     width: 84,
     height: 84,
     borderRadius: 42,
     borderWidth: 2,
     overflow: 'hidden',
-    marginBottom: 12,
   },
   avatar: {
     width: '100%',
@@ -563,57 +780,6 @@ const styles = StyleSheet.create({
     height: 30,
   },
 
-  // ── Recent Badges ──
-  badgesSection: {
-    marginBottom: theme.spacing.lg,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  seeAll: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
-  },
-  badgesScroll: {
-    gap: 10,
-  },
-  badgeCard: {
-    width: 90,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  badgeCardBlur: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-  },
-  badgeImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginBottom: 6,
-  },
-  badgeIconFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  badgeName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-
   // ── Quick Links ──
   linksCard: {
     borderRadius: theme.borderRadius.md,
@@ -643,5 +809,22 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontWeight: theme.typography.fontWeight.medium,
     color: theme.colors.text,
+  },
+
+  // ── Account Actions ──
+  accountActionsCard: {
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginTop: theme.spacing.md,
+  },
+
+  // ── Version ──
+  versionText: {
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: theme.spacing.lg,
+    opacity: 0.6,
   },
 });
