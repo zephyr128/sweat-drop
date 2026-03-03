@@ -71,7 +71,7 @@ const AnimatedText = ({ text, style }: { text: SharedValue<string>; style?: any 
 };
 
 export default function WorkoutScreen() {
-  const { sessionId, equipmentId, gymId, machineType: paramMachineType, sensorId, planId, machineId } = useLocalSearchParams<{
+  const { sessionId, equipmentId, gymId, machineType: paramMachineType, sensorId, planId, machineId, bleProtocol } = useLocalSearchParams<{
     sessionId?: string;
     equipmentId?: string;
     gymId?: string;
@@ -79,6 +79,7 @@ export default function WorkoutScreen() {
     sensorId?: string;
     planId?: string;
     machineId?: string;
+    bleProtocol?: string;
   }>();
   const { branding } = useTheme();
   const brandingHook = useBranding();
@@ -92,7 +93,7 @@ export default function WorkoutScreen() {
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   // REMOVED: challengeMessage state - challenge completions are now shown in session summary
-  // Challenge progress is automatically updated via add_drops() when workout ends
+  // Challenge progress is automatically updated via award_drops() when workout ends
   const [averageRPM, setAverageRPM] = useState<number>(0); // Average RPM for database sync (low frequency, OK to use state)
   const [showAutoPauseOverlay, setShowAutoPauseOverlay] = useState(false);
   const [showSensorAsleep, setShowSensorAsleep] = useState(false);
@@ -116,7 +117,7 @@ export default function WorkoutScreen() {
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   // REMOVED: challengeUpdateIntervalRef, lastChallengeUpdateRef, challengeMessageTimerRef
-  // Challenge progress is now automatically updated via add_drops() when workout ends
+  // Challenge progress is now automatically updated via award_drops() when workout ends
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bleMonitoringRef = useRef<boolean>(false);
   const lastRPMTimeRef = useRef<number>(Date.now());
@@ -137,6 +138,14 @@ export default function WorkoutScreen() {
   // Step-to-Drop: Track last step detection for walking mode
   const lastStepDetectionRef = useRef<number>(0); // Timestamp of last detected step
   const stepDetectionThreshold = 50; // Minimum RPM to consider as a step (walking mode)
+  // FTMS extended metrics tracking (accumulated during workout for raw_metrics)
+  const ftmsSpeedHistoryRef = useRef<number[]>([]);
+  const ftmsMaxSpeedRef = useRef<number>(0);
+  const ftmsTotalDistanceRef = useRef<number>(0);
+  const ftmsMaxPowerRef = useRef<number>(0);
+  const ftmsPowerHistoryRef = useRef<number[]>([]);
+  const ftmsDeviceCaloriesRef = useRef<number>(0);
+  const ftmsProtocolActiveRef = useRef<boolean>(false);
   // Throttled sync: Track last sync time
   const lastSyncRef = useRef<number>(0);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -282,7 +291,7 @@ export default function WorkoutScreen() {
   }, [paramMachineType, session?.machine?.type, session?.equipment?.equipment_type, machineType, session?.gym_id]);
 
   // Load challenge progress
-  // NOTE: Challenge progress is automatically updated via add_drops() when workout ends
+  // NOTE: Challenge progress is automatically updated via award_drops() when workout ends
   // No need to manually update progress during workout
   const { challenges, refresh: refreshChallenges } = useChallengeProgress(
     session?.gym_id || null,
@@ -416,6 +425,19 @@ export default function WorkoutScreen() {
     const startBLEMonitoring = async () => {
       try {
         console.log('[Workout] Connecting to BLE sensor:', activeSensorId);
+        
+        // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.4c)
+        // Set BLE protocol from machine data if available (skip auto-detection)
+        const machineProtocol = bleProtocol || session?.machine?.ble_protocol;
+        if (machineProtocol === 'ftms') {
+          const ftmsMachineType = (paramMachineType || session?.machine?.type) as 'treadmill' | 'bike' | 'elliptical' | undefined;
+          bleService.setProtocol('ftms', ftmsMachineType || 'bike');
+          ftmsProtocolActiveRef.current = true;
+        } else if (machineProtocol === 'magene' || machineProtocol === 'ksfit') {
+          bleService.setProtocol('csc');
+          ftmsProtocolActiveRef.current = false;
+        }
+        // else: auto-detect (default behavior)
         
         // Set up status callback for UI feedback
         bleService.setStatusCallback((status: string) => {
@@ -569,6 +591,41 @@ export default function WorkoutScreen() {
             
             // Critical Fix: Update last packet timestamp immediately for Watchdog
             lastPacketTime.value = now;
+            
+            // ── FTMS Extended Metrics Capture ──
+            // When protocol is FTMS, capture device-reported metrics for raw_metrics
+            if (measurement.protocol === 'ftms') {
+              ftmsProtocolActiveRef.current = true;
+              
+              // Speed tracking (km/h)
+              if (measurement.speed != null && measurement.speed > 0) {
+                ftmsSpeedHistoryRef.current.push(measurement.speed);
+                // Keep last 120 readings (~2 min at 1 Hz)
+                if (ftmsSpeedHistoryRef.current.length > 120) ftmsSpeedHistoryRef.current.shift();
+                if (measurement.speed > ftmsMaxSpeedRef.current) {
+                  ftmsMaxSpeedRef.current = measurement.speed;
+                }
+              }
+              
+              // Distance tracking (meters) - use device total directly
+              if (measurement.distance != null && measurement.distance > 0) {
+                ftmsTotalDistanceRef.current = measurement.distance;
+              }
+              
+              // Power tracking (watts)
+              if (measurement.power != null && measurement.power > 0) {
+                ftmsPowerHistoryRef.current.push(measurement.power);
+                if (ftmsPowerHistoryRef.current.length > 120) ftmsPowerHistoryRef.current.shift();
+                if (measurement.power > ftmsMaxPowerRef.current) {
+                  ftmsMaxPowerRef.current = measurement.power;
+                }
+              }
+              
+              // Device calories (kcal) - authoritative from machine
+              if (measurement.calories != null && measurement.calories > 0) {
+                ftmsDeviceCaloriesRef.current = measurement.calories;
+              }
+            }
             
             // PRO-FITNESS: Native-Driven RPM Processing (no setState)
             const rawRPM = measurement.rpm;
@@ -1353,7 +1410,7 @@ export default function WorkoutScreen() {
           heartbeatIntervalRef.current = null;
         }
         
-        // REMOVED: challengeUpdateIntervalRef cleanup - challenge progress is now automatic via add_drops()
+        // REMOVED: challengeUpdateIntervalRef cleanup - challenge progress is now automatic via award_drops()
         
         // Clear all timers
         if (longPressTimerRef.current) {
@@ -1412,6 +1469,7 @@ export default function WorkoutScreen() {
                       sessionId: session.id,
                       drops: Math.round(totalDropsShared.value).toString(),
                       duration: duration.toString(),
+                      gymId: session.gym_id || '',
                     },
                   });
                 } catch (routerError) {
@@ -1813,15 +1871,14 @@ export default function WorkoutScreen() {
       });
       
       // Load saved progress (update SharedValues)
-      if (data.drops_earned > 0) {
-        earnedDropsShared.value = data.drops_earned;
-        totalDropsShared.value = data.drops_earned;
-      }
+      // NOTE: drops_earned is no longer saved during workout sync (award_drops() sets it at end)
+      // Restore estimated calories from session for UI display
       if (data.duration_seconds) {
         setDuration(data.duration_seconds);
-        // REMOVED: lastChallengeUpdateRef - challenge progress is now automatic via add_drops()
-        // Recalculate calories based on drops (1 drop ≈ 0.4 kcal)
-        setCalories(Math.floor(data.drops_earned * 0.4));
+      }
+      if (data.calories && data.calories > 0) {
+        caloriesShared.value = data.calories;
+        setCalories(Math.round(data.calories));
       }
     }
   };
@@ -1841,14 +1898,17 @@ export default function WorkoutScreen() {
       }
 
       try {
-        // Update session with earnedDrops and averageRPM (read from SharedValues)
-        const currentEarnedDrops = Math.round(earnedDropsShared.value);
+        // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.2)
+        // CRITICAL: Do NOT save drops_earned during workout sync.
+        // award_drops() has an idempotency check (drops_earned > 0 = already processed).
+        // Save only duration, average_rpm, and estimated calories for server-side calculation.
+        const estimatedCalories = Math.round(caloriesShared.value);
         await supabase
           .from('sessions')
           .update({
-            drops_earned: currentEarnedDrops,
             duration_seconds: duration,
             average_rpm: averageRPM > 0 ? averageRPM : null,
+            calories: estimatedCalories > 0 ? estimatedCalories : null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', session.id);
@@ -1877,12 +1937,13 @@ export default function WorkoutScreen() {
     if (isPaused) return;
 
     const saveProgress = async () => {
-      const currentDrops = Math.round(totalDropsShared.value);
+      // CRITICAL: Do NOT save drops_earned — see award_drops() idempotency check
+      const estimatedCalories = Math.round(caloriesShared.value);
       await supabase
         .from('sessions')
         .update({
-          drops_earned: currentDrops,
           duration_seconds: duration,
+          calories: estimatedCalories > 0 ? estimatedCalories : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', session.id);
@@ -2105,9 +2166,9 @@ export default function WorkoutScreen() {
   }, [session?.gym_id, machineType, isPaused, bleConnected, refreshChallenges]);
 
   // Update challenge progress every minute (only when a new minute is reached)
-  // NOTE: Challenge progress is automatically updated via add_drops() when workout ends
+  // NOTE: Challenge progress is automatically updated via award_drops() when workout ends
   // No need to manually update progress during workout - removed deprecated updateProgress calls
-  // Progress will be updated when end_session() -> add_drops() -> update_challenge_progress() is called
+  // Progress will be updated when award_drops() -> update_challenge_progress() is called
   // 
   // Refresh challenges after workout ends to show updated progress
   useEffect(() => {
@@ -2207,6 +2268,7 @@ export default function WorkoutScreen() {
           sessionId: 'mock',
           drops: Math.round(totalDropsShared.value).toString(),
           duration: duration.toString(),
+          gymId: session?.gym_id || '',
         },
       });
       return;
@@ -2220,90 +2282,127 @@ export default function WorkoutScreen() {
       // Still navigate to summary with available data
     }
 
-    // PRO-FITNESS: Get final values from SharedValues
-    const finalEarnedDrops = Math.round(totalDropsShared.value);
-    const finalSmoothedRPM = smoothedRPMShared.value;
-    // Calculate average RPM from smoothed RPM (use current value as approximation)
-    // In production, you might want to track RPM history for true average
-    const finalAverageRPM = finalSmoothedRPM > 0 ? Math.round(finalSmoothedRPM) : (averageRPM > 0 ? averageRPM : null);
+    // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.2)
+    // CRITICAL: Drops are now calculated SERVER-SIDE by award_drops().
+    // Client-side drops (totalDropsShared) are only used as an UI estimate during workout.
+    // The authoritative drops value comes from the RPC response.
     
-    console.log('Ending session:', {
+    const estimatedDrops = Math.round(totalDropsShared.value); // UI estimate only
+    const estimatedCalories = Math.round(caloriesShared.value);
+    const finalSmoothedRPM = smoothedRPMShared.value;
+    const finalAverageRPM = finalSmoothedRPM > 0 ? Math.round(finalSmoothedRPM) : (averageRPM > 0 ? averageRPM : null);
+    const totalRevolutions = Math.round(totalCrankRevolutionsShared.value);
+    
+    // Build raw_metrics JSONB for server-side calculation and analytics
+    const rawMetrics: Record<string, unknown> = {
+      avg_cadence: finalAverageRPM,
+      calories_source: ftmsProtocolActiveRef.current && ftmsDeviceCaloriesRef.current > 0
+        ? 'device' : 'estimated',
+      ble_protocol: ftmsProtocolActiveRef.current ? 'ftms' : 'csc',
+    };
+
+    // Distance: prefer FTMS device-reported, fallback to revolution estimate
+    if (ftmsProtocolActiveRef.current && ftmsTotalDistanceRef.current > 0) {
+      rawMetrics.total_distance = Math.round(ftmsTotalDistanceRef.current);
+    } else if (totalRevolutions > 0) {
+      // Rough distance estimate: bike wheel circumference ~2.1m
+      rawMetrics.total_distance = Math.round(totalRevolutions * 2.1);
+    }
+
+    // FTMS extended metrics (only when FTMS protocol was active)
+    if (ftmsProtocolActiveRef.current) {
+      // Speed stats
+      if (ftmsSpeedHistoryRef.current.length > 0) {
+        const avgSpeed = ftmsSpeedHistoryRef.current.reduce((a, b) => a + b, 0)
+          / ftmsSpeedHistoryRef.current.length;
+        rawMetrics.avg_speed_kmh = Math.round(avgSpeed * 10) / 10;
+        rawMetrics.max_speed_kmh = Math.round(ftmsMaxSpeedRef.current * 10) / 10;
+      }
+
+      // Power stats
+      if (ftmsPowerHistoryRef.current.length > 0) {
+        const avgPower = ftmsPowerHistoryRef.current.reduce((a, b) => a + b, 0)
+          / ftmsPowerHistoryRef.current.length;
+        rawMetrics.avg_power_watts = Math.round(avgPower);
+        rawMetrics.max_power_watts = ftmsMaxPowerRef.current;
+      }
+
+      // Device calories (from machine, more accurate than estimation)
+      if (ftmsDeviceCaloriesRef.current > 0) {
+        rawMetrics.device_calories = ftmsDeviceCaloriesRef.current;
+      }
+    }
+
+    console.log('[Workout] Ending session (server-side drops):', {
       sessionId: session.id,
       gymId: session.gym_id,
-      drops: finalEarnedDrops,
+      estimatedDrops,
+      estimatedCalories,
       averageRPM: finalAverageRPM,
-      smoothedRPM: finalSmoothedRPM,
       userId: authSession.user.id,
     });
 
-    // Final sync before ending: Ensure last data is saved
+    // Final sync: Save duration, calories, raw_metrics BEFORE calling award_drops()
+    // CRITICAL: Do NOT save drops_earned — award_drops() uses it for idempotency check
+    // Prefer FTMS device calories when available (more accurate than estimation)
+    const finalCalories = ftmsProtocolActiveRef.current && ftmsDeviceCaloriesRef.current > 0
+      ? ftmsDeviceCaloriesRef.current
+      : estimatedCalories;
+
     try {
       await supabase
         .from('sessions')
         .update({
-          drops_earned: finalEarnedDrops,
           duration_seconds: duration,
           average_rpm: finalAverageRPM,
+          calories: finalCalories > 0 ? finalCalories : null,
+          raw_metrics: rawMetrics,
           updated_at: new Date().toISOString(),
         })
         .eq('id', session.id);
-      console.log('[Workout] Final sync completed:', { earnedDrops: finalEarnedDrops, averageRPM: finalAverageRPM, duration });
+      console.log('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current });
     } catch (syncError) {
       console.error('[Workout] Final sync error:', syncError);
-      // No blocking alert - continue with navigation
+      // Continue — award_drops() has a duration-based fallback
     }
 
-    // End session in Supabase
-    // This will automatically:
-    // 1. Update the session with end time and drops_earned
-    // 2. Add drops to global balance (profiles.total_drops)
-    // 3. Add drops to local balance (gym_memberships.local_drops_balance) for the gym where workout was performed
-    const { data: endSessionData, error } = await supabase.rpc('end_session', {
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CALL award_drops() — SERVER-SIDE DROPS CALCULATION
+    // This is the ONLY way drops are calculated. NEVER send drops from client.
+    // award_drops() will:
+    //   1. Calculate drops = calories × 2.5 × streak_multiplier
+    //   2. Update profiles (total_drops, available_drops, weekly, monthly, streak)
+    //   3. Update gym_memberships (local_drops_balance)
+    //   4. Insert drops_transactions ledger entry
+    //   5. Update challenge progress
+    //   6. Evaluate and award badges
+    //   7. Return { drops_earned, multiplier, badges_earned }
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let serverDrops = estimatedDrops; // Fallback to estimate if RPC fails
+    let serverMultiplier = 1.0;
+    let serverBadges: string[] = [];
+
+    const { data: awardResult, error } = await supabase.rpc('award_drops', {
       p_session_id: session.id,
-      p_drops_earned: finalEarnedDrops, // Use earnedDrops from sensor data (SharedValue)
     });
 
     if (error) {
-      console.error('Error ending session:', error);
-      // No blocking alert - log error and continue to summary
-      console.error('[Workout] Failed to save workout:', error.message);
-      // Still navigate to summary to show user their workout data
+      console.error('[Workout] award_drops() failed:', error.message);
+      // Fallback: navigate with estimated drops — the abandoned session cron will retry
+    } else if (awardResult && awardResult.length > 0) {
+      const result = awardResult[0];
+      serverDrops = result.drops_earned;
+      serverMultiplier = result.multiplier;
+      serverBadges = result.badges_earned || [];
+      console.log('[Workout] award_drops() success:', {
+        drops_earned: serverDrops,
+        multiplier: serverMultiplier,
+        badges_earned: serverBadges,
+      });
     }
 
-    console.log('Session ended successfully:', endSessionData);
-
-    // Verify that drops were saved by checking the profile
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('total_drops')
-      .eq('id', authSession.user.id)
-      .single();
-
-    if (profileError) {
-      console.error('Error verifying drops:', profileError);
-    } else {
-      console.log('Profile total_drops after workout:', profileData?.total_drops);
-    }
-
-    // Verify local balance
-    const { data: membershipData, error: membershipError } = await supabase
-      .from('gym_memberships')
-      .select('local_drops_balance')
-      .eq('user_id', authSession.user.id)
-      .eq('gym_id', session.gym_id)
-      .single();
-
-    if (membershipError && membershipError.code !== 'PGRST116') {
-      console.error('Error verifying local drops:', membershipError);
-    } else if (membershipData) {
-      console.log('Local drops balance after workout:', membershipData.local_drops_balance);
-    } else {
-      console.warn('No gym membership found - this might be normal if add_drops failed to create it');
-    }
-
-    // NOTE: Challenge progress is automatically updated via add_drops() when end_session() is called
-    // No need to manually update progress here - it's handled by the backend
-    // Progress will be updated when end_session() -> add_drops() -> update_challenge_progress() is called
+    // NOTE: Challenge progress + badges are automatically handled by award_drops()
+    // No need to manually update anything — it's all server-side now.
 
     // Unlock machine if it was locked
     if (session.machine_id && authSession?.user) {
@@ -2313,23 +2412,20 @@ export default function WorkoutScreen() {
           p_user_id: authSession.user.id,
         });
         console.log('[Workout] Machine unlocked');
-      } catch (error) {
-        console.error('[Workout] Failed to unlock machine:', error);
+      } catch (unlockError) {
+        console.error('[Workout] Failed to unlock machine:', unlockError);
       }
     }
-
-    // BLE disconnect disabled
-    // if (bleMonitoringRef.current) {
-    //   await bleService.disconnect();
-    //   bleMonitoringRef.current = false;
-    // }
 
     router.push({
       pathname: '/session-summary',
       params: {
         sessionId: session.id,
-        drops: finalEarnedDrops.toString(), // Use earnedDrops from sensor data (SharedValue)
+        drops: serverDrops.toString(),
         duration: duration.toString(),
+        multiplier: serverMultiplier.toString(),
+        badges: serverBadges.length > 0 ? JSON.stringify(serverBadges) : undefined,
+        gymId: session.gym_id || '',
       },
     });
   };

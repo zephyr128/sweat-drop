@@ -256,7 +256,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerLeft}
-            onPress={() => setSettingsSheetVisible(true)}
+            onPress={() => router.push('/profile')}
             activeOpacity={0.7}
           >
             <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>

@@ -48,6 +48,17 @@ module.exports = {
           cameraPermissionText: 'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
         },
       ],
+      // TODO: Re-enable expo-notifications plugin once Organization Apple Developer account is active.
+      // Personal Development teams do NOT support Push Notifications capability.
+      // The notification code in lib/notifications.ts is guarded and will no-op gracefully.
+      //
+      // [
+      //   'expo-notifications',
+      //   {
+      //     color: '#00E5FF',
+      //     defaultChannel: 'default',
+      //   },
+      // ],
       // NOTE: expo-web-browser does NOT require a config plugin in Expo SDK 54
       // It can be used directly without adding it to plugins array
       // Adding it here causes ESM/TypeScript loading errors with pnpm isolated linker
