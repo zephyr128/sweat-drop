@@ -4,16 +4,20 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { confirmRedemption, cancelRedemption, validateRedemptionCode } from '@/lib/actions/redemption-actions';
-import { CheckCircle2, XCircle, Clock, CheckCircle, Droplet, Ticket, Coffee, GlassWater, Shirt, Gift } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CheckCircle, Droplet, Ticket, Coffee, GlassWater, Shirt, Gift, Trophy, Swords, Filter, ShoppingBag } from 'lucide-react';
 import { QRValidator } from '@/components/QRValidator';
 import { supabase } from '@/lib/supabase-client';
 import { formatDateTime } from '@/lib/utils/date';
+
+type SourceType = 'reward_store' | 'arena_prize' | 'leaderboard_prize';
 
 interface Redemption {
   id: string;
   redemption_code: string;
   drops_spent: number;
   status: 'pending' | 'confirmed' | 'cancelled';
+  source_type?: SourceType;
+  description?: string | null;
   created_at: string;
   confirmed_at?: string;
   profiles: {
@@ -34,6 +38,12 @@ interface Redemption {
   } | null;
 }
 
+const SOURCE_TYPE_LABELS: Record<SourceType, { label: string; icon: typeof ShoppingBag; color: string }> = {
+  reward_store: { label: 'Store', icon: ShoppingBag, color: 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/30' },
+  leaderboard_prize: { label: 'Leaderboard', icon: Trophy, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  arena_prize: { label: 'Arena', icon: Swords, color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+};
+
 interface RedemptionsManagerProps {
   gymId: string;
   initialPendingRedemptions: Redemption[];
@@ -52,6 +62,7 @@ export function RedemptionsManager({
   const [searchResult, setSearchResult] = useState<Redemption | null>(null);
   const [_isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'confirmed' | 'search'>('pending');
+  const [sourceFilter, setSourceFilter] = useState<SourceType | 'all'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [_refreshing, setRefreshing] = useState(false);
 
@@ -158,6 +169,29 @@ export function RedemptionsManager({
     }
   };
 
+  const filterBySource = (redemptions: Redemption[]) => {
+    if (sourceFilter === 'all') return redemptions;
+    return redemptions.filter((r) => (r.source_type || 'reward_store') === sourceFilter);
+  };
+
+  const getSourceBadge = (redemption: Redemption) => {
+    const sourceType = (redemption.source_type || 'reward_store') as SourceType;
+    const info = SOURCE_TYPE_LABELS[sourceType] || SOURCE_TYPE_LABELS.reward_store;
+    const SourceIcon = info.icon;
+    return (
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${info.color}`}>
+        <SourceIcon className="w-2.5 h-2.5" />
+        {info.label}
+      </span>
+    );
+  };
+
+  const getRewardName = (redemption: Redemption) => {
+    if (redemption.rewards?.name) return redemption.rewards.name;
+    if (redemption.description) return redemption.description;
+    return 'Unknown Reward';
+  };
+
   const refreshRedemptions = async () => {
     setRefreshing(true);
     try {
@@ -227,7 +261,7 @@ export function RedemptionsManager({
         >
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4" />
-            Pending ({pendingRedemptions.length})
+            Pending ({filterBySource(pendingRedemptions).length})
           </div>
         </button>
         <button
@@ -240,7 +274,7 @@ export function RedemptionsManager({
         >
           <div className="flex items-center gap-2">
             <CheckCircle className="w-4 h-4" />
-            Confirmed ({confirmedRedemptions.length})
+            Confirmed ({filterBySource(confirmedRedemptions).length})
           </div>
         </button>
         {searchResult && (
@@ -257,17 +291,41 @@ export function RedemptionsManager({
         )}
       </div>
 
+      {/* Source Type Filter */}
+      <div className="flex items-center gap-2 mb-4">
+        <Filter className="w-4 h-4 text-[#808080]" />
+        <span className="text-xs text-[#808080] mr-1">Source:</span>
+        {(['all', 'reward_store', 'leaderboard_prize', 'arena_prize'] as const).map((st) => {
+          const isActive = sourceFilter === st;
+          return (
+            <button
+              key={st}
+              onClick={() => setSourceFilter(st)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                isActive
+                  ? 'bg-[#00E5FF] text-black'
+                  : 'bg-[#1A1A1A] text-[#808080] hover:text-white border border-[#333]'
+              }`}
+            >
+              {st === 'all' ? 'All' : SOURCE_TYPE_LABELS[st]?.label || st}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content */}
       <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
         {activeTab === 'pending' && (
           <div className="p-6">
-            {pendingRedemptions.length === 0 ? (
+            {filterBySource(pendingRedemptions).length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-[#808080]">No pending redemptions</p>
+                <p className="text-[#808080]">
+                  {sourceFilter !== 'all' ? `No pending ${SOURCE_TYPE_LABELS[sourceFilter]?.label || ''} redemptions` : 'No pending redemptions'}
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingRedemptions.map((redemption) => (
+                {filterBySource(pendingRedemptions).map((redemption) => (
                   <div
                     key={redemption.id}
                     className="bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg p-6 hover:border-[#00E5FF]/30 transition-colors"
@@ -280,11 +338,14 @@ export function RedemptionsManager({
                             return <IconComponent className="w-8 h-8 text-[#00E5FF]" strokeWidth={1.5} />;
                           })()}
                           <div className="flex-1">
-                            <h3 className="text-lg font-bold text-white mb-1">
-                              {redemption.rewards?.name || 'Unknown Reward'}
-                            </h3>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-lg font-bold text-white">
+                                {getRewardName(redemption)}
+                              </h3>
+                              {getSourceBadge(redemption)}
+                            </div>
                             <p className="text-sm text-[#808080]">
-                              {redemption.profiles?.username || 'Unknown User'} • {redemption.rewards?.reward_type || 'Unknown'}
+                              {redemption.profiles?.username || 'Unknown User'} • {redemption.rewards?.reward_type || 'Prize'}
                             </p>
                           </div>
                         </div>
@@ -339,13 +400,15 @@ export function RedemptionsManager({
 
         {activeTab === 'confirmed' && (
           <div className="p-6">
-            {confirmedRedemptions.length === 0 ? (
+            {filterBySource(confirmedRedemptions).length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-[#808080]">No confirmed redemptions</p>
+                <p className="text-[#808080]">
+                  {sourceFilter !== 'all' ? `No confirmed ${SOURCE_TYPE_LABELS[sourceFilter]?.label || ''} redemptions` : 'No confirmed redemptions'}
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {confirmedRedemptions.map((redemption) => (
+                {filterBySource(confirmedRedemptions).map((redemption) => (
                   <div
                     key={redemption.id}
                     className="bg-[#1A1A1A] border border-[#00E5FF]/20 rounded-lg p-6"
@@ -358,8 +421,9 @@ export function RedemptionsManager({
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="text-lg font-bold text-white">
-                            {redemption.rewards?.name || 'Unknown Reward'}
+                            {getRewardName(redemption)}
                           </h3>
+                          {getSourceBadge(redemption)}
                           <span className="px-2 py-1 bg-[#00E5FF]/10 text-[#00E5FF] rounded text-xs font-medium">
                             Confirmed
                           </span>

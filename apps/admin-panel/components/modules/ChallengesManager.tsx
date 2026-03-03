@@ -5,8 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { createChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats, getChallengeDetailedProgress, closeChallenge } from '@/lib/actions/challenge-actions';
-import { X, Trash2, Power, Droplet, Upload, Image, BarChart3, Users, CheckCircle2, XCircle, Building2, Plus, Minus } from 'lucide-react';
+import { createChallenge, updateChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats, getChallengeDetailedProgress, closeChallenge } from '@/lib/actions/challenge-actions';
+import { X, Trash2, Power, Droplet, Upload, Image, BarChart3, Users, CheckCircle2, XCircle, Building2, Plus, Minus, Pencil } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
 
@@ -101,6 +101,7 @@ interface ChallengesManagerProps {
 export function ChallengesManager({ gymId, initialChallenges }: ChallengesManagerProps) {
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [uploadingBadge, setUploadingBadge] = useState(false);
   const [badgePreview, setBadgePreview] = useState<string | null>(null);
@@ -208,6 +209,42 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
     },
   });
 
+  const openEdit = (challenge: Challenge) => {
+    setEditingChallenge(challenge);
+    const challengeType = challenge.challenge_type as ChallengeFormData['challengeType'];
+    reset({
+      name: challenge.name,
+      description: challenge.description || undefined,
+      challengeType: challengeType,
+      targetDrops: challenge.target_drops || undefined,
+      milestoneThreshold: challenge.milestone_threshold || undefined,
+      streakDays: challenge.streak_days || undefined,
+      rewardDrops: challenge.reward_drops,
+      badgeImageUrl: challenge.badge_image_url || '',
+      startDate: challenge.start_date || undefined,
+      endDate: challenge.end_date || undefined,
+      categoryType: (challenge.category_type as ChallengeFormData['categoryType']) || 'individual',
+      scoringModel: (challenge.scoring_model as ChallengeFormData['scoringModel']) || 'total_drops',
+      sponsorName: challenge.sponsor_name || '',
+      sponsorLogo: challenge.sponsor_logo || '',
+      prizeDescription: challenge.prize_description || '',
+    });
+    setBadgePreview(challenge.badge_image_url || null);
+    setSponsorLogoPreview(challenge.sponsor_logo || null);
+    if (challenge.tiers && challenge.tiers.length > 0) {
+      setEnableTiers(true);
+      setTiers(challenge.tiers);
+    } else {
+      setEnableTiers(false);
+      setTiers([
+        { label: 'Bronze', target: 100, drops: 25 },
+        { label: 'Silver', target: 250, drops: 75 },
+        { label: 'Gold', target: 500, drops: 200 },
+      ]);
+    }
+    setIsModalOpen(true);
+  };
+
   const onSubmit = async (data: ChallengeFormData) => {
     try {
       const submitData: any = {
@@ -216,15 +253,32 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         tiers: enableTiers ? tiers : undefined,
       };
 
-      const result = await createChallenge(submitData) as {
-        success: boolean;
-        data?: Challenge;
-        error?: string;
-      };
+      let result: { success: boolean; data?: Challenge; error?: string };
+
+      if (editingChallenge) {
+        result = await updateChallenge(editingChallenge.id, submitData) as {
+          success: boolean;
+          data?: Challenge;
+          error?: string;
+        };
+      } else {
+        result = await createChallenge(submitData) as {
+          success: boolean;
+          data?: Challenge;
+          error?: string;
+        };
+      }
 
       if (result.success && result.data) {
-        setChallenges([result.data as Challenge, ...challenges]);
-        toast.success('Challenge created successfully');
+        if (editingChallenge) {
+          setChallenges(
+            challenges.map((c) => (c.id === editingChallenge.id ? (result.data as Challenge) : c))
+          );
+          toast.success('Challenge updated successfully');
+        } else {
+          setChallenges([result.data as Challenge, ...challenges]);
+          toast.success('Challenge created successfully');
+        }
         reset();
         setBadgePreview(null);
         setSponsorLogoPreview(null);
@@ -234,9 +288,10 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
           { label: 'Silver', target: 250, drops: 75 },
           { label: 'Gold', target: 500, drops: 200 },
         ]);
+        setEditingChallenge(null);
         setIsModalOpen(false);
       } else {
-        toast.error(`Failed to create challenge: ${result.error}`);
+        toast.error(`Failed to ${editingChallenge ? 'update' : 'create'} challenge: ${result.error}`);
       }
     } catch (error: any) {
       toast.error(`Error: ${error.message}`);
@@ -466,6 +521,13 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                           <BarChart3 className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => openEdit(challenge)}
+                          className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() =>
                             handleToggleStatus(challenge.id, challenge.is_active)
                           }
@@ -501,10 +563,13 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Create New Challenge</h2>
+              <h2 className="text-2xl font-bold text-white">
+                {editingChallenge ? 'Edit Challenge' : 'Create New Challenge'}
+              </h2>
               <button
                 onClick={() => {
                   setIsModalOpen(false);
+                  setEditingChallenge(null);
                   reset();
                   setBadgePreview(null);
                 }}
@@ -915,14 +980,18 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   disabled={isSubmitting}
                   className="flex-1 px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Challenge'}
+                  {isSubmitting
+                    ? (editingChallenge ? 'Saving...' : 'Creating...')
+                    : (editingChallenge ? 'Save Changes' : 'Create Challenge')}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setIsModalOpen(false);
+                    setEditingChallenge(null);
                     reset();
                     setBadgePreview(null);
+                    setSponsorLogoPreview(null);
                   }}
                   className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors"
                 >

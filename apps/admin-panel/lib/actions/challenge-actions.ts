@@ -200,6 +200,138 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
   }
 }
 
+export async function updateChallenge(
+  challengeId: string,
+  input: z.infer<typeof createChallengeSchema>
+) {
+  try {
+    const validated = createChallengeSchema.parse(input);
+
+    // Set default dates based on challenge type
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date;
+
+    if (validated.startDate) {
+      startDate = new Date(validated.startDate);
+    } else {
+      startDate = new Date(now);
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    if (validated.endDate) {
+      endDate = new Date(validated.endDate);
+    } else if (validated.challengeType === 'daily') {
+      endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (validated.challengeType === 'weekly') {
+      endDate = new Date(now);
+      const dayOfWeek = endDate.getDay();
+      const daysUntilSunday = 7 - dayOfWeek;
+      endDate.setDate(endDate.getDate() + daysUntilSunday);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (validated.challengeType === 'monthly') {
+      endDate = new Date(now);
+      endDate.setMonth(endDate.getMonth() + 1);
+      endDate.setDate(0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (validated.challengeType === 'streak') {
+      endDate = new Date(now);
+      const streakDays = validated.streakDays || 3;
+      endDate.setDate(endDate.getDate() + streakDays);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      endDate = new Date(now);
+      endDate.setFullYear(endDate.getFullYear() + 10);
+    }
+
+    // Build criteria JSONB
+    let criteria: any;
+    if (validated.challengeType === 'streak') {
+      criteria = {
+        type: 'streak',
+        operator: '>=',
+        value: validated.streakDays || 3,
+        scope: 'gym',
+        gym_id: validated.gymId,
+      };
+    } else if (validated.challengeType === 'milestone') {
+      criteria = {
+        type: 'drops',
+        operator: '>=',
+        value: validated.milestoneThreshold || 1000,
+        scope: 'gym',
+        gym_id: validated.gymId,
+      };
+    } else {
+      criteria = {
+        type: 'drops',
+        operator: '>=',
+        value: validated.targetDrops || 100,
+        scope: 'gym',
+        gym_id: validated.gymId,
+        date_range: {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        },
+      };
+    }
+
+    const updateData: any = {
+      name: validated.name,
+      description: validated.description || null,
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+      challenge_type: validated.challengeType,
+      criteria: criteria,
+      target_drops: validated.challengeType === 'milestone' || validated.challengeType === 'streak'
+        ? 0
+        : validated.targetDrops || 0,
+      milestone_threshold: validated.challengeType === 'milestone'
+        ? validated.milestoneThreshold
+        : null,
+      streak_days: validated.challengeType === 'streak'
+        ? validated.streakDays
+        : null,
+      reward_drops: validated.rewardDrops,
+      badge_image_url: validated.badgeImageUrl && validated.badgeImageUrl.trim() !== ''
+        ? validated.badgeImageUrl.trim()
+        : null,
+      scoring_model: validated.scoringModel || 'total_drops',
+      tiers: validated.tiers && validated.tiers.length > 0 ? validated.tiers : null,
+      sponsor_name: validated.sponsorName || null,
+      sponsor_logo: validated.sponsorLogo && validated.sponsorLogo.trim() !== ''
+        ? validated.sponsorLogo.trim()
+        : null,
+      prize_description: validated.prizeDescription || null,
+    };
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('gym_challenges')
+      // @ts-expect-error - Supabase type inference issue
+      .update(updateData as any)
+      .eq('id', challengeId)
+      .eq('gym_id', validated.gymId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath(`/dashboard/gym/${validated.gymId}/challenges`);
+    return { success: true, data };
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: error.errors[0].message };
+    }
+    return { success: false, error: error.message };
+  }
+}
+
 export async function deleteChallenge(challengeId: string, gymId: string) {
   try {
     const supabaseAdmin = getAdminClient();
