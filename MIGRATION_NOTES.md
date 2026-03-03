@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2025-01-28 (Faza 3: Storage Strategy - Global Achievement Badges Bucket)
+**Last Updated:** 2026-03-03 (Phase 3: Full System Audit + Sweat Arenas Design)
 
 ---
 
@@ -16,6 +16,109 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-03-03] - Phase 3.0: Bug Fixes + Schema Prep for Sweat Arenas
+
+**Migration File:** `backend/supabase/migrations/20260303100000_phase3_bugfixes_and_redemptions_prep.sql`
+
+**Agent:** supabase-dba
+
+**Changes:**
+- **Bug Fix #1:** Drop `idx_redemptions_unique_pending`, create `idx_redemptions_unique_claimed` with `WHERE status = 'claimed'`
+- **Bug Fix #2:** Verified `claim_reward()` already has `GREATEST(0, ...)` guard (no change needed)
+- **Bug Fix #3:** Update `expire_stale_drops()` to also deduct from `gym_memberships.local_drops_balance`
+- **Schema Prep:** Make `redemptions.reward_id` NULLABLE (for arena/leaderboard prizes)
+- **Schema Prep:** Add `redemptions.description` column (TEXT)
+- **Schema Prep:** Add `redemptions.source_type` column (CHECK: 'reward_store' | 'arena_prize' | 'leaderboard_prize')
+- **Update:** `find_redemption_by_code()` with LEFT JOIN for nullable `reward_id`, returns `source_type` and `description`
+
+**Impact:**
+- Mobile App: Will need to handle `source_type` in redemptions
+- Admin Panel: Will need to filter/display `source_type` for redemptions
+- Reception Desk: `find_redemption_by_code()` now works for all redemption types (reward store, arena prizes, leaderboard prizes)
+
+**Breaking Changes:**
+- `redemptions.reward_id` is now NULLABLE (backward compatible)
+- New columns added (backward compatible)
+
+**Next Steps:**
+1. Run: `supabase gen types typescript --local > backend/types/database.types.ts`
+2. Proceed to Phase 3.1: Unified Leaderboard System
+
+---
+
+### [2026-03-03] - Phase 3.1: Unified Leaderboard System
+
+**Migration Files:**
+- `backend/supabase/migrations/20260303100001_unified_leaderboard_system.sql`
+- `backend/supabase/migrations/20260303100002_schedule_leaderboard_prize_distribution.sql`
+- `backend/supabase/functions/distribute-leaderboard-prizes/index.ts`
+
+**Agent:** supabase-dba
+
+**Changes:**
+- **Create `get_leaderboard()` generic RPC:** Supports 'gym', 'global', 'challenge', 'arena' types
+- **Rewrite `get_local_leaderboard()` and `get_global_leaderboard()`:** Thin wrappers around `get_leaderboard()` for backward compatibility
+- **Create `leaderboard_snapshots` table:** Stores snapshots at period end for prize distribution history
+- **Create `distribute_leaderboard_prizes()` function:** Awards prizes to top 3, inserts into `public.redemptions` with `source_type = 'leaderboard_prize'`
+- **Create `distribute-leaderboard-prizes` edge function:** Processes all active gyms, sends push notifications
+- **Schedule cron jobs:** Weekly (Sunday 22:55 UTC) and monthly (last day 22:55 UTC) prize distribution
+
+**Impact:**
+- Mobile App: Switch to `get_leaderboard()` RPC with `p_type` parameter
+- Admin Panel: Use `get_leaderboard()` for all leaderboard views
+- Leaderboard prizes: Top 3 winners get redemption entries automatically
+
+**Breaking Changes:**
+- `get_local_leaderboard()` and `get_global_leaderboard()` now return different columns (added `avatar_url`, `score_label`, `gym_name`). Old code may break.
+
+**Next Steps:**
+- Mobile agent: Refactor leaderboard screen to use `get_leaderboard()`
+- Admin agent: Update leaderboard views
+- Proceed to Phase 3.2: Sweat Arenas Schema
+
+---
+
+### [2026-03-03] - Phase 3.2: Sweat Arenas System
+
+**Migration Files:**
+- `backend/supabase/migrations/20260303100003_sweat_arenas_system.sql`
+- `backend/supabase/migrations/20260303100004_update_award_drops_for_arenas.sql`
+- `backend/supabase/migrations/20260303100005_schedule_arena_finalization.sql`
+- `backend/supabase/functions/finalize-arena/index.ts`
+
+**Agent:** supabase-dba
+
+**Changes:**
+- **Create `sweat_arenas` table:** Brand-sponsored competitions with scope (local/regional/network), scoring model, sponsor info, prizes JSONB
+- **Create `arena_gyms` table:** Participating gyms for each arena
+- **Create `arena_participants` table:** Member opt-in with live scores
+- **Create `arena_results` table:** Finalized rankings with `redemption_id` FK to `public.redemptions`
+- **Create `opt_into_arena()` RPC:** Validates and opts user into arena
+- **Create `get_available_arenas()` RPC:** Returns arenas available to user with opt-in status, rank, score
+- **Create `update_arena_scores()` helper:** Real-time updates for `total_drops` and `streak_days` arenas
+- **Create `update_arena_scores_periodic()` function:** Recalculates `days_visited` and `variety_score` (called by cron every 15 min)
+- **Create `finalize_arena()` RPC:** Calculates final rankings, inserts winners into `public.redemptions` with `source_type = 'arena_prize'`
+- **Update `award_drops()`:** Add step 13b calling `update_arena_scores()` for real-time arena score updates
+- **Create `finalize-arena` edge function:** Processes ended arenas, sends push notifications to winners
+- **Schedule cron jobs:**
+  - `update-arena-scores-periodic`: Every 15 minutes
+  - `finalize-arena-check`: Daily at 00:30 UTC
+
+**Impact:**
+- Mobile App: Arena cards on home screen, opt-in flow, arena leaderboards
+- Admin Panel: Arena CRUD, participant management, finalization
+- `award_drops()` now also updates arena scores (backward compatible)
+
+**Breaking Changes:**
+- `award_drops()` now also updates arena scores (backward compatible, no breaking changes)
+
+**Next Steps:**
+- Mobile agent: Implement arena UI (cards, opt-in, leaderboards)
+- Admin agent: Implement arena management (CRUD, participants, finalization)
+- Update TypeScript types: `backend/types/sweatdrop.ts`
+
+---
 
 ### [2025-01-28] - Create RLS Policies for Global Achievement Badges Storage Bucket
 

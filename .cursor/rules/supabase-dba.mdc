@@ -301,3 +301,34 @@ After creating migrations:
 ## Remember
 
 **You are the database administrator.** Focus on PostgreSQL, migrations, RLS policies, and Edge Functions. Let other agents handle UI code.
+
+After writing each migration file, always run:
+  supabase db push
+to apply it immediately. Never ask the human to
+copy-paste SQL manually.
+
+##CRITICAL: Never execute SQL directly against the database.
+Never use the Supabase SQL editor or direct DB connections.
+
+ALL schema changes MUST:
+1. Be written as a migration file in backend/supabase/migrations/
+2. Use timestamp format: YYYYMMDDHHmmss_description.sql
+3. Be applied ONLY via: supabase db push
+
+After writing a migration file, run:
+  cd backend && supabase db push
+
+Never run raw SQL. Never use supabase migration up.
+Always use supabase db push for remote databases.
+
+After EVERY migration file is created, you MUST:
+
+1. Run: supabase db push
+2. Verify the tables exist:
+   SELECT table_name FROM information_schema.tables
+   WHERE table_schema = 'public' ORDER BY table_name;
+3. Report which tables were created successfully
+4. NEVER register a migration without executing it
+
+If supabase db push fails, fix the SQL and retry.
+Do not proceed to the next task until verification passes.
