@@ -13,6 +13,7 @@ import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -29,6 +30,7 @@ export default function StoreScreen() {
   const branding = useBranding();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
+  const { t } = useTranslation('store');
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const [rewards, setRewards] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
@@ -104,24 +106,24 @@ export default function StoreScreen() {
 
     if (localDrops < reward.price_drops) {
       Alert.alert(
-        'Insufficient Drops',
-        `You need ${reward.price_drops} drops to redeem this reward.\n\nYou have ${localDrops} drops available at this gym.`
+        t('insufficientDrops'),
+        t('insufficientDropsMsg', { needed: reward.price_drops, available: localDrops })
       );
       return;
     }
 
     if (reward.stock !== null && reward.stock <= 0) {
-      Alert.alert('Out of Stock', 'This reward is currently unavailable.');
+      Alert.alert(t('outOfStock'), t('outOfStockMsg'));
       return;
     }
 
     Alert.alert(
-      'Redeem Reward',
-      `Redeem "${reward.name}" for ${reward.price_drops} drops?`,
+      t('redeemReward'),
+      t('redeemConfirm', { name: reward.name, price: reward.price_drops }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: 'Redeem',
+          text: t('redeem'),
           onPress: async () => {
             try {
               const { data, error } = await supabase.rpc('create_redemption', {
@@ -131,14 +133,14 @@ export default function StoreScreen() {
               });
 
               if (error) {
-                Alert.alert('Error', error.message);
+                Alert.alert(t('common:error'), error.message);
                 return;
               }
 
               if (!data || data.length === 0 || !data[0].success) {
                 Alert.alert(
-                  'Redemption Failed',
-                  data?.[0]?.error_message || 'Failed to create redemption. Please try again.'
+                  t('redemptionFailed'),
+                  data?.[0]?.error_message || t('redemptionFailed')
                 );
                 return;
               }
@@ -146,11 +148,11 @@ export default function StoreScreen() {
               const redemption = data[0];
 
               Alert.alert(
-                'Redemption Successful! 🎉',
-                `Your redemption code:\n\n${redemption.redemption_code}\n\nShow this code to gym staff to claim your reward.`,
+                t('redeemSuccess'),
+                t('redemptionCode', { code: redemption.redemption_code }),
                 [
                   {
-                    text: 'View History',
+                    text: t('viewHistory'),
                     onPress: () => {
                       router.push('/redemptions');
                       loadProfile();
@@ -166,7 +168,7 @@ export default function StoreScreen() {
                 ]
               );
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'An unexpected error occurred');
+              Alert.alert(t('common:error'), err.message || t('redemptionFailed'));
             }
           },
         },
@@ -209,7 +211,7 @@ export default function StoreScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Rewards Store</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <TouchableOpacity
           onPress={() => router.push('/redemptions')}
           style={styles.headerButton}
@@ -227,7 +229,7 @@ export default function StoreScreen() {
               <Text style={[styles.balanceText, getNumberStyle(18), { color: branding.primary }]}>
                 {localDrops} drops
               </Text>
-              <Text style={styles.balanceLabel}>Available at this gym</Text>
+              <Text style={styles.balanceLabel}>{t('availableAtGym')}</Text>
             </BlurView>
           </View>
         </Animated.View>
@@ -235,8 +237,8 @@ export default function StoreScreen() {
         {rewards.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="gift-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>No rewards available</Text>
-            <Text style={styles.emptySubtext}>Check back soon for new rewards!</Text>
+            <Text style={styles.emptyText}>{t('noRewards')}</Text>
+            <Text style={styles.emptySubtext}>{t('checkBackSoon')}</Text>
           </View>
         ) : (
           rewards.map((reward, index) => {

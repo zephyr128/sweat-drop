@@ -11,6 +11,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -25,6 +26,7 @@ export default function ChallengesScreen() {
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
+  const { t } = useTranslation('challenges');
   const [challenges, setChallenges] = useState<any[]>([]);
   const [progress, setProgress] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -190,7 +192,7 @@ export default function ChallengesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Challenges</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -198,8 +200,8 @@ export default function ChallengesScreen() {
         {challenges.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="flash-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>No active challenges</Text>
-            <Text style={styles.emptySubtext}>Check back later for new challenges from your gym!</Text>
+            <Text style={styles.emptyText}>{t('noChallenges')}</Text>
+            <Text style={styles.emptySubtext}>{t('checkBackSoon')}</Text>
           </View>
         ) : (
           challenges.map((challenge: any, index: number) => {

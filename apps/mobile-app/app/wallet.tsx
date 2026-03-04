@@ -10,6 +10,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -23,6 +24,7 @@ function hexToRgba(hex: string, alpha: number): string {
 export default function WalletScreen() {
   const { session } = useSession();
   const branding = useBranding();
+  const { t } = useTranslation('wallet');
   const [profile, setProfile] = useState<any>(null);
   const [todayDrops, setTodayDrops] = useState(0);
   const [weekDrops, setWeekDrops] = useState(0);
@@ -106,7 +108,7 @@ export default function WalletScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Wallet</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -121,14 +123,14 @@ export default function WalletScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.totalCardGradient}
               >
-                <Text style={styles.totalLabel}>Total Balance</Text>
+                <Text style={styles.totalLabel}>{t('totalBalance')}</Text>
                 <View style={styles.totalRow}>
                   <Ionicons name="water" size={40} color={branding.primary} />
                   <Text style={[styles.totalValue, getNumberStyle(48), { color: branding.primary }]}>
                     {profile?.total_drops || 0}
                   </Text>
                 </View>
-                <Text style={[styles.totalSubLabel, { color: hexToRgba(branding.primary, 0.5) }]}>drops</Text>
+                <Text style={[styles.totalSubLabel, { color: hexToRgba(branding.primary, 0.5) }]}>{t('drops')}</Text>
               </LinearGradient>
             </BlurView>
           </View>
@@ -138,12 +140,12 @@ export default function WalletScreen() {
         <Animated.View entering={FadeInDown.delay(250).duration(400)}>
           <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
             <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <Text style={styles.sectionTitle}>Earned Drops</Text>
+              <Text style={styles.sectionTitle}>{t('earnedDrops')}</Text>
 
               <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
                 <View style={styles.statLabelRow}>
                   <Ionicons name="today-outline" size={18} color={branding.primary} />
-                  <Text style={styles.statLabel}>Today</Text>
+                  <Text style={styles.statLabel}>{t('today')}</Text>
                 </View>
                 <View style={styles.statValueContainer}>
                   <Ionicons name="water" size={18} color={branding.primary} />
@@ -154,7 +156,7 @@ export default function WalletScreen() {
               <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
                 <View style={styles.statLabelRow}>
                   <Ionicons name="calendar-outline" size={18} color={branding.primary} />
-                  <Text style={styles.statLabel}>This Week</Text>
+                  <Text style={styles.statLabel}>{t('thisWeek')}</Text>
                 </View>
                 <View style={styles.statValueContainer}>
                   <Ionicons name="water" size={18} color={branding.primary} />
@@ -165,7 +167,7 @@ export default function WalletScreen() {
               <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
                 <View style={styles.statLabelRow}>
                   <Ionicons name="stats-chart-outline" size={18} color={branding.primary} />
-                  <Text style={styles.statLabel}>This Month</Text>
+                  <Text style={styles.statLabel}>{t('thisMonth')}</Text>
                 </View>
                 <View style={styles.statValueContainer}>
                   <Ionicons name="water" size={18} color={branding.primary} />

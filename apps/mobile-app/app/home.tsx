@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -53,6 +54,7 @@ const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation('home');
   const { session } = useSession();
   const { theme, activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
@@ -211,17 +213,17 @@ export default function HomeScreen() {
   const handleSetAsHomeGym = async () => {
     if (!activeGym) return;
     Alert.alert(
-      'Set as Home Gym?',
-      `Do you want to set "${activeGym.name}" as your home gym?`,
+      t('setAsHomeGym'),
+      t('setAsHomeGymMsg', { name: activeGym.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: 'Set as Home',
+          text: t('setAsHome'),
           onPress: async () => {
             try {
               await updateHomeGym(activeGym.id);
             } catch (error) {
-              Alert.alert('Error', 'Failed to update home gym. Please try again.');
+              Alert.alert(t('common:error'), t('failedToUpdateGym'));
             }
           },
         },
@@ -277,11 +279,11 @@ export default function HomeScreen() {
                   {/* Center content */}
                   <View style={es.dropsCenter}>
                     <Text style={es.dropsNumber}>0</Text>
-                    <Text style={es.dropsLabel}>DROPS</Text>
+                    <Text style={es.dropsLabel}>{t('drops')}</Text>
                     <View style={es.dropsDivider} />
                     <View style={es.lockRow}>
                       <Ionicons name="lock-closed-outline" size={14} color="rgba(255,255,255,0.30)" />
-                      <Text style={es.lockText}>Skeniraj da otključaš</Text>
+                      <Text style={es.lockText}>{t('scanToUnlock')}</Text>
                     </View>
                   </View>
                 </View>
@@ -292,9 +294,9 @@ export default function HomeScreen() {
             <Animated.View entering={FadeInDown.delay(100).duration(500)}>
               <View style={es.statsRow}>
                 {[
-                  { icon: 'flame-outline' as const, label: 'Streak' },
-                  { icon: 'water-outline' as const, label: 'Today' },
-                  { icon: 'time-outline' as const, label: 'Last' },
+                  { icon: 'flame-outline' as const, label: t('statsStreak') },
+                  { icon: 'water-outline' as const, label: t('statsToday') },
+                  { icon: 'time-outline' as const, label: t('statsLast') },
                 ].map((item, i) => (
                   <View key={i} style={es.statPill}>
                     <BlurView intensity={30} tint="dark" style={es.statPillBlur}>
@@ -319,9 +321,9 @@ export default function HomeScreen() {
                     </View>
                   </View>
 
-                  <Text style={es.ctaTitle}>SKENIRAJ QR KOD</Text>
+                  <Text style={es.ctaTitle}>{t('scanQrCode')}</Text>
                   <Text style={es.ctaSubtitle}>
-                    Skeniraj QR kod na bilo kojoj spravi{'\n'}u tvojoj teretani da počneš trening{'\n'}i počneš da zarađuješ drops 💧
+                    {t('scanQrSubtitle')}
                   </Text>
 
                   {/* How it works — 3 inline steps */}
@@ -330,21 +332,21 @@ export default function HomeScreen() {
                       <View style={es.stepCircle}>
                         <Text style={es.stepNum}>1</Text>
                       </View>
-                      <Text style={es.stepLabel}>Skeniraj</Text>
+                      <Text style={es.stepLabel}>{t('step1')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.15)" style={es.stepArrow} />
                     <View style={es.step}>
                       <View style={es.stepCircle}>
                         <Text style={es.stepNum}>2</Text>
                       </View>
-                      <Text style={es.stepLabel}>Treniraš</Text>
+                      <Text style={es.stepLabel}>{t('step2')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.15)" style={es.stepArrow} />
                     <View style={es.step}>
                       <View style={es.stepCircle}>
                         <Text style={es.stepNum}>3</Text>
                       </View>
-                      <Text style={es.stepLabel}>Osvajaš</Text>
+                      <Text style={es.stepLabel}>{t('step3')}</Text>
                     </View>
                   </View>
                 </BlurView>
@@ -356,8 +358,8 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(300).duration(500)}>
                 <View style={es.gymsSection}>
                   <View style={es.gymsSectionHeader}>
-                    <Text style={es.gymsSectionTitle}>Teretane sa SweatDrop-om</Text>
-                    <Text style={es.gymsSectionCount}>{availableGyms.length} teretana</Text>
+                    <Text style={es.gymsSectionTitle}>{t('availableGyms')}</Text>
+                    <Text style={es.gymsSectionCount}>{t('gymsCount', { count: availableGyms.length })}</Text>
                   </View>
 
                   <ScrollView
@@ -372,8 +374,8 @@ export default function HomeScreen() {
                         onPress={() =>
                           Alert.alert(
                             gym.name,
-                            'Postani član ove teretane i počni da zarađuješ drops!',
-                            [{ text: 'Zatvori' }],
+                            t('gymJoinPrompt'),
+                            [{ text: t('close') }],
                           )
                         }
                       >
@@ -400,7 +402,7 @@ export default function HomeScreen() {
                     {/* Placeholder card */}
                     <View style={es.gymPlaceholderCard}>
                       <Ionicons name="add-circle-outline" size={28} color="rgba(255,255,255,0.20)" />
-                      <Text style={es.gymPlaceholderText}>{'Nije ovde\ntvoja\nteretana?'}</Text>
+                      <Text style={es.gymPlaceholderText}>{t('notYourGym')}</Text>
                     </View>
                   </ScrollView>
                 </View>
@@ -410,30 +412,30 @@ export default function HomeScreen() {
             {/* ─── SECTION 6 — PREVIEW CARDS (locked features) ─── */}
             <Animated.View entering={FadeInDown.delay(400).duration(500)}>
               <View style={es.previewSection}>
-                <Text style={es.previewTitle}>Šta te čeka</Text>
+                <Text style={es.previewTitle}>{t('whatsWaiting')}</Text>
                 <View style={es.previewGrid}>
                   <View style={es.previewRow}>
                     <BlurView intensity={30} tint="dark" style={es.previewCard}>
                       <Ionicons name="podium-outline" size={24} color="rgba(255,255,255,0.25)" />
-                      <Text style={es.previewCardTitle}>Leaderboard</Text>
-                      <Text style={es.previewCardSub}>{'Takmiči se sa\nčlanovima'}</Text>
+                      <Text style={es.previewCardTitle}>{t('leaderboard')}</Text>
+                      <Text style={es.previewCardSub}>{t('leaderboardSub')}</Text>
                     </BlurView>
                     <BlurView intensity={30} tint="dark" style={es.previewCard}>
                       <Ionicons name="gift-outline" size={24} color="rgba(255,255,255,0.25)" />
-                      <Text style={es.previewCardTitle}>Nagrade</Text>
-                      <Text style={es.previewCardSub}>{'Troši drops\nna nagrade'}</Text>
+                      <Text style={es.previewCardTitle}>{t('rewards')}</Text>
+                      <Text style={es.previewCardSub}>{t('rewardsSub')}</Text>
                     </BlurView>
                   </View>
                   <View style={es.previewRow}>
                     <BlurView intensity={30} tint="dark" style={es.previewCard}>
                       <Ionicons name="flame-outline" size={24} color="rgba(255,255,255,0.25)" />
-                      <Text style={es.previewCardTitle}>Izazovi</Text>
-                      <Text style={es.previewCardSub}>{'Mesečna\ntakmičenja'}</Text>
+                      <Text style={es.previewCardTitle}>{t('challenges')}</Text>
+                      <Text style={es.previewCardSub}>{t('challengesSub')}</Text>
                     </BlurView>
                     <BlurView intensity={30} tint="dark" style={es.previewCard}>
                       <Ionicons name="trophy-outline" size={24} color="rgba(255,255,255,0.25)" />
-                      <Text style={es.previewCardTitle}>Arene</Text>
-                      <Text style={es.previewCardSub}>{'Sponzorisana\ntakmičenja'}</Text>
+                      <Text style={es.previewCardTitle}>{t('arenas')}</Text>
+                      <Text style={es.previewCardSub}>{t('arenasSub')}</Text>
                     </BlurView>
                   </View>
                 </View>
@@ -609,7 +611,7 @@ export default function HomeScreen() {
           {challengesLoading && (
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Active Challenges</Text>
+                <Text style={styles.sectionTitle}>{t('activeChallenges')}</Text>
               </View>
               <ScrollView
                 horizontal
@@ -652,7 +654,7 @@ export default function HomeScreen() {
           {!challengesLoading && displayedChallenges.length > 0 && (
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Active Challenges</Text>
+                <Text style={styles.sectionTitle}>{t('activeChallenges')}</Text>
               </View>
               <ScrollView
                 horizontal
@@ -669,12 +671,12 @@ export default function HomeScreen() {
                   
                   const getChallengeTypeLabel = () => {
                     switch (challenge.challenge_type) {
-                      case 'daily': return 'Daily';
-                      case 'weekly': return 'Weekly';
-                      case 'monthly': return 'Monthly';
-                      case 'streak': return 'Streak';
-                      case 'milestone': return 'Milestone';
-                      default: return 'Challenge';
+                      case 'daily': return t('daily');
+                      case 'weekly': return t('weekly');
+                      case 'monthly': return t('monthly');
+                      case 'streak': return t('streak');
+                      case 'milestone': return t('milestone');
+                      default: return t('challenge');
                     }
                   };
 
@@ -786,8 +788,8 @@ export default function HomeScreen() {
                         <View style={[styles.viewAllIconContainer, { backgroundColor: hexToRgba(branding.onPrimary, 0.2) }]}>
                           <Ionicons name="list" size={40} color={branding.onPrimary} />
                         </View>
-                        <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>View All</Text>
-                        <Text style={[styles.viewAllSubtext, { color: branding.onPrimary + 'CC' }]}>See all challenges</Text>
+                        <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>{t('viewAll')}</Text>
+                        <Text style={[styles.viewAllSubtext, { color: branding.onPrimary + 'CC' }]}>{t('viewAllChallenges')}</Text>
                         <Ionicons name="arrow-forward-circle" size={24} color={branding.onPrimary} style={styles.viewAllArrow} />
                       </View>
                     </LinearGradient>
@@ -803,7 +805,7 @@ export default function HomeScreen() {
               <BlurView intensity={50} tint="dark" style={styles.emptyChallengesBlur}>
                 <Ionicons name="trophy-outline" size={20} color={hexToRgba(branding.primary, 0.5)} />
                 <Text style={styles.emptyChallengesText}>
-                  No active challenges right now — check back soon!
+                  {t('noChallenges')}
                 </Text>
               </BlurView>
             </View>
@@ -815,10 +817,10 @@ export default function HomeScreen() {
           {isUnlocked && (
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Arenas</Text>
+                <Text style={styles.sectionTitle}>{t('arenas')}</Text>
                 {availableArenas && availableArenas.length > 0 && (
                   <TouchableOpacity onPress={() => router.push('/leaderboard')} activeOpacity={0.7}>
-                    <Text style={[styles.seeAllText, { color: branding.primary }]}>See All</Text>
+                    <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('seeAll')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -870,9 +872,9 @@ export default function HomeScreen() {
 
                                 {/* Arena Stats */}
                                 <View style={styles.arenaHomeStats}>
-                                  <Text style={styles.arenaHomeStat}>{arena.participant_count} participants</Text>
+                                  <Text style={styles.arenaHomeStat}>{arena.participant_count} {t('participants')}</Text>
                                   <Text style={[styles.arenaHomeStat, daysLeft <= 3 && { color: theme.colors.secondary }]}>
-                                    {daysLeft} days left
+                                    {daysLeft} {t('daysLeft')}
                                   </Text>
                                 </View>
 
@@ -881,13 +883,13 @@ export default function HomeScreen() {
                                   {arena.user_opted_in ? (
                                     <>
                                       <Text style={[styles.arenaRankLabel, { color: branding.primary }]}>
-                                        Your Rank: #{arena.user_rank ?? '—'}
+                                        {t('yourRank', { rank: arena.user_rank ?? '—' })}
                                       </Text>
                                     </>
                                   ) : (
                                     <>
                                       <Ionicons name="add-circle-outline" size={16} color={branding.primary} />
-                                      <Text style={[styles.challengeRewardText, { color: branding.primary }]}>Join Arena</Text>
+                                      <Text style={[styles.challengeRewardText, { color: branding.primary }]}>{t('joinArena')}</Text>
                                     </>
                                   )}
                                 </View>
@@ -910,9 +912,9 @@ export default function HomeScreen() {
                       <Ionicons name="trophy-outline" size={28} color={branding.primary} />
                     </View>
                     <View style={styles.arenaEmptyTextContainer}>
-                      <Text style={styles.arenaEmptyTitle}>No Active Arenas</Text>
+                      <Text style={styles.arenaEmptyTitle}>{t('noArenas')}</Text>
                       <Text style={styles.arenaEmptySubtitle}>
-                        Sponsor-branded competitions with prizes will appear here
+                        {t('noArenasSubtitle')}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
@@ -928,7 +930,7 @@ export default function HomeScreen() {
           {isUnlocked && (
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Next Badge</Text>
+                <Text style={styles.sectionTitle}>{t('nextBadge')}</Text>
               </View>
               <View style={styles.progressWidgetContainer}>
                 <ProgressWidget />
@@ -971,7 +973,7 @@ export default function HomeScreen() {
                         <View style={styles.smartCoachTextContainer}>
                           <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
                           <Text style={[styles.smartCoachSubtitle, { color: hexToRgba(branding.primary, 0.7) }]} numberOfLines={2}>
-                            Follow workout plans from your gym
+                            {t('smartCoachSubtitle')}
                           </Text>
                         </View>
                         <TouchableOpacity
@@ -1005,18 +1007,18 @@ export default function HomeScreen() {
                 <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="gift-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
-                    <Text style={styles.cardTitle}>Rewards Store</Text>
+                    <Text style={styles.cardTitle}>{t('rewardsStore')}</Text>
                     <Text 
                       style={styles.cardSubtitle}
                       numberOfLines={2}
                       adjustsFontSizeToFit={true}
                       minimumFontScale={0.8}
                     >
-                      Redeem your drops for exclusive rewards
+                      {t('rewardsStoreSubtitle')}
                     </Text>
                   </View>
                   <View style={styles.cardFooter}>
-                    <Text style={[styles.cardAction, { color: branding.primary }]}>View Store</Text>
+                    <Text style={[styles.cardAction, { color: branding.primary }]}>{t('viewStore')}</Text>
                     <Ionicons name="arrow-forward" size={16} color={branding.primary} />
                   </View>
                 </BlurView>
@@ -1037,18 +1039,18 @@ export default function HomeScreen() {
                 <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="trophy-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
-                    <Text style={styles.cardTitle}>Trophy Room</Text>
+                    <Text style={styles.cardTitle}>{t('trophyRoom')}</Text>
                     <Text 
                       style={styles.cardSubtitle}
                       numberOfLines={2}
                       adjustsFontSizeToFit={true}
                       minimumFontScale={0.8}
                     >
-                      View your earned badges & achievements
+                      {t('trophyRoomSubtitle')}
                     </Text>
                   </View>
                   <View style={styles.cardFooter}>
-                    <Text style={[styles.cardAction, { color: branding.primary }]}>View Badges</Text>
+                    <Text style={[styles.cardAction, { color: branding.primary }]}>{t('viewBadges')}</Text>
                     <Ionicons name="arrow-forward" size={16} color={branding.primary} />
                   </View>
                 </BlurView>

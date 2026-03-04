@@ -12,6 +12,7 @@ import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 // ── Types (mirrored from backend/types/sweatdrop.ts) ──
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'all_time';
 
@@ -79,6 +80,7 @@ export default function LeaderboardScreen() {
   const branding = useBranding();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
+  const { t } = useTranslation('leaderboard');
 
   const [activeTab, setActiveTab] = useState<TabType>('gym');
   const [period, setPeriod] = useState<LeaderboardPeriod>('weekly');
@@ -251,7 +253,7 @@ export default function LeaderboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Leaderboard</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -261,9 +263,9 @@ export default function LeaderboardScreen() {
           <View style={[styles.typeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
             <BlurView intensity={50} tint="dark" style={[styles.typeToggleBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               {([
-                { key: 'gym' as TabType, label: 'My Gym', icon: 'location' as const },
-                { key: 'global' as TabType, label: 'Global', icon: 'globe-outline' as const },
-                { key: 'arenas' as TabType, label: 'Arenas', icon: 'trophy' as const },
+                { key: 'gym' as TabType, label: t('myGym'), icon: 'location' as const },
+                { key: 'global' as TabType, label: t('global'), icon: 'globe-outline' as const },
+                { key: 'arenas' as TabType, label: t('arenas'), icon: 'trophy' as const },
               ]).map((tab) => (
                 <TouchableOpacity
                   key={tab.key}
@@ -315,7 +317,7 @@ export default function LeaderboardScreen() {
                       period === p && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
                     ]}
                   >
-                    {p === 'all_time' ? 'All Time' : p.charAt(0).toUpperCase() + p.slice(1)}
+                    {p === 'all_time' ? t('allTime') : p === 'weekly' ? t('weekly') : t('monthly')}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -328,7 +330,7 @@ export default function LeaderboardScreen() {
                 onPress={() => setNewcomerOnly(!newcomerOnly)}
               >
                 <Ionicons name="sparkles" size={14} color={newcomerOnly ? branding.primary : theme.colors.textSecondary} />
-                <Text style={[styles.newcomerText, newcomerOnly && { color: branding.primary }]}>Newcomers Only</Text>
+                <Text style={[styles.newcomerText, newcomerOnly && { color: branding.primary }]}>{t('newcomersOnly')}</Text>
               </TouchableOpacity>
             )}
           </Animated.View>
@@ -360,7 +362,7 @@ export default function LeaderboardScreen() {
           ) : arenas.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
-              <Text style={styles.emptyText}>No Active Arenas</Text>
+              <Text style={styles.emptyText}>{t('noActiveArenas')}</Text>
               <Text style={styles.emptySubtext}>
                 {loading ? 'Loading arenas...' : 'No arenas available at this time. Check back soon!'}
               </Text>
@@ -432,7 +434,7 @@ export default function LeaderboardScreen() {
           ) : leaderboard.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
-              <Text style={styles.emptyText}>No Rankings Yet</Text>
+              <Text style={styles.emptyText}>{t('noRankings')}</Text>
               <Text style={styles.emptySubtext}>
                 {activeTab === 'gym' 
                   ? 'Be the first to earn drops at this gym!' 
@@ -552,14 +554,14 @@ export default function LeaderboardScreen() {
                             <View style={styles.userNameRow}>
                               <Text style={[styles.username, isCurrent && { color: branding.primary }]}>
                                 {entry.username}
-                                {isCurrent && ' (You)'}
+                                {isCurrent && ` ${t('you')}`}
                               </Text>
                               {entry.streak_days > 0 && (
                                 <Text style={styles.streakSmall}>🔥{entry.streak_days}</Text>
                               )}
                               {entry.is_newcomer && (
                                 <View style={[styles.newcomerBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                                  <Text style={[styles.newcomerBadgeText, { color: branding.primary }]}>NEW</Text>
+                                  <Text style={[styles.newcomerBadgeText, { color: branding.primary }]}>{t('new')}</Text>
                                 </View>
                               )}
                             </View>

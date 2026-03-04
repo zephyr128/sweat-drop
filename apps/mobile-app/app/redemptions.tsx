@@ -11,6 +11,8 @@ import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -22,6 +24,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export default function RedemptionsScreen() {
+  const { t } = useTranslation('redemptions');
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const branding = useBranding();
@@ -113,7 +116,7 @@ export default function RedemptionsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>My Redemptions</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -121,8 +124,8 @@ export default function RedemptionsScreen() {
         {redemptions.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>No redemptions yet</Text>
-            <Text style={styles.emptySubtext}>Redeem rewards from the store to see them here</Text>
+            <Text style={styles.emptyText}>{t('noRedemptions')}</Text>
+            <Text style={styles.emptySubtext}>{t('noRedemptionsDesc')}</Text>
           </View>
         ) : (
           redemptions.map((redemption, index) => {
@@ -142,16 +145,16 @@ export default function RedemptionsScreen() {
                       </View>
                       <View style={styles.redemptionInfo}>
                         <Text style={styles.redemptionName} numberOfLines={1}>
-                          {redemption.rewards?.name || 'Unknown Reward'}
+                          {redemption.rewards?.name || t('unknownReward')}
                         </Text>
                         <Text style={styles.redemptionGym} numberOfLines={1}>
-                          {redemption.gyms?.name || 'Unknown Gym'}
+                          {redemption.gyms?.name || t('unknownGym')}
                         </Text>
                       </View>
                       <View style={[styles.statusBadge, { borderColor: statusColor + '30', backgroundColor: statusColor + '10' }]}>
                         <Ionicons name={statusIcon} size={14} color={statusColor} />
                         <Text style={[styles.statusText, { color: statusColor }]}>
-                          {redemption.status.charAt(0).toUpperCase() + redemption.status.slice(1)}
+                          {t(redemption.status)}
                         </Text>
                       </View>
                     </View>
@@ -160,19 +163,19 @@ export default function RedemptionsScreen() {
                     <View style={styles.redemptionDetails}>
                       {/* Code */}
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Code</Text>
+                        <Text style={styles.detailLabel}>{t('code')}</Text>
                         <TouchableOpacity
                           style={styles.codeContainer}
                           onPress={() => {
                             if (redemption.redemption_code) {
                               Clipboard.setString(redemption.redemption_code);
-                              Alert.alert('Copied!', 'Redemption code copied to clipboard');
+                              Alert.alert(t('copied'), t('codeCopied'));
                             }
                           }}
                           disabled={!redemption.redemption_code}
                         >
                           <Text style={[styles.redemptionCode, { color: branding.primary }]}>
-                            {redemption.redemption_code || 'N/A'}
+                            {redemption.redemption_code || t('na')}
                           </Text>
                           {redemption.status === 'pending' && redemption.redemption_code && (
                             <Ionicons name="copy-outline" size={14} color={branding.primary} />
@@ -182,7 +185,7 @@ export default function RedemptionsScreen() {
 
                       {/* Drops Spent */}
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Drops Spent</Text>
+                        <Text style={styles.detailLabel}>{t('dropsSpent')}</Text>
                         <View style={styles.dropsContainer}>
                           <Ionicons name="water" size={14} color={branding.primary} />
                           <Text style={[styles.dropsAmount, getNumberStyle(14), { color: branding.primary }]}>
@@ -193,18 +196,22 @@ export default function RedemptionsScreen() {
 
                       {/* Date */}
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Date</Text>
+                        <Text style={styles.detailLabel}>{t('date')}</Text>
                         <Text style={styles.detailValue}>
-                          {new Date(redemption.created_at).toLocaleDateString()}
+                          {new Date(redemption.created_at).toLocaleDateString(
+                            i18n.language === 'sr' ? 'sr-RS' : 'en-US'
+                          )}
                         </Text>
                       </View>
 
                       {/* Confirmed date */}
                       {redemption.status === 'confirmed' && redemption.confirmed_at && (
                         <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>Confirmed</Text>
+                          <Text style={styles.detailLabel}>{t('confirmed')}</Text>
                           <Text style={styles.detailValue}>
-                            {new Date(redemption.confirmed_at).toLocaleDateString()}
+                            {new Date(redemption.confirmed_at).toLocaleDateString(
+                              i18n.language === 'sr' ? 'sr-RS' : 'en-US'
+                            )}
                           </Text>
                         </View>
                       )}
@@ -215,7 +222,7 @@ export default function RedemptionsScreen() {
                       <View style={styles.pendingNote}>
                         <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning || '#FF9100'} />
                         <Text style={styles.pendingNoteText}>
-                          Show your code to gym staff to claim
+                          {t('showCodeToStaff')}
                         </Text>
                       </View>
                     )}
