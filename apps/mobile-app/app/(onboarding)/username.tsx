@@ -1,143 +1,106 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { theme } from '@/lib/theme';
 
-export default function UsernameScreen() {
-  const [username, setUsername] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [checkingExisting, setCheckingExisting] = useState(true);
+// ── Onboarding Progress Indicator ──
+function OnboardingProgress({
+  current,
+  total,
+}: {
+  current: number;
+  total: number;
+}) {
+  return (
+    <View style={progressStyles.container}>
+      {Array.from({ length: total }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            progressStyles.dot,
+            {
+              width: i === current - 1 ? 24 : 8,
+              backgroundColor:
+                i < current
+                  ? theme.colors.primary
+                  : 'rgba(255,255,255,0.12)',
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  dot: {
+    height: 3,
+    borderRadius: 2,
+  },
+});
+
+export default function DisplayNameScreen() {
   const router = useRouter();
+  const profile = useAuthStore((s) => s.profile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 
-  // Check if user already has a valid username
-  useEffect(() => {
-    async function checkExistingUsername() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          setCheckingExisting(false);
-          return;
-        }
+  // Pre-fill with OAuth name or existing username (if not auto-generated)
+  const initialName =
+    profile?.full_name ||
+    (profile?.username && !profile.username.startsWith('user_')
+      ? profile.username
+      : '');
 
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching profile:', error);
-          setCheckingExisting(false);
-          return;
-        }
-
-        // Check if username is valid (exists and doesn't start with 'user_')
-        const hasValidUsername = profile?.username && !profile.username.startsWith('user_');
-        
-        if (hasValidUsername) {
-          // User already has a valid username, redirect to home
-          router.replace('/home');
-        } else {
-          // Pre-fill the input with existing username if it exists
-          if (profile?.username) {
-            setUsername(profile.username);
-          }
-          setCheckingExisting(false);
-        }
-      } catch (error) {
-        console.error('Error checking username:', error);
-        setCheckingExisting(false);
-      }
-    }
-
-    checkExistingUsername();
-  }, [router]);
+  const [displayName, setDisplayName] = useState(initialName);
+  const [loading, setLoading] = useState(false);
 
   const handleContinue = async () => {
-    if (!username.trim()) {
-      Alert.alert('Error', 'Please enter a username');
+    const trimmed = displayName.trim();
+    if (!trimmed || trimmed.length < 2) {
+      Alert.alert('Greška', 'Ime mora imati najmanje 2 karaktera');
       return;
     }
 
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      Alert.alert('Error', 'User not found');
-      setLoading(false);
-      return;
-    }
-
-    // First, check if user already has this username
-    const { data: currentProfile } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', user.id)
-      .single();
-
-    // If username is the same, just redirect
-    if (currentProfile?.username === username.trim()) {
-      setLoading(false);
-      router.push('/(onboarding)/home-gym');
-      return;
-    }
-
-    // Check if username is already taken by another user
-    const { data: existingUser } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', username.trim())
-      .neq('id', user.id)
-      .single();
-
-    if (existingUser) {
-      setLoading(false);
-      Alert.alert('Error', 'This username is already taken. Please choose another one.');
-      return;
-    }
-
-    // Update username
-    const { error } = await supabase
-      .from('profiles')
-      .update({ username: username.trim() })
-      .eq('id', user.id);
-
+    const result = await updateProfile({ username: trimmed });
     setLoading(false);
 
-    if (error) {
-      if (error.code === '23505') {
-        Alert.alert('Error', 'This username is already taken. Please choose another one.');
-      } else {
-        Alert.alert('Error', error.message);
-      }
+    if (result.success) {
+      setOnboardingStep('avatar');
+      router.replace('/(onboarding)/avatar');
     } else {
-      router.push('/(onboarding)/home-gym');
+      if (result.error?.includes('already taken') || result.error?.includes('23505')) {
+        Alert.alert('Greška', 'Ovo ime je već zauzeto. Probaj drugo.');
+      } else {
+        Alert.alert('Greška', result.error || 'Nešto je pošlo naopako');
+      }
     }
   };
 
-  if (checkingExisting) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <LinearGradient
-          colors={['#000000', '#0A0E1A', '#000000']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Pure black background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -145,54 +108,102 @@ export default function UsernameScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Ionicons name="person-outline" size={48} color={theme.colors.primary} />
-          <Text style={styles.title}>Choose Your Username</Text>
-          <Text style={styles.subtitle}>
-            This will be shown on leaderboards
-          </Text>
-        </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.content}>
+          {/* Progress indicator */}
+          <OnboardingProgress current={1} total={3} />
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Ionicons name="at-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Username"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoComplete="username"
-              autoFocus
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleContinue}
-            disabled={loading || !username.trim()}
-            activeOpacity={0.8}
+          {/* Header */}
+          <Animated.View
+            entering={FadeInDown.delay(100).duration(500)}
+            style={styles.headerSection}
           >
-            <LinearGradient
-              colors={[theme.colors.primary, theme.colors.primaryDark]}
-              style={styles.buttonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color={theme.colors.background} />
-              ) : (
-                <>
-                  <Text style={styles.buttonText}>Continue</Text>
-                  <Ionicons name="arrow-forward" size={20} color={theme.colors.background} />
-                </>
+            <View style={styles.iconRing}>
+              <Text style={styles.iconEmoji}>✏️</Text>
+            </View>
+            <Text style={styles.title}>Kako da te zovemo?</Text>
+            <Text style={styles.subtitle}>
+              Ovo ime će se prikazivati na leaderboardima
+            </Text>
+          </Animated.View>
+
+          {/* Form */}
+          <Animated.View
+            entering={FadeInDown.delay(300).duration(500)}
+            style={styles.form}
+          >
+            <View style={styles.inputContainer}>
+              <Ionicons
+                name="at-outline"
+                size={20}
+                color={theme.colors.textSecondary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Tvoje ime"
+                placeholderTextColor={theme.colors.textTertiary}
+                value={displayName}
+                onChangeText={setDisplayName}
+                autoCapitalize="none"
+                autoComplete="username"
+                autoFocus
+                editable={!loading}
+                maxLength={30}
+              />
+              {displayName.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setDisplayName('')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={20}
+                    color={theme.colors.textTertiary}
+                  />
+                </TouchableOpacity>
               )}
-            </LinearGradient>
-          </TouchableOpacity>
+            </View>
+
+            {/* Character count */}
+            <Text style={styles.charCount}>
+              {displayName.trim().length}/30
+            </Text>
+
+            {/* Primary CTA */}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (loading || displayName.trim().length < 2) && { opacity: 0.6 },
+              ]}
+              onPress={handleContinue}
+              disabled={loading || displayName.trim().length < 2}
+              activeOpacity={0.8}
+            >
+              <View style={styles.primaryButtonInner}>
+                {loading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.colors.background}
+                  />
+                ) : (
+                  <>
+                    <Text style={styles.buttonText}>Nastavi</Text>
+                    <Ionicons
+                      name="arrow-forward"
+                      size={20}
+                      color={theme.colors.background}
+                    />
+                  </>
+                )}
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -202,29 +213,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   content: {
     flex: 1,
     padding: theme.spacing.xl,
     justifyContent: 'center',
   },
-  header: {
+
+  // ── Header ──
+  headerSection: {
     alignItems: 'center',
     marginBottom: theme.spacing['2xl'],
+  },
+  iconRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0, 229, 255, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 229, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+  },
+  iconEmoji: {
+    fontSize: 32,
   },
   title: {
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
     letterSpacing: 1,
-    textTransform: 'uppercase',
     textAlign: 'center',
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
     fontSize: theme.typography.fontSize.base,
@@ -232,8 +252,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: 'center',
   },
+
+  // ── Form ──
   form: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -254,25 +276,37 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
+  charCount: {
+    textAlign: 'right',
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.textTertiary,
+    marginTop: -theme.spacing.sm,
+  },
+
+  // ── Primary Button ──
   primaryButton: {
+    backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.full,
     overflow: 'hidden',
-    marginTop: theme.spacing.md,
-    ...theme.shadows.glow,
+    marginTop: theme.spacing.sm,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  buttonGradient: {
+  primaryButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.lg,
+    gap: 10,
+    paddingVertical: 18,
     paddingHorizontal: theme.spacing.xl,
   },
   buttonText: {
-    color: theme.colors.background,
+    color: '#000000',
     fontSize: theme.typography.fontSize.base,
     fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
 });

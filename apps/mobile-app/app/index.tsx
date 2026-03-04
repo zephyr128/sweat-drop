@@ -1,106 +1,89 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { useSession } from '@/hooks/useSession';
 import * as SplashScreen from 'expo-splash-screen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '@/lib/stores/authStore';
 
-// Keep splash screen visible while we load
+// Keep splash screen visible while we determine the initial route
 SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
   const router = useRouter();
-  const { session, loading } = useSession();
-  const [checkingUsername, setCheckingUsername] = useState(true);
-  const [hasUsername, setHasUsername] = useState(false);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const session = useAuthStore((s) => s.session);
+  const onboardingStep = useAuthStore((s) => s.onboardingStep);
+
+  const [pushAsked, setPushAsked] = useState<boolean | null>(null);
   const [hasNavigated, setHasNavigated] = useState(false);
 
-  // Check if user has username after session is loaded
+  // Load push notification status from AsyncStorage
   useEffect(() => {
-    async function checkUsername() {
-      if (loading) {
-        return;
-      }
-
-      if (!session) {
-        setCheckingUsername(false);
-        return;
-      }
-
+    const loadPushStatus = async () => {
       try {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', session.user.id)
-          .single();
-
-        if (error) {
-          console.error('Error checking username:', error);
-          setHasUsername(false);
-        } else if (!profile) {
-          console.log('No profile found for user');
-          setHasUsername(false);
-        } else {
-          const hasValidUsername = profile.username && typeof profile.username === 'string' && !profile.username.startsWith('user_');
-          console.log('Username check:', { username: profile.username, hasValidUsername });
-          setHasUsername(hasValidUsername);
-        }
-      } catch (error) {
-        console.error('Error checking username:', error);
-        setHasUsername(false);
-      } finally {
-        setCheckingUsername(false);
+        const status = await AsyncStorage.getItem('pushNotificationsAsked');
+        setPushAsked(status === 'true');
+      } catch {
+        setPushAsked(false);
       }
-    }
+    };
+    loadPushStatus();
+  }, []);
 
-    checkUsername();
-  }, [session, loading]);
-
-  // Handle navigation and splash screen hiding
+  // Navigate once auth is initialized and push status is loaded
   useEffect(() => {
-    async function prepare() {
-      // Wait for all checks to complete
-      if (loading || checkingUsername) {
-        return;
-      }
+    if (!isInitialized || pushAsked === null || hasNavigated) return;
 
+    const navigate = async () => {
       try {
-        // Determine navigation target
-        let targetRoute: string;
+        // Hide splash screen
+        await SplashScreen.hideAsync();
+        // Small delay for smooth transition
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         if (!session) {
-          targetRoute = '/(onboarding)/welcome';
-        } else if (!hasUsername) {
-          targetRoute = '/(onboarding)/username';
+          router.replace('/(onboarding)/welcome');
+        } else if (onboardingStep !== 'done') {
+          // Resume onboarding at the correct step
+          switch (onboardingStep) {
+            case 'auth':
+              router.replace('/(onboarding)/auth');
+              break;
+            case 'stepper':
+              router.replace('/(onboarding)/stepper');
+              break;
+            case 'display_name':
+              router.replace('/(onboarding)/username');
+              break;
+            case 'avatar':
+              router.replace('/(onboarding)/avatar');
+              break;
+            case 'notifications':
+              if (!pushAsked) {
+                router.replace('/(onboarding)/notifications');
+              } else {
+                // Already asked — skip to home
+                useAuthStore.getState().setOnboardingStep('done');
+                router.replace('/home');
+              }
+              break;
+            default:
+              router.replace('/home');
+          }
         } else {
-          targetRoute = '/home';
+          router.replace('/home');
         }
 
-        // Mark as navigated to prevent multiple navigations
         setHasNavigated(true);
-
-        // Hide splash screen first (while still showing black background)
-        await SplashScreen.hideAsync();
-        
-        // Small delay to ensure splash is hidden and smooth transition
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Navigate with replace (fade animation is handled by Stack.Screen options)
-        router.replace(targetRoute as any);
       } catch (e) {
-        console.warn('Error during app initialization:', e);
+        console.warn('[Index] Error during navigation:', e);
         setHasNavigated(true);
-        // Hide splash even on error
         await SplashScreen.hideAsync();
       }
-    }
+    };
 
-    // Only prepare if we haven't navigated yet
-    if (!hasNavigated) {
-      prepare();
-    }
-  }, [loading, checkingUsername, session, hasUsername, router, hasNavigated]);
+    navigate();
+  }, [isInitialized, session, onboardingStep, pushAsked, hasNavigated, router]);
 
-  // Don't render anything - let native splash screen show
-  // Fade animation is handled by Stack.Screen options in _layout.tsx
+  // Render nothing — splash screen is visible until navigation
   return null;
 }
-

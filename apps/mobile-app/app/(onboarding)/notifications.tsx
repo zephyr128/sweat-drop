@@ -1,0 +1,321 @@
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '@/lib/stores/authStore';
+import {
+  PUSH_NOTIFICATIONS_ENABLED,
+  registerForPushNotifications,
+} from '@/lib/notifications';
+import { theme } from '@/lib/theme';
+
+// ── Onboarding Progress Indicator ──
+function OnboardingProgress({
+  current,
+  total,
+}: {
+  current: number;
+  total: number;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row',
+      gap: 6,
+      justifyContent: 'center',
+      marginBottom: 32,
+    }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            height: 3,
+            width: i === current - 1 ? 24 : 8,
+            borderRadius: 2,
+            backgroundColor:
+              i < current
+                ? theme.colors.primary
+                : 'rgba(255,255,255,0.12)',
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+export default function NotificationsScreen() {
+  const router = useRouter();
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
+
+  const [loading, setLoading] = useState(false);
+
+  const completeOnboarding = async () => {
+    await AsyncStorage.setItem('pushNotificationsAsked', 'true');
+    setOnboardingStep('done');
+    router.replace('/home');
+  };
+
+  const handleEnable = async () => {
+    setLoading(true);
+    try {
+      if (PUSH_NOTIFICATIONS_ENABLED) {
+        const token = await registerForPushNotifications();
+        if (token) {
+          await updateProfile({ expo_push_token: token });
+        }
+      }
+    } catch (error) {
+      console.warn('[Notifications] Failed to register:', error);
+    } finally {
+      setLoading(false);
+      await completeOnboarding();
+    }
+  };
+
+  const handleSkip = async () => {
+    await completeOnboarding();
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <LinearGradient
+        colors={['#000000', '#0A0E1A', '#000000']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <View style={styles.content}>
+        {/* Progress indicator */}
+        <OnboardingProgress current={3} total={3} />
+
+        {/* Bell Icon with Glow */}
+        <Animated.View
+          entering={FadeIn.delay(100).duration(500)}
+          style={styles.iconSection}
+        >
+          <View style={styles.iconContainer}>
+            <View style={styles.iconGlow} />
+            <Ionicons
+              name="notifications-outline"
+              size={64}
+              color={theme.colors.primary}
+            />
+          </View>
+        </Animated.View>
+
+        {/* Title */}
+        <Animated.View
+          entering={FadeInDown.delay(300).duration(500)}
+          style={styles.headerSection}
+        >
+          <Text style={styles.title}>Ostani u toku</Text>
+          <Text style={styles.subtitle}>
+            Obaveštavamo te o novim izazovima, nagradi na leaderboardu i
+            podsetnicima za streak.
+          </Text>
+        </Animated.View>
+
+        {/* Benefits list */}
+        <Animated.View
+          entering={FadeInDown.delay(500).duration(500)}
+          style={styles.benefitsList}
+        >
+          {[
+            { icon: '🔥', text: 'Streak podsetnici' },
+            { icon: '🏆', text: 'Novi izazovi i takmičenja' },
+            { icon: '🎁', text: 'Ekskluzivne nagrade' },
+          ].map((benefit, index) => (
+            <View key={index} style={styles.benefitRow}>
+              <Text style={styles.benefitIcon}>{benefit.icon}</Text>
+              <Text style={styles.benefitText}>{benefit.text}</Text>
+            </View>
+          ))}
+        </Animated.View>
+
+        {/* Buttons */}
+        <Animated.View
+          entering={FadeInDown.delay(700).duration(500)}
+          style={styles.buttonsContainer}
+        >
+          {/* Primary CTA */}
+          <TouchableOpacity
+            style={[styles.primaryButton, loading && { opacity: 0.6 }]}
+            onPress={handleEnable}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <View style={styles.primaryButtonInner}>
+              {loading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={theme.colors.background}
+                />
+              ) : (
+                <>
+                  <Ionicons
+                    name="notifications"
+                    size={20}
+                    color={theme.colors.background}
+                  />
+                  <Text style={styles.buttonText}>
+                    Uključi obaveštenja
+                  </Text>
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Skip */}
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={handleSkip}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.secondaryButtonText}>Ne sada</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  content: {
+    flex: 1,
+    padding: theme.spacing.xl,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Icon ──
+  iconSection: {
+    marginBottom: theme.spacing.xl,
+  },
+  iconContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  iconGlow: {
+    position: 'absolute',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: theme.colors.primary,
+    opacity: 0.25,
+    ...theme.shadows.glow,
+  },
+
+  // ── Header ──
+  headerSection: {
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+  },
+  title: {
+    fontSize: theme.typography.fontSize['2xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text,
+    letterSpacing: 1,
+    marginBottom: theme.spacing.md,
+  },
+  subtitle: {
+    fontSize: theme.typography.fontSize.base,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    lineHeight:
+      theme.typography.lineHeight.relaxed * theme.typography.fontSize.base,
+    paddingHorizontal: theme.spacing.md,
+  },
+
+  // ── Benefits ──
+  benefitsList: {
+    width: '100%',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    backgroundColor: theme.glass.background,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.glass.border,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  benefitIcon: {
+    fontSize: 22,
+  },
+  benefitText: {
+    fontSize: theme.typography.fontSize.base,
+    color: theme.colors.text,
+    fontWeight: theme.typography.fontWeight.medium,
+    letterSpacing: 0.3,
+  },
+
+  // ── Buttons ──
+  buttonsContainer: {
+    width: '100%',
+    gap: theme.spacing.md,
+  },
+  primaryButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.full,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  primaryButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 18,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  buttonText: {
+    color: '#000000',
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.bold,
+    letterSpacing: 1.5,
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: theme.glass.border,
+    borderRadius: theme.borderRadius.full,
+    paddingVertical: theme.spacing.lg,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.medium,
+    letterSpacing: 0.5,
+  },
+});

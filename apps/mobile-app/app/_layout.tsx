@@ -1,14 +1,13 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
-import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
+import { useAuthStore } from '@/lib/stores/authStore';
 import BleManager from 'react-native-ble-manager';
-import { BleManager as BleManagerIOS } from 'react-native-ble-plx';
 import * as SplashScreen from 'expo-splash-screen';
+import { useRouter } from 'expo-router';
 import {
   PUSH_NOTIFICATIONS_ENABLED,
   configureNotificationHandler,
@@ -19,9 +18,7 @@ import {
   getDeepLinkFromNotification,
 } from '@/lib/notifications';
 
-// AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.1)
 // Configure notification handler OUTSIDE of component (must run before any notification arrives)
-// Guarded: no-ops when push notifications are disabled (Personal Dev Team limitation).
 if (PUSH_NOTIFICATIONS_ENABLED) {
   configureNotificationHandler();
 }
@@ -29,7 +26,7 @@ if (PUSH_NOTIFICATIONS_ENABLED) {
 // Inner component that uses theme (must be inside ThemeProvider)
 function StackNavigator() {
   const { branding } = useTheme();
-  
+
   return (
     <Stack
       screenOptions={{
@@ -41,26 +38,27 @@ function StackNavigator() {
           fontWeight: 'bold',
         },
         contentStyle: {
-          backgroundColor: '#000000', // Black background to match splash
+          backgroundColor: '#000000',
         },
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen 
-        name="(onboarding)" 
-        options={{ 
+      <Stack.Screen
+        name="(onboarding)"
+        options={{
           headerShown: false,
           animation: 'fade' as any,
           animationDuration: 300,
-        }} 
+          gestureEnabled: false,
+        }}
       />
-      <Stack.Screen 
-        name="home" 
-        options={{ 
+      <Stack.Screen
+        name="home"
+        options={{
           headerShown: false,
           animation: 'fade' as any,
           animationDuration: 300,
-        }} 
+        }}
       />
       <Stack.Screen name="wallet" options={{ headerShown: false }} />
       <Stack.Screen name="store" options={{ headerShown: false }} />
@@ -72,13 +70,23 @@ function StackNavigator() {
       <Stack.Screen name="trophy-room" options={{ headerShown: false }} />
       <Stack.Screen name="gym-plans" options={{ headerShown: false }} />
       <Stack.Screen name="plan-detail" options={{ headerShown: false }} />
-      <Stack.Screen 
-        name="scan" 
-        options={{ 
+      <Stack.Screen
+        name="scan"
+        options={{
           headerShown: false,
-          presentation: 'modal', // iOS-style slide-up modal
-          gestureEnabled: false, // Prevent swipe to dismiss
-        }} 
+          presentation: 'modal',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="gym-welcome"
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+          animation: 'fade',
+          animationDuration: 400,
+          gestureEnabled: false,
+        }}
       />
       <Stack.Screen name="workout" options={{ headerShown: false }} />
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
@@ -93,53 +101,44 @@ function StackNavigator() {
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [session, setSession] = useState<Session | null>(null);
   const router = useRouter();
+  const initialize = useAuthStore((s) => s.initialize);
+  const session = useAuthStore((s) => s.session);
   const pushTokenRegistered = useRef(false);
 
-  // Push notification tap handler — navigates to the deep link route
-  const handleNotificationTap = useCallback((deepLink: string | null) => {
-    if (deepLink) {
-      console.log('[App] Navigating from notification tap:', deepLink);
-      // Small delay to ensure navigation stack is ready
-      setTimeout(() => {
-        router.push(deepLink as any);
-      }, 100);
-    }
-  }, [router]);
+  // Push notification tap handler
+  const handleNotificationTap = useCallback(
+    (deepLink: string | null) => {
+      if (deepLink) {
+        console.log('[App] Navigating from notification tap:', deepLink);
+        setTimeout(() => {
+          router.push(deepLink as any);
+        }, 100);
+      }
+    },
+    [router],
+  );
 
+  // Single auth initialization — THE ONLY auth listener in the app
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+    const cleanup = initialize();
+    return cleanup;
+  }, []);
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      setSession(session);
-    });
-
-    // Initialize BLE Manager
+  // Initialize BLE Manager (Android)
+  useEffect(() => {
     if (Platform.OS === 'android') {
       BleManager.start({ showAlert: false })
         .then(() => {
           console.log('[App] BLE Manager initialized (Android)');
         })
-        .catch((error) => {
+        .catch((error: any) => {
           console.error('[App] Failed to initialize BLE Manager:', error);
         });
     }
-    // iOS BLE Manager is initialized in ble-service.ts
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // PUSH NOTIFICATIONS — register token when user is authenticated
-  // Disabled when PUSH_NOTIFICATIONS_ENABLED = false (Personal Dev Team)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // Push notifications — register token when user is authenticated
   useEffect(() => {
     if (!PUSH_NOTIFICATIONS_ENABLED) return;
     if (!session?.user?.id) {
@@ -147,7 +146,6 @@ export default function RootLayout() {
       return;
     }
 
-    // Only register once per session
     if (pushTokenRegistered.current) return;
     pushTokenRegistered.current = true;
 
@@ -160,7 +158,6 @@ export default function RootLayout() {
 
     registerPush();
 
-    // Check if app was opened from a notification (cold start)
     getInitialNotification().then((data) => {
       if (data) {
         const deepLink = getDeepLinkFromNotification(data);
