@@ -48,6 +48,15 @@ module.exports = {
           cameraPermissionText: 'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
         },
       ],
+      [
+        '@react-native-google-signin/google-signin',
+        {
+          iosUrlScheme: 'com.googleusercontent.apps.620444177181-ar724tn6j7lfr28h97fpaosbn2o48352',
+        },
+      ],
+      // expo-apple-authentication does NOT need a config plugin
+      // It works automatically when bundleIdentifier is set
+      //
       // TODO: Re-enable expo-notifications plugin once Organization Apple Developer account is active.
       // Personal Development teams do NOT support Push Notifications capability.
       // The notification code in lib/notifications.ts is guarded and will no-op gracefully.
@@ -59,9 +68,6 @@ module.exports = {
       //     defaultChannel: 'default',
       //   },
       // ],
-      // NOTE: expo-web-browser does NOT require a config plugin in Expo SDK 54
-      // It can be used directly without adding it to plugins array
-      // Adding it here causes ESM/TypeScript loading errors with pnpm isolated linker
     ],
     scheme: 'sweatdrop',
     extra: {
