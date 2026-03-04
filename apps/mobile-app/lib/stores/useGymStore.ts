@@ -30,6 +30,7 @@ interface GymState {
   setActiveGym: (gym: Gym | null) => void;
   setLoading: (loading: boolean) => void;
   clearPreview: () => void;
+  reset: () => void;
   
   // Computed
   getActiveGymId: () => string | null;
@@ -71,6 +72,16 @@ export const useGymStore = create<GymState>()(
 
       clearPreview: () => {
         set({ previewGymId: null });
+      },
+
+      reset: () => {
+        set({
+          homeGymId: null,
+          previewGymId: null,
+          gyms: [],
+          activeGym: null,
+          isLoading: false,
+        });
       },
 
       // Computed: Returns previewGymId if set, otherwise homeGymId

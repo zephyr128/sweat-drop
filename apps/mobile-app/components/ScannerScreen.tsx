@@ -66,9 +66,20 @@ export function ScannerScreen() {
   }>();
   const { session } = useSession();
   const { updateHomeGym } = useGymData();
-  const { homeGymId } = useGymStore();
   const device = useCameraDevice('back');
   const hasScannedRef = useRef(false);
+
+  // ── Refs to defeat stale closures in useCodeScanner ──
+  // useCodeScanner memoizes its onCodeScanned callback and never updates it,
+  // so every value used inside the callback chain must be read via refs.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const updateHomeGymRef = useRef(updateHomeGym);
+  updateHomeGymRef.current = updateHomeGym;
+  const isScanningRef = useRef(isScanning);
+  isScanningRef.current = isScanning;
+  const isProcessingRef = useRef(isProcessing);
+  isProcessingRef.current = isProcessing;
   
   // Premium Animations - All on UI thread for 60/120 FPS
   const scanLineY = useSharedValue(0);
@@ -315,7 +326,7 @@ export function ScannerScreen() {
       }
 
       // Check if machine is busy
-      if (machine.is_busy && machine.current_user_id !== session?.user?.id) {
+      if (machine.is_busy && machine.current_user_id !== sessionRef.current?.user?.id) {
         Alert.alert(
           'Sprava Zauzeta',
           'Ova sprava je trenutno zauzeta. Molimo sačekajte ili koristite drugu spravu.',
@@ -352,44 +363,28 @@ export function ScannerScreen() {
         return;
       }
 
-      // Check if scanned gym is different from home gym
-      if (homeGymId && machine.gym_id !== homeGymId) {
-        Alert.alert(
-          'Postavi kao Home Gym?',
-          'Ova teretana nije vaš Home Gym. Da li želite da je postavite kao Home Gym?',
-          [
-            {
-              text: 'Ne',
-              style: 'cancel',
-              onPress: () => {
-                proceedWithWorkout(machine);
-              },
-            },
-            {
-              text: 'Da',
-              onPress: async () => {
-                try {
-                  await updateHomeGym(machine.gym_id);
-                  proceedWithWorkout(machine);
-                } catch (error) {
-                  console.error('[Scanner] Error updating home gym:', error);
-                  Alert.alert(
-                    'Greška',
-                    'Nije moguće postaviti teretanu kao Home Gym. Nastavljamo sa treningom.',
-                    [
-                      {
-                        text: 'OK',
-                        onPress: () => {
-                          proceedWithWorkout(machine);
-                        },
-                      },
-                    ]
-                  );
-                }
-              },
-            },
-          ]
-        );
+      // ── Read homeGymId directly from store to avoid stale closure ──
+      const currentHomeGymId = useGymStore.getState().homeGymId;
+      console.log('[Scanner] Current homeGymId from store:', currentHomeGymId, '| Scanned gym:', machine.gym_id);
+
+      // First-time user OR different gym → show gym-welcome
+      if (!currentHomeGymId || machine.gym_id !== currentHomeGymId) {
+        const reason = !currentHomeGymId ? 'No home gym set' : `Different gym detected (was ${currentHomeGymId})`;
+        console.log(`[Scanner] ${reason} — switching to:`, machine.gym_id);
+        // Set in store IMMEDIATELY (before async DB call) so it's available even if DB update is slow
+        useGymStore.getState().setHomeGymId(machine.gym_id);
+        try {
+          // Use ref to avoid stale closure from useCodeScanner
+          await updateHomeGymRef.current(machine.gym_id);
+          // Sync authStore profile so home screen sees the new gym
+          const { useAuthStore } = require('@/lib/stores/authStore');
+          await useAuthStore.getState().refreshProfile();
+        } catch (error) {
+          console.error('[Scanner] Error setting home gym:', error);
+          // Store already has the value — DB will be synced on next loadUserHomeGym
+        }
+        // Show gym-welcome screen
+        proceedWithWorkout(machine, true);
         return;
       }
 
@@ -413,14 +408,17 @@ export function ScannerScreen() {
     }
   };
 
-  const proceedWithWorkout = async (machine: MachineStatus) => {
+  const proceedWithWorkout = async (machine: MachineStatus, isFirstGym = false) => {
     try {
       setIsProcessing(true);
+
+      // Always read session from ref to avoid stale closure
+      const currentSession = sessionRef.current;
       
-      if (session?.user) {
+      if (currentSession?.user) {
         const { data: lockResult, error: lockError } = await supabase.rpc('lock_machine', {
           p_machine_id: machine.machine_id,
-          p_user_id: session.user.id,
+          p_user_id: currentSession.user.id,
         });
 
         if (lockError || !lockResult) {
@@ -453,11 +451,15 @@ export function ScannerScreen() {
           }
         : null;
 
-      // Create session
+      // Create session (use currentSession from ref, not stale closure)
+      if (!currentSession?.user) {
+        throw new Error('No active session — cannot create workout');
+      }
+
       const { data: newSession, error: sessionError } = await supabase
         .from('sessions')
         .insert({
-          user_id: session!.user.id,
+          user_id: currentSession.user.id,
           gym_id: machine.gym_id,
           machine_id: machine.machine_id,
           started_at: new Date().toISOString(),
@@ -467,36 +469,52 @@ export function ScannerScreen() {
         .single();
 
       if (sessionError) {
-        if (session?.user) {
-          await supabase.rpc('unlock_machine', {
-            p_machine_id: machine.machine_id,
-            p_user_id: session.user.id,
-          });
-        }
+        await supabase.rpc('unlock_machine', {
+          p_machine_id: machine.machine_id,
+          p_user_id: currentSession.user.id,
+        });
         throw sessionError;
       }
 
       // Success haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Navigate to workout with plan parameters if available (from route params)
-      router.replace({
-        pathname: '/workout',
-        params: {
-          sessionId: newSession.id,
-          machineId: machine.machine_id,
-          gymId: machine.gym_id,
-          machineType: machine.machine_type,
-          sensorId: machine.sensor_id || '',
-          bleProtocol: machine.ble_protocol || '',
-          ...(planParams ? {
-            planId: planParams.planId,
-            subscriptionId: planParams.subscriptionId,
-            planItemId: planParams.planItemId,
-            exerciseIndex: planParams.exerciseIndex,
-          } : {}),
-        },
-      });
+      // Build shared workout params
+      const workoutParams: Record<string, string> = {
+        sessionId: newSession.id,
+        machineId: machine.machine_id,
+        gymId: machine.gym_id,
+        machineType: machine.machine_type,
+        sensorId: machine.sensor_id || '',
+        bleProtocol: machine.ble_protocol || '',
+        ...(planParams ? {
+          planId: planParams.planId,
+          subscriptionId: planParams.subscriptionId,
+          planItemId: planParams.planItemId,
+          exerciseIndex: planParams.exerciseIndex,
+        } : {}),
+      };
+
+      if (isFirstGym) {
+        // ── First-time gym user → show welcome screen ──
+        const gymName = newSession.gym?.name
+          ?? useGymStore.getState().activeGym?.name
+          ?? 'Tvojoj teretani';
+
+        router.replace({
+          pathname: '/gym-welcome',
+          params: {
+            gymName,
+            ...workoutParams,
+          },
+        });
+      } else {
+        // ── Returning user → go directly to workout ──
+        router.replace({
+          pathname: '/workout',
+          params: workoutParams,
+        });
+      }
     } catch (error: any) {
       console.error('[Scanner] Error proceeding with workout:', error);
       Alert.alert(
@@ -588,7 +606,25 @@ export function ScannerScreen() {
         return;
       }
 
-      // Proceed with workout (skip home gym check in dev mode)
+      // ── Read homeGymId directly from store to avoid stale closure ──
+      const currentDevHomeGymId = useGymStore.getState().homeGymId;
+      console.log('[Scanner][Dev] Current homeGymId from store:', currentDevHomeGymId, '| Scanned gym:', machine.gym_id);
+
+      if (!currentDevHomeGymId || machine.gym_id !== currentDevHomeGymId) {
+        const reason = !currentDevHomeGymId ? 'No home gym set' : `Different gym detected (was ${currentDevHomeGymId})`;
+        console.log(`[Scanner][Dev] ${reason} — switching to:`, machine.gym_id);
+        useGymStore.getState().setHomeGymId(machine.gym_id);
+        try {
+          await updateHomeGymRef.current(machine.gym_id);
+          const { useAuthStore } = require('@/lib/stores/authStore');
+          await useAuthStore.getState().refreshProfile();
+        } catch (error) {
+          console.error('[Scanner][Dev] Error setting home gym:', error);
+        }
+        proceedWithWorkout(machine, true);
+        return;
+      }
+
       proceedWithWorkout(machine);
     } catch (error: any) {
       console.error('[Scanner] Development mode error:', error);
@@ -608,14 +644,20 @@ export function ScannerScreen() {
     }
   };
 
+  // Store handler in ref so useCodeScanner always calls the latest version
+  const handleQRCodeScannedRef = useRef(handleQRCodeScanned);
+  handleQRCodeScannedRef.current = handleQRCodeScanned;
+
   const codeScanner = useCodeScanner({
     codeTypes: ['qr'],
     onCodeScanned: (codes) => {
-      if (codes.length > 0 && !hasScannedRef.current && !isProcessing && isScanning) {
-        setIsScanning(false);
+      // Use refs for ALL values — useCodeScanner memoizes this callback
+      // and never updates it, so direct state references would be stale.
+      if (codes.length > 0 && !hasScannedRef.current && !isProcessingRef.current && isScanningRef.current) {
+        isScanningRef.current = false;
         const qrCode = codes[0].value;
         if (qrCode) {
-          handleQRCodeScanned(qrCode);
+          handleQRCodeScannedRef.current(qrCode);
         }
       }
     },

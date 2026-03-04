@@ -39,17 +39,42 @@ export const useGymData = () => {
 
   const loadUserHomeGym = async () => {
     try {
+      // Prefer hook session; fall back to Supabase session if hook is stale
+      let userId = session?.user?.id;
+      if (!userId) {
+        const { data: { session: freshSession } } = await supabase.auth.getSession();
+        userId = freshSession?.user?.id;
+      }
+      if (!userId) return;
+
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('home_gym_id')
-        .eq('id', session?.user.id)
+        .eq('id', userId)
         .single();
 
       if (error) throw error;
 
-      if (profile?.home_gym_id && profile.home_gym_id !== homeGymId) {
-        setHomeGymId(profile.home_gym_id);
+      const dbGymId = profile?.home_gym_id ?? null;
+      const currentStoreGymId = useGymStore.getState().homeGymId;
+
+      if (dbGymId && dbGymId !== currentStoreGymId) {
+        // DB has a value — update store to match
+        setHomeGymId(dbGymId);
+      } else if (!dbGymId && currentStoreGymId) {
+        // Store has a value but DB doesn't — DB is stale.
+        // Persist the store value to DB instead of clearing it.
+        console.log('[useGymData] DB home_gym_id is null but store has:', currentStoreGymId, '— persisting to DB');
+        try {
+          await supabase
+            .from('profiles')
+            .update({ home_gym_id: currentStoreGymId })
+            .eq('id', userId);
+        } catch (e) {
+          console.warn('[useGymData] Failed to persist store homeGymId to DB:', e);
+        }
       }
+      // If both are null or both match — no action needed
     } catch (error) {
       console.error('Error loading user home gym:', error);
     }
@@ -138,13 +163,22 @@ export const useGymData = () => {
   }, [setLoading, setActiveGym, setGyms, gyms]);
 
   const updateHomeGym = async (gymId: string) => {
-    if (!session?.user) return;
+    // Prefer hook session; fall back to Supabase session if hook is stale
+    let userId = session?.user?.id;
+    if (!userId) {
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+      userId = freshSession?.user?.id;
+    }
+    if (!userId) {
+      console.warn('[useGymData] updateHomeGym: No user ID available');
+      return;
+    }
 
     try {
       const { error } = await supabase
         .from('profiles')
         .update({ home_gym_id: gymId })
-        .eq('id', session.user.id);
+        .eq('id', userId);
 
       if (error) throw error;
 

@@ -584,7 +584,51 @@ export default function SessionSummaryScreen() {
         <Animated.View entering={FadeInDown.delay(1100).duration(400)}>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: branding.primary }]}
-            onPress={() => router.replace('/home')}
+            onPress={async () => {
+              try {
+                const { useGymStore } = await import('@/lib/stores/useGymStore');
+                const { useAuthStore } = await import('@/lib/stores/authStore');
+
+                const currentHomeGymId = useGymStore.getState().homeGymId;
+
+                // If user still has no home gym (first workout), use the session's gym
+                if (!currentHomeGymId && gymId) {
+                  console.log('[SessionSummary] No home gym in store — setting from session:', gymId);
+                  // 1. Set in store immediately so home screen picks it up
+                  useGymStore.getState().setHomeGymId(gymId);
+                  // 2. Persist to DB
+                  try {
+                    const { data: { session: authSession } } = await supabase.auth.getSession();
+                    if (authSession?.user) {
+                      await supabase
+                        .from('profiles')
+                        .update({ home_gym_id: gymId })
+                        .eq('id', authSession.user.id);
+                    }
+                  } catch (dbErr) {
+                    console.warn('[SessionSummary] Failed to persist home gym to DB:', dbErr);
+                  }
+                }
+
+                // Refresh auth profile so it stays in sync
+                await useAuthStore.getState().refreshProfile();
+
+                // Sync gymStore from refreshed profile (confirms DB is correct)
+                const latestProfile = useAuthStore.getState().profile;
+                if (latestProfile?.home_gym_id) {
+                  useGymStore.getState().setHomeGymId(latestProfile.home_gym_id);
+                }
+              } catch (e) {
+                console.warn('[SessionSummary] Failed to sync state:', e);
+              }
+
+              // Dismiss all pushed/modal screens to return to the original home screen
+              if (router.canDismiss()) {
+                router.dismissAll();
+              } else {
+                router.replace('/home');
+              }
+            }}
             activeOpacity={0.8}
           >
             <Text style={[styles.buttonText, { color: branding.onPrimary }]}>Collect & Close</Text>

@@ -1,26 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+/**
+ * @deprecated Use useAuthStore directly instead.
+ * This wrapper exists for backward compatibility.
+ * New screens should import useAuthStore.
+ *
+ * There is NO onAuthStateChange listener here.
+ * The single listener lives in authStore.initialize().
+ */
+import { useAuthStore } from '@/lib/stores/authStore';
 
 export function useSession() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const session = useAuthStore((s) => s.session);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  return { session, loading };
+  return {
+    session,
+    loading: !isInitialized,
+    // Legacy compat — some screens check user directly
+    user: session?.user ?? null,
+  };
 }

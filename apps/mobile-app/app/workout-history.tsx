@@ -194,6 +194,32 @@ export default function WorkoutHistoryScreen() {
     });
   }, [sessions, selectedMonth]);
 
+  // ── Group sessions by day ──
+  const groupedByDay = useMemo(() => {
+    const groups: { dateStr: string; label: string; sessions: SessionRow[] }[] = [];
+    const map = new Map<string, SessionRow[]>();
+    for (const s of filteredSessions) {
+      const d = new Date(s.started_at);
+      const key = d.toISOString().split('T')[0]; // YYYY-MM-DD
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    for (const [dateStr, daySessions] of map) {
+      const d = new Date(dateStr + 'T12:00:00');
+      const isToday = dateStr === new Date().toISOString().split('T')[0];
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const isYesterday = dateStr === yesterday.toISOString().split('T')[0];
+      const label = isToday
+        ? 'Danas'
+        : isYesterday
+        ? 'Juče'
+        : d.toLocaleDateString('sr-RS', { weekday: 'long', day: 'numeric', month: 'long' });
+      groups.push({ dateStr, label, sessions: daySessions });
+    }
+    return groups;
+  }, [filteredSessions]);
+
   // ── Stats for selected month ──
   const monthStats = useMemo(() => {
     let totalDrops = 0;
@@ -336,73 +362,86 @@ export default function WorkoutHistoryScreen() {
         {filteredSessions.length === 0 ? (
           <Animated.View entering={FadeIn.delay(300).duration(400)} style={styles.emptyContainer}>
             <Ionicons name="fitness-outline" size={48} color={hexToRgba(branding.primary, 0.3)} />
-            <Text style={styles.emptyTitle}>No workouts this month</Text>
-            <Text style={styles.emptySubtitle}>Scan a machine QR to get started!</Text>
+            <Text style={styles.emptyTitle}>Nema treninga ovog meseca</Text>
+            <Text style={styles.emptySubtitle}>Skeniraj QR kod na spravi da počneš!</Text>
           </Animated.View>
         ) : (
           <View style={styles.sessionsList}>
-            {filteredSessions.map((s, index) => {
-              const machineType = s.machines?.type || 'treadmill';
-              const machineName = s.machines?.name || 'Unknown Machine';
-              const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
-
-              return (
-                <Animated.View
-                  key={s.id}
-                  entering={FadeInDown.delay(300 + index * 60).duration(400)}
-                >
-                  <View style={[styles.sessionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-                    <BlurView intensity={40} tint="dark" style={[styles.sessionCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-                      <View style={styles.sessionCardRow}>
-                        {/* Machine Icon */}
-                        <View style={[styles.machineIconCircle, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                          <Ionicons name={iconName} size={24} color={branding.primary} />
-                        </View>
-
-                        {/* Info */}
-                        <View style={styles.sessionInfo}>
-                          <Text style={styles.sessionMachine} numberOfLines={1}>{machineName}</Text>
-                          <Text style={styles.sessionDate}>{formatDate(s.started_at)} • {formatTime(s.started_at)}</Text>
-                        </View>
-
-                        {/* Stats */}
-                        <View style={styles.sessionStats}>
-                          <View style={styles.sessionStatRow}>
-                            <Ionicons name="water" size={14} color={branding.primary} />
-                            <Text style={[styles.sessionDrops, getNumberStyle(16), { color: branding.primary }]}>
-                              {s.drops_earned || 0}
-                            </Text>
-                          </View>
-                          <Text style={styles.sessionDuration}>{formatDuration(s.duration_seconds)}</Text>
-                        </View>
-                      </View>
-
-                      {/* Bottom detail row */}
-                      {(s.calories || (s.multiplier && s.multiplier > 1)) && (
-                        <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.08) }]}>
-                          {s.calories ? (
-                            <View style={styles.detailChip}>
-                              <Ionicons name="flame-outline" size={12} color={theme.colors.secondary} />
-                              <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
-                                ~{Math.round(Number(s.calories))} cal
-                              </Text>
-                            </View>
-                          ) : null}
-                          {s.multiplier && s.multiplier > 1 ? (
-                            <View style={[styles.detailChip, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                              <Ionicons name="flash" size={12} color={branding.primary} />
-                              <Text style={[styles.detailChipText, { color: branding.primary }]}>
-                                ×{s.multiplier.toFixed(1)} multiplier
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                      )}
-                    </BlurView>
+            {groupedByDay.map((group, groupIdx) => (
+              <View key={group.dateStr}>
+                {/* Day section header */}
+                <Animated.View entering={FadeInDown.delay(300 + groupIdx * 80).duration(400)}>
+                  <View style={styles.daySectionHeader}>
+                    <Text style={[styles.daySectionLabel, { color: branding.primary }]}>
+                      {group.label}
+                    </Text>
+                    <View style={[styles.daySectionLine, { backgroundColor: hexToRgba(branding.primary, 0.15) }]} />
                   </View>
                 </Animated.View>
-              );
-            })}
+
+                {group.sessions.map((s, index) => {
+                  const machineType = s.machines?.type || 'treadmill';
+                  const machineName = s.machines?.name || 'Unknown Machine';
+                  const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
+
+                  return (
+                    <Animated.View
+                      key={s.id}
+                      entering={FadeInDown.delay(350 + groupIdx * 80 + index * 60).duration(400)}
+                    >
+                      <View style={[styles.sessionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+                        <BlurView intensity={40} tint="dark" style={[styles.sessionCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                          <View style={styles.sessionCardRow}>
+                            {/* Machine Icon */}
+                            <View style={[styles.machineIconCircle, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                              <Ionicons name={iconName} size={24} color={branding.primary} />
+                            </View>
+
+                            {/* Info */}
+                            <View style={styles.sessionInfo}>
+                              <Text style={styles.sessionMachine} numberOfLines={1}>{machineName}</Text>
+                              <Text style={styles.sessionDate}>{formatTime(s.started_at)} • {formatDuration(s.duration_seconds)}</Text>
+                            </View>
+
+                            {/* Stats */}
+                            <View style={styles.sessionStats}>
+                              <View style={styles.sessionStatRow}>
+                                <Ionicons name="water" size={14} color={branding.primary} />
+                                <Text style={[styles.sessionDrops, getNumberStyle(16), { color: branding.primary }]}>
+                                  {s.drops_earned || 0}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Bottom detail row */}
+                          {(s.calories || (s.multiplier && s.multiplier > 1)) && (
+                            <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.08) }]}>
+                              {s.calories ? (
+                                <View style={styles.detailChip}>
+                                  <Ionicons name="flame-outline" size={12} color={theme.colors.secondary} />
+                                  <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
+                                    ~{Math.round(Number(s.calories))} cal
+                                  </Text>
+                                </View>
+                              ) : null}
+                              {s.multiplier && s.multiplier > 1 ? (
+                                <View style={[styles.detailChip, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                                  <Ionicons name="flash" size={12} color={branding.primary} />
+                                  <Text style={[styles.detailChipText, { color: branding.primary }]}>
+                                    ×{s.multiplier.toFixed(1)} multiplier
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          )}
+                        </BlurView>
+                      </View>
+                    </Animated.View>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         )}
 
@@ -426,17 +465,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    position: 'absolute',
-    left: 0,
-    right: 0,
     textAlign: 'center',
   },
   headerSpacer: {
@@ -561,6 +597,25 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textTertiary,
+  },
+
+  // ── Day Section ──
+  daySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  daySectionLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    textTransform: 'capitalize',
+    letterSpacing: 0.3,
+  },
+  daySectionLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
   },
 
   // ── Session Cards ──

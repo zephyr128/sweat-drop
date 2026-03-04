@@ -1463,7 +1463,7 @@ export default function WorkoutScreen() {
               // Fallback: Try direct navigation if handleFinishWorkout fails
               if (isMountedRef.current && session?.id) {
                 try {
-                  router.push({
+                  router.replace({
                     pathname: '/session-summary',
                     params: {
                       sessionId: session.id,
@@ -2262,7 +2262,7 @@ export default function WorkoutScreen() {
 
     if (!authSession?.user || !session?.id || session.id === 'mock-session') {
       // Mock mode
-      router.push({
+      router.replace({
         pathname: '/session-summary',
         params: {
           sessionId: 'mock',
@@ -2417,7 +2417,7 @@ export default function WorkoutScreen() {
       }
     }
 
-    router.push({
+    router.replace({
       pathname: '/session-summary',
       params: {
         sessionId: session.id,

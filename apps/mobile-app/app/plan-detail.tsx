@@ -395,15 +395,12 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    position: 'absolute',
-    left: 60,
-    right: 60,
     textAlign: 'center',
     letterSpacing: 0.5,
-    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
