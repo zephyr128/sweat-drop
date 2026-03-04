@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { useTranslation } from 'react-i18next';
 import { theme } from '@/lib/theme';
 
 // ── Onboarding Progress Indicator ──
@@ -62,6 +63,7 @@ const progressStyles = StyleSheet.create({
 
 export default function DisplayNameScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
   const profile = useAuthStore((s) => s.profile);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
@@ -79,7 +81,7 @@ export default function DisplayNameScreen() {
   const handleContinue = async () => {
     const trimmed = displayName.trim();
     if (!trimmed || trimmed.length < 2) {
-      Alert.alert('Greška', 'Ime mora imati najmanje 2 karaktera');
+      Alert.alert(t('common:error'), t('username.minLengthError'));
       return;
     }
 
@@ -92,9 +94,9 @@ export default function DisplayNameScreen() {
       router.replace('/(onboarding)/avatar');
     } else {
       if (result.error?.includes('already taken') || result.error?.includes('23505')) {
-        Alert.alert('Greška', 'Ovo ime je već zauzeto. Probaj drugo.');
+        Alert.alert(t('common:error'), t('username.alreadyTaken'));
       } else {
-        Alert.alert('Greška', result.error || 'Nešto je pošlo naopako');
+        Alert.alert(t('common:error'), result.error || t('auth.somethingWentWrong'));
       }
     }
   };
@@ -124,9 +126,9 @@ export default function DisplayNameScreen() {
             <View style={styles.iconRing}>
               <Text style={styles.iconEmoji}>✏️</Text>
             </View>
-            <Text style={styles.title}>Kako da te zovemo?</Text>
+            <Text style={styles.title}>{t('username.title')}</Text>
             <Text style={styles.subtitle}>
-              Ovo ime će se prikazivati na leaderboardima
+              {t('username.subtitle')}
             </Text>
           </Animated.View>
 
@@ -144,7 +146,7 @@ export default function DisplayNameScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Tvoje ime"
+                placeholder={t('username.placeholder')}
                 placeholderTextColor={theme.colors.textTertiary}
                 value={displayName}
                 onChangeText={setDisplayName}
@@ -191,7 +193,7 @@ export default function DisplayNameScreen() {
                   />
                 ) : (
                   <>
-                    <Text style={styles.buttonText}>Nastavi</Text>
+                    <Text style={styles.buttonText}>{t('common:continue')}</Text>
                     <Ionicons
                       name="arrow-forward"
                       size={20}

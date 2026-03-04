@@ -19,6 +19,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { theme } from '@/lib/theme';
+import { useTranslation } from 'react-i18next';
 import Constants from 'expo-constants';
 
 // ── Google Sign-In Setup ──
@@ -35,6 +36,7 @@ GoogleSignin.configure({
 
 export default function AuthScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
 
   const [email, setEmail] = useState('');
@@ -79,8 +81,8 @@ export default function AuthScreen() {
       await supabase.auth.signOut();
       useAuthStore.getState().reset();
       Alert.alert(
-        'Pristup odbijen',
-        'Admin nalozi ne mogu koristiti mobilnu aplikaciju. Koristi korisnički nalog.',
+        t('auth.accessDenied'),
+        t('auth.adminNotAllowed'),
       );
       return;
     }
@@ -99,7 +101,7 @@ export default function AuthScreen() {
       const idToken = signInResult?.data?.idToken;
 
       if (!idToken) {
-        throw new Error('Nema ID tokena od Google-a');
+        throw new Error(t('auth.noIdTokenGoogle'));
       }
 
       const { error } = await supabase.auth.signInWithIdToken({
@@ -113,7 +115,7 @@ export default function AuthScreen() {
     } catch (error: any) {
       if (error.code !== 'SIGN_IN_CANCELLED' && error.code !== '12501') {
         console.error('[Auth] Google sign-in error:', error);
-        Alert.alert('Greška', error.message || 'Google prijava nije uspela');
+        Alert.alert(t('common:error'), error.message || t('auth.googleFailed'));
       }
     } finally {
       setGoogleLoading(false);
@@ -145,7 +147,7 @@ export default function AuthScreen() {
       });
 
       if (!credential.identityToken) {
-        throw new Error('Nema identity tokena od Apple-a');
+        throw new Error(t('auth.noIdTokenApple'));
       }
 
       const { error } = await supabase.auth.signInWithIdToken({
@@ -160,7 +162,7 @@ export default function AuthScreen() {
     } catch (error: any) {
       if (error.code !== 'ERR_REQUEST_CANCELED') {
         console.error('[Auth] Apple sign-in error:', error);
-        Alert.alert('Greška', error.message || 'Apple prijava nije uspela');
+        Alert.alert(t('common:error'), error.message || t('auth.appleFailed'));
       }
     } finally {
       setAppleLoading(false);
@@ -173,11 +175,11 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   const handleEmailAuth = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Greška', 'Unesi email i lozinku');
+      Alert.alert(t('common:error'), t('auth.enterEmailPassword'));
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Greška', 'Lozinka mora imati najmanje 6 karaktera');
+      Alert.alert(t('common:error'), t('auth.passwordMinLength'));
       return;
     }
 
@@ -208,15 +210,15 @@ export default function AuthScreen() {
           });
 
         if (signUpError) {
-          Alert.alert('Greška', signUpError.message);
+          Alert.alert(t('common:error'), signUpError.message);
           return;
         }
 
         // Email confirmation required (no session returned)
         if (signUpData.user && !signUpData.session) {
           Alert.alert(
-            'Proveri email',
-            'Poslali smo ti link za potvrdu. Klikni na link u email-u i pokušaj ponovo da se prijaviš.',
+            t('auth.checkEmail'),
+            t('auth.confirmationSent'),
           );
           return;
         }
@@ -229,11 +231,11 @@ export default function AuthScreen() {
 
       // 3. Any other sign-in error — show to user
       if (signInError) {
-        Alert.alert('Greška', signInError.message);
+        Alert.alert(t('common:error'), signInError.message);
       }
     } catch (err: any) {
       console.error('[Auth] Email auth error:', err);
-      Alert.alert('Greška', err.message || 'Nešto je pošlo naopako');
+      Alert.alert(t('common:error'), err.message || t('auth.somethingWentWrong'));
     } finally {
       setEmailLoading(false);
     }
@@ -266,9 +268,9 @@ export default function AuthScreen() {
               <View style={styles.iconGlow} />
               <Ionicons name="water" size={56} color={theme.colors.primary} />
             </View>
-            <Text style={styles.title}>Prijavi se</Text>
+            <Text style={styles.title}>{t('auth.title')}</Text>
             <Text style={styles.subtitle}>
-              Kreni da treniraš i osvajaj nagrade
+              {t('auth.subtitle')}
             </Text>
           </Animated.View>
 
@@ -290,7 +292,7 @@ export default function AuthScreen() {
                 <>
                   <Ionicons name="logo-google" size={22} color="#4285F4" />
                   <Text style={styles.googleButtonText}>
-                    Nastavi sa Google
+                    {t('auth.continueWithGoogle')}
                   </Text>
                 </>
               )}
@@ -310,7 +312,7 @@ export default function AuthScreen() {
                   <>
                     <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
                     <Text style={styles.appleButtonText}>
-                      Nastavi sa Apple
+                      {t('auth.continueWithApple')}
                     </Text>
                   </>
                 )}
@@ -324,7 +326,7 @@ export default function AuthScreen() {
             style={styles.divider}
           >
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ili</Text>
+            <Text style={styles.dividerText}>{t('common:or')}</Text>
             <View style={styles.dividerLine} />
           </Animated.View>
 
@@ -342,7 +344,7 @@ export default function AuthScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder={t('auth.emailPlaceholder')}
                 placeholderTextColor={theme.colors.textTertiary}
                 value={email}
                 onChangeText={setEmail}
@@ -362,7 +364,7 @@ export default function AuthScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Lozinka"
+                placeholder={t('auth.passwordPlaceholder')}
                 placeholderTextColor={theme.colors.textTertiary}
                 value={password}
                 onChangeText={setPassword}
@@ -385,7 +387,7 @@ export default function AuthScreen() {
 
             {/* Neutral helper text */}
             <Text style={styles.authNote}>
-              Novi korisnik? Upiši email i lozinku za registraciju.
+              {t('auth.authNote')}
             </Text>
 
             {/* Primary CTA — neutral "NASTAVI" label */}
@@ -406,7 +408,7 @@ export default function AuthScreen() {
                   />
                 ) : (
                   <>
-                    <Text style={styles.primaryButtonText}>Nastavi</Text>
+                    <Text style={styles.primaryButtonText}>{t('common:continue')}</Text>
                     <Ionicons
                       name="arrow-forward"
                       size={20}
@@ -421,7 +423,7 @@ export default function AuthScreen() {
           {/* ── Footer ── */}
           <Animated.View entering={FadeInDown.delay(500).duration(500)}>
             <Text style={styles.footer}>
-              Nastavljanjem prihvataš uslove korišćenja
+              {t('auth.footer')}
             </Text>
           </Animated.View>
         </ScrollView>

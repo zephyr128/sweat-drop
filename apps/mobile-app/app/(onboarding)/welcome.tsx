@@ -14,10 +14,12 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { theme } from '@/lib/theme';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
 
   // ── Glow animation ──
   const glowScale = useSharedValue(1);
@@ -58,8 +60,8 @@ export default function WelcomeScreen() {
 
         {/* Title — intentional two-line layout */}
         <Animated.View entering={FadeInDown.delay(300).duration(500)}>
-          <Text style={styles.titleTop}>Dobrodošao u</Text>
-          <Text style={styles.titleBottom}>SweatDrop</Text>
+          <Text style={styles.titleTop}>{t('welcome.titleTop')}</Text>
+          <Text style={styles.titleBottom}>{t('welcome.titleBottom')}</Text>
         </Animated.View>
 
         {/* Subtitle */}
@@ -67,8 +69,7 @@ export default function WelcomeScreen() {
           entering={FadeInDown.delay(400).duration(500)}
           style={styles.subtitle}
         >
-          Treniraj. Osvajaj kapi.{'\n'}
-          Menjaj ih za nagrade u teretani.
+          {t('welcome.subtitle')}
         </Animated.Text>
       </View>
 
@@ -83,7 +84,7 @@ export default function WelcomeScreen() {
           activeOpacity={0.8}
         >
           <View style={styles.primaryButtonInner}>
-            <Text style={styles.buttonText}>Započni</Text>
+            <Text style={styles.buttonText}>{t('welcome.startButton')}</Text>
             <Ionicons
               name="arrow-forward"
               size={20}

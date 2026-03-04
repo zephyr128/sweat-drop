@@ -6,28 +6,10 @@ import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { theme } from '@/lib/theme';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
-const STEPS = [
-  {
-    icon: '💧',
-    title: 'Treniraj i osvajaj kapi',
-    description:
-      'Svaki trening na spravi ti donosi Sweat Drops — što duže treniraš, više kapljica padne.',
-  },
-  {
-    icon: '🏆',
-    title: 'Takmiči se',
-    description:
-      'Ispunjavaj izazove, osvajaj bedževe i penji se na leaderboard u svojoj teretani.',
-  },
-  {
-    icon: '🎁',
-    title: 'Menjaj kapi za nagrade',
-    description:
-      'Zameni svoje kapi za proteine, merch i popuste kod recepcije.',
-  },
-];
+const STEP_ICONS = ['💧', '🏆', '🎁'];
 
 // Step accent colors (glow behind emoji)
 const stepColors = [
@@ -38,7 +20,26 @@ const stepColors = [
 
 export default function StepperScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
+
+  const STEPS = [
+    {
+      icon: STEP_ICONS[0],
+      title: t('stepper.step1Title'),
+      description: t('stepper.step1Desc'),
+    },
+    {
+      icon: STEP_ICONS[1],
+      title: t('stepper.step2Title'),
+      description: t('stepper.step2Desc'),
+    },
+    {
+      icon: STEP_ICONS[2],
+      title: t('stepper.step3Title'),
+      description: t('stepper.step3Desc'),
+    },
+  ];
 
   const handleContinue = () => {
     setOnboardingStep('display_name');
@@ -60,8 +61,8 @@ export default function StepperScreen() {
           entering={FadeInDown.delay(100).duration(500)}
           style={styles.headerSection}
         >
-          <Text style={styles.title}>Kako funkcioniše</Text>
-          <Text style={styles.subtitle}>Tri koraka do nagrada</Text>
+          <Text style={styles.title}>{t('stepper.title')}</Text>
+          <Text style={styles.subtitle}>{t('stepper.subtitle')}</Text>
         </Animated.View>
 
         {/* Step Cards */}
@@ -115,7 +116,7 @@ export default function StepperScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.primaryButtonInner}>
-              <Text style={styles.buttonText}>Razumem, idemo!</Text>
+              <Text style={styles.buttonText}>{t('stepper.continueButton')}</Text>
               <Ionicons
                 name="arrow-forward"
                 size={20}

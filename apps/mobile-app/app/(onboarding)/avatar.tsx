@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { useTranslation } from 'react-i18next';
 import { theme } from '@/lib/theme';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
 
@@ -65,6 +66,7 @@ const progressStyles = StyleSheet.create({
 
 export default function AvatarScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 
@@ -149,9 +151,9 @@ export default function AvatarScreen() {
           entering={FadeInDown.delay(200).duration(500)}
           style={styles.headerSection}
         >
-          <Text style={styles.title}>Izaberi svoj avatar</Text>
+          <Text style={styles.title}>{t('avatar.title')}</Text>
           <Text style={styles.subtitle}>
-            Ovo se prikazuje pored tvog imena
+            {t('avatar.subtitle')}
           </Text>
         </Animated.View>
 
@@ -202,7 +204,7 @@ export default function AvatarScreen() {
                 />
               ) : (
                 <>
-                  <Text style={styles.buttonText}>Nastavi</Text>
+                  <Text style={styles.buttonText}>{t('common:continue')}</Text>
                   <Ionicons
                     name="arrow-forward"
                     size={20}
@@ -220,7 +222,7 @@ export default function AvatarScreen() {
             disabled={loading}
             activeOpacity={0.7}
           >
-            <Text style={styles.secondaryButtonText}>Preskoči</Text>
+            <Text style={styles.secondaryButtonText}>{t('common:skip')}</Text>
 
           </TouchableOpacity>
         </Animated.View>

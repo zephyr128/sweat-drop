@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { useTranslation } from 'react-i18next';
 import {
   PUSH_NOTIFICATIONS_ENABLED,
   registerForPushNotifications,
@@ -54,6 +55,7 @@ function OnboardingProgress({
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 
@@ -119,10 +121,9 @@ export default function NotificationsScreen() {
           entering={FadeInDown.delay(300).duration(500)}
           style={styles.headerSection}
         >
-          <Text style={styles.title}>Ostani u toku</Text>
+          <Text style={styles.title}>{t('notifications.title')}</Text>
           <Text style={styles.subtitle}>
-            Obaveštavamo te o novim izazovima, nagradi na leaderboardu i
-            podsetnicima za streak.
+            {t('notifications.subtitle')}
           </Text>
         </Animated.View>
 
@@ -132,9 +133,9 @@ export default function NotificationsScreen() {
           style={styles.benefitsList}
         >
           {[
-            { icon: '🔥', text: 'Streak podsetnici' },
-            { icon: '🏆', text: 'Novi izazovi i takmičenja' },
-            { icon: '🎁', text: 'Ekskluzivne nagrade' },
+            { icon: '🔥', text: t('notifications.benefit1') },
+            { icon: '🏆', text: t('notifications.benefit2') },
+            { icon: '🎁', text: t('notifications.benefit3') },
           ].map((benefit, index) => (
             <View key={index} style={styles.benefitRow}>
               <Text style={styles.benefitIcon}>{benefit.icon}</Text>
@@ -169,7 +170,7 @@ export default function NotificationsScreen() {
                     color={theme.colors.background}
                   />
                   <Text style={styles.buttonText}>
-                    Uključi obaveštenja
+                    {t('notifications.enableButton')}
                   </Text>
                 </>
               )}
@@ -183,7 +184,7 @@ export default function NotificationsScreen() {
             disabled={loading}
             activeOpacity={0.7}
           >
-            <Text style={styles.secondaryButtonText}>Ne sada</Text>
+            <Text style={styles.secondaryButtonText}>{t('common:notNow')}</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
