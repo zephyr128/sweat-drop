@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -15,7 +15,7 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle } from '@/lib/theme';
+import { getNumberStyle, theme as appTheme } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { GymSelectorModal } from '@/components/GymSelectorModal';
 import { LockedOverlay } from '@/components/LockedOverlay';
@@ -161,6 +161,23 @@ export default function HomeScreen() {
     }, [activeGymId, session?.user, refreshChallenges, refreshStats, refreshArenas])
   );
 
+  // ── Available gyms (for empty state) ──
+  const [availableGyms, setAvailableGyms] = useState<{id: string; name: string; city: string | null; address: string | null; logo_url: string | null}[]>([]);
+
+  useEffect(() => {
+    if (homeGymId) return;
+
+    supabase
+      .from('gyms')
+      .select('id, name, city, address, logo_url, is_active')
+      .eq('is_active', true)
+      .order('name')
+      .limit(10)
+      .then(({ data }) => {
+        if (data) setAvailableGyms(data);
+      });
+  }, [homeGymId]);
+
   const loadData = async () => {
     if (!session?.user) return;
     setLoading(true);
@@ -222,6 +239,231 @@ export default function HomeScreen() {
     );
   }
 
+  // ── Empty state for users with no home gym ──
+  if (!homeGymId) {
+    return (
+      <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]}>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <LinearGradient
+            colors={['#000000', '#0A0E1A', '#000000'] as any}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+
+          <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+            {/* ─── SECTION 1 — HEADER ─── */}
+            <View style={es.header}>
+              <TouchableOpacity
+                style={es.headerLeft}
+                onPress={() => router.push('/profile')}
+                activeOpacity={0.7}
+              >
+                <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
+                  <Text style={es.avatarText}>
+                    {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
+                  </Text>
+                </View>
+                <Text style={es.username}>{profile?.username || 'User'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ─── SECTION 2 — DROPS HERO (dimmed preview) ─── */}
+            <Animated.View entering={FadeInDown.delay(0).duration(500)}>
+              <View style={es.dropsHero}>
+                <View style={es.dropsRing}>
+                  {/* Dashed outer ring */}
+                  <View style={es.dropsRingDashed} />
+                  {/* Center content */}
+                  <View style={es.dropsCenter}>
+                    <Text style={es.dropsNumber}>0</Text>
+                    <Text style={es.dropsLabel}>DROPS</Text>
+                    <View style={es.dropsDivider} />
+                    <View style={es.lockRow}>
+                      <Ionicons name="lock-closed-outline" size={14} color="rgba(255,255,255,0.30)" />
+                      <Text style={es.lockText}>Skeniraj da otključaš</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* ─── SECTION 3 — QUICK STATS PREVIEW (locked) ─── */}
+            <Animated.View entering={FadeInDown.delay(100).duration(500)}>
+              <View style={es.statsRow}>
+                {[
+                  { icon: 'flame-outline' as const, label: 'Streak' },
+                  { icon: 'water-outline' as const, label: 'Today' },
+                  { icon: 'time-outline' as const, label: 'Last' },
+                ].map((item, i) => (
+                  <View key={i} style={es.statPill}>
+                    <BlurView intensity={30} tint="dark" style={es.statPillBlur}>
+                      <Ionicons name={item.icon} size={18} color="rgba(255,255,255,0.15)" />
+                      <Text style={es.statPillValue}>—</Text>
+                      <Text style={es.statPillLabel}>{item.label}</Text>
+                    </BlurView>
+                  </View>
+                ))}
+              </View>
+            </Animated.View>
+
+            {/* ─── SECTION 4 — MAIN CTA CARD ─── */}
+            <Animated.View entering={FadeInDown.delay(200).duration(500)}>
+              <View style={es.ctaCardOuter}>
+                <BlurView intensity={50} tint="dark" style={es.ctaCardBlur}>
+                  {/* QR icon with glow */}
+                  <View style={es.ctaIconWrapper}>
+                    <View style={es.ctaIconGlow} />
+                    <View style={es.ctaIconCircle}>
+                      <Ionicons name="qr-code-outline" size={32} color={appTheme.colors.primary} />
+                    </View>
+                  </View>
+
+                  <Text style={es.ctaTitle}>SKENIRAJ QR KOD</Text>
+                  <Text style={es.ctaSubtitle}>
+                    Skeniraj QR kod na bilo kojoj spravi{'\n'}u tvojoj teretani da počneš trening{'\n'}i počneš da zarađuješ drops 💧
+                  </Text>
+
+                  {/* How it works — 3 inline steps */}
+                  <View style={es.stepsRow}>
+                    <View style={es.step}>
+                      <View style={es.stepCircle}>
+                        <Text style={es.stepNum}>1</Text>
+                      </View>
+                      <Text style={es.stepLabel}>Skeniraj</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.15)" style={es.stepArrow} />
+                    <View style={es.step}>
+                      <View style={es.stepCircle}>
+                        <Text style={es.stepNum}>2</Text>
+                      </View>
+                      <Text style={es.stepLabel}>Treniraš</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.15)" style={es.stepArrow} />
+                    <View style={es.step}>
+                      <View style={es.stepCircle}>
+                        <Text style={es.stepNum}>3</Text>
+                      </View>
+                      <Text style={es.stepLabel}>Osvajaš</Text>
+                    </View>
+                  </View>
+                </BlurView>
+              </View>
+            </Animated.View>
+
+            {/* ─── SECTION 5 — AVAILABLE GYMS ─── */}
+            {availableGyms.length > 0 && (
+              <Animated.View entering={FadeInDown.delay(300).duration(500)}>
+                <View style={es.gymsSection}>
+                  <View style={es.gymsSectionHeader}>
+                    <Text style={es.gymsSectionTitle}>Teretane sa SweatDrop-om</Text>
+                    <Text style={es.gymsSectionCount}>{availableGyms.length} teretana</Text>
+                  </View>
+
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={es.gymScrollContent}
+                  >
+                    {availableGyms.map((gym) => (
+                      <TouchableOpacity
+                        key={gym.id}
+                        activeOpacity={0.8}
+                        onPress={() =>
+                          Alert.alert(
+                            gym.name,
+                            'Postani član ove teretane i počni da zarađuješ drops!',
+                            [{ text: 'Zatvori' }],
+                          )
+                        }
+                      >
+                        <BlurView intensity={40} tint="dark" style={es.gymCard}>
+                          <View style={es.gymCardInner}>
+                            {gym.logo_url ? (
+                              <Image source={{ uri: gym.logo_url }} style={es.gymLogo} resizeMode="contain" />
+                            ) : (
+                              <View style={es.gymLogoPlaceholder}>
+                                <Ionicons name="fitness" size={22} color={appTheme.colors.primary} />
+                              </View>
+                            )}
+                            <View style={es.gymInfo}>
+                              <Text style={es.gymName} numberOfLines={1}>{gym.name}</Text>
+                              {(gym.city || gym.address) && (
+                                <Text style={es.gymCity} numberOfLines={1}>{gym.city || gym.address}</Text>
+                              )}
+                            </View>
+                          </View>
+                        </BlurView>
+                      </TouchableOpacity>
+                    ))}
+
+                    {/* Placeholder card */}
+                    <View style={es.gymPlaceholderCard}>
+                      <Ionicons name="add-circle-outline" size={28} color="rgba(255,255,255,0.20)" />
+                      <Text style={es.gymPlaceholderText}>{'Nije ovde\ntvoja\nteretana?'}</Text>
+                    </View>
+                  </ScrollView>
+                </View>
+              </Animated.View>
+            )}
+
+            {/* ─── SECTION 6 — PREVIEW CARDS (locked features) ─── */}
+            <Animated.View entering={FadeInDown.delay(400).duration(500)}>
+              <View style={es.previewSection}>
+                <Text style={es.previewTitle}>Šta te čeka</Text>
+                <View style={es.previewGrid}>
+                  <View style={es.previewRow}>
+                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                      <Ionicons name="podium-outline" size={24} color="rgba(255,255,255,0.25)" />
+                      <Text style={es.previewCardTitle}>Leaderboard</Text>
+                      <Text style={es.previewCardSub}>{'Takmiči se sa\nčlanovima'}</Text>
+                    </BlurView>
+                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                      <Ionicons name="gift-outline" size={24} color="rgba(255,255,255,0.25)" />
+                      <Text style={es.previewCardTitle}>Nagrade</Text>
+                      <Text style={es.previewCardSub}>{'Troši drops\nna nagrade'}</Text>
+                    </BlurView>
+                  </View>
+                  <View style={es.previewRow}>
+                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                      <Ionicons name="flame-outline" size={24} color="rgba(255,255,255,0.25)" />
+                      <Text style={es.previewCardTitle}>Izazovi</Text>
+                      <Text style={es.previewCardSub}>{'Mesečna\ntakmičenja'}</Text>
+                    </BlurView>
+                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                      <Ionicons name="trophy-outline" size={24} color="rgba(255,255,255,0.25)" />
+                      <Text style={es.previewCardTitle}>Arene</Text>
+                      <Text style={es.previewCardSub}>{'Sponzorisana\ntakmičenja'}</Text>
+                    </BlurView>
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+          </ScrollView>
+
+          {/* QR Scanner FAB */}
+          <View style={styles.fabContainer}>
+            <Animated.View style={[styles.fabGlow, glowStyle, { backgroundColor: branding.primary }]} />
+            <TouchableOpacity
+              style={[styles.fab, { shadowColor: branding.primary }]}
+              onPress={handleQRPress}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={[branding.primary, branding.primaryDark]}
+                style={styles.fabGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="qr-code" size={48} color={branding.onPrimary} />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Animated.View>
+    );
+  }
+
   // Drops
   const totalDrops = profile?.total_drops || 0;
   // Global progress: cap at 10 000 for a full ring (tunable)
@@ -266,7 +508,7 @@ export default function HomeScreen() {
           >
             <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
               <Text style={[styles.avatarText, { color: branding.primary }]}>
-                {profile?.username?.charAt(0).toUpperCase() || 'U'}
+                {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
               </Text>
             </View>
             <Text style={styles.username}>{profile?.username || 'User'}</Text>
@@ -1419,5 +1661,350 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+});
+
+// ═══════════════════════════════════════════════════════════
+// EMPTY STATE STYLES
+// ═══════════════════════════════════════════════════════════
+const es = StyleSheet.create({
+  /* ── Header ── */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    marginBottom: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 20,
+  },
+  username: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
+  /* ── Drops Hero (dimmed preview) ── */
+  dropsHero: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  dropsRing: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  dropsRingDashed: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 110,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,229,255,0.10)',
+    borderStyle: 'dashed',
+  },
+  dropsCenter: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  dropsNumber: {
+    fontSize: 64,
+    fontWeight: 'bold',
+    color: 'rgba(255,255,255,0.15)',
+    fontFamily: 'Courier',
+  },
+  dropsLabel: {
+    fontSize: 11,
+    letterSpacing: 3,
+    color: 'rgba(255,255,255,0.20)',
+    textTransform: 'uppercase',
+  },
+  dropsDivider: {
+    height: 1,
+    width: 40,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginVertical: 8,
+  },
+  lockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lockText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.30)',
+  },
+
+  /* ── Quick Stats Preview (locked) ── */
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  statPill: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
+  },
+  statPillBlur: {
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(20,20,30,0.5)',
+    overflow: 'hidden',
+  },
+  statPillValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'rgba(255,255,255,0.15)',
+  },
+  statPillLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.20)',
+  },
+
+  /* ── Main CTA Card ── */
+  ctaCardOuter: {
+    marginBottom: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,229,255,0.15)',
+    overflow: 'hidden',
+  },
+  ctaCardBlur: {
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: 'rgba(20,20,30,0.80)',
+    overflow: 'hidden',
+  },
+  ctaIconWrapper: {
+    position: 'relative',
+    marginBottom: 20,
+  },
+  ctaIconGlow: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,229,255,0.10)',
+    top: -8,
+    left: -8,
+    shadowColor: '#00E5FF',
+    shadowRadius: 20,
+    shadowOpacity: 0.4,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  ctaIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0,229,255,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,229,255,0.30)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ctaTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  ctaSubtitle: {
+    fontSize: 14,
+    color: '#B0B0B0',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  stepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 4,
+  },
+  step: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,229,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,229,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepNum: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#00E5FF',
+  },
+  stepLabel: {
+    fontSize: 11,
+    color: '#B0B0B0',
+    textAlign: 'center',
+  },
+  stepArrow: {
+    alignSelf: 'center',
+    marginTop: -12,
+  },
+
+  /* ── Available Gyms ── */
+  gymsSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  gymsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  gymsSectionTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  gymsSectionCount: {
+    fontSize: 13,
+    color: '#B0B0B0',
+  },
+  gymScrollContent: {
+    gap: 12,
+    paddingRight: 16,
+  },
+  gymCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+    width: 150,
+    height: 130,
+    backgroundColor: 'rgba(20,20,30,0.70)',
+  },
+  gymCardInner: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  gymLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+  },
+  gymLogoPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,229,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,229,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gymInfo: {
+    gap: 2,
+  },
+  gymName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  gymCity: {
+    fontSize: 11,
+    color: '#B0B0B0',
+  },
+  gymPlaceholderCard: {
+    width: 130,
+    height: 130,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(20,20,30,0.40)',
+  },
+  gymPlaceholderText: {
+    fontSize: 11,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.25)',
+    lineHeight: 16,
+  },
+
+  /* ── Preview Cards (locked features) ── */
+  previewSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  previewTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  previewGrid: {
+    gap: 8,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  previewCard: {
+    flex: 1,
+    height: 90,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    padding: 12,
+    backgroundColor: 'rgba(20,20,30,0.50)',
+  },
+  previewCardTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: 'rgba(255,255,255,0.30)',
+    textAlign: 'center',
+  },
+  previewCardSub: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.20)',
+    textAlign: 'center',
   },
 });

@@ -8,6 +8,7 @@ import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
+import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, getNumberStyle } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, {
@@ -58,7 +59,7 @@ interface ProfileStats {
 
 function formatMemberSince(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('sr-RS', { month: 'long', year: 'numeric' });
 }
 
 export default function ProfileScreen() {
@@ -66,6 +67,8 @@ export default function ProfileScreen() {
   const { session } = useSession();
   const branding = useBranding();
   const { badges } = useUserBadges();
+  const { homeGymId } = useGymStore();
+  const hasGym = !!homeGymId;
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
@@ -214,8 +217,13 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await supabase.auth.signOut();
-              router.replace('/(onboarding)/auth');
+              const { useAuthStore } = await import('@/lib/stores/authStore');
+              await useAuthStore.getState().signOut();
+              // Dismiss all stacked screens (home → profile) then replace root with welcome
+              if (router.canDismiss()) {
+                router.dismissAll();
+              }
+              router.replace('/(onboarding)/welcome');
             } catch (error: any) {
               Alert.alert('Error', error.message || 'Failed to log out');
             }
@@ -245,9 +253,13 @@ export default function ProfileScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      // Sign out — actual account deletion handled server-side
-                      await supabase.auth.signOut();
-                      router.replace('/(onboarding)/auth');
+                      const { useAuthStore } = await import('@/lib/stores/authStore');
+                      await useAuthStore.getState().signOut();
+                      // Dismiss all stacked screens then replace root with welcome
+                      if (router.canDismiss()) {
+                        router.dismissAll();
+                      }
+                      router.replace('/(onboarding)/welcome');
                     } catch (error: any) {
                       Alert.alert('Error', error.message || 'Failed to delete account');
                     }
@@ -340,8 +352,15 @@ export default function ProfileScreen() {
                   {/* Front — Avatar */}
                   <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
                     <View style={[styles.avatarContainer, { borderColor: branding.primary }]}>
-                      {profile?.avatar_url ? (
+                      {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
                         <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+                      ) : profile?.avatar_url ? (
+                        <LinearGradient
+                          colors={[branding.primary, branding.primaryDark]}
+                          style={styles.avatarPlaceholder}
+                        >
+                          <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>
+                        </LinearGradient>
                       ) : (
                         <LinearGradient
                           colors={[branding.primary, branding.primaryDark]}
@@ -426,10 +445,10 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
           <View style={styles.statsGrid}>
             {[
-              { icon: 'water' as const, value: profile?.total_drops || 0, label: 'Total Drops', color: branding.primary },
-              { icon: 'flame' as const, value: profile?.streak_days || 0, label: 'Day Streak', color: theme.colors.secondary },
-              { icon: 'barbell' as const, value: stats.totalWorkouts, label: 'Workouts', color: branding.primary },
-              { icon: 'time' as const, value: `${stats.totalHours}h`, label: 'Trained', color: branding.primary },
+              { icon: 'water' as const, value: (profile?.total_drops || 0) === 0 ? '—' : profile?.total_drops || 0, label: 'Total Drops', color: branding.primary },
+              { icon: 'flame' as const, value: (profile?.streak_days || 0) === 0 ? '—' : profile?.streak_days || 0, label: 'Day Streak', color: theme.colors.secondary },
+              { icon: 'barbell' as const, value: stats.totalWorkouts === 0 ? '—' : stats.totalWorkouts, label: 'Workouts', color: branding.primary },
+              { icon: 'time' as const, value: stats.totalHours === 0 ? '—' : `${stats.totalHours}h`, label: 'Trained', color: branding.primary },
             ].map((stat, i) => (
               <View key={i} style={[styles.statCard, { borderColor: hexToRgba(stat.color, 0.12) }]}>
                 <BlurView intensity={30} tint="dark" style={[styles.statCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
@@ -474,28 +493,61 @@ export default function ProfileScreen() {
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
+        {/* NO-GYM BANNER                               */}
+        {/* ═══════════════════════════════════════════ */}
+        {!hasGym && (
+          <Animated.View entering={FadeInDown.delay(350).duration(400)}>
+            <View style={styles.noGymBanner}>
+              <BlurView intensity={40} tint="dark" style={styles.noGymBannerBlur}>
+                <View style={styles.noGymBannerContent}>
+                  <Ionicons name="qr-code-outline" size={20} color={theme.colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.noGymBannerTitle}>Nemaš povezanu teretanu</Text>
+                    <Text style={styles.noGymBannerSub}>
+                      Skeniraj QR kod na spravi da otključaš sve funkcije
+                    </Text>
+                  </View>
+                </View>
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
         {/* QUICK LINKS                                 */}
         {/* ═══════════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
             <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-              {quickLinks.map((link, i) => (
-                <TouchableOpacity
-                  key={link.route}
-                  style={[
-                    styles.linkRow,
-                    i < quickLinks.length - 1 && { borderBottomColor: hexToRgba(branding.primary, 0.06), borderBottomWidth: 1 },
-                  ]}
-                  onPress={() => router.push(link.route as any)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                    <Ionicons name={link.icon} size={20} color={branding.primary} />
-                  </View>
-                  <Text style={styles.linkLabel}>{link.label}</Text>
-                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
-                </TouchableOpacity>
-              ))}
+              {quickLinks.map((link, i) => {
+                const gymRequiredLabels = ['Leaderboard', 'Wallet', 'Rewards Store', 'Challenges', 'Trophy Room'];
+                const isGymRequired = gymRequiredLabels.includes(link.label);
+                const isWorkoutHistoryEmpty = link.label === 'Workout History' && stats.totalWorkouts === 0 && !hasGym;
+                const isDisabled = (isGymRequired && !hasGym) || isWorkoutHistoryEmpty;
+
+                return (
+                  <TouchableOpacity
+                    key={link.route}
+                    style={[
+                      styles.linkRow,
+                      i < quickLinks.length - 1 && { borderBottomColor: hexToRgba(branding.primary, 0.06), borderBottomWidth: 1 },
+                      isDisabled && { opacity: 0.35 },
+                    ]}
+                    onPress={() => router.push(link.route as any)}
+                    activeOpacity={0.7}
+                    disabled={isDisabled}
+                  >
+                    <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                      <Ionicons name={link.icon} size={20} color={branding.primary} />
+                    </View>
+                    {isDisabled && (
+                      <Ionicons name="lock-closed-outline" size={14} color={theme.colors.textTertiary} style={{ marginRight: 4 }} />
+                    )}
+                    <Text style={styles.linkLabel}>{link.label}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+                  </TouchableOpacity>
+                );
+              })}
             </BlurView>
           </View>
         </Animated.View>
@@ -672,6 +724,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  avatarEmoji: {
+    fontSize: 42,
+  },
   avatarInitial: {
     fontSize: 32,
     fontWeight: '700',
@@ -826,5 +881,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: theme.spacing.lg,
     opacity: 0.6,
+  },
+
+  // ── No-Gym Banner ──
+  noGymBanner: {
+    marginBottom: theme.spacing.lg,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.15)',
+    overflow: 'hidden',
+  },
+  noGymBannerBlur: {
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(20, 20, 30, 0.7)',
+  },
+  noGymBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: theme.spacing.md,
+  },
+  noGymBannerTitle: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  noGymBannerSub: {
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.textSecondary,
+    lineHeight: 16,
   },
 });
