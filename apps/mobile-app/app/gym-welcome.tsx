@@ -22,6 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { theme } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 // Helper: derive branding from primary color
 function hexToRgba(hex: string, alpha: number): string {
@@ -148,6 +149,7 @@ export default function GymWelcomeScreen() {
     exerciseIndex?: string;
   }>();
   const router = useRouter();
+  const { t } = useTranslation('gymWelcome');
 
   // ── Fetch gym branding from owner_branding (the sole source of truth) ──
   // NOTE: gyms.primary_color was DROPPED by migration 20240101000034.
@@ -259,7 +261,7 @@ export default function GymWelcomeScreen() {
     });
   };
 
-  const displayName = gymName || 'Tvojoj teretani';
+  const displayName = gymName || t('defaultGymName');
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -296,7 +298,7 @@ export default function GymWelcomeScreen() {
             entering={FadeInDown.delay(500).duration(500)}
             style={[styles.welcomeLabel, { color: hexToRgba(brandPrimary, 0.7) }]}
           >
-            Dobrodošao u
+            {t('welcomeTo')}
           </Animated.Text>
 
           {/* Gym name */}
@@ -325,7 +327,7 @@ export default function GymWelcomeScreen() {
             entering={FadeInDown.delay(800).duration(400)}
             style={styles.subtitle}
           >
-            Vreme je za trening!
+            {t('subtitle')}
           </Animated.Text>
         </View>
 
@@ -342,24 +344,24 @@ export default function GymWelcomeScreen() {
             <View style={styles.infoRow}>
               <View style={styles.infoItem}>
                 <Ionicons name="water" size={24} color={brandPrimary} />
-                <Text style={[styles.infoValue, { color: brandPrimary }]}>Zarađuješ</Text>
-                <Text style={styles.infoLabel}>Drops po km</Text>
+                <Text style={[styles.infoValue, { color: brandPrimary }]}>{t('earningDrops')}</Text>
+                <Text style={styles.infoLabel}>{t('dropsPerKm')}</Text>
               </View>
 
               <View style={[styles.infoDivider, { backgroundColor: hexToRgba(brandPrimary, 0.12) }]} />
 
               <View style={styles.infoItem}>
                 <Ionicons name="flame" size={24} color={brandPrimary} />
-                <Text style={[styles.infoValue, { color: brandPrimary }]}>Streak</Text>
-                <Text style={styles.infoLabel}>Bonus do 2×</Text>
+                <Text style={[styles.infoValue, { color: brandPrimary }]}>{t('streak')}</Text>
+                <Text style={styles.infoLabel}>{t('streakBonus')}</Text>
               </View>
 
               <View style={[styles.infoDivider, { backgroundColor: hexToRgba(brandPrimary, 0.12) }]} />
 
               <View style={styles.infoItem}>
                 <Ionicons name="trophy" size={24} color={brandPrimary} />
-                <Text style={[styles.infoValue, { color: brandPrimary }]}>Nagrade</Text>
-                <Text style={styles.infoLabel}>U teretani</Text>
+                <Text style={[styles.infoValue, { color: brandPrimary }]}>{t('rewards')}</Text>
+                <Text style={styles.infoLabel}>{t('inGym')}</Text>
               </View>
             </View>
           </BlurView>
@@ -381,7 +383,7 @@ export default function GymWelcomeScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <Text style={[styles.buttonText, { color: brandOnPrimary }]}>Počni trening</Text>
+              <Text style={[styles.buttonText, { color: brandOnPrimary }]}>{t('startWorkout')}</Text>
               <Ionicons
                 name="arrow-forward"
                 size={20}

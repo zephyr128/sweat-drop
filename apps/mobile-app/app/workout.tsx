@@ -36,6 +36,7 @@ import { bleService, CSCMeasurement } from '@/lib/ble-service';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { ActiveChallengesOverlay } from '@/components/ActiveChallengesOverlay';
+import { useTranslation } from 'react-i18next';
 
 // ActiveDrop interface removed - drops are now managed internally by DropEmitter
 
@@ -83,6 +84,7 @@ export default function WorkoutScreen() {
   }>();
   const { branding } = useTheme();
   const brandingHook = useBranding();
+  const { t } = useTranslation('workout');
   const [session, setSession] = useState<any>(null);
   // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
   const [duration, setDuration] = useState(0);
@@ -957,8 +959,8 @@ export default function WorkoutScreen() {
                     setIsPaused(true);
                     setShowAutoPauseOverlay(false);
                     Alert.alert(
-                      'Workout Paused',
-                      'Workout automatically paused because sensor is not sending data. Check sensor connection.',
+                      t('paused'),
+                      t('noPedalingDetected'),
                       [{ text: 'OK' }]
                     );
                   }
@@ -1552,7 +1554,7 @@ export default function WorkoutScreen() {
       console.log('[SmartCoach] Moved to next exercise:', item.exercise_name);
     } catch (err) {
         console.error('[SmartCoach] Error in handleNextExercise:', err);
-        Alert.alert('Error', 'Failed to move to next exercise. Please try again.');
+        Alert.alert(t('common:error'), t('failedNextExercise'));
     }
   }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, isPlanCompleted]);
 
@@ -2614,7 +2616,7 @@ export default function WorkoutScreen() {
           {session?.gym?.name && (
             <View style={styles.gymTag}>
               <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
-              <Text style={styles.gymTagText}>At: {session.gym.name}</Text>
+              <Text style={styles.gymTagText}>{t('atGym', { name: session.gym.name })}</Text>
             </View>
           )}
         </View>
@@ -2657,7 +2659,7 @@ export default function WorkoutScreen() {
           }
         ]}>
           <Text style={styles.bonusText}>
-            +100 <Ionicons name="water" size={16} color={theme.colors.primary} /> DROPS BONUS
+            +100 <Ionicons name="water" size={16} color={theme.colors.primary} /> {t('dropsBonus')}
           </Text>
         </Animated.View>
       )}
@@ -2693,7 +2695,7 @@ export default function WorkoutScreen() {
           <View style={styles.nextExerciseContent}>
             <Ionicons name="checkmark-circle" size={24} color={branding.primary} />
             <Text style={[styles.nextExerciseText, { color: branding.primary }]}>
-              Exercise Completed!
+              {t('exerciseCompleted')}
             </Text>
           </View>
           <TouchableOpacity
@@ -2701,7 +2703,7 @@ export default function WorkoutScreen() {
             onPress={handleNextExercise}
           >
             <Text style={[styles.nextExerciseButtonText, { color: branding.onPrimary }]}>
-              Next Exercise
+              {t('nextExercise')}
             </Text>
             <Ionicons name="arrow-forward" size={20} color={branding.onPrimary} />
           </TouchableOpacity>
@@ -2714,10 +2716,10 @@ export default function WorkoutScreen() {
           <View style={[styles.planCompletedContainer, { backgroundColor: branding.primaryLight }]}>
             <Ionicons name="trophy" size={64} color={branding.primary} />
             <Text style={[styles.planCompletedTitle, { color: branding.primary }]}>
-              Plan Completed!
+              {t('planCompleted')}
             </Text>
             <Text style={styles.planCompletedSubtitle}>
-              Congratulations! You've completed all exercises.
+              {t('planCompletedSubtitle')}
             </Text>
           </View>
         </BlurView>
@@ -2823,9 +2825,9 @@ export default function WorkoutScreen() {
           {/* DROPS Label - Only show when BLE is connected */}
           {bleConnected && (
             <View style={styles.dropsLabelContainer}>
-              <Text style={styles.dropsLabel}>DROPS</Text>
+              <Text style={styles.dropsLabel}>{t('drops')}</Text>
               {isOverachieved && (
-                <Text style={styles.overachievedText}>🎉 Overachieved!</Text>
+                <Text style={styles.overachievedText}>{t('overachieved')}</Text>
               )}
             </View>
           )}
@@ -2863,7 +2865,7 @@ export default function WorkoutScreen() {
             text={animatedCaloriesText}
             style={[styles.statValue, getNumberStyle(20)]}
           />
-          <Text style={styles.statLabel}>kcal</Text>
+          <Text style={styles.statLabel}>{t('kcal')}</Text>
         </View>
 
         <View style={styles.statItem}>
@@ -2872,7 +2874,7 @@ export default function WorkoutScreen() {
             text={animatedPaceText}
             style={[styles.statValue, getNumberStyle(20)]}
           />
-          <Text style={styles.statLabel}>min/km</Text>
+          <Text style={styles.statLabel}>{t('minPerKm')}</Text>
         </View>
 
         {/* Premium UI: RPM Display with Dynamic Color & Pulse Effect (only show if sensor is connected) */}
@@ -2897,7 +2899,7 @@ export default function WorkoutScreen() {
                 rpmTextColorStyle, // Premium UI: Dynamic color based on RPM intensity
               ]}
             />
-            <Text style={styles.statLabel}>RPM</Text>
+            <Text style={styles.statLabel}>{t('rpm')}</Text>
           </Animated.View>
         )}
       </View>
@@ -2916,7 +2918,7 @@ export default function WorkoutScreen() {
           />
         </View>
         <View style={styles.targetContainer}>
-          <Text style={styles.targetText}>Target: </Text>
+          <Text style={styles.targetText}>{t('target')}</Text>
           <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
           <Ionicons name="water" size={16} color={theme.colors.primary} />
         </View>
@@ -2925,7 +2927,7 @@ export default function WorkoutScreen() {
       {/* Paused Overlay */}
       {isPaused && (
         <Animated.View style={[styles.pausedOverlay, pausedOverlayStyle]} pointerEvents="none">
-          <Text style={styles.pausedText}>PAUSED</Text>
+          <Text style={styles.pausedText}>{t('paused')}</Text>
         </Animated.View>
       )}
 
@@ -2933,9 +2935,9 @@ export default function WorkoutScreen() {
       {showAutoPauseOverlay && !isPaused && (session?.machine?.sensor_id || sensorId) && (
         <Animated.View style={[styles.autoPauseOverlay, pausedOverlayStyle]} pointerEvents="none">
           <Ionicons name="warning-outline" size={48} color={theme.colors.warning || '#FFA500'} />
-          <Text style={styles.autoPauseTitle}>Sensor Not Sending Data</Text>
+          <Text style={styles.autoPauseTitle}>{t('sensorNotSending')}</Text>
           <Text style={styles.autoPauseText}>
-            Workout will be automatically paused if sensor does not connect within the next 20 seconds.
+            {t('autoPauseWarning')}
           </Text>
         </Animated.View>
       )}
@@ -2944,9 +2946,9 @@ export default function WorkoutScreen() {
       {showSensorAsleep && !isPaused && (session?.machine?.sensor_id || sensorId) && (
         <Animated.View style={[styles.sensorAsleepOverlay, pausedOverlayStyle]}>
           <Ionicons name="bluetooth-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={styles.sensorAsleepTitle}>Senzor Uspavan</Text>
+          <Text style={styles.sensorAsleepTitle}>{t('sensorAsleep')}</Text>
           <Text style={styles.sensorAsleepText}>
-            Senzor ne šalje podatke. Proverite da li je uključen i u Cadence modu (crveno svetlo).
+            {t('sensorAsleepText')}
           </Text>
           <TouchableOpacity
             style={styles.reconnectButton}
@@ -2975,7 +2977,7 @@ export default function WorkoutScreen() {
             ) : (
               <>
                 <Ionicons name="refresh" size={20} color={theme.colors.background} />
-                <Text style={styles.reconnectButtonText}>Ponovo Poveži</Text>
+                <Text style={styles.reconnectButtonText}>{t('reconnect')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -2986,9 +2988,9 @@ export default function WorkoutScreen() {
       {!bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
         <Animated.View style={[styles.bleConnectionOverlay, pausedOverlayStyle]}>
           <ActivityIndicator size="large" color={branding.primary} />
-          <Text style={styles.bleConnectionTitle}>Povezivanje sa senzorom...</Text>
+          <Text style={styles.bleConnectionTitle}>{t('connecting')}</Text>
           <Text style={styles.bleConnectionText}>
-            {bleStatus || 'Molimo sačekajte dok se aplikacija povezuje sa Magene S3+ senzorom.'}
+            {bleStatus || t('connectingSubtitle')}
           </Text>
         </Animated.View>
       )}
@@ -3016,7 +3018,7 @@ export default function WorkoutScreen() {
         >
           <View style={styles.finishButton}>
             <Animated.View style={[styles.finishButtonFill, finishButtonStyle]} />
-            <Text style={styles.finishButtonText}>Finish Workout</Text>
+            <Text style={styles.finishButtonText}>{t('finishWorkout')}</Text>
           </View>
         </Pressable>
       </View>

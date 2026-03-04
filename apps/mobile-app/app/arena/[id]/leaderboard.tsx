@@ -11,6 +11,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 // ── Types ──
 interface LeaderboardEntry {
@@ -47,6 +48,7 @@ export default function ArenaLeaderboardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useSession();
   const branding = useBranding();
+  const { t } = useTranslation('arena');
 
   const [arenaInfo, setArenaInfo] = useState<ArenaInfo | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -123,7 +125,7 @@ export default function ArenaLeaderboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>{arenaInfo?.name || 'Arena Leaderboard'}</Text>
+        <Text style={styles.headerTitle}>{arenaInfo?.name || t('arenaLeaderboard')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -137,11 +139,11 @@ export default function ArenaLeaderboardScreen() {
               <Ionicons name="trophy" size={16} color={branding.primary} />
             )}
             <Text style={[styles.sponsorText, { color: branding.primary }]}>
-              Sponsored by {arenaInfo.sponsor_name}
+              {t('sponsoredBy', { name: arenaInfo.sponsor_name })}
             </Text>
             {arenaInfo.is_finalized && (
               <View style={[styles.finalizedBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                <Text style={[styles.finalizedText, { color: branding.primary }]}>ENDED</Text>
+                <Text style={[styles.finalizedText, { color: branding.primary }]}>{t('ended')}</Text>
               </View>
             )}
           </View>
@@ -156,7 +158,7 @@ export default function ArenaLeaderboardScreen() {
         ) : leaderboard.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>No participants yet</Text>
+            <Text style={styles.emptyText}>{t('noParticipants')}</Text>
           </View>
         ) : (
           <>
@@ -245,7 +247,7 @@ export default function ArenaLeaderboardScreen() {
 
                         <View style={styles.userInfo}>
                           <Text style={[styles.listUsername, isCurrent && { color: branding.primary }]}>
-                            {entry.username}{isCurrent ? ' (You)' : ''}
+                            {entry.username}{isCurrent ? t('youSuffix') : ''}
                           </Text>
                           {entry.gym_name && (
                             <Text style={styles.listGymName}>{entry.gym_name}</Text>

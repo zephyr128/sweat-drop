@@ -11,6 +11,7 @@ import { theme } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -31,6 +32,7 @@ interface GymWithPlans {
 }
 
 export default function SmartCoachScreen() {
+  const { t } = useTranslation('smartcoach');
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
@@ -177,12 +179,12 @@ export default function SmartCoachScreen() {
         />
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.headerTitle}>SmartCoach</Text>
+          <Text style={styles.headerTitle}>{t('title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={branding.primary} />
-          <Text style={styles.loadingText}>Loading workout plans...</Text>
+          <Text style={styles.loadingText}>{t('loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -200,7 +202,7 @@ export default function SmartCoachScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>SmartCoach</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -210,14 +212,14 @@ export default function SmartCoachScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.subtitle}>
-          Follow workout plans from your gym or trainers
+          {t('subtitle')}
         </Text>
 
         {gyms.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="fitness-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>No workout plans available</Text>
-            <Text style={styles.emptySubtext}>Ask your gym to create workout plans</Text>
+            <Text style={styles.emptyText}>{t('noPlans')}</Text>
+            <Text style={styles.emptySubtext}>{t('noPlansDesc')}</Text>
           </View>
         ) : (
           <View style={styles.gymsList}>
@@ -248,7 +250,7 @@ export default function SmartCoachScreen() {
                         <View style={styles.planCountContainer}>
                           <Ionicons name="list" size={14} color={gym.primary_color || branding.primary} />
                           <Text style={[styles.planCount, { color: gym.primary_color || branding.primary }]}>
-                            {gym.plan_count} {gym.plan_count === 1 ? 'plan' : 'plans'}
+                            {t('plan', { count: gym.plan_count })}
                           </Text>
                         </View>
                       </View>
@@ -265,12 +267,12 @@ export default function SmartCoachScreen() {
         {/* Freelance Coach Section */}
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Find Freelance Coach</Text>
+            <Text style={styles.sectionTitle}>{t('findFreelanceCoach')}</Text>
             <View style={[styles.comingSoonCard, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
               <BlurView intensity={50} tint="dark" style={[styles.comingSoonBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="person-outline" size={32} color={theme.colors.textSecondary} />
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
-                <Text style={styles.comingSoonSubtext}>Connect with personal trainers</Text>
+                <Text style={styles.comingSoonText}>{t('comingSoon')}</Text>
+                <Text style={styles.comingSoonSubtext}>{t('connectWithTrainers')}</Text>
               </BlurView>
             </View>
           </View>

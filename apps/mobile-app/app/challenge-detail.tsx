@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
@@ -23,6 +24,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export default function ChallengeDetailScreen() {
+  const { t } = useTranslation('challenges');
   const router = useRouter();
   const { challengeId, gymId } = useLocalSearchParams<{
     challengeId: string;
@@ -86,25 +88,25 @@ export default function ChallengeDetailScreen() {
     const now = new Date();
     const diff = end.getTime() - now.getTime();
 
-    if (diff <= 0) return 'Ended';
+    if (diff <= 0) return t('ended');
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-    if (days > 0) return `${days}d ${hours}h ${minutes}m left`;
-    if (hours > 0) return `${hours}h ${minutes}m left`;
-    return `${minutes}m left`;
+    if (days > 0) return t('timeLeft', { days, hours, minutes });
+    if (hours > 0) return t('hoursLeft', { hours, minutes });
+    return t('minutesLeft', { minutes });
   };
 
   const getChallengeTypeLabel = (challengeType: string) => {
     switch (challengeType) {
-      case 'daily': return 'Daily Challenge';
-      case 'weekly': return 'Weekly Challenge';
-      case 'monthly': return 'Monthly Challenge';
-      case 'streak': return 'Streak Challenge';
-      case 'milestone': return 'Milestone Challenge';
-      default: return 'Challenge';
+      case 'daily': return t('dailyChallenge');
+      case 'weekly': return t('weeklyChallenge');
+      case 'monthly': return t('monthlyChallenge');
+      case 'streak': return t('streakChallenge');
+      case 'milestone': return t('milestoneChallenge');
+      default: return t('challenge');
     }
   };
 
@@ -121,9 +123,9 @@ export default function ChallengeDetailScreen() {
 
   const getMachineTypeLabel = (machineType: string) => {
     switch (machineType) {
-      case 'treadmill': return 'Treadmill';
-      case 'bike': return 'Bike';
-      case 'any': return 'Any Machine';
+      case 'treadmill': return t('treadmill');
+      case 'bike': return t('bike');
+      case 'any': return t('anyMachine');
       default: return machineType;
     }
   };
@@ -143,12 +145,12 @@ export default function ChallengeDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.headerTitle}>Challenge</Text>
+          <Text style={styles.headerTitle}>{t('challenge')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centerContent}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={styles.emptyText}>Challenge not found</Text>
+          <Text style={styles.emptyText}>{t('challengeNotFound')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -173,7 +175,7 @@ export default function ChallengeDetailScreen() {
   const isCompleted = challengeProgress?.is_completed || progress?.is_completed || false;
   const progressRatio = target > 0 ? Math.min(current / target, 1) : 0;
   const rewardDrops = challenge?.reward_drops || 0;
-  const unit = challenge.challenge_type === 'streak' ? 'days' : 'drops';
+  const unit = challenge.challenge_type === 'streak' ? t('unit_days') : t('unit_drops');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -187,7 +189,7 @@ export default function ChallengeDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Challenge Details</Text>
+        <Text style={styles.headerTitle}>{t('challengeDetails')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -220,11 +222,11 @@ export default function ChallengeDetailScreen() {
               <View style={styles.infoPills}>
                 <View style={[styles.infoPill, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
                   <Ionicons name="trophy-outline" size={16} color={branding.primary} />
-                  <Text style={styles.infoPillText}>{target} {unit} needed</Text>
+                  <Text style={styles.infoPillText}>{t('needed', { count: target, unit })}</Text>
                 </View>
                 <View style={[styles.infoPill, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
                   <Ionicons name="water" size={16} color={branding.primary} />
-                  <Text style={styles.infoPillText}>{rewardDrops} drops reward</Text>
+                  <Text style={styles.infoPillText}>{t('dropsReward', { count: rewardDrops })}</Text>
                 </View>
                 {challenge.end_date && (
                   <View style={[styles.infoPill, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
@@ -242,7 +244,7 @@ export default function ChallengeDetailScreen() {
           <View style={[styles.progressCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
             <BlurView intensity={50} tint="dark" style={[styles.progressBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>Your Progress</Text>
+                <Text style={styles.progressTitle}>{t('yourProgress')}</Text>
                 <Text style={[styles.progressPercentage, getNumberStyle(20), { color: branding.primary }]}>
                   {Math.round(progressRatio * 100)}%
                 </Text>
@@ -275,7 +277,7 @@ export default function ChallengeDetailScreen() {
 
               {!isCompleted && (
                 <Text style={styles.remainingText}>
-                  {Math.max(target - current, 0)} {unit} remaining
+                  {t('remaining', { count: Math.max(target - current, 0), unit })}
                 </Text>
               )}
 
@@ -284,8 +286,8 @@ export default function ChallengeDetailScreen() {
                 <View style={styles.completedBadge}>
                   <Ionicons name="checkmark-circle" size={24} color={theme.colors.secondary} />
                   <View>
-                    <Text style={styles.completedText}>Challenge Completed!</Text>
-                    <Text style={styles.completedSubtext}>You earned {rewardDrops} drops</Text>
+                    <Text style={styles.completedText}>{t('challengeCompleted')}</Text>
+                    <Text style={styles.completedSubtext}>{t('youEarned', { drops: rewardDrops })}</Text>
                   </View>
                 </View>
               )}
@@ -297,12 +299,12 @@ export default function ChallengeDetailScreen() {
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <View style={[styles.howToCard, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
             <BlurView intensity={50} tint="dark" style={[styles.howToBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <Text style={styles.howToTitle}>How to Participate</Text>
+              <Text style={styles.howToTitle}>{t('howToParticipate')}</Text>
               <View style={styles.howToSteps}>
                 {[
-                  `Scan a QR code on a ${getMachineTypeLabel(challenge.machine_type || 'any').toLowerCase()} machine`,
-                  'Start your workout and exercise for the required time',
-                  `Complete the challenge to earn ${rewardDrops} drops`,
+                  t('step1', { machine: getMachineTypeLabel(challenge.machine_type || 'any').toLowerCase() }),
+                  t('step2'),
+                  t('step3', { drops: rewardDrops }),
                 ].map((stepText, idx) => (
                   <View key={idx} style={styles.step}>
                     <View style={[styles.stepNumber, { backgroundColor: hexToRgba(branding.primary, 0.1), borderColor: hexToRgba(branding.primary, 0.2) }]}>

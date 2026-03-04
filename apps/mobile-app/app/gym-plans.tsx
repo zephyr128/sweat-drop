@@ -11,6 +11,7 @@ import { theme } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -33,6 +34,7 @@ interface WorkoutPlan {
 }
 
 export default function GymPlansScreen() {
+  const { t } = useTranslation('plans');
   const router = useRouter();
   const params = useLocalSearchParams();
   const gymId = params.gymId as string;
@@ -122,7 +124,7 @@ export default function GymPlansScreen() {
         />
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.headerTitle}>Workout Plans</Text>
+          <Text style={styles.headerTitle}>{t('workoutPlans')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
@@ -144,7 +146,7 @@ export default function GymPlansScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Workout Plans</Text>
+        <Text style={styles.headerTitle}>{t('workoutPlans')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -156,8 +158,8 @@ export default function GymPlansScreen() {
         {plans.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="fitness-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>No workout plans available</Text>
-            <Text style={styles.emptySubtext}>This gym hasn't created any workout plans yet</Text>
+            <Text style={styles.emptyText}>{t('noPlans')}</Text>
+            <Text style={styles.emptySubtext}>{t('noPlansDesc')}</Text>
           </View>
         ) : (
           <View style={styles.plansList}>
@@ -200,14 +202,14 @@ export default function GymPlansScreen() {
                           <View style={styles.metadataItem}>
                             <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
                             <Text style={styles.metadataText}>
-                              {plan.estimated_duration_minutes} min
+                              {plan.estimated_duration_minutes} {t('min')}
                             </Text>
                           </View>
                         )}
                         <View style={styles.metadataItem}>
                           <Ionicons name="list-outline" size={14} color={theme.colors.textSecondary} />
                           <Text style={styles.metadataText}>
-                            {plan.items_count || 0} exercises
+                            {plan.items_count || 0} {t('exercises')}
                           </Text>
                         </View>
                       </View>

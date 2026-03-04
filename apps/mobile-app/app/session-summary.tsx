@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import Animated, {
   FadeInDown,
   FadeIn,
@@ -51,6 +52,7 @@ export default function SessionSummaryScreen() {
   }>();
   // Parse multiplier from award_drops() response (default 1.0)
   const streakMultiplier = multiplier ? parseFloat(multiplier) : 1.0;
+  const { t } = useTranslation('workout');
   // Parse badge names from award_drops() response
   const awardedBadgeNames: string[] = badges ? (() => { try { return JSON.parse(badges); } catch { return []; } })() : [];
   const [session, setSession] = useState<any>(null);
@@ -285,9 +287,9 @@ export default function SessionSummaryScreen() {
   };
 
   const getMultiplierLabel = () => {
-    if (streakMultiplier >= 2.0) return '14+ day streak';
-    if (streakMultiplier >= 1.5) return '7+ day streak';
-    if (streakMultiplier >= 1.2) return '3+ day streak';
+    if (streakMultiplier >= 2.0) return t('summary.streak14');
+    if (streakMultiplier >= 1.5) return t('summary.streak7');
+    if (streakMultiplier >= 1.2) return t('summary.streak3');
     return '';
   };
 
@@ -314,8 +316,8 @@ export default function SessionSummaryScreen() {
         {/* Celebration Header */}
         <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.celebrationHeader}>
           <Text style={styles.emoji}>🎉</Text>
-          <Text style={styles.title}>Workout Complete!</Text>
-          <Text style={styles.subtitle}>Great job! Here's your summary</Text>
+          <Text style={styles.title}>{t('summary.workoutComplete')}</Text>
+          <Text style={styles.subtitle}>{t('summary.greatJob')}</Text>
         </Animated.View>
 
         {/* Drops Hero */}
@@ -328,12 +330,12 @@ export default function SessionSummaryScreen() {
               <Text style={[styles.dropsValue, getNumberStyle(48), { color: branding.primary }]}>
                 +{drops || '0'}
               </Text>
-              <Text style={styles.dropsLabel}>Drops Earned</Text>
+              <Text style={styles.dropsLabel}>{t('summary.dropsEarned')}</Text>
               {streakMultiplier > 1.0 && (
                 <View style={[styles.multiplierBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
                   <Ionicons name="flame" size={14} color={branding.primary} />
                   <Text style={[styles.multiplierText, { color: branding.primary }]}>
-                    ×{streakMultiplier} streak bonus
+                    {t('summary.streakBonus', { multiplier: streakMultiplier })}
                   </Text>
                 </View>
               )}
@@ -350,7 +352,7 @@ export default function SessionSummaryScreen() {
                 <Text style={[styles.statValue, getNumberStyle(24)]}>
                   {formatTime(duration || '0')}
                 </Text>
-                <Text style={styles.statLabel}>Duration</Text>
+                <Text style={styles.statLabel}>{t('summary.duration')}</Text>
               </BlurView>
             </View>
             {session?.equipment && (
@@ -360,7 +362,7 @@ export default function SessionSummaryScreen() {
                   <Text style={styles.statEquipment} numberOfLines={1}>
                     {session.equipment.name}
                   </Text>
-                  <Text style={styles.statLabel}>Equipment</Text>
+                  <Text style={styles.statLabel}>{t('summary.equipment')}</Text>
                 </BlurView>
               </View>
             )}
@@ -381,9 +383,9 @@ export default function SessionSummaryScreen() {
                     <Text style={styles.streakEmoji}>{getStreakEmoji()}</Text>
                     <View>
                       <Text style={[styles.streakValue, getNumberStyle(28), { color: branding.primary }]}>
-                        {streakDays} day{streakDays !== 1 ? 's' : ''}
+                        {t('summary.streakDays', { count: streakDays })}
                       </Text>
-                      <Text style={styles.streakLabel}>Current Streak</Text>
+                      <Text style={styles.streakLabel}>{t('summary.currentStreak')}</Text>
                     </View>
                   </View>
                   {streakMultiplier > 1.0 && (
@@ -417,15 +419,11 @@ export default function SessionSummaryScreen() {
                   </Text>
                   <View style={styles.rankTextContainer}>
                     <Text style={styles.rankTitle}>
-                      You're{' '}
-                      <Text style={[getNumberStyle(18), { color: branding.primary }]}>
-                        #{userRank}
-                      </Text>
-                      {' '}this week
+                      {t('summary.rankThisWeek', { rank: userRank })}
                     </Text>
                     {gymName && (
                       <Text style={styles.rankSubtitle}>
-                        at {gymName}
+                        {t('summary.atGym', { name: gymName })}
                       </Text>
                     )}
                   </View>
@@ -447,8 +445,7 @@ export default function SessionSummaryScreen() {
                 <View style={styles.percentileContent}>
                   <Text style={styles.percentileEmoji}>🔥</Text>
                   <Text style={styles.percentileText}>
-                    You beat <Text style={[getNumberStyle(16), { color: branding.primary }]}>{percentile}%</Text> of people
-                    in {session.gym.name} today!
+                    {t('summary.beatPercent', { percent: percentile, gym: session.gym.name })}
                   </Text>
                 </View>
               </BlurView>
@@ -468,7 +465,7 @@ export default function SessionSummaryScreen() {
                 <Animated.View style={[styles.badgesHeader, trophyAnimStyle]}>
                   <Ionicons name="trophy" size={24} color="#FFD700" />
                   <Text style={styles.badgesSectionTitle}>
-                    {earnedBadges.length === 1 ? 'New Badge Earned!' : `${earnedBadges.length} Badges Earned!`}
+                    {t('summary.newBadge', { count: earnedBadges.length })}
                   </Text>
                 </Animated.View>
                 <View style={styles.badgesGrid}>
@@ -508,13 +505,13 @@ export default function SessionSummaryScreen() {
               <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <View style={styles.challengeHeader}>
                   <Ionicons name="flag" size={20} color={branding.primary} />
-                  <Text style={styles.challengeSectionTitle}>Challenge Progress</Text>
+                  <Text style={styles.challengeSectionTitle}>{t('summary.challengeProgress')}</Text>
                 </View>
                 {challengeProgress.map((challenge, index) => {
                   const progressPercent = challenge.target_drops > 0
                     ? Math.min((challenge.current_drops / challenge.target_drops) * 100, 100)
                     : 0;
-                  const unit = challenge.challenge_type === 'streak' ? 'days' : 'drops';
+                  const unit = challenge.challenge_type === 'streak' ? t('summary.days') : t('drops');
 
                   return (
                     <Animated.View
@@ -532,7 +529,7 @@ export default function SessionSummaryScreen() {
                           {challenge.is_completed && (
                             <View style={styles.completedPill}>
                               <Ionicons name="checkmark-circle" size={14} color={theme.colors.secondary} />
-                              <Text style={styles.completedPillText}>Done!</Text>
+                              <Text style={styles.completedPillText}>{t('summary.done')}</Text>
                             </View>
                           )}
                         </View>
@@ -567,7 +564,7 @@ export default function SessionSummaryScreen() {
                           <View style={styles.challengeReward}>
                             <Ionicons name="water" size={12} color={hexToRgba(branding.primary, 0.6)} />
                             <Text style={[styles.challengeRewardText, { color: hexToRgba(branding.primary, 0.6) }]}>
-                              {challenge.reward_drops} drops reward
+                              {t('summary.dropsReward', { count: challenge.reward_drops })}
                             </Text>
                           </View>
                         )}
@@ -631,7 +628,7 @@ export default function SessionSummaryScreen() {
             }}
             activeOpacity={0.8}
           >
-            <Text style={[styles.buttonText, { color: branding.onPrimary }]}>Collect & Close</Text>
+            <Text style={[styles.buttonText, { color: branding.onPrimary }]}>{t('summary.collectAndClose')}</Text>
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>

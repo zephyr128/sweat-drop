@@ -11,6 +11,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -45,6 +46,7 @@ interface WorkoutPlanItem {
 }
 
 export default function PlanDetailScreen() {
+  const { t } = useTranslation('plans');
   const router = useRouter();
   const params = useLocalSearchParams();
   const planId = params.planId as string;
@@ -166,12 +168,12 @@ export default function PlanDetailScreen() {
   };
 
   const formatExercise = (item: WorkoutPlanItem) => {
-    const machineType = item.target_machine_type === 'bike' ? 'Bike' : 'Treadmill';
+    const machineType = item.target_machine_type === 'bike' ? t('bike') : t('treadmill');
     const value = item.target_value;
     const unit =
       item.target_unit ||
       (item.target_metric === 'time'
-        ? 'min'
+        ? t('min')
         : item.target_metric === 'distance'
         ? 'km'
         : item.target_metric === 'reps'
@@ -179,9 +181,9 @@ export default function PlanDetailScreen() {
         : '');
 
     if (item.target_metric === 'time') {
-      return `${machineType}: ${value} ${unit} session`;
+      return `${machineType}: ${value} ${unit} ${t('session')}`;
     } else if (item.target_metric === 'distance') {
-      return `${machineType}: ${value} ${unit} running`;
+      return `${machineType}: ${value} ${unit} ${t('running')}`;
     } else if (item.target_metric === 'reps' && item.sets > 1) {
       return `${machineType}: ${item.sets}x${value} ${item.target_metric}`;
     } else {
@@ -226,12 +228,12 @@ export default function PlanDetailScreen() {
         />
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.headerTitle}>Plan Details</Text>
+          <Text style={styles.headerTitle}>{t('planDetails')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={styles.emptyText}>Plan not found</Text>
+          <Text style={styles.emptyText}>{t('planNotFound')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -276,7 +278,7 @@ export default function PlanDetailScreen() {
                 {plan.estimated_duration_minutes && (
                   <View style={styles.metadataItem}>
                     <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} />
-                    <Text style={styles.metadataText}>{plan.estimated_duration_minutes} min</Text>
+                    <Text style={styles.metadataText}>{plan.estimated_duration_minutes} {t('min')}</Text>
                   </View>
                 )}
                 {plan.category && (
@@ -294,12 +296,12 @@ export default function PlanDetailScreen() {
         <Animated.View entering={FadeInDown.delay(250).duration(400)}>
           <View style={styles.exercisesSection}>
             <Text style={styles.sectionTitle}>
-              Exercises <Text style={{ color: theme.colors.textSecondary }}>({plan.items.length})</Text>
+              {t('exercises')} <Text style={{ color: theme.colors.textSecondary }}>({plan.items.length})</Text>
             </Text>
 
             {plan.items.length === 0 ? (
               <View style={styles.emptyExercises}>
-                <Text style={styles.emptyExercisesText}>No exercises defined</Text>
+                <Text style={styles.emptyExercisesText}>{t('noExercises')}</Text>
               </View>
             ) : (
               <View style={styles.exercisesList}>
@@ -324,7 +326,7 @@ export default function PlanDetailScreen() {
                             <View style={[styles.restBadge, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
                               <Ionicons name="pause-outline" size={12} color={branding.primary} />
                               <Text style={[styles.restText, { color: branding.primary }]}>
-                                {item.rest_seconds}s rest
+                                {t('rest', { seconds: item.rest_seconds })}
                               </Text>
                             </View>
                           )}
@@ -358,7 +360,7 @@ export default function PlanDetailScreen() {
                 <>
                   <Ionicons name="play-circle" size={22} color={branding.onPrimary} />
                   <Text style={[styles.startButtonText, { color: branding.onPrimary }]}>
-                    Start This Plan
+                    {t('startThisPlan')}
                   </Text>
                 </>
               )}

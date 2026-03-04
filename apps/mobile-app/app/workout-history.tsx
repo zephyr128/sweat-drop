@@ -11,13 +11,15 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.5)
 // Workout History screen with calendar dots and session cards.
 // Data comes from `sessions` table. Machine type comes from joined `machines` table.
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// Days of week will be localized in the component
 const CELL_SIZE = Math.floor((SCREEN_WIDTH - 48 - 6 * 8) / 7); // 48=padding, 6*8=gaps
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -51,24 +53,29 @@ function formatDuration(seconds: number | null): string {
   if (!seconds || seconds <= 0) return '0m';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  if (h > 0) return `${h}${i18n.t('history:hours')} ${m}${i18n.t('history:minutes')}`;
+  return `${m}${i18n.t('history:minutes')}`;
 }
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const locale = i18n.language === 'sr' ? 'sr-RS' : 'en-US';
+  return d.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const locale = i18n.language === 'sr' ? 'sr-RS' : 'en-US';
+  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: i18n.language !== 'sr' });
 }
 
 export default function WorkoutHistoryScreen() {
+  const { t } = useTranslation('history');
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
+
+  const DAYS_OF_WEEK = [t('mon'), t('tue'), t('wed'), t('thu'), t('fri'), t('sat'), t('sun')];
 
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,7 +176,10 @@ export default function WorkoutHistoryScreen() {
     return days;
   }, [selectedMonth, workoutDates]);
 
-  const monthLabel = selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthLabel = selectedMonth.toLocaleDateString(
+    i18n.language === 'sr' ? 'sr-RS' : 'en-US',
+    { month: 'long', year: 'numeric' }
+  );
   const today = new Date();
   const canGoForward = selectedMonth.getFullYear() < today.getFullYear() ||
     (selectedMonth.getFullYear() === today.getFullYear() && selectedMonth.getMonth() < today.getMonth());
@@ -211,10 +221,10 @@ export default function WorkoutHistoryScreen() {
       yesterday.setDate(yesterday.getDate() - 1);
       const isYesterday = dateStr === yesterday.toISOString().split('T')[0];
       const label = isToday
-        ? 'Danas'
+        ? t('today')
         : isYesterday
-        ? 'Juče'
-        : d.toLocaleDateString('sr-RS', { weekday: 'long', day: 'numeric', month: 'long' });
+        ? t('yesterday')
+        : d.toLocaleDateString(i18n.language === 'sr' ? 'sr-RS' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' });
       groups.push({ dateStr, label, sessions: daySessions });
     }
     return groups;
@@ -266,7 +276,7 @@ export default function WorkoutHistoryScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Workout History</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -341,17 +351,17 @@ export default function WorkoutHistoryScreen() {
             <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
               <Ionicons name="barbell-outline" size={16} color={branding.primary} />
               <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>{monthStats.workouts}</Text>
-              <Text style={styles.statPillLabel}>workouts</Text>
+              <Text style={styles.statPillLabel}>{t('workouts')}</Text>
             </View>
             <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
               <Ionicons name="water" size={16} color={branding.primary} />
               <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>{monthStats.totalDrops}</Text>
-              <Text style={styles.statPillLabel}>drops</Text>
+              <Text style={styles.statPillLabel}>{t('drops')}</Text>
             </View>
             <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
               <Ionicons name="time-outline" size={16} color={branding.primary} />
               <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>{formatDuration(monthStats.totalDuration)}</Text>
-              <Text style={styles.statPillLabel}>total</Text>
+              <Text style={styles.statPillLabel}>{t('total')}</Text>
             </View>
           </View>
         </Animated.View>
@@ -362,8 +372,8 @@ export default function WorkoutHistoryScreen() {
         {filteredSessions.length === 0 ? (
           <Animated.View entering={FadeIn.delay(300).duration(400)} style={styles.emptyContainer}>
             <Ionicons name="fitness-outline" size={48} color={hexToRgba(branding.primary, 0.3)} />
-            <Text style={styles.emptyTitle}>Nema treninga ovog meseca</Text>
-            <Text style={styles.emptySubtitle}>Skeniraj QR kod na spravi da počneš!</Text>
+            <Text style={styles.emptyTitle}>{t('noWorkoutsThisMonth')}</Text>
+            <Text style={styles.emptySubtitle}>{t('scanQrToStart')}</Text>
           </Animated.View>
         ) : (
           <View style={styles.sessionsList}>
@@ -381,7 +391,7 @@ export default function WorkoutHistoryScreen() {
 
                 {group.sessions.map((s, index) => {
                   const machineType = s.machines?.type || 'treadmill';
-                  const machineName = s.machines?.name || 'Unknown Machine';
+                  const machineName = s.machines?.name || t('unknownMachine');
                   const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
 
                   return (
@@ -421,7 +431,7 @@ export default function WorkoutHistoryScreen() {
                                 <View style={styles.detailChip}>
                                   <Ionicons name="flame-outline" size={12} color={theme.colors.secondary} />
                                   <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
-                                    ~{Math.round(Number(s.calories))} cal
+                                    ~{Math.round(Number(s.calories))} {t('cal')}
                                   </Text>
                                 </View>
                               ) : null}
@@ -429,7 +439,7 @@ export default function WorkoutHistoryScreen() {
                                 <View style={[styles.detailChip, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                                   <Ionicons name="flash" size={12} color={branding.primary} />
                                   <Text style={[styles.detailChipText, { color: branding.primary }]}>
-                                    ×{s.multiplier.toFixed(1)} multiplier
+                                    ×{s.multiplier.toFixed(1)} {t('multiplier')}
                                   </Text>
                                 </View>
                               ) : null}

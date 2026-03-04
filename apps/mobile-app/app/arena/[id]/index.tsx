@@ -11,6 +11,7 @@ import { theme, getNumberStyle } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 // ── Types ──
 interface AvailableArena {
@@ -50,11 +51,11 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-const SCORING_LABELS: Record<string, { icon: string; text: string }> = {
-  total_drops: { icon: '💧', text: 'Earn the most drops to win!' },
-  days_visited: { icon: '📅', text: 'Visit the gym the most days to win!' },
-  variety_score: { icon: '🏋️', text: 'Use the most different machines to win!' },
-  streak_days: { icon: '🔥', text: 'Build the longest training streak to win!' },
+const SCORING_ICONS: Record<string, string> = {
+  total_drops: '💧',
+  days_visited: '📅',
+  variety_score: '🏋️',
+  streak_days: '🔥',
 };
 
 export default function ArenaDetailScreen() {
@@ -62,6 +63,7 @@ export default function ArenaDetailScreen() {
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
+  const { t } = useTranslation('arena');
 
   const [arena, setArena] = useState<AvailableArena | null>(null);
   const [miniLeaderboard, setMiniLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -129,13 +131,13 @@ export default function ArenaDetailScreen() {
       });
 
       if (error) {
-        Alert.alert('Error', error.message || 'Failed to join arena');
+        Alert.alert(t('error'), error.message || t('failedToJoin'));
       } else {
         // Refresh arena data
         await loadArena();
       }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Something went wrong');
+      Alert.alert(t('error'), err?.message || t('somethingWentWrong'));
     } finally {
       setOptInLoading(false);
     }
@@ -155,7 +157,7 @@ export default function ArenaDetailScreen() {
         <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} style={StyleSheet.absoluteFillObject} />
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.headerTitle}>Arena</Text>
+          <Text style={styles.headerTitle}>{t('title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
@@ -171,19 +173,21 @@ export default function ArenaDetailScreen() {
         <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} style={StyleSheet.absoluteFillObject} />
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.headerTitle}>Arena</Text>
+          <Text style={styles.headerTitle}>{t('title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={styles.emptyText}>Arena not found</Text>
+          <Text style={styles.emptyText}>{t('arenaNotFound')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   const daysLeft = getDaysLeft(arena.end_date);
-  const scoring = SCORING_LABELS[arena.scoring_model] || SCORING_LABELS.total_drops;
+  const scoringIcon = SCORING_ICONS[arena.scoring_model] || SCORING_ICONS.total_drops;
+  const scoringTextKey = `scoring_${arena.scoring_model}` as const;
+  const scoringText = t(scoringTextKey, { defaultValue: t('scoring_total_drops') });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -197,7 +201,7 @@ export default function ArenaDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Arena</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -226,29 +230,29 @@ export default function ArenaDetailScreen() {
 
               {/* Scoring model */}
               <View style={[styles.scoringRow, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
-                <Text style={styles.scoringIcon}>{scoring.icon}</Text>
-                <Text style={styles.scoringText}>{scoring.text}</Text>
+                <Text style={styles.scoringIcon}>{scoringIcon}</Text>
+                <Text style={styles.scoringText}>{scoringText}</Text>
               </View>
 
               {/* Stats */}
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
                   <Text style={[styles.statValue, { color: branding.primary }]}>{arena.participant_count}</Text>
-                  <Text style={styles.statLabel}>Participants</Text>
+                  <Text style={styles.statLabel}>{t('statParticipants')}</Text>
                 </View>
                 <View style={[styles.statDivider, { backgroundColor: hexToRgba(branding.primary, 0.15) }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statValue, daysLeft <= 3 ? { color: theme.colors.secondary } : { color: branding.primary }]}>
                     {daysLeft}
                   </Text>
-                  <Text style={styles.statLabel}>Days Left</Text>
+                  <Text style={styles.statLabel}>{t('statDaysLeft')}</Text>
                 </View>
                 {arena.user_opted_in && arena.user_rank != null && (
                   <>
                     <View style={[styles.statDivider, { backgroundColor: hexToRgba(branding.primary, 0.15) }]} />
                     <View style={styles.statItem}>
                       <Text style={[styles.statValue, { color: branding.primary }]}>#{arena.user_rank}</Text>
-                      <Text style={styles.statLabel}>Your Rank</Text>
+                      <Text style={styles.statLabel}>{t('statYourRank')}</Text>
                     </View>
                   </>
                 )}
@@ -260,7 +264,7 @@ export default function ArenaDetailScreen() {
         {/* Prizes */}
         {arena.prizes.length > 0 && (
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <Text style={styles.sectionTitle}>Prizes</Text>
+            <Text style={styles.sectionTitle}>{t('prizes')}</Text>
             <View style={[styles.prizesCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
               <BlurView intensity={50} tint="dark" style={[styles.prizesBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 {arena.prizes
@@ -308,7 +312,7 @@ export default function ArenaDetailScreen() {
                 ) : (
                   <>
                     <Ionicons name="flash" size={22} color={branding.onPrimary} />
-                    <Text style={[styles.joinButtonText, { color: branding.onPrimary }]}>Join Arena</Text>
+                    <Text style={[styles.joinButtonText, { color: branding.onPrimary }]}>{t('joinArena')}</Text>
                   </>
                 )}
               </LinearGradient>
@@ -319,12 +323,12 @@ export default function ArenaDetailScreen() {
             {/* Mini Leaderboard */}
             <Animated.View entering={FadeInDown.delay(300).duration(400)}>
               <View style={styles.leaderboardHeader}>
-                <Text style={styles.sectionTitle}>Leaderboard</Text>
+                <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
                 <TouchableOpacity
                   onPress={() => router.push({ pathname: '/arena/[id]/leaderboard', params: { id: arena.arena_id } })}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.viewAllLink, { color: branding.primary }]}>View Full →</Text>
+                  <Text style={[styles.viewAllLink, { color: branding.primary }]}>{t('viewFull')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -332,7 +336,7 @@ export default function ArenaDetailScreen() {
                 <BlurView intensity={50} tint="dark" style={[styles.lbBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                   {miniLeaderboard.length === 0 ? (
                     <View style={styles.lbEmpty}>
-                      <Text style={styles.lbEmptyText}>No participants yet</Text>
+                      <Text style={styles.lbEmptyText}>{t('noParticipants')}</Text>
                     </View>
                   ) : (
                     miniLeaderboard.map((entry, index) => {
@@ -352,7 +356,7 @@ export default function ArenaDetailScreen() {
                           </Text>
                           <View style={styles.lbUserInfo}>
                             <Text style={[styles.lbUsername, isCurrent && { color: branding.primary }]}>
-                              {entry.username}{isCurrent ? ' (You)' : ''}
+                              {entry.username}{isCurrent ? t('youSuffix') : ''}
                             </Text>
                             {entry.gym_name && (
                               <Text style={styles.lbGymName}>{entry.gym_name}</Text>
