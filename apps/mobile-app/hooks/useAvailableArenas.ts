@@ -51,7 +51,7 @@ export function useAvailableArenas() {
         setArenas([]);
       } else {
         const allArenas = (data as AvailableArena[]) || [];
-        console.log('[useAvailableArenas] Loaded arenas:', allArenas.length);
+        // Loaded arenas
         // Show all available arenas (not just opted-in ones) for home screen
         setArenas(allArenas);
       }

@@ -154,15 +154,6 @@ export default function LeaderboardScreen() {
         setLeaderboard([]);
       } else if (data) {
         const entries = (data as LeaderboardEntry[]) || [];
-        console.log('[Leaderboard] Loaded entries:', entries.length, 'for period:', period, 'type:', isGym ? 'gym' : 'global');
-        if (entries.length > 0) {
-          console.log('[Leaderboard] First entry sample:', {
-            rank: entries[0].rank,
-            username: entries[0].username,
-            score: entries[0].score,
-            score_label: entries[0].score_label,
-          });
-        }
         setLeaderboard(entries);
 
         const userEntry = entries.find(
@@ -170,14 +161,7 @@ export default function LeaderboardScreen() {
         );
         setCurrentUserRank(userEntry?.rank ?? null);
       } else {
-        console.warn('[Leaderboard] No data returned from get_leaderboard RPC');
-        console.warn('[Leaderboard] Params:', {
-          p_type: isGym ? 'gym' : 'global',
-          p_scope_id: isGym ? activeGymId : null,
-          p_period: period,
-          p_limit: 100,
-          p_newcomer_only: newcomerOnly,
-        });
+        // No data returned from RPC
         setLeaderboard([]);
       }
 
@@ -212,7 +196,7 @@ export default function LeaderboardScreen() {
     setLoading(true);
 
     try {
-      console.log('[Leaderboard] Loading arenas for user:', session.user.id);
+      // Loading arenas for user
       const { data, error } = await supabase.rpc('get_available_arenas', {
         p_user_id: session.user.id,
       });
@@ -223,14 +207,6 @@ export default function LeaderboardScreen() {
         setArenas([]);
       } else {
         const allArenas = (data as AvailableArena[]) || [];
-        console.log('[Leaderboard] Loaded arenas:', allArenas.length, 'total');
-        if (allArenas.length > 0) {
-          console.log('[Leaderboard] First arena sample:', {
-            name: allArenas[0].name,
-            user_opted_in: allArenas[0].user_opted_in,
-            participant_count: allArenas[0].participant_count,
-          });
-        }
         // Show all available arenas (same as home screen) - user can see and opt-in
         setArenas(allArenas);
       }
@@ -639,17 +615,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    position: 'absolute',
-    left: 0,
-    right: 0,
     textAlign: 'center',
     letterSpacing: 0.5,
     pointerEvents: 'none',

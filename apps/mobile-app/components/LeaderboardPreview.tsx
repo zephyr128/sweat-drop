@@ -59,7 +59,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
 
       if (error) {
         // Try fallback RPC first
-        console.warn('[LeaderboardPreview] get_leaderboard RPC failed, trying fallback RPC...', error.message);
+        // get_leaderboard RPC failed, trying fallback RPC
         const { data: fallbackRpcData, error: fallbackRpcError } = await supabase.rpc('get_local_leaderboard', {
           p_gym_id: gymId,
           p_period: 'weekly',
@@ -86,7 +86,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         }
 
         // Final fallback: direct query
-        console.warn('[LeaderboardPreview] Fallback RPC also failed, using direct query...');
+        // Fallback RPC also failed, using direct query
         const { data: fallbackData } = await supabase
           .from('gym_memberships')
           .select('user_id, local_drops_balance, profiles:user_id(username)')
