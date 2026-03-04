@@ -294,15 +294,12 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    flex: 1,
     fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
-    position: 'absolute',
-    left: 60,
-    right: 60,
     textAlign: 'center',
     letterSpacing: 0.3,
-    pointerEvents: 'none',
   },
   headerSpacer: { width: 40 },
   sponsorBanner: {
