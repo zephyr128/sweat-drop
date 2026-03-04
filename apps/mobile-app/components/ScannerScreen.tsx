@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -53,6 +54,7 @@ interface MachineStatus {
 }
 
 export function ScannerScreen() {
+  const { t } = useTranslation('scanner');
   const [hasPermission, setHasPermission] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -178,12 +180,12 @@ export function ScannerScreen() {
         setHasPermission(true);
       } else if (permission === 'denied') {
         Alert.alert(
-          'Camera Permission Required',
-          'SweatDrop needs camera access to scan QR codes. Please enable it in Settings.',
+          t('permissionRequired'),
+          t('permissionDesc'),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('common:cancel'), style: 'cancel' },
             {
-              text: 'Open Settings',
+              text: t('openSettings'),
               onPress: () => {
                 if (Platform.OS === 'ios') {
                   Linking.openURL('app-settings:');
@@ -197,12 +199,12 @@ export function ScannerScreen() {
         setHasPermission(false);
       } else {
         Alert.alert(
-          'Camera Permission Restricted',
-          'Camera access is restricted on this device. Please contact your administrator or enable it in Settings.',
+          t('permissionRestricted'),
+          t('permissionRestrictedDesc'),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('common:cancel'), style: 'cancel' },
             {
-              text: 'Open Settings',
+              text: t('openSettings'),
               onPress: () => {
                 if (Platform.OS === 'ios') {
                   Linking.openURL('app-settings:');
@@ -218,12 +220,12 @@ export function ScannerScreen() {
     } catch (error) {
       console.error('[Scanner] Camera permission error:', error);
       Alert.alert(
-        'Camera Permission Error',
-        'Failed to request camera permissions. Please try again or enable camera access in Settings.',
+        t('permissionError'),
+        t('permissionErrorDesc'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common:cancel'), style: 'cancel' },
           {
-            text: 'Open Settings',
+            text: t('openSettings'),
             onPress: () => {
               if (Platform.OS === 'ios') {
                 Linking.openURL('app-settings:');
@@ -288,11 +290,11 @@ export function ScannerScreen() {
 
       if (!machineStatus || machineStatus.length === 0) {
         Alert.alert(
-          'Machine Not Found',
-          'QR kod nije validan ili sprava nije aktivna. Proverite da li je QR kod ispravan.',
+          t('machineNotFound'),
+          t('machineNotFoundDesc'),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 hasScannedRef.current = false;
                 setIsScanning(true);
@@ -309,11 +311,11 @@ export function ScannerScreen() {
       // Check if machine is under maintenance
       if (machine.is_under_maintenance) {
         Alert.alert(
-          'Sprava Nedostupna',
-          'Ova sprava je trenutno u održavanju. Molimo koristite drugu spravu.',
+          t('machineUnavailable'),
+          t('machineUnavailableDesc'),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 hasScannedRef.current = false;
                 setIsScanning(true);
@@ -328,11 +330,11 @@ export function ScannerScreen() {
       // Check if machine is busy
       if (machine.is_busy && machine.current_user_id !== sessionRef.current?.user?.id) {
         Alert.alert(
-          'Sprava Zauzeta',
-          'Ova sprava je trenutno zauzeta. Molimo sačekajte ili koristite drugu spravu.',
+          t('machineBusy'),
+          t('machineBusyDesc'),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 hasScannedRef.current = false;
                 setIsScanning(true);
@@ -347,11 +349,11 @@ export function ScannerScreen() {
       // Check if machine has sensor_id
       if (!machine.sensor_id) {
         Alert.alert(
-          'Senzor Nije Uparen',
-          'Ova sprava nema uparen senzor. Molimo kontaktirajte administratora da upari senzor pre početka treninga.',
+          t('sensorNotPaired'),
+          t('sensorNotPairedDesc'),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 hasScannedRef.current = false;
                 setIsScanning(true);
@@ -392,11 +394,11 @@ export function ScannerScreen() {
     } catch (error: any) {
       console.error('[Scanner] Error processing QR code:', error);
       Alert.alert(
-        'Greška',
-        error.message || 'Došlo je do greške pri skeniranju QR koda. Pokušajte ponovo.',
+        t('error'),
+        error.message || t('errorProcessing'),
         [
           {
-            text: 'OK',
+            text: t('common:ok'),
             onPress: () => {
               hasScannedRef.current = false;
               setIsScanning(true);
@@ -423,11 +425,11 @@ export function ScannerScreen() {
 
         if (lockError || !lockResult) {
           Alert.alert(
-            'Sprava Zauzeta',
-            'Nije moguće zaključati spravu. Možda je već u upotrebi.',
+            t('lockFailed'),
+            t('lockFailedDesc'),
             [
               {
-                text: 'OK',
+                text: t('common:ok'),
                 onPress: () => {
                   hasScannedRef.current = false;
                   setIsScanning(true);
@@ -518,11 +520,11 @@ export function ScannerScreen() {
     } catch (error: any) {
       console.error('[Scanner] Error proceeding with workout:', error);
       Alert.alert(
-        'Greška',
-        error.message || 'Došlo je do greške pri pokretanju treninga. Pokušajte ponovo.',
+        t('error'),
+        error.message || t('errorWorkout'),
         [
           {
-            text: 'OK',
+            text: t('common:ok'),
             onPress: () => {
               hasScannedRef.current = false;
               setIsScanning(true);
@@ -553,11 +555,11 @@ export function ScannerScreen() {
 
       if (!machineStatus || machineStatus.length === 0) {
         Alert.alert(
-          'Machine Not Found',
-          `Development machine with QR UUID ${DEV_QR_UUID} not found. Please check DEV_QR_UUID in ScannerScreen.tsx`,
+          t('machineNotFound'),
+          t('devModeNotFound', { uuid: DEV_QR_UUID }),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 setIsScanning(true);
                 setIsProcessing(false);
@@ -573,11 +575,11 @@ export function ScannerScreen() {
       // Check if machine is under maintenance
       if (machine.is_under_maintenance) {
         Alert.alert(
-          'Sprava Nedostupna',
-          'Development sprava je trenutno u održavanju.',
+          t('machineUnavailable'),
+          t('machineUnavailableDesc'),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 setIsScanning(true);
                 setIsProcessing(false);
@@ -591,11 +593,11 @@ export function ScannerScreen() {
       // Check if machine has sensor_id
       if (!machine.sensor_id) {
         Alert.alert(
-          'Senzor Nije Uparen',
-          'Development sprava nema uparen senzor.',
+          t('sensorNotPaired'),
+          t('sensorNotPairedDesc'),
           [
             {
-              text: 'OK',
+              text: t('common:ok'),
               onPress: () => {
                 setIsScanning(true);
                 setIsProcessing(false);
@@ -629,11 +631,11 @@ export function ScannerScreen() {
     } catch (error: any) {
       console.error('[Scanner] Development mode error:', error);
       Alert.alert(
-        'Development Mode Error',
-        error.message || 'Došlo je do greške u development modu. Proverite DEV_QR_UUID.',
+        t('devModeError'),
+        error.message || t('errorProcessing'),
         [
           {
-            text: 'OK',
+            text: t('common:ok'),
             onPress: () => {
               setIsScanning(true);
               setIsProcessing(false);
@@ -698,15 +700,15 @@ export function ScannerScreen() {
         />
         <View style={styles.permissionContainer}>
           <Ionicons name="camera-outline" size={64} color={theme.colors.primary} />
-          <Text style={styles.permissionTitle}>Camera Permission Required</Text>
+          <Text style={styles.permissionTitle}>{t('permissionRequired')}</Text>
           <Text style={styles.permissionText}>
-            SweatDrop needs camera access to scan QR codes on equipment. Please grant permission to continue.
+            {t('permissionDesc')}
           </Text>
           <TouchableOpacity
             style={styles.permissionButton}
             onPress={checkCameraPermission}
           >
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+            <Text style={styles.permissionButtonText}>{t('grantPermission')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.settingsButton}
@@ -718,7 +720,7 @@ export function ScannerScreen() {
               }
             }}
           >
-            <Text style={styles.settingsButtonText}>Open Settings</Text>
+            <Text style={styles.settingsButtonText}>{t('openSettings')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -736,7 +738,7 @@ export function ScannerScreen() {
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Initializing camera...</Text>
+          <Text style={styles.loadingText}>{t('initializingCamera')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -814,11 +816,11 @@ export function ScannerScreen() {
         {isProcessing ? (
           <View style={styles.processingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.processingText}>Processing QR code...</Text>
+            <Text style={styles.processingText}>{t('processingQr')}</Text>
           </View>
         ) : (
           <Text style={styles.instructionsText}>
-            Position QR code within the frame
+            {t('instruction')}
           </Text>
         )}
       </View>

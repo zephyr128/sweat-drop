@@ -1,3 +1,4 @@
+import '@/lib/i18n'; // Initialize i18n before anything else
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useCallback } from 'react';

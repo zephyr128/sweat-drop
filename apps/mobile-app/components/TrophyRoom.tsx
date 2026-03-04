@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
 import { useAllBadges, BadgeWithProgress } from '@/hooks/useAllBadges';
@@ -39,6 +40,7 @@ interface TrophyRoomProps {
 }
 
 export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
+  const { t } = useTranslation('trophyRoom');
   const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { badges: earnedBadges, loading: badgesLoading } = useUserBadges(userId);
@@ -217,7 +219,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         ) : (
           <BackButton />
         )}
-        <Text style={styles.headerTitle}>Awards</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -230,7 +232,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
               {totalEarned}
             </Text>
             <Text style={styles.summaryLabel}>
-              of {totalAvailable} earned
+              {t('ofEarned', { total: totalAvailable })}
             </Text>
           </View>
         </View>
@@ -241,7 +243,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         <View style={styles.filterRow}>
           {(['all', 'this_gym', 'earned', 'locked'] as const).map((type) => {
             const isActive = filterType === type;
-            const labelMap = { all: 'All', this_gym: 'This Gym', earned: 'Earned', locked: 'Locked' };
+            const labelMap = { all: t('filterAll'), this_gym: t('filterThisGym'), earned: t('filterEarned'), locked: t('filterLocked') };
             return (
               <TouchableOpacity
                 key={type}
@@ -272,7 +274,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
             <Ionicons name="search" size={16} color="rgba(255,255,255,0.3)" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search badges..."
+              placeholder={t('searchPlaceholder')}
               placeholderTextColor="rgba(255,255,255,0.25)"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -294,9 +296,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         {filteredBadges.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="trophy-outline" size={56} color="rgba(255,255,255,0.15)" />
-            <Text style={styles.emptyTitle}>No badges found</Text>
+            <Text style={styles.emptyTitle}>{t('noBadgesFound')}</Text>
             <Text style={styles.emptyText}>
-              {searchQuery ? 'Try adjusting your search' : 'Complete workouts to earn badges!'}
+              {searchQuery ? t('tryAdjustingSearch') : t('completeWorkouts')}
             </Text>
           </View>
         ) : (
@@ -306,7 +308,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
               <Animated.View entering={FadeInDown.delay(250).duration(400)}>
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Earned</Text>
+                    <Text style={styles.sectionTitle}>{t('sectionEarned')}</Text>
                     <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
                       <Text style={[styles.sectionCountText, { color: branding.primary }]}>
                         {earnedFiltered.length}
@@ -325,7 +327,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
               <Animated.View entering={FadeInDown.delay(350).duration(400)}>
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>In Progress</Text>
+                    <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
                     <View style={styles.sectionCountPill}>
                       <Text style={styles.sectionCountText}>
                         {lockedFiltered.length}
