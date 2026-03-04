@@ -1,0 +1,14 @@
+{
+  "title": "Awards",
+  "ofEarned": "of {{total}} earned",
+  "filterAll": "All",
+  "filterThisGym": "This gym",
+  "filterEarned": "Earned",
+  "filterLocked": "Locked",
+  "searchPlaceholder": "Search badges...",
+  "noBadgesFound": "No badges found",
+  "tryAdjustingSearch": "Try adjusting your search",
+  "completeWorkouts": "Complete workouts to earn badges!",
+  "sectionEarned": "Earned",
+  "sectionInProgress": "In progress"
+}

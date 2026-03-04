@@ -10,6 +10,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
@@ -35,6 +36,7 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export const ProgressWidget: React.FC = () => {
   const router = useRouter();
+  const { t } = useTranslation('home');
   const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { globalAchievements, gymChallenges } = useAllBadges();
@@ -106,7 +108,7 @@ export const ProgressWidget: React.FC = () => {
             <View style={styles.header}>
               <Ionicons name="trophy" size={20} color={branding.primary} />
               <Text style={[styles.title, { color: branding.primary }]}>
-                Next Badge
+                {t('nextBadge')}
               </Text>
             </View>
 
@@ -129,7 +131,7 @@ export const ProgressWidget: React.FC = () => {
             </View>
 
             <View style={styles.footer}>
-              <Text style={[styles.footerText, { color: branding.primary }]}>View Trophy Room</Text>
+              <Text style={[styles.footerText, { color: branding.primary }]}>{t('viewTrophyRoom')}</Text>
               <Ionicons name="arrow-forward" size={16} color={branding.primary} />
             </View>
           </View>

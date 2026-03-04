@@ -1,0 +1,13 @@
+{
+  "title": "SmartCoach",
+  "subtitle": "Prati planove treninga iz tvoje teretane ili od trenera",
+  "loading": "Učitavanje planova treninga...",
+  "noPlans": "Nema dostupnih planova treninga",
+  "noPlansDesc": "Zatraži od teretane da napravi planove treninga",
+  "plan_one": "{{count}} plan",
+  "plan_few": "{{count}} plana",
+  "plan_other": "{{count}} planova",
+  "findFreelanceCoach": "Pronađi freelance trenera",
+  "comingSoon": "Uskoro",
+  "connectWithTrainers": "Poveži se sa personalnim trenerima"
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Leaderboard",
+  "myGym": "Moja teretana",
+  "global": "Globalno",
+  "arenas": "Arene",
+  "weekly": "Nedeljno",
+  "monthly": "Mesečno",
+  "allTime": "Ukupno",
+  "newcomersOnly": "Samo novajlije",
+  "noRankings": "Nema rangiranja",
+  "beFirstGym": "Budi prvi koji zarađuje drops u ovoj teretani!",
+  "beFirstGlobal": "Budi prvi koji zarađuje drops globalno!",
+  "noActiveArenas": "Nema aktivnih arena",
+  "noArenasAvailable": "Nema dostupnih arena trenutno. Proveri ponovo uskoro!",
+  "loadingArenas": "Učitavanje arena...",
+  "you": "(Ti)",
+  "new": "NOVO",
+  "prizesResetWeekly": "Nagrade se resetuju svake nedelje",
+  "prizesResetMonthly": "Nagrade se resetuju svakog meseca",
+  "participants_one": "{{count}} učesnik",
+  "participants_few": "{{count}} učesnika",
+  "participants_other": "{{count}} učesnika"
+}

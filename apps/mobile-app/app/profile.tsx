@@ -22,6 +22,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import Constants from 'expo-constants';
+import { useTranslation } from 'react-i18next';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.6)
 // Dedicated Profile screen with hero, stats grid, recent badges, quick links.
@@ -57,9 +58,10 @@ interface ProfileStats {
   longestStreak: number;
 }
 
-function formatMemberSince(iso: string): string {
+function formatMemberSince(iso: string, lang: string = 'sr'): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('sr-RS', { month: 'long', year: 'numeric' });
+  const locale = lang === 'sr' ? 'sr-RS' : 'en-US';
+  return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 }
 
 export default function ProfileScreen() {
@@ -69,6 +71,7 @@ export default function ProfileScreen() {
   const { badges } = useUserBadges();
   const { homeGymId } = useGymStore();
   const hasGym = !!homeGymId;
+  const { t, i18n } = useTranslation('profile');
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
@@ -208,24 +211,23 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
+      t('logoutTitle'),
+      t('logoutConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: 'Log Out',
+          text: t('logout'),
           style: 'destructive',
           onPress: async () => {
             try {
               const { useAuthStore } = await import('@/lib/stores/authStore');
               await useAuthStore.getState().signOut();
-              // Dismiss all stacked screens (home → profile) then replace root with welcome
               if (router.canDismiss()) {
                 router.dismissAll();
               }
               router.replace('/(onboarding)/welcome');
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to log out');
+              Alert.alert(t('common:error'), error.message || t('failedLogout'));
             }
           },
         },
@@ -235,33 +237,32 @@ export default function ProfileScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all associated data. This action cannot be undone.',
+      t('deleteAccountTitle'),
+      t('deleteConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: 'Delete Account',
+          text: t('deleteAccount'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Are you absolutely sure?',
-              'All your drops, badges, and workout history will be lost forever.',
+              t('deleteConfirm2Title'),
+              t('deleteConfirm2'),
               [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('common:cancel'), style: 'cancel' },
                 {
-                  text: 'Yes, Delete',
+                  text: t('yesDelete'),
                   style: 'destructive',
                   onPress: async () => {
                     try {
                       const { useAuthStore } = await import('@/lib/stores/authStore');
                       await useAuthStore.getState().signOut();
-                      // Dismiss all stacked screens then replace root with welcome
                       if (router.canDismiss()) {
                         router.dismissAll();
                       }
                       router.replace('/(onboarding)/welcome');
                     } catch (error: any) {
-                      Alert.alert('Error', error.message || 'Failed to delete account');
+                      Alert.alert(t('common:error'), error.message || t('failedDelete'));
                     }
                   },
                 },
@@ -275,12 +276,12 @@ export default function ProfileScreen() {
 
   // Quick links
   const quickLinks = [
-    { icon: 'time-outline' as const, label: 'Workout History', route: '/workout-history' },
-    { icon: 'trophy-outline' as const, label: 'Trophy Room', route: '/trophy-room' },
-    { icon: 'podium-outline' as const, label: 'Leaderboard', route: '/leaderboard' },
-    { icon: 'wallet-outline' as const, label: 'Wallet', route: '/wallet' },
-    { icon: 'storefront-outline' as const, label: 'Rewards Store', route: '/store' },
-    { icon: 'flame-outline' as const, label: 'Challenges', route: '/challenges' },
+    { icon: 'time-outline' as const, label: t('workoutHistory'), route: '/workout-history', key: 'workoutHistory' },
+    { icon: 'trophy-outline' as const, label: t('trophyRoom'), route: '/trophy-room', key: 'trophyRoom' },
+    { icon: 'podium-outline' as const, label: t('leaderboard'), route: '/leaderboard', key: 'leaderboard' },
+    { icon: 'wallet-outline' as const, label: t('wallet'), route: '/wallet', key: 'wallet' },
+    { icon: 'storefront-outline' as const, label: t('rewardsStore'), route: '/store', key: 'rewardsStore' },
+    { icon: 'flame-outline' as const, label: t('challenges'), route: '/challenges', key: 'challenges' },
   ];
 
   if (loading && !profile) {
@@ -318,7 +319,7 @@ export default function ProfileScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -406,7 +407,7 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
 
                 {/* Username */}
-                <Text style={styles.username}>{profile?.username || 'User'}</Text>
+                <Text style={styles.username}>{profile?.username || t('common:user')}</Text>
                 {profile?.full_name && (
                   <Text style={styles.fullName}>{profile.full_name}</Text>
                 )}
@@ -416,21 +417,21 @@ export default function ProfileScreen() {
                   <View style={[styles.heroPill, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                     <Ionicons name="calendar-outline" size={12} color={branding.primary} />
                     <Text style={[styles.heroPillText, { color: branding.primary }]}>
-                      Member since {profile ? formatMemberSince(profile.created_at) : ''}
+                      {t('memberSince', { date: profile ? formatMemberSince(profile.created_at, i18n.language) : '' })}
                     </Text>
                   </View>
                   {profile && profile.streak_days > 0 && (
                     <View style={[styles.heroPill, { backgroundColor: 'rgba(255, 145, 0, 0.12)' }]}>
                       <Text style={{ fontSize: 12 }}>🔥</Text>
                       <Text style={[styles.heroPillText, { color: theme.colors.secondary }]}>
-                        {profile.streak_days} day streak
+                        {t('dayStreakPill', { count: profile.streak_days })}
                       </Text>
                     </View>
                   )}
                   {profile?.is_newcomer && (
                     <View style={[styles.heroPill, { backgroundColor: 'rgba(76, 175, 80, 0.12)' }]}>
                       <Text style={{ fontSize: 12 }}>🌱</Text>
-                      <Text style={[styles.heroPillText, { color: '#4CAF50' }]}>Newcomer</Text>
+                      <Text style={[styles.heroPillText, { color: '#4CAF50' }]}>{t('newcomer')}</Text>
                     </View>
                   )}
                 </View>
@@ -445,10 +446,10 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
           <View style={styles.statsGrid}>
             {[
-              { icon: 'water' as const, value: (profile?.total_drops || 0) === 0 ? '—' : profile?.total_drops || 0, label: 'Total Drops', color: branding.primary },
-              { icon: 'flame' as const, value: (profile?.streak_days || 0) === 0 ? '—' : profile?.streak_days || 0, label: 'Day Streak', color: theme.colors.secondary },
-              { icon: 'barbell' as const, value: stats.totalWorkouts === 0 ? '—' : stats.totalWorkouts, label: 'Workouts', color: branding.primary },
-              { icon: 'time' as const, value: stats.totalHours === 0 ? '—' : `${stats.totalHours}h`, label: 'Trained', color: branding.primary },
+              { icon: 'water' as const, value: (profile?.total_drops || 0) === 0 ? '—' : profile?.total_drops || 0, label: t('totalDrops'), color: branding.primary },
+              { icon: 'flame' as const, value: (profile?.streak_days || 0) === 0 ? '—' : profile?.streak_days || 0, label: t('dayStreak'), color: theme.colors.secondary },
+              { icon: 'barbell' as const, value: stats.totalWorkouts === 0 ? '—' : stats.totalWorkouts, label: t('totalWorkouts'), color: branding.primary },
+              { icon: 'time' as const, value: stats.totalHours === 0 ? '—' : `${stats.totalHours}h`, label: t('trained'), color: branding.primary },
             ].map((stat, i) => (
               <View key={i} style={[styles.statCard, { borderColor: hexToRgba(stat.color, 0.12) }]}>
                 <BlurView intensity={30} tint="dark" style={[styles.statCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
@@ -471,21 +472,21 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <View style={[styles.breakdownCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
             <BlurView intensity={40} tint="dark" style={[styles.breakdownBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-              <Text style={styles.sectionTitle}>Drops Breakdown</Text>
+              <Text style={styles.sectionTitle}>{t('dropsBreakdown')}</Text>
               <View style={styles.breakdownRow}>
                 <View style={styles.breakdownItem}>
                   <Text style={[styles.breakdownValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.weekly_drops || 0}</Text>
-                  <Text style={styles.breakdownLabel}>This Week</Text>
+                  <Text style={styles.breakdownLabel}>{t('thisWeek')}</Text>
                 </View>
                 <View style={[styles.breakdownDivider, { backgroundColor: hexToRgba(branding.primary, 0.1) }]} />
                 <View style={styles.breakdownItem}>
                   <Text style={[styles.breakdownValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.monthly_drops || 0}</Text>
-                  <Text style={styles.breakdownLabel}>This Month</Text>
+                  <Text style={styles.breakdownLabel}>{t('thisMonth')}</Text>
                 </View>
                 <View style={[styles.breakdownDivider, { backgroundColor: hexToRgba(branding.primary, 0.1) }]} />
                 <View style={styles.breakdownItem}>
                   <Text style={[styles.breakdownValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.total_drops || 0}</Text>
-                  <Text style={styles.breakdownLabel}>All Time</Text>
+                  <Text style={styles.breakdownLabel}>{t('allTime')}</Text>
                 </View>
               </View>
             </BlurView>
@@ -502,9 +503,9 @@ export default function ProfileScreen() {
                 <View style={styles.noGymBannerContent}>
                   <Ionicons name="qr-code-outline" size={20} color={theme.colors.primary} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.noGymBannerTitle}>Nemaš povezanu teretanu</Text>
+                    <Text style={styles.noGymBannerTitle}>{t('noGymTitle')}</Text>
                     <Text style={styles.noGymBannerSub}>
-                      Skeniraj QR kod na spravi da otključaš sve funkcije
+                      {t('noGymSub')}
                     </Text>
                   </View>
                 </View>
@@ -520,9 +521,9 @@ export default function ProfileScreen() {
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
             <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
               {quickLinks.map((link, i) => {
-                const gymRequiredLabels = ['Leaderboard', 'Wallet', 'Rewards Store', 'Challenges', 'Trophy Room'];
-                const isGymRequired = gymRequiredLabels.includes(link.label);
-                const isWorkoutHistoryEmpty = link.label === 'Workout History' && stats.totalWorkouts === 0 && !hasGym;
+                const gymRequiredKeys = ['leaderboard', 'wallet', 'rewardsStore', 'challenges', 'trophyRoom'];
+                const isGymRequired = gymRequiredKeys.includes(link.key);
+                const isWorkoutHistoryEmpty = link.key === 'workoutHistory' && stats.totalWorkouts === 0 && !hasGym;
                 const isDisabled = (isGymRequired && !hasGym) || isWorkoutHistoryEmpty;
 
                 return (
@@ -553,9 +554,47 @@ export default function ProfileScreen() {
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
+        {/* SETTINGS (LANGUAGE)                         */}
+        {/* ═══════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(480).duration(400)}>
+          <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
+            <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+              <View style={styles.linkRow}>
+                <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                  <Ionicons name="language-outline" size={20} color={branding.primary} />
+                </View>
+                <Text style={styles.linkLabel}>{t('language')}</Text>
+                <View style={styles.languageToggle}>
+                  <TouchableOpacity
+                    style={[
+                      styles.langButton,
+                      i18n.language === 'sr' && [styles.langButtonActive, { backgroundColor: hexToRgba(branding.primary, 0.15), borderColor: branding.primary }],
+                    ]}
+                    onPress={() => i18n.changeLanguage('sr')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.langButtonText, i18n.language === 'sr' && { color: branding.primary, fontWeight: '700' as const }]}>SR</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.langButton,
+                      i18n.language === 'en' && [styles.langButtonActive, { backgroundColor: hexToRgba(branding.primary, 0.15), borderColor: branding.primary }],
+                    ]}
+                    onPress={() => i18n.changeLanguage('en')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.langButtonText, i18n.language === 'en' && { color: branding.primary, fontWeight: '700' as const }]}>EN</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ═══════════════════════════════════════════ */}
         {/* ACCOUNT ACTIONS                             */}
         {/* ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(520).duration(400)}>
           <View style={[styles.accountActionsCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
             <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
               {/* Log Out */}
@@ -567,7 +606,7 @@ export default function ProfileScreen() {
                 <View style={[styles.linkIcon, { backgroundColor: 'rgba(255, 145, 0, 0.1)' }]}>
                   <Ionicons name="log-out-outline" size={20} color={theme.colors.secondary} />
                 </View>
-                <Text style={[styles.linkLabel, { color: theme.colors.secondary }]}>Log Out</Text>
+                <Text style={[styles.linkLabel, { color: theme.colors.secondary }]}>{t('logout')}</Text>
                 <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
               </TouchableOpacity>
 
@@ -580,7 +619,7 @@ export default function ProfileScreen() {
                 <View style={[styles.linkIcon, { backgroundColor: 'rgba(255, 59, 48, 0.1)' }]}>
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                 </View>
-                <Text style={[styles.linkLabel, { color: '#FF3B30' }]}>Delete Account</Text>
+                <Text style={[styles.linkLabel, { color: '#FF3B30' }]}>{t('deleteAccount')}</Text>
                 <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
               </TouchableOpacity>
             </BlurView>
@@ -912,5 +951,29 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
     lineHeight: 16,
+  },
+
+  // ── Language Toggle ──
+  languageToggle: {
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: 'auto',
+  },
+  langButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  langButtonActive: {
+    borderWidth: 1.5,
+  },
+  langButtonText: {
+    fontSize: theme.typography.fontSize.xs,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.5,
   },
 });

@@ -1,0 +1,17 @@
+{
+  "title": "Moja otkupljenja",
+  "noRedemptions": "Nema otkupljenja",
+  "noRedemptionsDesc": "Otkupi nagrade iz prodavnice da ih vidiš ovde",
+  "code": "Kod",
+  "dropsSpent": "Potrošeno drops",
+  "date": "Datum",
+  "confirmed": "Potvrđeno",
+  "copied": "Kopirano!",
+  "codeCopied": "Kod za otkupljenje kopiran",
+  "pending": "Na čekanju",
+  "cancelled": "Otkazano",
+  "na": "N/A",
+  "showCodeToStaff": "Pokaži kod osoblju teretane da preuzmeš nagradu",
+  "unknownReward": "Nepoznata nagrada",
+  "unknownGym": "Nepoznata teretana"
+}

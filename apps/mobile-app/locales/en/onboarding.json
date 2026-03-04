@@ -1,0 +1,59 @@
+{
+  "welcome": {
+    "titleTop": "Welcome to",
+    "titleBottom": "SweatDrop",
+    "subtitle": "Train. Earn drops.\nRedeem them for rewards at the gym.",
+    "startButton": "Get Started"
+  },
+  "auth": {
+    "title": "Sign in",
+    "subtitle": "Start training and earn rewards",
+    "continueWithGoogle": "Continue with Google",
+    "continueWithApple": "Continue with Apple",
+    "emailPlaceholder": "Email",
+    "passwordPlaceholder": "Password",
+    "authNote": "New user? Enter email and password to register.",
+    "footer": "By continuing, you agree to the Terms of Service",
+    "noIdTokenGoogle": "No ID token from Google",
+    "noIdTokenApple": "No identity token from Apple",
+    "googleFailed": "Google sign-in failed",
+    "appleFailed": "Apple sign-in failed",
+    "enterEmailPassword": "Enter email and password",
+    "passwordMinLength": "Password must be at least 6 characters",
+    "checkEmail": "Check your email",
+    "confirmationSent": "We sent you a confirmation link. Click the link in the email and try signing in again.",
+    "somethingWentWrong": "Something went wrong",
+    "accessDenied": "Access denied",
+    "adminNotAllowed": "Admin accounts cannot use the mobile app. Use a user account."
+  },
+  "stepper": {
+    "title": "How it works",
+    "subtitle": "Three steps to rewards",
+    "step1Title": "Train and earn drops",
+    "step1Desc": "Every workout on a machine earns you Sweat Drops — the longer you train, the more drops you collect.",
+    "step2Title": "Compete",
+    "step2Desc": "Complete challenges, earn badges, and climb the leaderboard at your gym.",
+    "step3Title": "Redeem drops for rewards",
+    "step3Desc": "Exchange your drops for protein, merch, and discounts at the front desk.",
+    "continueButton": "Got it, let's go!"
+  },
+  "username": {
+    "title": "What should we call you?",
+    "subtitle": "This name will appear on leaderboards",
+    "placeholder": "Your name",
+    "minLengthError": "Name must be at least 2 characters",
+    "alreadyTaken": "This name is already taken. Try another."
+  },
+  "avatar": {
+    "title": "Choose your avatar",
+    "subtitle": "This appears next to your name"
+  },
+  "notifications": {
+    "title": "Stay in the loop",
+    "subtitle": "We'll notify you about new challenges, leaderboard rewards, and streak reminders.",
+    "enableButton": "Enable notifications",
+    "benefit1": "Streak reminders",
+    "benefit2": "New challenges and competitions",
+    "benefit3": "Exclusive rewards"
+  }
+}

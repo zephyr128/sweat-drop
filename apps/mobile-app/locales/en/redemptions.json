@@ -1,0 +1,17 @@
+{
+  "title": "My redemptions",
+  "noRedemptions": "No redemptions yet",
+  "noRedemptionsDesc": "Redeem rewards from the store to see them here",
+  "code": "Code",
+  "dropsSpent": "Drops spent",
+  "date": "Date",
+  "confirmed": "Confirmed",
+  "copied": "Copied!",
+  "codeCopied": "Redemption code copied to clipboard",
+  "pending": "Pending",
+  "cancelled": "Cancelled",
+  "na": "N/A",
+  "showCodeToStaff": "Show your code to gym staff to claim",
+  "unknownReward": "Unknown reward",
+  "unknownGym": "Unknown gym"
+}

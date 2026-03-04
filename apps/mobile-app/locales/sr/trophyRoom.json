@@ -1,0 +1,14 @@
+{
+  "title": "Nagrade",
+  "ofEarned": "od {{total}} osvojeno",
+  "filterAll": "Sve",
+  "filterThisGym": "Ova teretana",
+  "filterEarned": "Osvojeno",
+  "filterLocked": "Zaključano",
+  "searchPlaceholder": "Pretraži značke...",
+  "noBadgesFound": "Nema pronađenih znački",
+  "tryAdjustingSearch": "Pokušaj prilagoditi pretragu",
+  "completeWorkouts": "Završi treninge da osvojiš značke!",
+  "sectionEarned": "Osvojeno",
+  "sectionInProgress": "U toku"
+}

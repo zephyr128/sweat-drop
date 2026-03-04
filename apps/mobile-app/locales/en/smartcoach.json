@@ -1,0 +1,12 @@
+{
+  "title": "SmartCoach",
+  "subtitle": "Follow workout plans from your gym or trainers",
+  "loading": "Loading workout plans...",
+  "noPlans": "No workout plans available",
+  "noPlansDesc": "Ask your gym to create workout plans",
+  "plan_one": "{{count}} plan",
+  "plan_other": "{{count}} plans",
+  "findFreelanceCoach": "Find freelance coach",
+  "comingSoon": "Coming soon",
+  "connectWithTrainers": "Connect with personal trainers"
+}

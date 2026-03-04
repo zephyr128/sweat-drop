@@ -1,0 +1,20 @@
+{
+  "workoutPlans": "Planovi treninga",
+  "noPlans": "Nema dostupnih planova treninga",
+  "noPlansDesc": "Ova teretana još nema planove treninga",
+  "exercises": "Vežbe",
+  "noExercises": "Nema definisanih vežbi",
+  "startThisPlan": "Započni ovaj plan",
+  "planDetails": "Detalji plana",
+  "planNotFound": "Plan nije pronađen",
+  "min": "min",
+  "session": "sesija",
+  "running": "trčanje",
+  "rest": "{{seconds}}s odmor",
+  "bike": "Bicikl",
+  "treadmill": "Traka",
+  "beginner": "Početnik",
+  "intermediate": "Srednji",
+  "advanced": "Napredni",
+  "expert": "Ekspert"
+}

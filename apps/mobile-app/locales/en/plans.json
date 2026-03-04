@@ -1,0 +1,20 @@
+{
+  "workoutPlans": "Workout plans",
+  "noPlans": "No workout plans available",
+  "noPlansDesc": "This gym hasn't created any workout plans yet",
+  "exercises": "Exercises",
+  "noExercises": "No exercises defined",
+  "startThisPlan": "Start this plan",
+  "planDetails": "Plan details",
+  "planNotFound": "Plan not found",
+  "min": "min",
+  "session": "session",
+  "running": "running",
+  "rest": "{{seconds}}s rest",
+  "bike": "Bike",
+  "treadmill": "Treadmill",
+  "beginner": "Beginner",
+  "intermediate": "Intermediate",
+  "advanced": "Advanced",
+  "expert": "Expert"
+}
