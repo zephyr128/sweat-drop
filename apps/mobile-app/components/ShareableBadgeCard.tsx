@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 
 // AGENT NOTE: [2026-03-03] - mobile-coder
 // Shareable badge card for social sharing — 1:1 square format.
@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   brandName: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 16,
     letterSpacing: 1.2,
   },
   badgeHero: {
@@ -216,8 +216,8 @@ const styles = StyleSheet.create({
     borderColor: '#050510',
   },
   badgeName: {
-    fontSize: 22,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 24,
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 0.3,
@@ -243,8 +243,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   earnedText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   gymRow: {
     flexDirection: 'row',
@@ -253,9 +253,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   gymText: {
+    ...fontStyles.bodyMedium,
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.3)',
-    fontWeight: '500',
   },
   footer: {
     position: 'absolute',
@@ -274,8 +274,8 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   username: {
+    ...fontStyles.bodySemiBold,
     fontSize: 13,
-    fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.4)',
   },
   footerBrand: {
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   footerApp: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...fontStyles.heading,
+    fontSize: 12,
     letterSpacing: 0.5,
   },
 });

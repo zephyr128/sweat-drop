@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -172,7 +172,9 @@ export default function ChallengeDetailScreen() {
     current = challengeProgress?.current_drops || progress?.current_drops || 0;
   }
 
-  const isCompleted = challengeProgress?.is_completed || progress?.is_completed || false;
+  // For milestone challenges, check completion against actual progress
+  const dbCompleted = challengeProgress?.is_completed || progress?.is_completed || false;
+  const isCompleted = dbCompleted || (target > 0 && current >= target);
   const progressRatio = target > 0 ? Math.min(current / target, 1) : 0;
   const rewardDrops = challenge?.reward_drops || 0;
   const unit = challenge.challenge_type === 'streak' ? t('unit_days') : t('unit_drops');
@@ -337,7 +339,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -396,13 +398,13 @@ const styles = StyleSheet.create({
   },
   typeText: {
     fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   challengeName: {
     fontSize: theme.typography.fontSize['3xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
     letterSpacing: 0.5,
@@ -452,12 +454,12 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
   progressPercentage: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
   },
   progressBarTrack: {
     height: 10,
@@ -477,14 +479,14 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   progressCurrent: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
   },
   progressDivider: {
     fontSize: theme.typography.fontSize.xl,
     color: theme.colors.textSecondary,
   },
   progressTarget: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.textSecondary,
   },
   progressUnit: {
@@ -511,7 +513,7 @@ const styles = StyleSheet.create({
   },
   completedText: {
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.secondary,
     letterSpacing: 0.3,
   },
@@ -534,7 +536,7 @@ const styles = StyleSheet.create({
   },
   howToTitle: {
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     marginBottom: theme.spacing.lg,
     letterSpacing: 0.3,
@@ -557,7 +559,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stepNumberText: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
   },
   stepText: {
     flex: 1,

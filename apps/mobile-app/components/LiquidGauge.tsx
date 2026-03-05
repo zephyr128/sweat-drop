@@ -12,7 +12,7 @@ import {
   Blur,
 } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, useDerivedValue, useAnimatedReaction, useFrameCallback, cancelAnimation, Easing, withSpring, SharedValue } from 'react-native-reanimated';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 
 interface LiquidGaugeProps {
   progress: number | SharedValue<number>; // 0 to 1 (can be number or SharedValue)
@@ -436,8 +436,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   valueText: {
+    ...fontStyles.number,
     color: theme.colors.text,
-    fontWeight: 'bold',
     textAlign: 'center',
     // Premium shadow and blur for readability
     textShadowColor: 'rgba(0, 0, 0, 0.9)',
@@ -450,8 +450,8 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
   },
   messageText: {
+    ...fontStyles.heading,
     color: theme.colors.secondary,
-    fontWeight: 'bold',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.9)',
     textShadowOffset: { width: 0, height: 3 },

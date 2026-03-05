@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/contexts/ThemeContext';
-import { theme as baseTheme } from '@/lib/theme';
+import { theme as baseTheme, fontStyles } from '@/lib/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface LockedOverlayProps {
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   lockedTitle: {
     fontSize: baseTheme.typography.fontSize.xl,
-    fontWeight: baseTheme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: baseTheme.colors.text,
     letterSpacing: 0.5,
     textAlign: 'center',
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   setHomeButtonText: {
     fontSize: baseTheme.typography.fontSize.sm,
-    fontWeight: baseTheme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: baseTheme.colors.background,
     letterSpacing: 0.5,
   },

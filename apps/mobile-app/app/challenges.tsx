@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -105,8 +105,35 @@ export default function ChallengesScreen() {
       console.error('Error loading challenge progress:', progressError);
     }
 
+    // For milestone challenges, fetch actual local_drops_balance
+    const hasMilestone = challengesData.some((c) => c.challenge_type === 'milestone');
+    let localDropsBalance = 0;
+    if (hasMilestone) {
+      const { data: membershipData } = await supabase
+        .from('gym_memberships')
+        .select('local_drops_balance')
+        .eq('user_id', session.user.id)
+        .eq('gym_id', gymId)
+        .single();
+      localDropsBalance = membershipData?.local_drops_balance || 0;
+    }
+
     const mergedChallenges = challengesData.map((challenge) => {
       const prog = progressData?.find((p) => p.challenge_id === challenge.id);
+      
+      // For milestone challenges, override progress with local_drops_balance
+      if (challenge.challenge_type === 'milestone' && prog) {
+        return {
+          ...challenge,
+          progress: {
+            ...prog,
+            current_drops: localDropsBalance,
+            // If actual balance >= milestone threshold, mark as completed on client
+            is_completed: prog.is_completed || localDropsBalance >= (challenge.milestone_threshold || challenge.target_drops || 0),
+          },
+        };
+      }
+      
       return { ...challenge, progress: prog };
     });
 
@@ -343,12 +370,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    ...fontStyles.heading,
     flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    fontSize: 26,
     color: theme.colors.text,
     textAlign: 'center',
-    letterSpacing: 0.5,
   },
   headerSpacer: {
     width: 40,
@@ -371,12 +397,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 22,
     color: theme.colors.text,
-    letterSpacing: 0.3,
   },
   emptySubtext: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     textAlign: 'center',
@@ -414,15 +440,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   challengeType: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.semibold,
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 14,
     marginBottom: 2,
-    letterSpacing: 0.5,
   },
   challengeName: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
@@ -436,11 +460,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   timeRemaining: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },
   challengeDescription: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
@@ -491,8 +517,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   rewardText: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.3,
   },
   /* Completed */
@@ -508,8 +534,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.secondary + '25',
   },
   completedText: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.secondary,
     letterSpacing: 0.3,
   },

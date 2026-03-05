@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -287,7 +287,7 @@ export default function LeaderboardScreen() {
                   <Text
                     style={[
                       styles.typeTabText,
-                      activeTab === tab.key && { color: branding.primary, fontWeight: theme.typography.fontWeight.bold },
+                      activeTab === tab.key && { color: branding.primary },
                     ]}
                   >
                     {tab.label}
@@ -314,7 +314,7 @@ export default function LeaderboardScreen() {
                   <Text
                     style={[
                       styles.periodButtonText,
-                      period === p && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
+                      period === p && { color: branding.onPrimary },
                     ]}
                   >
                     {p === 'all_time' ? t('allTime') : p === 'weekly' ? t('weekly') : t('monthly')}
@@ -456,24 +456,55 @@ export default function LeaderboardScreen() {
                       const entry = leaderboard[podiumIdx];
                       if (!entry) return null;
                       const isFirst = podiumIdx === 0;
+                      const isSecond = podiumIdx === 1;
                       const reward = getRewardForRank(entry.rank);
+                      const medalColors = {
+                        0: '#FFD700', // gold
+                        1: '#C0C0C0', // silver
+                        2: '#CD7F32', // bronze
+                      };
+                      const medalColor = medalColors[podiumIdx as keyof typeof medalColors];
+                      const avatarSize = isFirst ? 68 : 52;
+                      const platformHeight = isFirst ? 48 : isSecond ? 32 : 20;
                       return (
                         <View
                           key={entry.user_id}
                           style={[styles.podiumItem, isFirst && styles.podiumItemFirst]}
                         >
+                          {/* Medal indicator */}
+                          <Text style={styles.podiumMedal}>
+                            {isFirst ? '🥇' : isSecond ? '🥈' : '🥉'}
+                          </Text>
+
                           {/* Avatar */}
                           <View
                             style={[
                               styles.podiumAvatar,
-                              isFirst && { borderColor: branding.primary, borderWidth: 2 },
+                              {
+                                width: avatarSize,
+                                height: avatarSize,
+                                borderRadius: avatarSize / 2,
+                                borderColor: medalColor,
+                                borderWidth: isFirst ? 3 : 2,
+                              },
+                              isFirst && {
+                                shadowColor: medalColor,
+                                shadowOffset: { width: 0, height: 0 },
+                                shadowOpacity: 0.6,
+                                shadowRadius: 12,
+                                elevation: 8,
+                              },
                               isCurrentUser(entry.user_id) && {
                                 backgroundColor: hexToRgba(branding.primary, 0.15),
                               },
                             ]}
                           >
-                            {entry.avatar_url ? (
-                              <Image source={{ uri: entry.avatar_url }} style={styles.podiumAvatarImage} />
+                            {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
+                              <Image source={{ uri: entry.avatar_url }} style={[styles.podiumAvatarImage, { borderRadius: avatarSize / 2 }]} />
+                            ) : entry.avatar_url ? (
+                              <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
+                                {entry.avatar_url}
+                              </Text>
                             ) : (
                               <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
                                 {getRankDisplay(entry.rank).emoji}
@@ -502,6 +533,15 @@ export default function LeaderboardScreen() {
                               {reward.reward_name}
                             </Text>
                           )}
+                          {/* Podium platform */}
+                          <View style={[
+                            styles.podiumPlatform,
+                            {
+                              height: platformHeight,
+                              backgroundColor: hexToRgba(medalColor, 0.12),
+                              borderColor: hexToRgba(medalColor, 0.25),
+                            },
+                          ]} />
                         </View>
                       );
                     })}
@@ -540,8 +580,12 @@ export default function LeaderboardScreen() {
                           </View>
 
                           {/* Avatar */}
-                          {entry.avatar_url ? (
+                          {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
                             <Image source={{ uri: entry.avatar_url }} style={styles.listAvatar} />
+                          ) : entry.avatar_url ? (
+                            <View style={styles.listAvatarPlaceholder}>
+                              <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
+                            </View>
                           ) : (
                             <View style={styles.listAvatarPlaceholder}>
                               <Text style={styles.listAvatarInitial}>
@@ -552,19 +596,20 @@ export default function LeaderboardScreen() {
 
                           <View style={styles.userInfo}>
                             <View style={styles.userNameRow}>
-                              <Text style={[styles.username, isCurrent && { color: branding.primary }]}>
+                              <Text style={[styles.username, isCurrent && { color: branding.primary }]} numberOfLines={1}>
                                 {entry.username}
                                 {isCurrent && ` ${t('you')}`}
                               </Text>
                               {entry.streak_days > 0 && (
                                 <Text style={styles.streakSmall}>🔥{entry.streak_days}</Text>
                               )}
-                              {entry.is_newcomer && (
-                                <View style={[styles.newcomerBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                                  <Text style={[styles.newcomerBadgeText, { color: branding.primary }]}>{t('new')}</Text>
-                                </View>
-                              )}
                             </View>
+                            {entry.is_newcomer && (
+                              <View style={[styles.newcomerBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                                <Ionicons name="sparkles" size={10} color={branding.primary} />
+                                <Text style={[styles.newcomerBadgeText, { color: branding.primary }]}>{t('new')}</Text>
+                              </View>
+                            )}
                           </View>
 
                           <Text style={[
@@ -621,12 +666,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    ...fontStyles.heading,
     flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    fontSize: 26,
     color: theme.colors.text,
     textAlign: 'center',
-    letterSpacing: 0.5,
     pointerEvents: 'none',
   },
   headerSpacer: {
@@ -664,10 +708,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   typeTabText: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
   },
   /* Period Filter */
   periodFilter: {
@@ -685,10 +728,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   periodButtonText: {
+    ...fontStyles.heading,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
-    fontWeight: theme.typography.fontWeight.medium,
-    letterSpacing: 0.3,
   },
   /* Newcomer Toggle */
   newcomerToggle: {
@@ -704,9 +746,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   newcomerText: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
-    fontWeight: theme.typography.fontWeight.medium,
   },
   /* Prize Row */
   prizeRow: {
@@ -729,9 +771,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   prizeName: {
+    ...fontStyles.bodyMedium,
     fontSize: 11,
     color: theme.colors.textSecondary,
-    fontWeight: theme.typography.fontWeight.medium,
     flex: 1,
   },
   /* Loading / Empty */
@@ -745,12 +787,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 22,
     color: theme.colors.text,
-    letterSpacing: 0.3,
   },
   emptySubtext: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     textAlign: 'center',
@@ -761,63 +803,66 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'flex-end',
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.sm,
     marginBottom: theme.spacing.xl,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   podiumItem: {
     flex: 1,
     alignItems: 'center',
     gap: 4,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
   },
   podiumItemFirst: {
     paddingTop: 0,
   },
+  podiumMedal: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
   podiumAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     overflow: 'hidden',
   },
   podiumAvatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 26,
   },
   podiumEmoji: {
     fontSize: 22,
   },
   podiumEmojiFirst: {
-    fontSize: 28,
+    fontSize: 30,
+  },
+  podiumPlatform: {
+    width: '80%',
+    borderRadius: 6,
+    borderWidth: 1,
+    marginTop: 8,
   },
   streakBadge: {
+    ...fontStyles.bodySemiBold,
     fontSize: 10,
     color: theme.colors.secondary,
-    fontWeight: '600',
   },
   podiumName: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
     textAlign: 'center',
     maxWidth: 80,
   },
   podiumScore: {
+    ...fontStyles.number,
     fontSize: 12,
-    fontWeight: theme.typography.fontWeight.bold,
-    fontFamily: theme.typography.fontFamily.monospace,
     letterSpacing: 0.3,
   },
   prizeLabel: {
+    ...fontStyles.bodySemiBold,
     fontSize: 9,
-    fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.3,
     textAlign: 'center',
     maxWidth: 80,
@@ -848,7 +893,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rankText: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.number,
     color: theme.colors.textSecondary,
   },
   rankTextTop: {
@@ -869,9 +914,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  listAvatarEmoji: {
+    fontSize: 18,
+  },
   listAvatarInitial: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 15,
     color: theme.colors.textSecondary,
   },
   userInfo: {
@@ -884,29 +932,34 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   username: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
+    flexShrink: 1,
   },
   streakSmall: {
     fontSize: 10,
     color: theme.colors.secondary,
   },
   newcomerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
+    marginTop: 2,
   },
   newcomerBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
+    ...fontStyles.heading,
+    fontSize: 10,
     letterSpacing: 0.5,
   },
   scoreLabel: {
+    ...fontStyles.number,
     fontSize: 13,
-    fontWeight: theme.typography.fontWeight.semibold,
-    fontFamily: theme.typography.fontFamily.monospace,
   },
   /* Sticky Footer */
   stickyFooter: {
@@ -924,20 +977,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
   },
   stickyFooterRank: {
+    ...fontStyles.number,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     width: 50,
-    fontFamily: theme.typography.fontFamily.monospace,
   },
   stickyFooterName: {
+    ...fontStyles.bodySemiBold,
     flex: 1,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
   resetNote: {
+    ...fontStyles.body,
     textAlign: 'center',
     fontSize: 11,
     color: theme.colors.textTertiary,
@@ -979,14 +1032,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   arenaName: {
+    ...fontStyles.bodySemiBold,
     fontSize: 15,
-    fontWeight: '700',
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
   sponsorLabel: {
+    ...fontStyles.bodySemiBold,
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.3,
     marginTop: 2,
   },
@@ -1022,8 +1075,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   arenaRankText: {
+    ...fontStyles.number,
     fontSize: 14,
-    fontWeight: '800',
-    fontFamily: theme.typography.fontFamily.monospace,
   },
 });

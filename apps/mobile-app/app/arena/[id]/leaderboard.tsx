@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -180,8 +180,12 @@ export default function ArenaLeaderboardScreen() {
                             isCurrentUser(entry.user_id) && { backgroundColor: hexToRgba(branding.primary, 0.15) },
                           ]}
                         >
-                          {entry.avatar_url ? (
+                          {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
                             <Image source={{ uri: entry.avatar_url }} style={styles.podiumAvatarImg} />
+                          ) : entry.avatar_url ? (
+                            <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
+                              {entry.avatar_url}
+                            </Text>
                           ) : (
                             <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
                               {getRankDisplay(entry.rank).emoji}
@@ -235,8 +239,12 @@ export default function ArenaLeaderboardScreen() {
                           </Text>
                         </View>
 
-                        {entry.avatar_url ? (
+                        {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
                           <Image source={{ uri: entry.avatar_url }} style={styles.listAvatar} />
+                        ) : entry.avatar_url ? (
+                          <View style={styles.listAvatarPlaceholder}>
+                            <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
+                          </View>
                         ) : (
                           <View style={styles.listAvatarPlaceholder}>
                             <Text style={styles.listAvatarInitial}>
@@ -298,7 +306,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.3,
@@ -317,8 +325,8 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   sponsorText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
   finalizedBadge: {
@@ -328,8 +336,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   finalizedText: {
-    fontSize: 10,
-    fontWeight: '800',
+    ...fontStyles.heading,
+    fontSize: 12,
     letterSpacing: 0.5,
   },
   scrollView: { flex: 1 },
@@ -347,8 +355,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 22,
     color: theme.colors.text,
   },
 
@@ -387,8 +395,8 @@ const styles = StyleSheet.create({
   podiumEmoji: { fontSize: 20 },
   podiumEmojiFirst: { fontSize: 26 },
   podiumName: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '700',
     color: theme.colors.text,
     textAlign: 'center',
     maxWidth: 80,
@@ -400,13 +408,12 @@ const styles = StyleSheet.create({
     maxWidth: 80,
   },
   podiumScore: {
+    ...fontStyles.number,
     fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Courier',
   },
   podiumPrize: {
+    ...fontStyles.bodySemiBold,
     fontSize: 9,
-    fontWeight: '600',
     textAlign: 'center',
     maxWidth: 80,
     marginTop: 1,
@@ -437,7 +444,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rankText: {
-    fontWeight: '700',
+    ...fontStyles.number,
     color: theme.colors.textSecondary,
   },
   rankTextTop: { fontSize: 18 },
@@ -456,9 +463,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  listAvatarEmoji: {
+    fontSize: 16,
+  },
   listAvatarInitial: {
-    fontSize: 12,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textSecondary,
   },
   userInfo: {
@@ -466,8 +476,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   listUsername: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: theme.colors.text,
     letterSpacing: 0.2,
   },
@@ -477,9 +487,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   scoreLabel: {
+    ...fontStyles.number,
     fontSize: 13,
-    fontWeight: '600',
-    fontFamily: 'Courier',
   },
 
   /* Sticky Footer */
@@ -498,15 +507,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   stickyRank: {
+    ...fontStyles.number,
     fontSize: 16,
-    fontWeight: '800',
-    fontFamily: 'Courier',
     width: 50,
   },
   stickyName: {
+    ...fontStyles.bodySemiBold,
     flex: 1,
     fontSize: 15,
-    fontWeight: '600',
     color: theme.colors.text,
   },
 });

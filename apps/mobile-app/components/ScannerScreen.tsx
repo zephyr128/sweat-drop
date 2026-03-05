@@ -28,7 +28,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymData } from '@/hooks/useGymData';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -958,11 +958,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   instructionsText: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.text,
     fontSize: 16,
     textAlign: 'center',
     letterSpacing: 0.5,
-    fontWeight: '500',
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
@@ -971,11 +971,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   processingText: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.text,
     fontSize: 14,
     marginTop: 10,
     letterSpacing: 0.5,
-    fontWeight: '500',
   },
   closeButton: {
     position: 'absolute',
@@ -1027,8 +1027,8 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   permissionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 26,
     color: theme.colors.text,
     marginTop: 20,
     marginBottom: 10,
@@ -1049,9 +1049,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   permissionButtonText: {
+    ...fontStyles.heading,
     color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
   },
   settingsButton: {
     backgroundColor: 'transparent',
@@ -1062,9 +1062,9 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   settingsButtonText: {
+    ...fontStyles.heading,
     color: theme.colors.primary,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
   },
   loadingContainer: {
     flex: 1,

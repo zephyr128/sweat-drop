@@ -46,10 +46,11 @@ export const theme = {
   typography: {
     // Font Families
     fontFamily: {
-      regular: 'System', // Will use Inter or Roboto if available
-      medium: 'System',
-      bold: 'System',
-      monospace: 'Courier', // Monospace for numbers
+      regular: 'Inter_400Regular',
+      medium: 'Inter_500Medium',
+      semibold: 'Inter_600SemiBold',
+      bold: 'BebasNeue_400Regular',
+      monospace: 'SpaceMono_400Regular',
     },
     
     // Font Sizes
@@ -161,14 +162,45 @@ export const theme = {
   },
 } as const;
 
-// Helper function to get number style (monospace, bold)
+// Font style presets — use these instead of fontWeight + fontFamily separately
+export const fontStyles = {
+  // Bebas Neue — headlines, titles, section labels, buttons
+  heading: {
+    fontFamily: 'BebasNeue_400Regular',
+    letterSpacing: 1.5,
+  } as const,
+
+  // Inter Regular — body text, descriptions, captions
+  body: {
+    fontFamily: 'Inter_400Regular',
+  } as const,
+
+  // Inter Medium — secondary labels
+  bodyMedium: {
+    fontFamily: 'Inter_500Medium',
+  } as const,
+
+  // Inter SemiBold — list items, card subtitles, usernames
+  bodySemiBold: {
+    fontFamily: 'Inter_600SemiBold',
+  } as const,
+
+  // Inter Bold — emphasis within body text
+  bodyBold: {
+    fontFamily: 'Inter_700Bold',
+  } as const,
+
+  // Space Mono — numbers
+  number: {
+    fontFamily: 'SpaceMono_400Regular',
+  } as const,
+} as const;
+
+// Helper function to get number style (monospace)
 export const getNumberStyle = (fontSize: number) => ({
-  fontFamily: theme.typography.fontFamily.monospace,
+  fontFamily: 'SpaceMono_400Regular',
   fontSize,
-  fontWeight: theme.typography.fontWeight.bold,
   color: theme.colors.text,
-  // Note: fontVariant removed due to TypeScript type incompatibility with React Native
-  // The monospace font family already provides consistent number width
 });
 
 // Export individual color values for convenience

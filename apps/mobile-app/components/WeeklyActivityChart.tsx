@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { fontStyles } from '@/lib/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -20,6 +21,7 @@ interface WeeklyActivityChartProps {
   data: DayData[];
   activeDays: number;
   brandPrimary: string;
+  onPress?: () => void;
 }
 
 /* ── Helpers ──────────────────────────────────────── */
@@ -80,19 +82,19 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
   data,
   activeDays,
   brandPrimary,
+  onPress,
 }) => {
   const maxDrops = Math.max(...data.map((d) => d.drops), 1);
 
-  return (
-    <View style={styles.wrapper}>
-      <BlurView intensity={50} tint="dark" style={styles.blur}>
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>This Week</Text>
-          <Text style={[styles.activeDaysText, { color: brandPrimary }]}>
-            {activeDays}/7 days
-          </Text>
-        </View>
+  const content = (
+    <>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>This Week</Text>
+        <Text style={[styles.activeDaysText, { color: brandPrimary }]}>
+          {activeDays}/7 days
+        </Text>
+      </View>
 
         {/* Bars */}
         <View style={styles.chartRow}>
@@ -112,7 +114,7 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
                 <Text
                   style={[
                     styles.dayLabel,
-                    d.isToday && { color: brandPrimary, fontWeight: '700' },
+                    d.isToday && { color: brandPrimary, ...fontStyles.bodySemiBold },
                   ]}
                 >
                   {d.day}
@@ -121,6 +123,23 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
             );
           })}
         </View>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.wrapper} onPress={onPress} activeOpacity={0.8}>
+        <BlurView intensity={50} tint="dark" style={styles.blur}>
+          {content}
+        </BlurView>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={styles.wrapper}>
+      <BlurView intensity={50} tint="dark" style={styles.blur}>
+        {content}
       </BlurView>
     </View>
   );
@@ -146,14 +165,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 16,
     color: '#FFFFFF',
-    letterSpacing: 0.3,
   },
   activeDaysText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.2,
   },
   chartRow: {
@@ -179,8 +197,8 @@ const styles = StyleSheet.create({
     minHeight: 4,
   },
   dayLabel: {
+    ...fontStyles.bodyMedium,
     fontSize: 9,
-    fontWeight: '500',
     color: '#808080',
     letterSpacing: 0.3,
     textTransform: 'uppercase',

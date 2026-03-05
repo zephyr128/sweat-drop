@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import Constants from 'expo-constants';
 
@@ -467,16 +467,16 @@ const styles = StyleSheet.create({
     ...theme.shadows.glow,
   },
   title: {
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 26,
     color: theme.colors.text,
-    letterSpacing: 1,
     marginBottom: theme.spacing.sm,
   },
   subtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textAlign: 'center',
   },
 
@@ -497,9 +497,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   googleButtonText: {
+    ...fontStyles.bodySemiBold,
     color: '#1A1A1A',
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.3,
   },
   // Apple — pure black, white text, subtle border
@@ -516,9 +516,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.18)',
   },
   appleButtonText: {
+    ...fontStyles.bodySemiBold,
     color: '#FFFFFF',
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.3,
   },
 
@@ -535,9 +535,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.glass.border,
   },
   dividerText: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.textTertiary,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.medium,
     letterSpacing: 0.5,
   },
 
@@ -559,6 +559,7 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.sm,
   },
   input: {
+    ...fontStyles.body,
     flex: 1,
     paddingVertical: theme.spacing.md,
     fontSize: theme.typography.fontSize.base,
@@ -568,6 +569,7 @@ const styles = StyleSheet.create({
 
   // ── Auth note (replaces toggle link) ──
   authNote: {
+    ...fontStyles.body,
     fontSize: 12,
     color: theme.colors.textTertiary,
     textAlign: 'center',
@@ -596,14 +598,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   primaryButtonText: {
+    ...fontStyles.heading,
     color: '#000000',
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1.5,
+    fontSize: 18,
   },
 
   // ── Footer ──
   footer: {
+    ...fontStyles.body,
     color: theme.colors.textTertiary,
     fontSize: theme.typography.fontSize.xs,
     textAlign: 'center',

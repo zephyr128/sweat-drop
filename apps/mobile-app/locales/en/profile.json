@@ -1,5 +1,10 @@
 {
   "title": "Profile",
+  "sections": {
+    "activity": "ACTIVITY",
+    "rewards": "REWARDS",
+    "settings": "SETTINGS"
+  },
   "totalDrops": "Total drops",
   "dayStreak": "Day streak",
   "totalWorkouts": "Workouts",
@@ -37,5 +42,6 @@
   "thisMonth": "This month",
   "allTime": "All time",
   "noGymTitle": "No gym connected",
-  "noGymSub": "Scan QR code on a machine to unlock all features"
+  "noGymSub": "Scan QR code on a machine to unlock all features",
+  "gyms": "Gyms"
 }

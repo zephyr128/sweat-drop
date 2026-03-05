@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 
 interface StatPeriod {
@@ -285,8 +285,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   title: {
-    fontSize: theme.typography.fontSize['3xl'],
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 32,
     color: theme.colors.text,
   },
   subtitle: {
@@ -308,8 +308,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   periodButtonText: {
+    ...fontStyles.heading,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: '600',
     color: theme.colors.textSecondary,
   },
   statsGrid: {
@@ -327,13 +327,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   statValue: {
+    ...fontStyles.number,
     fontSize: theme.typography.fontSize['3xl'],
-    fontWeight: '700',
     color: theme.colors.text,
   },
   statLabel: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
-    fontWeight: '500',
   },
 });

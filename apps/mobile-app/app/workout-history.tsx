@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -326,7 +326,7 @@ export default function WorkoutHistoryScreen() {
                       ]}>
                         <Text style={[
                           styles.dateText,
-                          cell.isToday && { color: branding.primary, fontWeight: '700' },
+                          cell.isToday && { color: branding.primary, ...fontStyles.bodySemiBold },
                           cell.hasWorkout && { color: '#fff' },
                         ]}>
                           {cell.date}
@@ -479,9 +479,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    ...fontStyles.heading,
     flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    fontSize: 26,
     color: theme.colors.text,
     textAlign: 'center',
   },
@@ -516,8 +516,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xs,
   },
   monthLabel: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 20,
   },
   dayHeaders: {
     flexDirection: 'row',
@@ -529,9 +529,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayHeaderText: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textTertiary,
-    fontWeight: theme.typography.fontWeight.medium,
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -553,6 +553,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dateText: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
   },
@@ -584,9 +585,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   statPillValue: {
-    fontWeight: '700',
+    ...fontStyles.number,
   },
   statPillLabel: {
+    ...fontStyles.body,
     fontSize: 11,
     color: theme.colors.textTertiary,
   },
@@ -599,12 +601,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyTitle: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.heading,
+    fontSize: 20,
     color: theme.colors.textSecondary,
     marginTop: 8,
   },
   emptySubtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textTertiary,
   },
@@ -618,8 +621,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   daySectionLabel: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     textTransform: 'capitalize',
     letterSpacing: 0.3,
   },
@@ -659,11 +662,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sessionMachine: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
   },
   sessionDate: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textTertiary,
   },
@@ -677,9 +681,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sessionDrops: {
-    fontWeight: '700',
+    ...fontStyles.number,
   },
   sessionDuration: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textTertiary,
   },
@@ -701,7 +706,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   detailChipText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 11,
-    fontWeight: '600',
   },
 });

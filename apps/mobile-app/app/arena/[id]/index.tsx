@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -417,13 +417,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 22,
     color: theme.colors.text,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 20,
     color: theme.colors.text,
     letterSpacing: 0.3,
     marginBottom: 12,
@@ -463,14 +463,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heroSponsor: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...fontStyles.heading,
+    fontSize: 14,
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
   heroName: {
-    fontSize: 22,
-    fontWeight: '800',
+    ...fontStyles.heading,
+    fontSize: 24,
     color: theme.colors.text,
     letterSpacing: 0.3,
     marginTop: 2,
@@ -495,9 +494,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   scoringText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
     color: theme.colors.text,
-    fontWeight: '600',
     letterSpacing: 0.2,
     flex: 1,
   },
@@ -512,9 +511,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: {
+    ...fontStyles.number,
     fontSize: 22,
-    fontWeight: '800',
-    fontFamily: 'Courier',
   },
   statLabel: {
     fontSize: 11,
@@ -557,8 +555,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   prizeText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 15,
-    fontWeight: '600',
     color: theme.colors.text,
     letterSpacing: 0.2,
   },
@@ -583,8 +581,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   joinButtonText: {
-    fontSize: 18,
-    fontWeight: '800',
+    ...fontStyles.heading,
+    fontSize: 20,
     letterSpacing: 0.5,
   },
 
@@ -597,8 +595,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   viewAllLink: {
+    ...fontStyles.bodySemiBold,
     fontSize: 13,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
   lbContainer: {
@@ -629,9 +627,9 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },
   lbRank: {
+    ...fontStyles.number,
     width: 36,
     fontSize: 14,
-    fontWeight: '700',
     color: theme.colors.textSecondary,
     textAlign: 'center',
   },
@@ -640,8 +638,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   lbUsername: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: theme.colors.text,
     letterSpacing: 0.2,
   },
@@ -651,8 +649,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   lbScore: {
+    ...fontStyles.number,
     fontSize: 13,
-    fontWeight: '600',
-    fontFamily: 'Courier',
   },
 });

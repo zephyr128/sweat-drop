@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { getNumberStyle } from '@/lib/theme';
+import { getNumberStyle, fontStyles } from '@/lib/theme';
 
 /* ── Types ────────────────────────────────────────── */
 interface ClosestRewardBannerProps {
@@ -73,8 +73,8 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
         <View style={styles.textCol}>
           {canAfford ? (
             <Text style={styles.bannerText}>
-              <Text style={{ color: '#4CAF50', fontWeight: '700' }}>Redeem </Text>
-              <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{reward.name}</Text>
+              <Text style={[fontStyles.bodySemiBold, { color: '#4CAF50' }]}>Redeem </Text>
+              <Text style={[fontStyles.bodySemiBold, { color: '#FFFFFF' }]}>{reward.name}</Text>
             </Text>
           ) : (
             <Text style={styles.bannerText}>
@@ -82,7 +82,7 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
                 {reward.dropsAway}
               </Text>
               <Text style={{ color: '#B0B0B0' }}> drops to </Text>
-              <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{reward.name}</Text>
+              <Text style={[fontStyles.bodySemiBold, { color: '#FFFFFF' }]}>{reward.name}</Text>
             </Text>
           )}
         </View>
@@ -125,6 +125,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   bannerText: {
+    ...fontStyles.body,
     fontSize: 13,
     color: '#B0B0B0',
     letterSpacing: 0.2,

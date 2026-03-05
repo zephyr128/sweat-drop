@@ -18,8 +18,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useBranding } from '@/lib/hooks/useBranding';
-import { theme } from '@/lib/theme';
-import { getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -345,10 +344,9 @@ const styles = StyleSheet.create({
     includeFontPadding: false, // Android: tighter bounding box
   },
   localDropsLabel: {
-    fontSize: 9,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 11,
     letterSpacing: 2,
-    textTransform: 'uppercase',
     marginTop: 2,
   },
   divider: {
@@ -362,8 +360,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalLabel: {
+    ...fontStyles.bodyMedium,
     fontSize: 11,
-    fontWeight: '500',
     letterSpacing: 0.3,
   },
 });

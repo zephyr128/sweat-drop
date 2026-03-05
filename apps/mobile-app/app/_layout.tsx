@@ -9,6 +9,19 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import BleManager from 'react-native-ble-manager';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter } from 'expo-router';
+import { useFonts } from 'expo-font';
+import {
+  BebasNeue_400Regular,
+} from '@expo-google-fonts/bebas-neue';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import {
+  SpaceMono_400Regular,
+} from '@expo-google-fonts/space-mono';
 import {
   PUSH_NOTIFICATIONS_ENABLED,
   configureNotificationHandler,
@@ -36,7 +49,7 @@ function StackNavigator() {
         },
         headerTintColor: branding.onPrimary,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontFamily: 'BebasNeue_400Regular',
         },
         contentStyle: {
           backgroundColor: '#000000',
@@ -93,7 +106,9 @@ function StackNavigator() {
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
       <Stack.Screen name="workout-history" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
+      <Stack.Screen name="arenas" options={{ headerShown: false }} />
       <Stack.Screen name="arena" options={{ headerShown: false }} />
+      <Stack.Screen name="gyms" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -106,6 +121,16 @@ export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   const session = useAuthStore((s) => s.session);
   const pushTokenRegistered = useRef(false);
+
+  // Load custom fonts
+  const [fontsLoaded, fontError] = useFonts({
+    BebasNeue_400Regular,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    SpaceMono_400Regular,
+  });
 
   // Push notification tap handler
   const handleNotificationTap = useCallback(
@@ -173,6 +198,11 @@ export default function RootLayout() {
     const cleanup = addNotificationListeners(handleNotificationTap);
     return cleanup;
   }, [handleNotificationTap]);
+
+  // Block render until custom fonts are loaded
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     <ThemeProvider>

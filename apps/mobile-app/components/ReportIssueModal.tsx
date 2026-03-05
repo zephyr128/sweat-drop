@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 
 interface ReportIssueModalProps {
   visible: boolean;
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.5,
   },
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.primary,
     marginBottom: theme.spacing.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
   },
   subtitle: {
     fontSize: theme.typography.fontSize.base,
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   },
   optionTextSelected: {
     color: theme.colors.text,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
   },
   actions: {
     flexDirection: 'row',
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: theme.colors.text,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     letterSpacing: 0.3,
   },
   submitButton: {
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#000000',
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     letterSpacing: 0.3,
   },
 });

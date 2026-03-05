@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { getNumberStyle } from '@/lib/theme';
+import { getNumberStyle, fontStyles } from '@/lib/theme';
 
 /* ── Types ────────────────────────────────────────── */
 interface QuickStatsRowProps {
@@ -149,9 +149,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   pillLabel: {
+    ...fontStyles.bodyMedium,
     fontSize: 10,
     color: '#808080',
-    fontWeight: '500',
     letterSpacing: 0.3,
     marginTop: 1,
   },

@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useTranslation } from 'react-i18next';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
 
 const AVATARS = [
@@ -276,16 +276,16 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xl,
   },
   title: {
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 26,
     color: theme.colors.text,
-    letterSpacing: 1,
     marginBottom: theme.spacing.sm,
   },
   subtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textAlign: 'center',
   },
 
@@ -340,10 +340,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   buttonText: {
+    ...fontStyles.heading,
     color: '#000000',
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1.5,
+    fontSize: 18,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -354,9 +353,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryButtonText: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.medium,
     letterSpacing: 0.5,
   },
 });

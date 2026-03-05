@@ -9,8 +9,8 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { theme, getNumberStyle } from '@/lib/theme';
-import { useBranding } from '@/lib/contexts/ThemeContext';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import Animated, {
   FadeInDown,
   useSharedValue,
@@ -35,6 +35,18 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(result[2], 16);
   const b = parseInt(result[3], 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function SectionLabel({ label }: { label: string }) {
+  return <Text style={styles.sectionLabel}>{label}</Text>;
+}
+
+function SectionDivider() {
+  return <View style={styles.sectionDivider} />;
+}
+
+function SectionDividerThick() {
+  return <View style={styles.sectionDividerThick} />;
 }
 
 interface ProfileData {
@@ -68,11 +80,11 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
+  const { activeGym } = useTheme();
   const { badges } = useUserBadges();
   const { homeGymId } = useGymStore();
   const hasGym = !!homeGymId;
   const { t, i18n } = useTranslation('profile');
-
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
   const [loading, setLoading] = useState(true);
@@ -274,11 +286,15 @@ export default function ProfileScreen() {
     );
   };
 
-  // Quick links
-  const quickLinks = [
+  // Section 1 — Activity links
+  const activityLinks = [
     { icon: 'time-outline' as const, label: t('workoutHistory'), route: '/workout-history', key: 'workoutHistory' },
     { icon: 'trophy-outline' as const, label: t('trophyRoom'), route: '/trophy-room', key: 'trophyRoom' },
     { icon: 'podium-outline' as const, label: t('leaderboard'), route: '/leaderboard', key: 'leaderboard' },
+  ];
+
+  // Section 2 — Rewards links
+  const rewardsLinks = [
     { icon: 'wallet-outline' as const, label: t('wallet'), route: '/wallet', key: 'wallet' },
     { icon: 'storefront-outline' as const, label: t('rewardsStore'), route: '/store', key: 'rewardsStore' },
     { icon: 'flame-outline' as const, label: t('challenges'), route: '/challenges', key: 'challenges' },
@@ -515,38 +531,42 @@ export default function ProfileScreen() {
         )}
 
         {/* ═══════════════════════════════════════════ */}
-        {/* QUICK LINKS                                 */}
+        {/* SEKCIJA 1 — AKTIVNOST                       */}
         {/* ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(400).duration(400)}>
-          <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-            <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-              {quickLinks.map((link, i) => {
-                const gymRequiredKeys = ['leaderboard', 'wallet', 'rewardsStore', 'challenges', 'trophyRoom'];
+        <Animated.View entering={FadeInDown.delay(400).duration(300)}>
+          <SectionLabel label={t('sections.activity')} />
+          <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+              {activityLinks.map((link, i) => {
+                const gymRequiredKeys = ['leaderboard', 'trophyRoom'];
                 const isGymRequired = gymRequiredKeys.includes(link.key);
                 const isWorkoutHistoryEmpty = link.key === 'workoutHistory' && stats.totalWorkouts === 0 && !hasGym;
                 const isDisabled = (isGymRequired && !hasGym) || isWorkoutHistoryEmpty;
 
                 return (
-                  <TouchableOpacity
-                    key={link.route}
-                    style={[
-                      styles.linkRow,
-                      i < quickLinks.length - 1 && { borderBottomColor: hexToRgba(branding.primary, 0.06), borderBottomWidth: 1 },
-                      isDisabled && { opacity: 0.35 },
-                    ]}
-                    onPress={() => router.push(link.route as any)}
-                    activeOpacity={0.7}
-                    disabled={isDisabled}
-                  >
-                    <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                      <Ionicons name={link.icon} size={20} color={branding.primary} />
-                    </View>
-                    {isDisabled && (
-                      <Ionicons name="lock-closed-outline" size={14} color={theme.colors.textTertiary} style={{ marginRight: 4 }} />
-                    )}
-                    <Text style={styles.linkLabel}>{link.label}</Text>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
-                  </TouchableOpacity>
+                  <View key={link.route}>
+                    <TouchableOpacity
+                      style={[
+                        styles.linkRow,
+                        isDisabled && { opacity: 0.35 },
+                      ]}
+                      onPress={() => router.push(link.route as any)}
+                      activeOpacity={0.7}
+                      disabled={isDisabled}
+                    >
+                      <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
+                        <Ionicons name={link.icon} size={20} color={branding.primary} />
+                      </View>
+                      <Text style={[styles.linkLabel, isDisabled && { opacity: 0.35 }]}>
+                        {link.label}
+                      </Text>
+                      {isDisabled
+                        ? <Ionicons name="lock-closed-outline" size={14} color={theme.colors.textTertiary} />
+                        : <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+                      }
+                    </TouchableOpacity>
+                    {i < activityLinks.length - 1 && <SectionDivider />}
+                  </View>
                 );
               })}
             </BlurView>
@@ -554,13 +574,75 @@ export default function ProfileScreen() {
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
-        {/* SETTINGS (LANGUAGE)                         */}
+        {/* SEKCIJA 2 — NAGRADE                         */}
         {/* ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(480).duration(400)}>
-          <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
-            <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+        <Animated.View entering={FadeInDown.delay(460).duration(300)}>
+          <SectionLabel label={t('sections.rewards')} />
+          <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+              {rewardsLinks.map((link, i) => {
+                const isDisabled = !hasGym;
+
+                return (
+                  <View key={link.route}>
+                    <TouchableOpacity
+                      style={[
+                        styles.linkRow,
+                        isDisabled && { opacity: 0.35 },
+                      ]}
+                      onPress={() => router.push(link.route as any)}
+                      activeOpacity={0.7}
+                      disabled={isDisabled}
+                    >
+                      <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
+                        <Ionicons name={link.icon} size={20} color={branding.primary} />
+                      </View>
+                      <Text style={[styles.linkLabel, isDisabled && { opacity: 0.35 }]}>
+                        {link.label}
+                      </Text>
+                      {isDisabled
+                        ? <Ionicons name="lock-closed-outline" size={14} color={theme.colors.textTertiary} />
+                        : <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+                      }
+                    </TouchableOpacity>
+                    {i < rewardsLinks.length - 1 && <SectionDivider />}
+                  </View>
+                );
+              })}
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* SEKCIJA 3 — PODEŠAVANJA                     */}
+        {/* ═══════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(520).duration(300)}>
+          <SectionLabel label={t('sections.settings')} />
+          <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+              {/* Gym selector */}
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => router.push('/gyms')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
+                  <Ionicons name="fitness-outline" size={20} color={branding.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkLabel}>{t('gyms')}</Text>
+                  {activeGym && (
+                    <Text style={styles.linkSubLabel}>{activeGym.name}</Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+              </TouchableOpacity>
+
+              <SectionDivider />
+
+              {/* Language selector */}
               <View style={styles.linkRow}>
-                <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
                   <Ionicons name="language-outline" size={20} color={branding.primary} />
                 </View>
                 <Text style={styles.linkLabel}>{t('language')}</Text>
@@ -573,7 +655,7 @@ export default function ProfileScreen() {
                     onPress={() => i18n.changeLanguage('sr')}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.langButtonText, i18n.language === 'sr' && { color: branding.primary, fontWeight: '700' as const }]}>SR</Text>
+                    <Text style={[styles.langButtonText, i18n.language === 'sr' && { color: branding.primary }]}>SR</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
@@ -583,23 +665,16 @@ export default function ProfileScreen() {
                     onPress={() => i18n.changeLanguage('en')}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.langButtonText, i18n.language === 'en' && { color: branding.primary, fontWeight: '700' as const }]}>EN</Text>
+                    <Text style={[styles.langButtonText, i18n.language === 'en' && { color: branding.primary }]}>EN</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-            </BlurView>
-          </View>
-        </Animated.View>
 
-        {/* ═══════════════════════════════════════════ */}
-        {/* ACCOUNT ACTIONS                             */}
-        {/* ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(520).duration(400)}>
-          <View style={[styles.accountActionsCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
-            <BlurView intensity={40} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+              <SectionDividerThick />
+
               {/* Log Out */}
               <TouchableOpacity
-                style={[styles.linkRow, { borderBottomColor: hexToRgba(branding.primary, 0.06), borderBottomWidth: 1 }]}
+                style={styles.linkRow}
                 onPress={handleLogout}
                 activeOpacity={0.7}
               >
@@ -609,6 +684,8 @@ export default function ProfileScreen() {
                 <Text style={[styles.linkLabel, { color: theme.colors.secondary }]}>{t('logout')}</Text>
                 <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
               </TouchableOpacity>
+
+              <SectionDivider />
 
               {/* Delete Account */}
               <TouchableOpacity
@@ -636,6 +713,7 @@ export default function ProfileScreen() {
         {/* Bottom spacer */}
         <View style={{ height: 40 }} />
       </ScrollView>
+
     </SafeAreaView>
   );
 }
@@ -667,9 +745,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerTitle: {
+    ...fontStyles.heading,
     flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    fontSize: 26,
     color: theme.colors.text,
     textAlign: 'center',
   },
@@ -741,8 +819,8 @@ const styles = StyleSheet.create({
     maxWidth: 88,
   },
   badgeNameChipText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 9,
-    fontWeight: '700',
     color: '#FFD700',
     textAlign: 'center',
   },
@@ -767,16 +845,17 @@ const styles = StyleSheet.create({
     fontSize: 42,
   },
   avatarInitial: {
-    fontSize: 32,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 34,
   },
   username: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     marginBottom: 2,
   },
   fullName: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     marginBottom: 12,
@@ -796,8 +875,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   heroPillText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
 
   // ── Stats Grid ──
@@ -832,7 +911,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statLabel: {
-    fontSize: theme.typography.fontSize.xs,
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textTertiary,
   },
 
@@ -849,8 +929,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sectionTitle: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 20,
     color: theme.colors.text,
     marginBottom: 12,
   },
@@ -866,7 +946,8 @@ const styles = StyleSheet.create({
   },
   breakdownValue: {},
   breakdownLabel: {
-    fontSize: 11,
+    ...fontStyles.heading,
+    fontSize: 13,
     color: theme.colors.textTertiary,
   },
   breakdownDivider: {
@@ -899,22 +980,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkLabel: {
+    ...fontStyles.bodySemiBold,
     flex: 1,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.medium,
     color: theme.colors.text,
   },
+  linkSubLabel: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
 
-  // ── Account Actions ──
-  accountActionsCard: {
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginTop: theme.spacing.md,
+  // ── Section Labels ──
+  sectionLabel: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    color: theme.colors.textTertiary,
+    marginBottom: 8,
+    marginLeft: 4,
+    marginTop: theme.spacing.lg,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginHorizontal: 0,
+  },
+  sectionDividerThick: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: 16,
+    marginVertical: 4,
   },
 
   // ── Version ──
   versionText: {
+    ...fontStyles.body,
     fontSize: 12,
     color: theme.colors.textTertiary,
     textAlign: 'center',
@@ -942,12 +1043,13 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
   },
   noGymBannerTitle: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     marginBottom: 2,
   },
   noGymBannerSub: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
     lineHeight: 16,
@@ -971,9 +1073,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   langButtonText: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.medium,
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.5,
   },
 });

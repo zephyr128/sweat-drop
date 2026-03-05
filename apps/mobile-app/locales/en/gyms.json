@@ -1,0 +1,8 @@
+{
+  "title": "Gyms",
+  "subtitle": "Select a gym",
+  "currently_active": "Currently active:",
+  "set_home_prompt": "Set this gym as your home gym?",
+  "set_home_confirm": "Set as Home",
+  "no_gyms": "No gyms available."
+}

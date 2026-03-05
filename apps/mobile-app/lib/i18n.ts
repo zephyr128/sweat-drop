@@ -20,6 +20,7 @@ import srTrophyRoom from '@/locales/sr/trophyRoom.json';
 import srRedemptions from '@/locales/sr/redemptions.json';
 import srSmartcoach from '@/locales/sr/smartcoach.json';
 import srPlans from '@/locales/sr/plans.json';
+import srGyms from '@/locales/sr/gyms.json';
 
 // ── English translations ──
 import enCommon from '@/locales/en/common.json';
@@ -39,6 +40,7 @@ import enTrophyRoom from '@/locales/en/trophyRoom.json';
 import enRedemptions from '@/locales/en/redemptions.json';
 import enSmartcoach from '@/locales/en/smartcoach.json';
 import enPlans from '@/locales/en/plans.json';
+import enGyms from '@/locales/en/gyms.json';
 
 const resources = {
   sr: {
@@ -59,6 +61,7 @@ const resources = {
     redemptions: srRedemptions,
     smartcoach: srSmartcoach,
     plans: srPlans,
+    gyms: srGyms,
   },
   en: {
     common: enCommon,
@@ -78,6 +81,7 @@ const resources = {
     redemptions: enRedemptions,
     smartcoach: enSmartcoach,
     plans: enPlans,
+    gyms: enGyms,
   },
 };
 
@@ -108,6 +112,7 @@ i18n.use(initReactI18next).init({
     'redemptions',
     'smartcoach',
     'plans',
+    'gyms',
   ],
   interpolation: {
     escapeValue: false, // React already escapes

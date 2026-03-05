@@ -11,6 +11,7 @@ import {
   Switch,
   Keyboard,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
@@ -20,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useRouter } from 'expo-router';
-import { theme as baseTheme, getNumberStyle } from '@/lib/theme';
+import { theme as baseTheme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -405,9 +406,15 @@ export function UserSettingsSheet({ visible, onClose, profile }: UserSettingsShe
               },
             ]}
           >
-            <Text style={[styles.avatarText, { color: branding.primary }]}>
-              {profile?.username?.charAt(0).toUpperCase() || 'U'}
-            </Text>
+            {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : profile?.avatar_url ? (
+              <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>
+            ) : (
+              <Text style={[styles.avatarText, { color: branding.primary }]}>
+                {profile?.username?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -737,8 +744,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 24,
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
@@ -788,14 +795,22 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
+  },
+  avatarEmoji: {
+    fontSize: 42,
   },
   avatarText: {
     fontSize: 38,
-    fontWeight: '700',
   },
   heroUsername: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 26,
     color: '#FFFFFF',
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -816,8 +831,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   memberBadgeText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
 
@@ -846,17 +861,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   statPillLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 11,
     letterSpacing: 0.8,
     marginTop: 2,
   },
 
   /* Section */
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 13,
     letterSpacing: 1.2,
     marginBottom: 10,
     marginLeft: 4,
@@ -892,8 +906,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingsRowLabel: {
+    ...fontStyles.bodySemiBold,
     fontSize: 15,
-    fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
@@ -933,8 +947,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   saveButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 14,
     letterSpacing: 0.3,
   },
   cancelButton: {

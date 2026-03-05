@@ -7,7 +7,7 @@ import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import Animated, {
@@ -664,12 +664,12 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   title: {
-    fontSize: theme.typography.fontSize['3xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 30,
     color: theme.colors.text,
-    letterSpacing: 0.5,
   },
   subtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
@@ -697,13 +697,13 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   dropsValue: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.number,
     marginBottom: theme.spacing.xs,
   },
   dropsLabel: {
-    fontSize: theme.typography.fontSize.base,
+    ...fontStyles.heading,
+    fontSize: 18,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
   },
   multiplierBadge: {
     flexDirection: 'row',
@@ -715,8 +715,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.full,
   },
   multiplierText: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     letterSpacing: 0.3,
   },
   /* Stats Row */
@@ -739,21 +739,21 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   statValue: {
+    ...fontStyles.number,
     fontSize: 22,
-    fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
   },
   statEquipment: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.3,
   },
   statLabel: {
-    fontSize: theme.typography.fontSize.xs,
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
   },
   /* Streak */
   streakCard: {
@@ -785,13 +785,13 @@ const styles = StyleSheet.create({
     fontSize: 32,
   },
   streakValue: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.number,
   },
   streakLabel: {
-    fontSize: theme.typography.fontSize.xs,
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textSecondary,
     marginTop: 2,
-    letterSpacing: 0.3,
   },
   multiplierPill: {
     alignItems: 'center',
@@ -800,12 +800,12 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
   },
   multiplierPillText: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.number,
   },
   multiplierPillLabel: {
-    fontSize: 10,
+    ...fontStyles.heading,
+    fontSize: 12,
     marginTop: 2,
-    letterSpacing: 0.3,
   },
   /* Rank */
   rankCard: {
@@ -835,12 +835,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rankTitle: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
   rankSubtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginTop: 2,
@@ -871,9 +872,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   percentileText: {
+    ...fontStyles.bodySemiBold,
     flex: 1,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
     lineHeight: 22,
@@ -901,10 +902,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   badgesSectionTitle: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 20,
     color: '#FFD700',
-    letterSpacing: 0.3,
   },
   badgesGrid: {
     flexDirection: 'row',
@@ -933,10 +933,10 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   badgeName: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.text,
     textAlign: 'center',
-    fontWeight: theme.typography.fontWeight.medium,
     letterSpacing: 0.3,
   },
   /* Challenge Progress */
@@ -958,10 +958,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   challengeSectionTitle: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 20,
     color: theme.colors.text,
-    letterSpacing: 0.3,
   },
   challengeItem: {
     paddingVertical: theme.spacing.md,
@@ -977,9 +976,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   challengeItemName: {
+    ...fontStyles.bodySemiBold,
     flex: 1,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
@@ -993,8 +992,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(76, 217, 100, 0.12)',
   },
   completedPillText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 11,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.secondary,
     letterSpacing: 0.3,
   },
@@ -1037,8 +1036,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.semibold,
-    letterSpacing: 0.5,
+    ...fontStyles.heading,
+    fontSize: 20,
   },
 });

@@ -17,7 +17,7 @@ import { BlurView } from 'expo-blur';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { UserBadge } from '@/hooks/useUserBadges';
 import { useSession } from '@/hooks/useSession';
 import { supabase } from '@/lib/supabase';
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   },
   badgeName: {
     fontSize: 22,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 6,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   badgeType: {
     fontSize: 13,
-    fontWeight: theme.typography.fontWeight.medium,
+    ...fontStyles.bodyMedium,
   },
   badgeDescription: {
     fontSize: 15,
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   earnedText: {
     fontSize: 13,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
   },
   /* Share button */
   shareButton: {
@@ -385,8 +385,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   shareButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 16,
     color: '#000',
     letterSpacing: 0.2,
   },

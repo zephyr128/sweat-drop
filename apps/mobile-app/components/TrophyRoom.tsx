@@ -10,7 +10,7 @@ import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
 import { useAllBadges, BadgeWithProgress } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import BackButton from './BackButton';
 import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
@@ -256,7 +256,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                 <Text
                   style={[
                     styles.filterTabText,
-                    isActive && { color: branding.onPrimary, fontWeight: theme.typography.fontWeight.semibold },
+                    isActive && { color: branding.onPrimary, ...fontStyles.bodySemiBold },
                   ]}
                 >
                   {labelMap[type]}
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     position: 'absolute',
     left: 0,
@@ -413,12 +413,12 @@ const styles = StyleSheet.create({
   },
   summaryText: {
     fontSize: 14,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
   },
   summaryLabel: {
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.45)',
-    fontWeight: theme.typography.fontWeight.medium,
+    ...fontStyles.bodyMedium,
   },
   /* Filter row */
   filterRow: {
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
   },
   filterTabText: {
     fontSize: 13,
-    fontWeight: theme.typography.fontWeight.medium,
+    ...fontStyles.bodyMedium,
     color: 'rgba(255, 255, 255, 0.5)',
     letterSpacing: 0.2,
   },
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     color: 'rgba(255, 255, 255, 0.7)',
     letterSpacing: 0.2,
   },
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   },
   sectionCountText: {
     fontSize: 12,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     color: 'rgba(255, 255, 255, 0.4)',
   },
   /* Badge grid — 3 columns */
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
   },
   emptyText: {

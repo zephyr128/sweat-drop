@@ -7,7 +7,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   },
   planName: {
     fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     textTransform: 'capitalize',
     letterSpacing: 0.3,
   },
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.3,

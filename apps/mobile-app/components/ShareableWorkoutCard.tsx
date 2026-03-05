@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.8)
 // Shareable workout card component — Instagram Stories format (9:16 ratio).
@@ -144,7 +144,7 @@ export function ShareableWorkoutCard({ data }: { data: ShareableWorkoutData }) {
           {/* Machine */}
           <View style={[styles.statCard, { borderColor: hexToRgba(brandColor, 0.12) }]}>
             <Ionicons name={machineIcon} size={20} color={brandColor} />
-            <Text style={[styles.statValue, { color: '#fff', fontSize: 16, fontWeight: '700' }]} numberOfLines={1}>
+            <Text style={[styles.statValue, { color: '#fff', fontSize: 16 }]} numberOfLines={1}>
               {data.machineName}
             </Text>
             <Text style={styles.statLabel}>Equipment</Text>
@@ -235,13 +235,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   brandName: {
+    ...fontStyles.heading,
     fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 1.5,
   },
   gymName: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...fontStyles.heading,
+    fontSize: 14,
     letterSpacing: 0.5,
   },
 
@@ -269,8 +268,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   dropsLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...fontStyles.heading,
+    fontSize: 14,
     marginTop: 2,
   },
   multiplierBadge: {
@@ -282,8 +281,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   multiplierText: {
+    ...fontStyles.number,
     fontSize: 13,
-    fontWeight: '700',
   },
 
   // ── Stats Grid ──
@@ -303,12 +302,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: {
-    fontWeight: '700',
+    ...fontStyles.number,
   },
   statLabel: {
-    fontSize: 11,
+    ...fontStyles.heading,
+    fontSize: 12,
     color: 'rgba(255, 255, 255, 0.4)',
-    fontWeight: '600',
   },
 
   // ── Rank Banner ──
@@ -323,8 +322,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
   },
   rankText: {
+    ...fontStyles.number,
     fontSize: 14,
-    fontWeight: '600',
   },
 
   // ── Footer ──
@@ -343,8 +342,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   footerUsername: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.5)',
   },
   footerBrand: {
@@ -353,8 +352,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   footerApp: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...fontStyles.heading,
+    fontSize: 13,
     letterSpacing: 0.5,
   },
 });

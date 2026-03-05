@@ -6,7 +6,8 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { useTranslation } from 'react-i18next';
 
 interface LeaderboardEntry {
   user_id: string;
@@ -36,6 +37,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
+  const { t } = useTranslation('home');
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
   const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
   const [currentUserEntry, setCurrentUserEntry] = useState<LeaderboardEntry | null>(null);
@@ -148,7 +150,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     return (
       <View style={styles.container}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Leaderboard</Text>
+          <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
         <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
@@ -165,7 +167,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     return (
       <View style={styles.container}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Leaderboard</Text>
+          <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
         <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
@@ -184,7 +186,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     <View style={styles.container}>
       {/* Section Header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Leaderboard</Text>
+        <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         <TouchableOpacity
           onPress={() => {
             if (!isUnlocked) return;
@@ -193,7 +195,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
           activeOpacity={0.7}
           disabled={!isUnlocked}
         >
-          <Text style={[styles.viewAllLink, { color: branding.primary }]}>View All</Text>
+          <Text style={[styles.viewAllLink, { color: branding.primary }]}>{t('viewAll')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -219,7 +221,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
                   <Text
                     style={[
                       styles.username,
-                      isMe && { color: branding.primary, fontWeight: '700' },
+                      isMe && { color: branding.primary },
                     ]}
                     numberOfLines={1}
                   >
@@ -255,7 +257,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
                   #{currentUserRank}
                 </Text>
                 <View style={styles.userInfo}>
-                  <Text style={[styles.username, { color: branding.primary, fontWeight: '700' }]} numberOfLines={1}>
+                  <Text style={[styles.username, { color: branding.primary }]} numberOfLines={1}>
                     {currentUserEntry.username} (You)
                   </Text>
                 </View>
@@ -285,14 +287,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 22,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
   },
   viewAllLink: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
     letterSpacing: 0.3,
   },
   card: {
@@ -323,8 +324,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   rankNumber: {
+    ...fontStyles.number,
     fontSize: 14,
-    fontWeight: '700',
     width: 32,
     textAlign: 'center',
   },
@@ -333,8 +334,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   username: {
+    ...fontStyles.bodySemiBold,
     fontSize: 15,
-    fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },

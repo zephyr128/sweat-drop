@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -195,12 +195,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    ...fontStyles.heading,
     flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    fontSize: 26,
     color: theme.colors.text,
     textAlign: 'center',
-    letterSpacing: 0.5,
   },
   headerSpacer: {
     width: 40,
@@ -226,12 +225,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalLabel: {
+    ...fontStyles.heading,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    fontWeight: theme.typography.fontWeight.semibold,
   },
   totalRow: {
     flexDirection: 'row',
@@ -239,14 +236,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   totalValue: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.number,
   },
   totalSubLabel: {
+    ...fontStyles.heading,
     fontSize: theme.typography.fontSize.sm,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
     marginTop: theme.spacing.xs,
-    fontWeight: theme.typography.fontWeight.semibold,
   },
   statsContainer: {
     borderRadius: theme.borderRadius.xl,
@@ -259,11 +254,10 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 20,
     color: theme.colors.text,
     marginBottom: theme.spacing.lg,
-    letterSpacing: 0.5,
   },
   statRow: {
     flexDirection: 'row',
@@ -278,6 +272,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   statLabel: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
@@ -288,6 +283,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   statValue: {
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.number,
   },
 });

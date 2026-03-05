@@ -25,7 +25,7 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import LiquidGauge, { LiquidGaugeRef } from '@/components/LiquidGauge';
 import { DropEmitter } from '@/components/DropEmitter';
 import CircularProgressRing from '@/components/CircularProgressRing';
@@ -3053,9 +3053,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   gymTagText: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: '500',
   },
   headerRight: {
     flexDirection: 'row',
@@ -3082,8 +3082,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   challengesBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 12,
   },
   headerDrops: {
     flexDirection: 'row',
@@ -3095,8 +3095,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.full,
   },
   headerDropsText: {
+    ...fontStyles.number,
     color: theme.colors.primary,
-    fontWeight: 'bold',
   },
   bonusBanner: {
     backgroundColor: theme.colors.primary + '20',
@@ -3108,11 +3108,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   bonusText: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: 'bold',
+    fontSize: 18,
     textAlign: 'center',
-    letterSpacing: 1,
   },
   waterContainer: {
     flex: 1,
@@ -3153,9 +3152,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   connectingText: {
+    ...fontStyles.bodySemiBold,
     color: theme.colors.text,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: '600',
     textAlign: 'center',
     paddingHorizontal: theme.spacing.lg,
     textShadowColor: 'rgba(0, 0, 0, 0.6)',
@@ -3213,18 +3212,18 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   dropsLabel: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: '600',
+    fontSize: 18,
     letterSpacing: 2,
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
   },
   overachievedText: {
+    ...fontStyles.bodySemiBold,
     color: theme.colors.secondary,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: '600',
     marginTop: theme.spacing.xs,
   },
   statsGrid: {
@@ -3244,10 +3243,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   statValue: {
+    ...fontStyles.number,
     color: theme.colors.text,
-    fontWeight: 'bold',
   },
   statLabel: {
+    ...fontStyles.heading,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.sm,
   },
@@ -3272,12 +3272,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   targetText: {
+    ...fontStyles.body,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.sm,
   },
   targetNumber: {
+    ...fontStyles.number,
     color: theme.colors.text,
-    fontWeight: '600',
   },
   pausedOverlay: {
     position: 'absolute',
@@ -3291,9 +3292,9 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   pausedText: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize['3xl'],
-    fontWeight: 'bold',
+    fontSize: 30,
     letterSpacing: 4,
   },
   autoPauseOverlay: {
@@ -3309,14 +3310,15 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
   },
   autoPauseTitle: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: 'bold',
+    fontSize: 22,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.sm,
     textAlign: 'center',
   },
   autoPauseText: {
+    ...fontStyles.body,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.base,
     textAlign: 'center',
@@ -3336,14 +3338,15 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
   },
   sensorAsleepTitle: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: 'bold',
+    fontSize: 22,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.sm,
     textAlign: 'center',
   },
   sensorAsleepText: {
+    ...fontStyles.body,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.base,
     textAlign: 'center',
@@ -3362,10 +3365,9 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
   },
   reconnectButtonText: {
+    ...fontStyles.heading,
     color: theme.colors.background,
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
+    fontSize: 18,
   },
   bleConnectionOverlay: {
     position: 'absolute',
@@ -3380,14 +3382,15 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
   },
   bleConnectionTitle: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: 'bold',
+    fontSize: 22,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.sm,
     textAlign: 'center',
   },
   bleConnectionText: {
+    ...fontStyles.body,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.base,
     textAlign: 'center',
@@ -3432,8 +3435,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   nextExerciseText: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: '700',
     flex: 1,
   },
   nextExerciseButton: {
@@ -3446,8 +3449,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
   },
   nextExerciseButtonText: {
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 18,
   },
   finishButton: {
     height: 56,
@@ -3467,9 +3470,9 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   finishButtonText: {
+    ...fontStyles.heading,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: '600',
+    fontSize: 20,
     zIndex: 1,
   },
   planCompletedOverlay: {
@@ -3491,11 +3494,12 @@ const styles = StyleSheet.create({
     margin: theme.spacing.lg,
   },
   planCompletedTitle: {
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 26,
     textAlign: 'center',
   },
   planCompletedSubtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     textAlign: 'center',

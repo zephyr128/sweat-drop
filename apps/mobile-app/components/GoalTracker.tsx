@@ -8,7 +8,7 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 
 interface GoalTrackerProps {
@@ -130,8 +130,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   exerciseName: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: '600',
     flex: 1,
   },
   progressContainer: {
@@ -153,8 +153,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   progressText: {
+    ...fontStyles.number,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: '700',
   },
   targetText: {
     fontSize: theme.typography.fontSize.sm,

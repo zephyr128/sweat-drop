@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
@@ -321,12 +321,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   headerTitle: {
+    ...fontStyles.heading,
     flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    fontSize: 26,
     color: theme.colors.text,
     textAlign: 'center',
-    letterSpacing: 0.5,
   },
   headerButton: {
     width: 40,
@@ -360,10 +359,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   balanceText: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.number,
   },
   balanceLabel: {
-    fontSize: theme.typography.fontSize.xs,
+    ...fontStyles.heading,
+    fontSize: 14,
     color: theme.colors.textSecondary,
     marginLeft: 'auto',
   },
@@ -373,12 +373,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyText: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 22,
     color: theme.colors.text,
-    letterSpacing: 0.3,
   },
   emptySubtext: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     textAlign: 'center',
@@ -419,13 +419,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rewardName: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     marginBottom: theme.spacing.xs,
     letterSpacing: 0.3,
   },
   rewardDescription: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
@@ -442,9 +443,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   rewardPrice: {
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.number,
   },
   rewardStock: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,

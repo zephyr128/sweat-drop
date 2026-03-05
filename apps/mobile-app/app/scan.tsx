@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { ReportIssueModal } from '@/components/ReportIssueModal';
 import { ScannerScreen } from '@/components/ScannerScreen';
 
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   },
   placeholderTitle: {
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
     letterSpacing: 0.5,
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
     letterSpacing: 0.3,
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
     letterSpacing: 0.5,
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#000000',
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     letterSpacing: 0.5,
   },
   reportButton: {
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
   reportButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     letterSpacing: 0.3,
   },
 });

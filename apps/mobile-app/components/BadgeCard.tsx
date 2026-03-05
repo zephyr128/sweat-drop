@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import type { UserBadge } from '@/hooks/useUserBadges';
 
 // AGENT NOTE: [2026-03-03] - mobile-coder
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.text,
     textAlign: 'center',
-    fontWeight: theme.typography.fontWeight.medium,
+    ...fontStyles.bodyMedium,
     marginTop: 6,
     lineHeight: 15,
     maxWidth: BADGE_SIZE - 4,
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 10,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     marginTop: 2,
   },
 });

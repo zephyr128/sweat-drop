@@ -20,7 +20,7 @@ import Animated, {
   FadeInDown,
   Easing,
 } from 'react-native-reanimated';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 
@@ -430,14 +430,15 @@ const styles = StyleSheet.create({
 
   // ── Text ──
   welcomeLabel: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.lg,
     color: theme.colors.textSecondary,
-    letterSpacing: 1,
+    letterSpacing: 0.3,
     marginBottom: theme.spacing.xs,
   },
   gymNameText: {
-    fontSize: 34,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 36,
     color: theme.colors.primary,
     letterSpacing: 3,
     textAlign: 'center',
@@ -457,6 +458,7 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   subtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     textAlign: 'center',
@@ -490,12 +492,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   infoValue: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
   infoLabel: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
     letterSpacing: 0.2,
@@ -528,9 +531,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   buttonText: {
+    ...fontStyles.heading,
     color: theme.colors.background,
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1,
+    fontSize: 18,
   },
 });

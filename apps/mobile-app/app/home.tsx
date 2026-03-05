@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
@@ -16,9 +16,8 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle, theme as appTheme } from '@/lib/theme';
+import { getNumberStyle, theme as appTheme, fontStyles } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
-import { GymSelectorModal } from '@/components/GymSelectorModal';
 import { LockedOverlay } from '@/components/LockedOverlay';
 import { UserSettingsSheet } from '@/components/UserSettingsSheet';
 import { ProgressWidget } from '@/components/ProgressWidget';
@@ -29,7 +28,6 @@ import { ClosestRewardBanner } from '@/components/ClosestRewardBanner';
 import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
 import { useHomeStats } from '@/hooks/useHomeStats';
 import { useAvailableArenas } from '@/hooks/useAvailableArenas';
-import { Gym } from '@/lib/stores/useGymStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 12;
@@ -58,7 +56,7 @@ export default function HomeScreen() {
   const { session } = useSession();
   const { theme, activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
-  const { getActiveGymId, setPreviewGymId, setActiveGym, homeGymId, previewGymId } = useGymStore();
+  const { getActiveGymId, homeGymId, previewGymId } = useGymStore();
   const { updateHomeGym } = useGymData();
   const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
@@ -87,7 +85,6 @@ export default function HomeScreen() {
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [gymSelectorVisible, setGymSelectorVisible] = useState(false);
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -112,7 +109,7 @@ export default function HomeScreen() {
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading, refresh: refreshChallenges } = useChallengeProgress(activeGymId, null);
   const activeChallenges = allChallenges;
-  const displayedChallenges = activeChallenges;
+  const displayedChallenges = activeChallenges.slice(0, 5);
   
   // Debug log
   useEffect(() => {
@@ -152,15 +149,19 @@ export default function HomeScreen() {
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
 
-  // Refresh challenges + stats + arenas when screen is focused
+  // Refresh ALL data when screen is focused (including profile drops)
   useFocusEffect(
     useCallback(() => {
-      if (activeGymId && session?.user) {
-        refreshChallenges?.();
-        refreshStats?.();
-        refreshArenas?.();
+      if (session?.user) {
+        loadData();
+        refreshLocalDrops();
+        if (activeGymId) {
+          refreshChallenges?.();
+          refreshStats?.();
+          refreshArenas?.();
+        }
       }
-    }, [activeGymId, session?.user, refreshChallenges, refreshStats, refreshArenas])
+    }, [activeGymId, session?.user])
   );
 
   // ── Available gyms (for empty state) ──
@@ -203,11 +204,6 @@ export default function HomeScreen() {
 
   const handleQRPress = async () => {
     router.push('/scan');
-  };
-
-  const handleGymSelect = (gym: Gym) => {
-    setPreviewGymId(gym.id);
-    setActiveGym(gym);
   };
 
   const handleSetAsHomeGym = async () => {
@@ -262,9 +258,13 @@ export default function HomeScreen() {
                 activeOpacity={0.7}
               >
                 <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
-                  <Text style={es.avatarText}>
-                    {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
-                  </Text>
+                  {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+                    <Image source={{ uri: profile.avatar_url }} style={es.avatarImage} />
+                  ) : (
+                    <Text style={es.avatarText}>
+                      {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
+                    </Text>
+                  )}
                 </View>
                 <Text style={es.username}>{profile?.username || 'User'}</Text>
               </TouchableOpacity>
@@ -509,35 +509,28 @@ export default function HomeScreen() {
             activeOpacity={0.7}
           >
             <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-              <Text style={[styles.avatarText, { color: branding.primary }]}>
-                {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
-              </Text>
+              {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+                <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
+                </Text>
+              )}
             </View>
             <Text style={styles.username}>{profile?.username || 'User'}</Text>
           </TouchableOpacity>
 
           <View style={styles.headerRight}>
-            {/* Gym Selector Pill */}
-            <TouchableOpacity
-              style={[styles.gymSelectorChip, { borderColor: hexToRgba(branding.primary, 0.4) }]}
-              onPress={() => setGymSelectorVisible(true)}
-              activeOpacity={0.8}
-            >
-              {activeGym?.logo_url ? (
-                <Image
-                  source={{ uri: activeGym.logo_url }}
-                  style={styles.gymSelectorLogo}
-                  resizeMode="contain"
-                />
-              ) : (
-                <Ionicons name="fitness" size={14} color={branding.primary} />
-              )}
-              <Text style={[styles.gymSelectorText, { color: branding.primary }]} numberOfLines={1} ellipsizeMode="tail">
-                {activeGym?.name || 'Gym'}
-              </Text>
-              <Ionicons name="chevron-down" size={12} color={branding.primary} />
-            </TouchableOpacity>
-
+            {activeGym && (
+              <Animated.View
+                entering={FadeIn.duration(400)}
+                style={styles.gymNameBadge}
+              >
+                <Text style={styles.gymNameText} numberOfLines={1}>
+                  {activeGym.name}
+                </Text>
+              </Animated.View>
+            )}
           </View>
         </View>
 
@@ -577,6 +570,7 @@ export default function HomeScreen() {
             data={homeStats.weeklyActivity}
             activeDays={homeStats.activeDaysThisWeek}
             brandPrimary={branding.primary}
+            onPress={() => router.push('/workout-history')}
           />
         )}
 
@@ -655,6 +649,16 @@ export default function HomeScreen() {
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>{t('activeChallenges')}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!isUnlocked) return;
+                    router.push('/challenges');
+                  }}
+                  activeOpacity={0.7}
+                  disabled={!isUnlocked}
+                >
+                  <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('viewAll')}</Text>
+                </TouchableOpacity>
               </View>
               <ScrollView
                 horizontal
@@ -767,34 +771,6 @@ export default function HomeScreen() {
                   );
                 })}
 
-                {/* View All Button */}
-                <View style={[styles.viewAllCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-                  <TouchableOpacity
-                    style={styles.viewAllCard}
-                    onPress={() => {
-                      if (!isUnlocked) return;
-                      router.push('/challenges');
-                    }}
-                    activeOpacity={isUnlocked ? 0.9 : 1}
-                    disabled={!isUnlocked}
-                  >
-                    <LinearGradient
-                      colors={[branding.primary, branding.primaryDark, branding.primary]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.viewAllGradient}
-                    >
-                      <View style={styles.viewAllContent}>
-                        <View style={[styles.viewAllIconContainer, { backgroundColor: hexToRgba(branding.onPrimary, 0.2) }]}>
-                          <Ionicons name="list" size={40} color={branding.onPrimary} />
-                        </View>
-                        <Text style={[styles.viewAllText, { color: branding.onPrimary }]}>{t('viewAll')}</Text>
-                        <Text style={[styles.viewAllSubtext, { color: branding.onPrimary + 'CC' }]}>{t('viewAllChallenges')}</Text>
-                        <Ionicons name="arrow-forward-circle" size={24} color={branding.onPrimary} style={styles.viewAllArrow} />
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
               </ScrollView>
             </View>
           )}
@@ -819,8 +795,8 @@ export default function HomeScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>{t('arenas')}</Text>
                 {availableArenas && availableArenas.length > 0 && (
-                  <TouchableOpacity onPress={() => router.push('/leaderboard')} activeOpacity={0.7}>
-                    <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('seeAll')}</Text>
+                  <TouchableOpacity onPress={() => router.push('/arenas')} activeOpacity={0.7}>
+                    <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('viewAll')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -834,7 +810,7 @@ export default function HomeScreen() {
                   snapToAlignment="start"
                   decelerationRate="fast"
                 >
-                  {availableArenas.map((arena) => {
+                  {availableArenas.slice(0, 5).map((arena) => {
                     const daysLeft = Math.max(0, Math.ceil((new Date(arena.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
                     const scoringIcons: Record<string, string> = { total_drops: '💧', days_visited: '📅', variety_score: '🏋️', streak_days: '🔥' };
                     const scoringIcon = scoringIcons[arena.scoring_model] || '💧';
@@ -904,7 +880,7 @@ export default function HomeScreen() {
               ) : (
                 <TouchableOpacity
                   style={[styles.arenaEmptyState, { borderColor: hexToRgba(branding.primary, 0.15) }]}
-                  onPress={() => router.push('/leaderboard')}
+                  onPress={() => router.push('/arenas')}
                   activeOpacity={0.8}
                 >
                   <BlurView intensity={40} tint="dark" style={styles.arenaEmptyBlur}>
@@ -1079,13 +1055,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Gym Selector Modal */}
-      <GymSelectorModal
-        visible={gymSelectorVisible}
-        onClose={() => setGymSelectorVisible(false)}
-        onSelectGym={handleGymSelect}
-      />
-
       {/* User Settings Sheet */}
       <UserSettingsSheet
         visible={settingsSheetVisible}
@@ -1158,44 +1127,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     flexShrink: 0,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
   },
   avatarText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    fontFamily: 'Courier',
   },
   username: {
+    ...fontStyles.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.3,
     flexShrink: 1,
     flexWrap: 'wrap',
   },
-  gymSelectorChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  gymNameBadge: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    maxWidth: 120,
-    flexShrink: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    maxWidth: 160,
   },
-  gymSelectorLogo: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    flexShrink: 0,
-  },
-  gymSelectorText: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-    flexShrink: 1,
-    minWidth: 0,
+  gymNameText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: appTheme.colors.textSecondary,
+    letterSpacing: 0.3,
   },
   /* ─── Hero Section ──────────────────────── */
   heroSection: {
@@ -1204,10 +1167,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   heroGymName: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 14,
     marginTop: 8,
   },
 
@@ -1234,10 +1195,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 22,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
   },
 
   /* ─── Challenges ────────────────────────── */
@@ -1292,15 +1252,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   challengeType: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 12,
     marginBottom: 4,
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   challengeName: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.3,
     lineHeight: 18,
@@ -1319,6 +1278,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   progressText: {
+    ...fontStyles.body,
     fontSize: 11,
     color: '#B0B0B0',
     letterSpacing: 0.3,
@@ -1332,8 +1292,8 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
   challengeRewardText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
   skeletonBadge: {
@@ -1361,8 +1321,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   seeAllText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 13,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
   arenaHeaderRow: {
@@ -1393,14 +1353,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   arenaHomeStat: {
+    ...fontStyles.body,
     fontSize: 11,
     color: '#B0B0B0',
     letterSpacing: 0.2,
   },
   arenaRankLabel: {
+    ...fontStyles.number,
     fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'Courier',
     letterSpacing: 0.3,
   },
   arenaEmptyState: {
@@ -1427,63 +1387,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   arenaEmptyTitle: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   arenaEmptySubtitle: {
+    ...fontStyles.body,
     fontSize: 11,
     color: '#8E8E93',
     lineHeight: 15,
-  },
-
-  /* ─── View All ──────────────────────────── */
-  viewAllCardWrapper: {
-    marginRight: 12,
-    height: 200,
-  },
-  viewAllCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    height: '100%',
-    width: '100%',
-  },
-  viewAllGradient: {
-    borderRadius: 16,
-    height: '100%',
-    width: '100%',
-  },
-  viewAllContent: {
-    padding: 16,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  viewAllIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  viewAllText: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  viewAllSubtext: {
-    fontSize: 12,
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  viewAllArrow: {
-    marginTop: 8,
-    opacity: 0.8,
   },
 
   /* ─── Empty Challenges Banner (slim) ─────── */
@@ -1503,6 +1416,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(20, 20, 30, 0.75)',
   },
   emptyChallengesText: {
+    ...fontStyles.body,
     fontSize: 13,
     color: '#808080',
     letterSpacing: 0.2,
@@ -1559,11 +1473,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   smartCoachTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    ...fontStyles.heading,
+    fontSize: 22,
   },
   smartCoachSubtitle: {
+    ...fontStyles.body,
     fontSize: 14,
     letterSpacing: 0.3,
     lineHeight: 18,
@@ -1607,13 +1521,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 16,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
     marginBottom: 4,
   },
   cardSubtitle: {
+    ...fontStyles.body,
     fontSize: 12,
     color: '#B0B0B0',
     letterSpacing: 0.3,
@@ -1626,8 +1540,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardAction: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     letterSpacing: 0.5,
   },
 
@@ -1691,13 +1605,19 @@ const es = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
   },
   avatarText: {
     fontSize: 20,
   },
   username: {
+    ...fontStyles.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     color: '#FFFFFF',
   },
 
@@ -1730,16 +1650,15 @@ const es = StyleSheet.create({
     gap: 4,
   },
   dropsNumber: {
+    ...fontStyles.number,
     fontSize: 64,
-    fontWeight: 'bold',
     color: 'rgba(255,255,255,0.15)',
-    fontFamily: 'Courier',
   },
   dropsLabel: {
-    fontSize: 11,
+    ...fontStyles.heading,
+    fontSize: 13,
     letterSpacing: 3,
     color: 'rgba(255,255,255,0.20)',
-    textTransform: 'uppercase',
   },
   dropsDivider: {
     height: 1,
@@ -1753,6 +1672,7 @@ const es = StyleSheet.create({
     gap: 6,
   },
   lockText: {
+    ...fontStyles.body,
     fontSize: 12,
     color: 'rgba(255,255,255,0.30)',
   },
@@ -1780,11 +1700,12 @@ const es = StyleSheet.create({
     overflow: 'hidden',
   },
   statPillValue: {
+    ...fontStyles.number,
     fontSize: 18,
-    fontWeight: 'bold',
     color: 'rgba(255,255,255,0.15)',
   },
   statPillLabel: {
+    ...fontStyles.body,
     fontSize: 10,
     color: 'rgba(255,255,255,0.20)',
   },
@@ -1833,14 +1754,15 @@ const es = StyleSheet.create({
     alignItems: 'center',
   },
   ctaTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 22,
     color: '#FFFFFF',
     letterSpacing: 2,
     textAlign: 'center',
     marginBottom: 8,
   },
   ctaSubtitle: {
+    ...fontStyles.body,
     fontSize: 14,
     color: '#B0B0B0',
     textAlign: 'center',
@@ -1869,11 +1791,13 @@ const es = StyleSheet.create({
     alignItems: 'center',
   },
   stepNum: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 18,
     color: '#00E5FF',
+    letterSpacing: 0,
   },
   stepLabel: {
+    ...fontStyles.body,
     fontSize: 11,
     color: '#B0B0B0',
     textAlign: 'center',
@@ -1895,11 +1819,12 @@ const es = StyleSheet.create({
     marginBottom: 12,
   },
   gymsSectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 19,
     color: '#FFFFFF',
   },
   gymsSectionCount: {
+    ...fontStyles.body,
     fontSize: 13,
     color: '#B0B0B0',
   },
@@ -1940,11 +1865,12 @@ const es = StyleSheet.create({
     gap: 2,
   },
   gymName: {
+    ...fontStyles.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: '#FFFFFF',
   },
   gymCity: {
+    ...fontStyles.body,
     fontSize: 11,
     color: '#B0B0B0',
   },
@@ -1961,6 +1887,7 @@ const es = StyleSheet.create({
     backgroundColor: 'rgba(20,20,30,0.40)',
   },
   gymPlaceholderText: {
+    ...fontStyles.body,
     fontSize: 11,
     textAlign: 'center',
     color: 'rgba(255,255,255,0.25)',
@@ -1973,8 +1900,8 @@ const es = StyleSheet.create({
     marginBottom: 16,
   },
   previewTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 19,
     color: '#FFFFFF',
     marginBottom: 12,
   },
@@ -1999,12 +1926,13 @@ const es = StyleSheet.create({
     backgroundColor: 'rgba(20,20,30,0.50)',
   },
   previewCardTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.30)',
     textAlign: 'center',
   },
   previewCardSub: {
+    ...fontStyles.body,
     fontSize: 10,
     color: 'rgba(255,255,255,0.20)',
     textAlign: 'center',

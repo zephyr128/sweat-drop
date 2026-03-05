@@ -1,5 +1,10 @@
 {
   "title": "Profil",
+  "sections": {
+    "activity": "AKTIVNOST",
+    "rewards": "NAGRADE",
+    "settings": "PODEŠAVANJA"
+  },
   "totalDrops": "Ukupno drops",
   "dayStreak": "Streak dana",
   "totalWorkouts": "Treninzi",
@@ -38,5 +43,6 @@
   "thisMonth": "Ovaj mesec",
   "allTime": "Ukupno",
   "noGymTitle": "Nemaš povezanu teretanu",
-  "noGymSub": "Skeniraj QR kod na spravi da otključaš sve funkcije"
+  "noGymSub": "Skeniraj QR kod na spravi da otključaš sve funkcije",
+  "gyms": "Teretane"
 }

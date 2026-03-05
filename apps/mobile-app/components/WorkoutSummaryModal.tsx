@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'rea
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 
 interface WorkoutSummaryModalProps {
@@ -149,8 +149,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   title: {
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 26,
     textAlign: 'center',
   },
   subtitle: {
@@ -174,14 +174,14 @@ const styles = StyleSheet.create({
     ...theme.shadows.sm,
   },
   statValue: {
+    ...fontStyles.number,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: '700',
     color: theme.colors.text,
   },
   statLabel: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
-    fontWeight: '500',
   },
   closeButton: {
     flexDirection: 'row',
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
   },
   closeButtonText: {
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: '700',
+    ...fontStyles.heading,
+    fontSize: 18,
   },
 });

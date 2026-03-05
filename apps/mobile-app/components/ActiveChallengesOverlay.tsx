@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
 import { ChallengeProgress } from '@/hooks/useChallengeProgress';
+import { fontStyles } from '@/lib/theme';
 
 interface ActiveChallengesOverlayProps {
   challenges: ChallengeProgress[];
@@ -194,8 +195,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    ...fontStyles.heading,
+    fontSize: 22,
     letterSpacing: 0.5,
   },
   closeButton: {
@@ -229,8 +230,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   challengeName: {
+    ...fontStyles.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     flex: 1,
   },
   frequencyBadge: {
@@ -239,9 +240,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   frequencyText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 12,
     letterSpacing: 0.5,
   },
   progressInfo: {
@@ -251,12 +251,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   progressText: {
+    ...fontStyles.bodyMedium,
     fontSize: 14,
-    fontWeight: '500',
   },
   remainingText: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   progressBarContainer: {
     height: 6,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   bountyText: {
+    ...fontStyles.bodyMedium,
     fontSize: 12,
-    fontWeight: '500',
   },
 });

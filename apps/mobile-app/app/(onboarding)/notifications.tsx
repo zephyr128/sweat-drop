@@ -18,7 +18,7 @@ import {
   PUSH_NOTIFICATIONS_ENABLED,
   registerForPushNotifications,
 } from '@/lib/notifications';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 
 // ── Onboarding Progress Indicator ──
 function OnboardingProgress({
@@ -232,16 +232,16 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xl,
   },
   title: {
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 26,
     color: theme.colors.text,
-    letterSpacing: 1,
     marginBottom: theme.spacing.md,
   },
   subtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textAlign: 'center',
     lineHeight:
       theme.typography.lineHeight.relaxed * theme.typography.fontSize.base,
@@ -270,9 +270,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   benefitText: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.text,
-    fontWeight: theme.typography.fontWeight.medium,
     letterSpacing: 0.3,
   },
 
@@ -300,10 +300,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   buttonText: {
+    ...fontStyles.heading,
     color: '#000000',
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1.5,
+    fontSize: 18,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -314,9 +313,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryButtonText: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.textSecondary,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.medium,
     letterSpacing: 0.5,
   },
 });

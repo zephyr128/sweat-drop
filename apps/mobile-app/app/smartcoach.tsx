@@ -7,7 +7,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   },
   gymName: {
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   },
   planCount: {
     fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     letterSpacing: 0.3,
   },
   /* Empty */
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.3,
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
     letterSpacing: 0.3,
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
   },
   comingSoonText: {
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },

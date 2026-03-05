@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -132,15 +132,15 @@ const styles = StyleSheet.create({
 
   // ── Title (two-line) ──
   titleTop: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 22,
     color: theme.colors.textSecondary,
     letterSpacing: 3,
     textAlign: 'center',
   },
   titleBottom: {
-    fontSize: 36,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontSize: 38,
     color: theme.colors.text,
     letterSpacing: 4,
     textAlign: 'center',
@@ -154,13 +154,14 @@ const styles = StyleSheet.create({
 
   // ── Subtitle ──
   subtitle: {
+    ...fontStyles.body,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     textAlign: 'center',
     marginTop: theme.spacing.lg,
     lineHeight:
       theme.typography.lineHeight.relaxed * theme.typography.fontSize.base,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     paddingHorizontal: theme.spacing.lg,
   },
 
@@ -193,9 +194,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   buttonText: {
+    ...fontStyles.heading,
     color: '#000000',
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1.5,
+    fontSize: 18,
   },
 });

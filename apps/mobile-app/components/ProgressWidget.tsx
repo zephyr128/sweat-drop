@@ -15,7 +15,7 @@ import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = 16; // Horizontal padding of ScrollView
@@ -172,13 +172,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   title: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.heading,
+    fontSize: 16,
     letterSpacing: 0.3,
   },
   badgeName: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
@@ -195,9 +195,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   progressText: {
+    ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
-    fontWeight: theme.typography.fontWeight.medium,
   },
   footer: {
     flexDirection: 'row',
@@ -206,6 +206,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
   },
   footerText: {
+    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
   },

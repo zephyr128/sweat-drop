@@ -233,7 +233,7 @@ PODS:
     - ExpoModulesCore
   - ExpoFileSystem (19.0.21):
     - ExpoModulesCore
-  - ExpoFont (14.0.11):
+  - ExpoFont (55.0.4):
     - ExpoModulesCore
   - ExpoHaptics (14.0.1):
     - ExpoModulesCore
@@ -2486,7 +2486,7 @@ DEPENDENCIES:
   - ExpoCrypto (from `../../../node_modules/expo-crypto/ios`)
   - ExpoDevice (from `../../../node_modules/expo-device/ios`)
   - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios`)
-  - ExpoFont (from `../../../node_modules/expo-font/ios`)
+  - ExpoFont (from `../node_modules/expo-font/ios`)
   - ExpoHaptics (from `../../../node_modules/expo-haptics/ios`)
   - ExpoHead (from `../../../node_modules/expo-router/ios`)
   - ExpoImage (from `../../../node_modules/expo-image/ios`)
@@ -2638,7 +2638,7 @@ EXTERNAL SOURCES:
   ExpoFileSystem:
     :path: "../../../node_modules/expo-file-system/ios"
   ExpoFont:
-    :path: "../../../node_modules/expo-font/ios"
+    :path: "../node_modules/expo-font/ios"
   ExpoHaptics:
     :path: "../../../node_modules/expo-haptics/ios"
   ExpoHead:
@@ -2848,7 +2848,7 @@ SPEC CHECKSUMS:
   ExpoCrypto: 4d23a9ff67c25e2ed23ca792d81e58817a7ea1b9
   ExpoDevice: cf7419343b6e060209aaadd596defb1b6320597f
   ExpoFileSystem: aefcd337b94b874f88752ebefc52813b84992fad
-  ExpoFont: c625dbd97ed57e9089b172b2a7bb99003d074664
+  ExpoFont: 4d2a6dedce012c4793532cb38d561d3da95eaafd
   ExpoHaptics: e01cce0741d68c281853118eb0267f88d42c6b7a
   ExpoHead: 3f6ed6cbda48f13bcaddae98f8e5dc525dcfb34f
   ExpoImage: f6bcd30bb98d4c484869668fbc32834bb3ee5bfb

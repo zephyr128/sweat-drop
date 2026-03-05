@@ -22,22 +22,29 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
+  // Reset loaded flag when gym changes (to show skeleton on gym switch)
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [gymId]);
+
   const loadChallenges = useCallback(async () => {
     if (!session?.user?.id || !gymId) {
       if (isMountedRef.current) {
         setChallenges([]);
-        setLoading(false); // Ensure loading is set to false when no gymId
+        setLoading(false);
       }
       return;
     }
 
-    if (isMountedRef.current) setLoading(true);
+    // Only show loading skeleton on initial load, not on subsequent refreshes
+    if (!hasLoadedRef.current && isMountedRef.current) setLoading(true);
     if (isMountedRef.current) setError(null);
 
     try {
@@ -152,11 +159,18 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
             challenge.progress_percentage = challenge.target_drops > 0
               ? Math.min((challenge.current_drops / challenge.target_drops) * 100, 100)
               : 0;
+            // If actual balance >= target, mark as completed on client side
+            if (!challenge.is_completed && challenge.target_drops > 0 && challenge.current_drops >= challenge.target_drops) {
+              challenge.is_completed = true;
+            }
           });
         }
       }
 
-      if (isMountedRef.current) setChallenges(challengesWithProgress);
+      if (isMountedRef.current) {
+        setChallenges(challengesWithProgress);
+        hasLoadedRef.current = true;
+      }
     } catch (err: any) {
       console.error('Error in loadChallenges:', err);
       if (isMountedRef.current) setError(err.message);
