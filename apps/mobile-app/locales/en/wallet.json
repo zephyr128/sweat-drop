@@ -6,6 +6,8 @@
   "today": "Today",
   "thisWeek": "This week",
   "thisMonth": "This month",
+  "currentGym": "Current gym",
+  "gymBalance": "Local balance",
   "transactions": "Transactions",
   "noTransactions": "No transactions yet",
   "noTransactionsDesc": "Start working out to earn drops!",

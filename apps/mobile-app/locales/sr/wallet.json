@@ -1,8 +1,11 @@
 {
   "title": "Novčanik",
   "totalBalance": "Ukupno stanje",
+  "drops": "drops",
   "earnedDrops": "Zarađeni drops",
   "today": "Danas",
   "thisWeek": "Ova nedelja",
-  "thisMonth": "Ovaj mesec"
+  "thisMonth": "Ovaj mesec",
+  "currentGym": "Teretana",
+  "gymBalance": "Lokalni balans"
 }

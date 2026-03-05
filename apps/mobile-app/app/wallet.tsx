@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
+import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -21,21 +22,31 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+interface GymDropsData {
+  gymName: string;
+  localBalance: number;
+  weeklyDrops: number;
+  monthlyDrops: number;
+}
+
 export default function WalletScreen() {
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('wallet');
+  const { activeGym, getActiveGymId } = useGymStore();
   const [profile, setProfile] = useState<any>(null);
   const [todayDrops, setTodayDrops] = useState(0);
-  const [weekDrops, setWeekDrops] = useState(0);
-  const [monthDrops, setMonthDrops] = useState(0);
+  const [gymDrops, setGymDrops] = useState<GymDropsData | null>(null);
+
+  const activeGymId = getActiveGymId();
 
   useEffect(() => {
     if (session?.user) {
       loadProfile();
-      loadDropsStats();
+      loadTodayDrops();
+      loadGymDrops();
     }
-  }, [session]);
+  }, [session, activeGymId]);
 
   const loadProfile = async () => {
     if (!session?.user) return;
@@ -51,17 +62,12 @@ export default function WalletScreen() {
     }
   };
 
-  const loadDropsStats = async () => {
+  const loadTodayDrops = async () => {
     if (!session?.user) return;
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthAgo = new Date(today);
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
 
-    // Today
     const { data: todayData } = await supabase
       .from('drops_transactions')
       .select('amount')
@@ -69,30 +75,74 @@ export default function WalletScreen() {
       .gte('created_at', today.toISOString())
       .gt('amount', 0);
 
-    const todayTotal = todayData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
+    const todayTotal = todayData?.reduce((sum, tx) => sum + (tx.amount || 0), 0) || 0;
     setTodayDrops(todayTotal);
+  };
 
-    // This week
-    const { data: weekData } = await supabase
-      .from('drops_transactions')
-      .select('amount')
-      .eq('user_id', session.user.id)
-      .gte('created_at', weekAgo.toISOString())
-      .gt('amount', 0);
+  const loadGymDrops = async () => {
+    if (!session?.user || !activeGymId) {
+      setGymDrops(null);
+      return;
+    }
 
-    const weekTotal = weekData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
-    setWeekDrops(weekTotal);
+    try {
+      // Get local drops balance from gym_memberships
+      const { data: membership } = await supabase
+        .from('gym_memberships')
+        .select('local_drops_balance')
+        .eq('user_id', session.user.id)
+        .eq('gym_id', activeGymId)
+        .single();
 
-    // This month
-    const { data: monthData } = await supabase
-      .from('drops_transactions')
-      .select('amount')
-      .eq('user_id', session.user.id)
-      .gte('created_at', monthAgo.toISOString())
-      .gt('amount', 0);
+      // Get gym-specific weekly drops (from sessions)
+      const weekStart = getWeekStart();
+      const { data: weekSessions } = await supabase
+        .from('sessions')
+        .select('drops_earned')
+        .eq('user_id', session.user.id)
+        .eq('gym_id', activeGymId)
+        .gte('started_at', weekStart.toISOString())
+        .gt('drops_earned', 0);
 
-    const monthTotal = monthData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
-    setMonthDrops(monthTotal);
+      const weeklyDrops = weekSessions?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
+
+      // Get gym-specific monthly drops (from sessions)
+      const monthStart = getMonthStart();
+      const { data: monthSessions } = await supabase
+        .from('sessions')
+        .select('drops_earned')
+        .eq('user_id', session.user.id)
+        .eq('gym_id', activeGymId)
+        .gte('started_at', monthStart.toISOString())
+        .gt('drops_earned', 0);
+
+      const monthlyDrops = monthSessions?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
+
+      setGymDrops({
+        gymName: activeGym?.name || t('currentGym'),
+        localBalance: membership?.local_drops_balance || 0,
+        weeklyDrops,
+        monthlyDrops,
+      });
+    } catch (err) {
+      console.error('Error loading gym drops:', err);
+      setGymDrops(null);
+    }
+  };
+
+  /** Returns Monday 00:00 of the current week (ISO week) */
+  const getWeekStart = (): Date => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diff = day === 0 ? 6 : day - 1; // days since Monday
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
+    return monday;
+  };
+
+  /** Returns 1st of current month 00:00 */
+  const getMonthStart = (): Date => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
   };
 
   return (
@@ -136,8 +186,8 @@ export default function WalletScreen() {
           </View>
         </Animated.View>
 
-        {/* Earned Drops Section */}
-        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+        {/* Global Earned Drops Section */}
+        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
           <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
             <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               <Text style={styles.sectionTitle}>{t('earnedDrops')}</Text>
@@ -160,7 +210,7 @@ export default function WalletScreen() {
                 </View>
                 <View style={styles.statValueContainer}>
                   <Ionicons name="water" size={18} color={branding.primary} />
-                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{weekDrops}</Text>
+                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.weekly_drops || 0}</Text>
                 </View>
               </View>
 
@@ -171,12 +221,59 @@ export default function WalletScreen() {
                 </View>
                 <View style={styles.statValueContainer}>
                   <Ionicons name="water" size={18} color={branding.primary} />
-                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{monthDrops}</Text>
+                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.monthly_drops || 0}</Text>
                 </View>
               </View>
             </BlurView>
           </View>
         </Animated.View>
+
+        {/* Gym Drops Section */}
+        {gymDrops && (
+          <Animated.View entering={FadeInDown.delay(350).duration(400)}>
+            <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15), marginTop: theme.spacing.lg }]}>
+              <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <View style={styles.gymSectionHeader}>
+                  <Ionicons name="fitness-outline" size={20} color={branding.primary} />
+                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{gymDrops.gymName}</Text>
+                </View>
+
+                <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
+                  <View style={styles.statLabelRow}>
+                    <Ionicons name="wallet-outline" size={18} color={branding.primary} />
+                    <Text style={styles.statLabel}>{t('gymBalance')}</Text>
+                  </View>
+                  <View style={styles.statValueContainer}>
+                    <Ionicons name="water" size={18} color={branding.primary} />
+                    <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{gymDrops.localBalance}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
+                  <View style={styles.statLabelRow}>
+                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
+                    <Text style={styles.statLabel}>{t('thisWeek')}</Text>
+                  </View>
+                  <View style={styles.statValueContainer}>
+                    <Ionicons name="water" size={18} color={theme.colors.textSecondary} />
+                    <Text style={[styles.statValue, getNumberStyle(18), { color: theme.colors.textSecondary }]}>{gymDrops.weeklyDrops}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
+                  <View style={styles.statLabelRow}>
+                    <Ionicons name="stats-chart-outline" size={18} color={theme.colors.textSecondary} />
+                    <Text style={styles.statLabel}>{t('thisMonth')}</Text>
+                  </View>
+                  <View style={styles.statValueContainer}>
+                    <Ionicons name="water" size={18} color={theme.colors.textSecondary} />
+                    <Text style={[styles.statValue, getNumberStyle(18), { color: theme.colors.textSecondary }]}>{gymDrops.monthlyDrops}</Text>
+                  </View>
+                </View>
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -257,6 +354,12 @@ const styles = StyleSheet.create({
     ...fontStyles.heading,
     fontSize: 20,
     color: theme.colors.text,
+    marginBottom: theme.spacing.lg,
+  },
+  gymSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
   },
   statRow: {
