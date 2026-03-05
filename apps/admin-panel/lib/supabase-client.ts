@@ -14,8 +14,8 @@ const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabaseUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
 const supabaseAnonKey = typeof rawKey === 'string' ? rawKey.trim() : '';
 
-// 3. DEBUG LOG - Ovo će ti reći šta tačno Vercel šalje
-if (typeof window !== 'undefined') {
+// 3. DEBUG LOG - Only in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   console.log('--- SUPABASE DEBUG ---');
   console.log('Raw URL:', rawUrl ? 'POSTOJI' : 'NE POSTOJI', '| Type:', typeof rawUrl, '| Length:', typeof rawUrl === 'string' ? rawUrl.length : 'N/A');
   console.log('Raw Key:', rawKey ? 'POSTOJI' : 'NE POSTOJI', '| Type:', typeof rawKey, '| Length:', typeof rawKey === 'string' ? rawKey.length : 'N/A');
@@ -32,10 +32,12 @@ if (typeof window !== 'undefined') {
 
 // 4. Ako su i dalje 0, nemoj bacati Error (to kvari Hydration), nego vrati placeholder klijent
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Supabase ključevi su PRAZNI nakon trima!');
-  console.error('❌ URL:', supabaseUrl ? `set (${supabaseUrl.length} chars)` : 'MISSING');
-  console.error('❌ Key:', supabaseAnonKey ? `set (${supabaseAnonKey.length} chars)` : 'MISSING');
-  console.error('💡 SOLUTION: Add environment variables in Vercel Settings → Environment Variables and redeploy');
+  if (process.env.NODE_ENV === 'development') {
+    console.error('❌ Supabase ključevi su PRAZNI nakon trima!');
+    console.error('❌ URL:', supabaseUrl ? `set (${supabaseUrl.length} chars)` : 'MISSING');
+    console.error('❌ Key:', supabaseAnonKey ? `set (${supabaseAnonKey.length} chars)` : 'MISSING');
+    console.error('💡 SOLUTION: Add environment variables in Vercel Settings → Environment Variables and redeploy');
+  }
 }
 
 // 5. Create client with placeholder if values are missing (prevents Hydration Error)

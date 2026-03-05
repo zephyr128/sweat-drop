@@ -25,25 +25,31 @@ export default async function DashboardLayout({
   // However, getCurrentProfile() might fail due to RLS or cookie issues
   let profile = null;
   try {
-    // Debug: Check what getCurrentUser returns
+    // Debug: Check what getCurrentUser returns (only in development)
     const user = await getCurrentUser();
-    console.log('[DashboardLayout] getCurrentUser result:', user ? { id: user.id, email: user.email } : 'null');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[DashboardLayout] getCurrentUser result:', user ? { id: user.id, email: user.email } : 'null');
+    }
     
     profile = await getCurrentProfile();
     
     if (!profile) {
-      console.error('[DashboardLayout] getCurrentProfile returned null but user exists:', user?.id);
-      console.error('[DashboardLayout] This is likely an RLS policy issue. Check server logs above for details.');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[DashboardLayout] getCurrentProfile returned null but user exists:', user?.id);
+        console.error('[DashboardLayout] This is likely an RLS policy issue. Check server logs above for details.');
+      }
     }
   } catch (error: unknown) {
     // If getCurrentProfile fails, middleware should have handled it
     // But if it didn't, render minimal layout to avoid redirect loop
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
-    console.error('[DashboardLayout] Error fetching profile:', {
-      message: errorMessage,
-      stack: errorStack,
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[DashboardLayout] Error fetching profile:', {
+        message: errorMessage,
+        stack: errorStack,
+      });
+    }
     // Render minimal layout without profile - middleware will handle redirect if needed
     return (
       <div className="min-h-screen bg-[#000000] flex items-center justify-center">
@@ -58,8 +64,10 @@ export default async function DashboardLayout({
   // Middleware should have caught this, but don't redirect to avoid loop
   // This is likely an RLS policy or cookie issue - check server console logs
   if (!profile) {
-    console.warn('[DashboardLayout] Profile not found but user is authenticated');
-    console.warn('[DashboardLayout] This is likely an RLS policy issue. Check server logs for getCurrentProfile errors.');
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[DashboardLayout] Profile not found but user is authenticated');
+      console.warn('[DashboardLayout] This is likely an RLS policy issue. Check server logs for getCurrentProfile errors.');
+    }
     return (
       <div className="min-h-screen bg-[#000000] flex items-center justify-center">
         <div className="text-center">

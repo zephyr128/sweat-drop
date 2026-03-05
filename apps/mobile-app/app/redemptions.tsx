@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   },
   redemptionName: {
     fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.3,
     marginBottom: 2,
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 10,
-    fontWeight: theme.typography.fontWeight.semibold,
+    ...fontStyles.bodySemiBold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.text,
-    fontWeight: theme.typography.fontWeight.medium,
+    ...fontStyles.bodyMedium,
     letterSpacing: 0.3,
   },
   codeContainer: {
@@ -377,8 +377,8 @@ const styles = StyleSheet.create({
   },
   redemptionCode: {
     fontSize: theme.typography.fontSize.sm,
-    fontFamily: 'Courier',
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
+    fontFamily: 'Courier', // Override heading font with monospace for code
     letterSpacing: 1,
   },
   dropsContainer: {
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   dropsAmount: {
-    fontWeight: theme.typography.fontWeight.bold,
+    ...fontStyles.heading,
   },
   pendingNote: {
     flexDirection: 'row',
