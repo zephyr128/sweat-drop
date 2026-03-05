@@ -10,6 +10,7 @@ import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
 import { useAllBadges, BadgeWithProgress } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
+import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, fontStyles } from '@/lib/theme';
 import BackButton from './BackButton';
 import { BadgeCard } from './BadgeCard';
@@ -43,6 +44,8 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const { t } = useTranslation('trophyRoom');
   const { theme: currentTheme } = useTheme();
   const branding = useBranding();
+  const { getActiveGymId } = useGymStore();
+  const activeGymId = getActiveGymId();
   const { badges: earnedBadges, loading: badgesLoading } = useUserBadges(userId);
   const { globalAchievements, gymChallenges, loading: allBadgesLoading } = useAllBadges();
   const { progress: userProgress, isCompleted } = useUserProgress(userId);
@@ -71,6 +74,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         badge_image_url: achievement.badge_image_url,
         badge_type: 'global',
         gym_name: null,
+        gym_id: null,
         is_earned: earned,
         earned_at: earnedBadge?.earned_at || null,
         progress: earned ? 100 : (prog?.progress_percent ?? 0),
@@ -93,6 +97,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         badge_image_url: challenge.badge_image_url,
         badge_type: 'gym',
         gym_name: challenge.gym_name,
+        gym_id: challenge.gym_id,
         is_earned: earned,
         earned_at: earnedBadge?.earned_at || null,
         progress: earned ? 100 : (prog?.progress_percent ?? 0),
@@ -101,10 +106,11 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     });
 
     // Merge orphan earned gym badges not covered by gymChallenges
-    // (e.g. from deleted challenges or gyms we no longer have membership for)
+    // ONLY include orphans from the current active gym (not from other gyms)
     const coveredGymBadgeNames = new Set(gymChallenges.map((c) => c.name));
     earnedBadges
       .filter((b) => b.badge_type === 'gym' && !coveredGymBadgeNames.has(b.badge_name))
+      .filter((b) => !activeGymId || b.gym_id === activeGymId) // Only current gym's orphans
       .forEach((b) => {
         badges.push({
           id: b.badge_id,
@@ -113,6 +119,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           badge_image_url: b.badge_image_url,
           badge_type: 'gym',
           gym_name: b.gym_name,
+          gym_id: b.gym_id,
           is_earned: true,
           earned_at: b.earned_at,
           progress: 100,
@@ -120,17 +127,37 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       });
 
     return badges;
-  }, [globalAchievements, gymChallenges, earnedBadges, userProgress]);
+  }, [globalAchievements, gymChallenges, earnedBadges, userProgress, activeGymId]);
 
   const filteredBadges = useMemo(() => {
     let filtered = allBadgesWithProgress;
 
     if (filterType === 'this_gym') {
-      filtered = filtered.filter((badge) => badge.badge_type === 'gym');
+      // Show only badges from the current active gym
+      filtered = filtered.filter((badge) =>
+        badge.badge_type === 'gym' &&
+        (!activeGymId || badge.gym_id === activeGymId)
+      );
+    } else if (filterType === 'all') {
+      // Show global badges + current gym badges only (not other gyms)
+      filtered = filtered.filter((badge) =>
+        badge.badge_type === 'global' ||
+        (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId))
+      );
     } else if (filterType === 'earned') {
-      filtered = filtered.filter((badge) => badge.is_earned);
+      // Show earned badges from global + current gym only
+      filtered = filtered.filter((badge) =>
+        badge.is_earned &&
+        (badge.badge_type === 'global' ||
+          (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId)))
+      );
     } else if (filterType === 'locked') {
-      filtered = filtered.filter((badge) => !badge.is_earned);
+      // Show locked badges from global + current gym only
+      filtered = filtered.filter((badge) =>
+        !badge.is_earned &&
+        (badge.badge_type === 'global' ||
+          (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId)))
+      );
     }
 
     if (searchQuery.trim()) {
@@ -142,7 +169,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     }
 
     return filtered;
-  }, [allBadgesWithProgress, filterType, searchQuery]);
+  }, [allBadgesWithProgress, filterType, searchQuery, activeGymId]);
 
   // Separate earned and locked for display
   const earnedFiltered = filteredBadges.filter((b) => b.is_earned);
@@ -180,6 +207,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           earned_at: badge.earned_at || '',
           badge_type: badge.badge_type,
           gym_name: badge.gym_name,
+          gym_id: badge.gym_id || null,
         }}
         isLocked={!badge.is_earned}
         progress={badge.progress}

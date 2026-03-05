@@ -10,6 +10,7 @@ export interface UserBadge {
   earned_at: string;
   badge_type: 'global' | 'gym';
   gym_name: string | null;
+  gym_id: string | null;
 }
 
 export function useUserBadges(userId?: string) {

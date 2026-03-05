@@ -36,6 +36,7 @@ export interface BadgeWithProgress {
   badge_image_url: string | null;
   badge_type: 'global' | 'gym';
   gym_name: string | null;
+  gym_id: string | null;
   is_earned: boolean;
   earned_at: string | null;
   progress: number; // 0-100
