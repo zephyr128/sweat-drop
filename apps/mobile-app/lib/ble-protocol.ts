@@ -5,7 +5,7 @@
  * Reference: docs/plans/mvp_full_audit_and_build_plan.md
  *
  * Defines unified BLE measurement type and protocol constants.
- * Supports: CSC (Magene S3+), FTMS (Life Fitness, Technogym, Matrix, Horizon)
+ * Supports: CSC (Magene S3+), FTMS (Life Fitness, Technogym, Matrix, Horizon), Yesoul (FFF0 proprietary)
  *
  * The BLEMeasurement type extends the old CSCMeasurement with FTMS fields.
  * `CSCMeasurement` is kept as a backward-compatible alias.
@@ -16,7 +16,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /** Supported BLE protocols */
-export type BLEProtocolType = 'csc' | 'ftms';
+export type BLEProtocolType = 'csc' | 'ftms' | 'yesoul';
 
 /** Machine types that FTMS supports */
 export type FTMSMachineType = 'treadmill' | 'bike' | 'elliptical';
@@ -33,6 +33,12 @@ export const CSC_FEATURE_CHAR_UUID = '2A5C';
 
 // FTMS (Fitness Machine Service) — Life Fitness, Technogym, Matrix, Horizon
 export const FTMS_SERVICE_UUID = '1826';
+
+// Yesoul (Proprietary FFF0 Service) — Yesoul spin bikes
+export const YESOUL_SERVICE_UUID = 'fff0';
+export const YESOUL_WRITE_CHAR_UUID = 'fff3';   // Send commands to bike
+export const YESOUL_NOTIFY_CHAR_UUID = 'fff4';   // Receive metrics (12-byte packets)
+export const YESOUL_READ_CHAR_UUID = 'fff5';     // Read status
 export const FTMS_FEATURE_CHAR_UUID = '2ACC';         // Fitness Machine Feature
 export const FTMS_TREADMILL_DATA_CHAR_UUID = '2ACD';  // Treadmill Data
 export const FTMS_CROSS_TRAINER_CHAR_UUID = '2ACE';   // Cross Trainer Data
@@ -45,6 +51,7 @@ export const ALL_SCAN_SERVICE_UUIDS = [
   CSC_SERVICE_UUID,
   CSC_SPEED_SERVICE_UUID,
   FTMS_SERVICE_UUID,
+  YESOUL_SERVICE_UUID,   // Yesoul proprietary
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -116,6 +123,17 @@ export function createCSCMeasurement(fields: {
   };
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  YESOUL RAW DATA TYPE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Raw parsed values from Yesoul FFF4 notify packet */
+export interface YesoulRawData {
+  rpm: number;           // bytes[6] — cadence 0-120 RPM
+  resistanceRaw: number; // bytes[4] — raw 0-78, level = raw / 2.4
+  powerW: number;        // bytes[8][9] LE / 10 — Watts
+}
+
 /** Create an FTMS measurement with synthesized CSC fields */
 export function createFTMSMeasurement(
   fields: {
@@ -160,5 +178,52 @@ export function createFTMSMeasurement(
     resistance: fields.resistance ?? null,
     steps: fields.steps ?? null,
     elapsedTime: fields.elapsedTime ?? null,
+  };
+}
+
+/** Create a Yesoul measurement with synthesized CSC fields and derived speed */
+export function createYesoulMeasurement(
+  raw: YesoulRawData,
+  syntheticCrankCounter: number,
+): BLEMeasurement {
+  // Yesoul wheel circumference: 1.75m, gear ratio: 3.0
+  const WHEEL_CIRCUMFERENCE_M = 1.75;
+  const GEAR_RATIO = 3.0;
+
+  const speedKmh = raw.rpm > 0
+    ? (raw.rpm * GEAR_RATIO * WHEEL_CIRCUMFERENCE_M * 60) / 1000
+    : 0;
+
+  // Convert raw resistance (0-78) to level (1-32)
+  const resistanceLevel = Math.max(1, Math.min(32,
+    Math.round(raw.resistanceRaw / 2.4)
+  ));
+
+  // Synthesize CSC-compatible fields (same approach as FTMS)
+  const now = Date.now();
+  const syntheticCrankEventTime = (now % 64000) * 1.024;
+
+  return {
+    // Synthesized CSC fields
+    wheelRevolutions: 0,
+    lastWheelEventTime: 0,
+    crankRevolutions: syntheticCrankCounter,
+    lastCrankEventTime: Math.round(syntheticCrankEventTime),
+    rpm: raw.rpm,
+    timestamp: now,
+
+    // Protocol
+    protocol: 'yesoul',
+
+    // Yesoul fields (mapped to FTMS-compatible slots)
+    speed: speedKmh,
+    power: raw.powerW,
+    distance: null,       // accumulated externally in workout.tsx
+    incline: null,        // not applicable for spin bike
+    calories: null,       // accumulated externally in workout.tsx
+    heartRate: null,      // not in Yesoul packet
+    resistance: resistanceLevel,
+    steps: null,          // not applicable
+    elapsedTime: null,    // tracked externally
   };
 }

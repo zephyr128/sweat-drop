@@ -6,6 +6,7 @@
  * Protocols:
  * - CSC (0x1816): Cycling Speed and Cadence — Magene S3+
  * - FTMS (0x1826): Fitness Machine Service — Life Fitness, Technogym, Matrix, Horizon
+ * - Yesoul (0xFFF0): Proprietary — Yesoul spin bikes
  *
  * AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.4)
  * Added FTMS protocol support alongside existing CSC. Protocol is auto-detected
@@ -20,6 +21,7 @@ import {
   type BLEProtocolType,
   type FTMSMachineType,
   type BLEMeasurement,
+  type YesoulRawData,
   CSC_SERVICE_UUID,
   CSC_SPEED_SERVICE_UUID,
   CSC_MEASUREMENT_CHAR_UUID,
@@ -28,9 +30,12 @@ import {
   FTMS_TREADMILL_DATA_CHAR_UUID,
   FTMS_INDOOR_BIKE_CHAR_UUID,
   FTMS_CROSS_TRAINER_CHAR_UUID,
+  YESOUL_SERVICE_UUID,
+  YESOUL_NOTIFY_CHAR_UUID,
   ALL_SCAN_SERVICE_UUIDS,
   createCSCMeasurement,
   createFTMSMeasurement,
+  createYesoulMeasurement,
 } from '@/lib/ble-protocol';
 
 import {
@@ -137,7 +142,7 @@ export class BLEService {
   /**
    * Set the expected BLE protocol (forces protocol instead of auto-detection).
    * Call before connectToDevice() to skip auto-detection.
-   * @param protocol - 'csc' for Magene S3+, 'ftms' for gym equipment
+   * @param protocol - 'csc' for Magene S3+, 'ftms' for gym equipment, 'yesoul' for Yesoul spin bikes
    * @param machineType - FTMS machine type hint (default: 'bike')
    */
   setProtocol(protocol: BLEProtocolType, machineType?: FTMSMachineType): void {
@@ -375,16 +380,48 @@ export class BLEService {
         });
 
         // ── PROTOCOL DETECTION ──
-        // Check for FTMS service first (more capable, used by most gym equipment)
+        // Check for all supported services
+        const yesoulService = services.find(s => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
         const ftmsService = services.find(s => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
         const cscCadenceService = services.find(s => uuidMatches(s.uuid, CSC_SERVICE_UUID));
         const cscSpeedService = services.find(s => uuidMatches(s.uuid, CSC_SPEED_SERVICE_UUID));
 
-        // Determine which protocol to use
-        const useFTMS = (this.forcedProtocol === 'ftms') ||
-          (!this.forcedProtocol && ftmsService) ||
-          (this.forcedProtocol !== 'csc' && ftmsService && !cscCadenceService);
+        // Priority: Yesoul > FTMS > CSC
+        const useYesoul = (this.forcedProtocol === 'yesoul') ||
+          (!this.forcedProtocol && yesoulService && !ftmsService && !cscCadenceService);
 
+        const useFTMS = !useYesoul && (
+          (this.forcedProtocol === 'ftms') ||
+          (!this.forcedProtocol && ftmsService) ||
+          (this.forcedProtocol !== 'csc' && ftmsService && !cscCadenceService)
+        );
+
+        // ── Yesoul Protocol ──
+        if (useYesoul && yesoulService) {
+          console.log(`[BLE] Yesoul Service found: ${yesoulService.uuid}`);
+          this.emitStatus('Found Yesoul bike');
+          this.activeProtocol = 'yesoul';
+          this.syntheticCrankCounter = 0;
+
+          // Validate FFF4 notify characteristic exists
+          const chars = await yesoulService.characteristics();
+          const hasNotify = chars.some(c => uuidMatches(c.uuid, YESOUL_NOTIFY_CHAR_UUID));
+
+          console.log(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
+
+          if (!hasNotify) {
+            throw new Error('Yesoul service found but FFF4 notify characteristic missing.');
+          }
+
+          this.device = device;
+          this.deviceId = device.id;
+          this.isConnected = true;
+          this.emitStatus('Ready (Yesoul bike)');
+          console.log('[BLE] Connected via Yesoul proprietary protocol (iOS)');
+          return true;
+        }
+
+        // ── FTMS Protocol ──
         if (useFTMS && ftmsService) {
           console.log(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
           this.emitStatus('Found FTMS service');
@@ -433,7 +470,7 @@ export class BLEService {
 
         if (!cscService) {
           const serviceUuids = services.map(s => s.uuid).join(', ');
-          throw new Error(`No supported BLE service found (CSC 0x1816 or FTMS 0x1826). Available: ${serviceUuids}`);
+          throw new Error(`No supported BLE service found (CSC 0x1816, FTMS 0x1826, or Yesoul 0xFFF0). Available: ${serviceUuids}`);
         }
 
         console.log(`[BLE] Found CSC Service: ${cscService.uuid} (normalized: ${normalizeUUID(cscService.uuid)})`);
@@ -491,14 +528,48 @@ export class BLEService {
         });
 
         // ── PROTOCOL DETECTION ──
+        const yesoulService = services.find((s: any) => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
         const ftmsService = services.find((s: any) => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
         const cscCadenceService = services.find((s: any) => uuidMatches(s.uuid, CSC_SERVICE_UUID));
         const cscSpeedService = services.find((s: any) => uuidMatches(s.uuid, CSC_SPEED_SERVICE_UUID));
 
-        const useFTMS = (this.forcedProtocol === 'ftms') ||
-          (!this.forcedProtocol && ftmsService) ||
-          (this.forcedProtocol !== 'csc' && ftmsService && !cscCadenceService);
+        // Priority: Yesoul > FTMS > CSC
+        const useYesoul = (this.forcedProtocol === 'yesoul') ||
+          (!this.forcedProtocol && yesoulService && !ftmsService && !cscCadenceService);
 
+        const useFTMS = !useYesoul && (
+          (this.forcedProtocol === 'ftms') ||
+          (!this.forcedProtocol && ftmsService) ||
+          (this.forcedProtocol !== 'csc' && ftmsService && !cscCadenceService)
+        );
+
+        // ── Yesoul Protocol ──
+        if (useYesoul && yesoulService) {
+          console.log(`[BLE] Yesoul Service found: ${yesoulService.uuid}`);
+          this.emitStatus('Found Yesoul bike');
+          this.activeProtocol = 'yesoul';
+          this.syntheticCrankCounter = 0;
+
+          // Validate FFF4 notify characteristic
+          // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
+          const chars = await BleManager.getCharacteristics(deviceId, yesoulService.uuid);
+          const hasNotify = chars.some((c: any) => uuidMatches(c.uuid, YESOUL_NOTIFY_CHAR_UUID));
+
+          console.log(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
+
+          if (!hasNotify) {
+            throw new Error('Yesoul service found but FFF4 notify characteristic missing.');
+          }
+
+          this.device = deviceId;
+          this.deviceId = deviceId;
+          this.isConnected = true;
+          this.emitStatus('Ready (Yesoul bike)');
+          console.log('[BLE] Connected via Yesoul proprietary protocol (Android)');
+          return true;
+        }
+
+        // ── FTMS Protocol ──
         if (useFTMS && ftmsService) {
           console.log(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
           this.emitStatus('Found FTMS service');
@@ -544,7 +615,7 @@ export class BLEService {
 
         if (!cscService) {
           const serviceUuids = services.map((s: any) => s.uuid).join(', ');
-          throw new Error(`No supported BLE service found (CSC 0x1816 or FTMS 0x1826). Available: ${serviceUuids}`);
+          throw new Error(`No supported BLE service found (CSC 0x1816, FTMS 0x1826, or Yesoul 0xFFF0). Available: ${serviceUuids}`);
         }
 
         console.log(`[BLE] Found CSC Service: ${cscService.uuid}`);
@@ -624,6 +695,8 @@ export class BLEService {
       // Route to protocol-specific monitoring
       if (this.activeProtocol === 'ftms') {
         await this.startFTMSMonitoring();
+      } else if (this.activeProtocol === 'yesoul') {
+        await this.startYesoulMonitoring();
       } else {
         await this.startCSCMonitoring();
       }
@@ -865,6 +938,166 @@ export class BLEService {
     }
   }
 
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  YESOUL PROTOCOL (FFF0 Proprietary)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  /**
+   * Parse Yesoul FFF4 notify packet (12 bytes).
+   *
+   * Packet format:
+   *   [0]    0x51      Header
+   *   [1]    0x1C      Message type
+   *   [2-3]            Sequence counter
+   *   [4]    uint8     Resistance (raw 0-78, level = raw / 2.4)
+   *   [5]    0x00      Padding
+   *   [6]    uint8     RPM (cadence)
+   *   [7]    0x00      Padding
+   *   [8-9]  uint16 LE Power × 10 (Watts)
+   *   [10]             Checksum
+   *   [11]   0x00      Padding
+   */
+  private parseYesoulPacket(bytes: Uint8Array): YesoulRawData | null {
+    // Validate packet
+    if (bytes.length < 12) return null;
+    if (bytes[0] !== 0x51) return null;
+    if (bytes[1] !== 0x1C) return null;
+
+    const rpm = bytes[6];
+    const resistanceRaw = bytes[4];
+    const powerW = ((bytes[9] << 8) | bytes[8]) / 10;
+
+    // Sanity checks
+    if (rpm > 200) return null;           // unrealistic RPM
+    if (resistanceRaw > 100) return null; // unrealistic resistance
+    if (powerW > 2000) return null;       // unrealistic power
+
+    return { rpm, resistanceRaw, powerW };
+  }
+
+  /**
+   * Handle incoming Yesoul measurement data (called from notification callback).
+   */
+  private handleYesoulMeasurement(bytes: Uint8Array): void {
+    // TEMP DEBUG — raw byte inspection
+    const hex = Array.from(bytes)
+      .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+      .join(' ');
+    console.log(`[Yesoul RAW] len=${bytes.length} ${hex}`);
+    console.log(`[Yesoul BYTES] [4]=${bytes[4]} [6]=${bytes[6]} [8]=${bytes[8]} [9]=${bytes[9]}`);
+
+    this.lastMeasurementTime = Date.now();
+    this.emitStatus('Signal OK');
+    this.syntheticCrankCounter++;
+
+    const raw = this.parseYesoulPacket(bytes);
+    if (!raw) {
+      console.warn('[BLE] Invalid Yesoul packet, skipping');
+      return;
+    }
+
+    const measurement = createYesoulMeasurement(
+      raw,
+      this.syntheticCrankCounter,
+    );
+
+    console.log(
+      `[BLE] Yesoul: RPM=${raw.rpm}` +
+      ` resistance=${Math.round(raw.resistanceRaw / 2.4)}` +
+      ` power=${raw.powerW}W` +
+      ` speed=${measurement.speed?.toFixed(1)}km/h`
+    );
+
+    if (this.measurementCallback) {
+      this.measurementCallback(measurement);
+    }
+  }
+
+  /**
+   * Start Yesoul protocol monitoring.
+   * Subscribes to FFF4 notify characteristic for metrics data.
+   */
+  private async startYesoulMonitoring(): Promise<void> {
+    console.log('[BLE] Starting Yesoul monitoring...');
+
+    if (Platform.OS === 'ios') {
+      const device = this.device as Device;
+      const services = await device.services();
+      const yesoulService = services.find(s => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
+      if (!yesoulService) {
+        throw new Error('Yesoul service not found for monitoring');
+      }
+
+      const chars = await yesoulService.characteristics();
+      const notifyChar = chars.find(c => uuidMatches(c.uuid, YESOUL_NOTIFY_CHAR_UUID));
+      if (!notifyChar) {
+        throw new Error('Yesoul FFF4 notify characteristic not found');
+      }
+
+      console.log('[BLE] iOS: Subscribing to Yesoul FFF4...');
+      this.notificationSubscription = device.monitorCharacteristicForService(
+        yesoulService.uuid,
+        notifyChar.uuid,
+        (error, characteristic) => {
+          if (error) {
+            console.error('[BLE] Yesoul measurement error:', error);
+            this.handleConnectionLoss();
+            return;
+          }
+
+          if (characteristic?.value) {
+            const bytes = this.base64ToBytes(characteristic.value);
+            if (bytes) {
+              this.handleYesoulMeasurement(bytes);
+            }
+          }
+        }
+      );
+
+      console.log('[BLE] Yesoul monitoring started (iOS)');
+    } else {
+      // Android
+      const deviceId = this.device as string;
+      // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
+      const services = await BleManager.getServices(deviceId);
+      const yesoulService = services.find((s: any) => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
+      if (!yesoulService) {
+        throw new Error('Yesoul service not found for monitoring');
+      }
+
+      await BleManager.startNotification(
+        deviceId,
+        yesoulService.uuid,
+        YESOUL_NOTIFY_CHAR_UUID,
+      );
+
+      // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+      this.notificationSubscription = BleManager.addListener(
+        'BleManagerDidUpdateValueForCharacteristic',
+        (data: any) => {
+          if (data.peripheral !== deviceId) return;
+          if (!uuidMatches(data.characteristic, YESOUL_NOTIFY_CHAR_UUID)) return;
+          if (!data.value) return;
+
+          const bytes = this.base64ToBytes(data.value);
+          if (bytes) {
+            this.handleYesoulMeasurement(bytes);
+          }
+        }
+      );
+
+      // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
+      BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
+        if (data.peripheral === deviceId) {
+          console.log('[BLE] Yesoul device disconnected');
+          this.handleConnectionLoss();
+        }
+      });
+
+      console.log('[BLE] Yesoul monitoring started (Android)');
+    }
+  }
+
   /**
    * Convert base64 string to Uint8Array (shared utility for iOS/Android)
    */
@@ -1061,6 +1294,14 @@ export class BLEService {
                     } catch { /* ignore */ }
                   }
                 }
+              }
+            } else if (this.activeProtocol === 'yesoul') {
+              // Stop Yesoul notification
+              const yesoulService = services.find((s: any) => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
+              if (yesoulService) {
+                try {
+                  await BleManager.stopNotification(deviceId, yesoulService.uuid, YESOUL_NOTIFY_CHAR_UUID);
+                } catch { /* ignore */ }
               }
             } else {
               // Stop CSC notification
