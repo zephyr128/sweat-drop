@@ -218,7 +218,7 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
 export async function registerBLEDevice(
   machineId: string,
   bleDeviceName: string,
-  bleProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit',
+  bleProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | 'unknown' | null,
   protocolVerified: boolean
 ) {
   try {
@@ -232,13 +232,17 @@ export async function registerBLEDevice(
       return { success: false, error: 'Admin client not available' };
     }
 
+    // DB CHECK constraint only allows: 'ftms', 'fitshow', 'magene', 'ksfit'
+    // For unknown protocols (proprietary devices), save as NULL
+    const dbProtocol = bleProtocol === 'unknown' ? null : bleProtocol;
+
     const { data, error } = await supabaseAdmin
       .from('machines')
       // @ts-expect-error - Supabase type inference issue
       .update({
         sensor_id: bleDeviceName,
         sensor_paired_at: new Date().toISOString(),
-        ble_protocol: bleProtocol,
+        ble_protocol: dbProtocol,
         protocol_verified: protocolVerified,
       } as any)
       .eq('id', machineId)

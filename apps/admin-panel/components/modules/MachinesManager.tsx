@@ -69,9 +69,10 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   const [bleStatus, setBleStatus] = useState<{
     step: 'idle' | 'scanning' | 'connecting' | 'detecting' | 'testing' | 'done' | 'error';
     deviceName?: string;
-    protocol?: 'ftms' | 'fitshow' | 'magene' | 'ksfit';
+    protocol?: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | 'unknown';
     dataReceived?: boolean;
     error?: string;
+    scanAll?: boolean;
   }>({ step: 'idle' });
   const [gyms, setGyms] = useState<Array<{ id: string; name: string; city: string | null; country: string | null }>>([]);
   const [selectedGymId, setSelectedGymId] = useState<string>(gymId || '');
@@ -286,34 +287,53 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
     HEART_RATE: 0x180D,  // Heart Rate
   };
 
-  const handleBLERegistration = async (machineId: string) => {
+  const handleBLERegistration = async (machineId: string, scanAll = false) => {
     if (!('bluetooth' in navigator)) {
       toast.error('Web Bluetooth is not supported. Use Chrome or Edge.');
       return;
     }
 
     setBleRegistrationModal(machineId);
-    setBleStatus({ step: 'scanning' });
+    setBleStatus({ step: 'scanning', scanAll });
 
     try {
-      // Scan for BLE devices with fitness-related services
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          { services: [BLE_SERVICES.FTMS] },
-          { services: [BLE_SERVICES.CSC] },
-          { services: [BLE_SERVICES.RSC] },
-        ],
-        optionalServices: [
-          'battery_service',
-          'device_information',
-          'generic_access',
-          BLE_SERVICES.FTMS,
-          BLE_SERVICES.CSC,
-          BLE_SERVICES.RSC,
-        ],
-      });
+      // Scan for BLE devices — standard mode uses service filters, scan-all mode shows every device
+      const requestOptions: any = scanAll
+        ? {
+            acceptAllDevices: true,
+            optionalServices: [
+              'battery_service',
+              'device_information',
+              'generic_access',
+              BLE_SERVICES.FTMS,
+              BLE_SERVICES.CSC,
+              BLE_SERVICES.RSC,
+              BLE_SERVICES.HEART_RATE,
+            ],
+          }
+        : {
+            filters: [
+              { services: [BLE_SERVICES.FTMS] },
+              { services: [BLE_SERVICES.CSC] },
+              { services: [BLE_SERVICES.RSC] },
+            ],
+            optionalServices: [
+              'battery_service',
+              'device_information',
+              'generic_access',
+              BLE_SERVICES.FTMS,
+              BLE_SERVICES.CSC,
+              BLE_SERVICES.RSC,
+            ],
+          };
 
-      const deviceName = device.name || device.id || `BLE-${Date.now()}`;
+      const device = await (navigator as any).bluetooth.requestDevice(requestOptions);
+
+      // CRITICAL: Save device.id (Web Bluetooth opaque ID, base64) as sensor_id for the DB.
+      // Mobile app detects base64 strings and enters scan-by-name mode instead of direct connect.
+      // device.name is the human-readable name (e.g., "YESOUL282920") — used for UI display only.
+      const bleDeviceId = device.id || `BLE-${Date.now()}`;
+      const deviceName = device.name || device.id || 'Unknown Device';
       setBleStatus({ step: 'connecting', deviceName });
 
       // Connect to GATT server
@@ -321,7 +341,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
       setBleStatus({ step: 'detecting', deviceName });
 
       // Protocol detection — try FTMS first, then CSC (Magene), then others
-      let detectedProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' = 'magene';
+      let detectedProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | 'unknown' = scanAll ? 'unknown' : 'magene';
       let dataReceived = false;
 
       // Try FTMS (Fitness Machine Service) — most standard
@@ -402,12 +422,16 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
         }
       }
 
-      // Check device name for FitShow/KSFit hints
+      // Check device name for FitShow/KSFit/other protocol hints
       const nameLower = deviceName.toLowerCase();
-      if (nameLower.includes('fitshow') || nameLower.includes('fs-')) {
-        detectedProtocol = 'fitshow';
-      } else if (nameLower.includes('ksfit') || nameLower.includes('ks-')) {
-        detectedProtocol = 'ksfit';
+      if (detectedProtocol === 'unknown' || detectedProtocol === 'magene') {
+        if (nameLower.includes('fitshow') || nameLower.includes('fs-')) {
+          detectedProtocol = 'fitshow';
+        } else if (nameLower.includes('ksfit') || nameLower.includes('ks-')) {
+          detectedProtocol = 'ksfit';
+        } else if (nameLower.includes('magene') || nameLower.includes('csc')) {
+          detectedProtocol = 'magene';
+        }
       }
 
       setBleStatus({
@@ -417,10 +441,10 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
         dataReceived,
       });
 
-      // Save to database
+      // Save to database — use bleDeviceId (base64 opaque ID) so mobile can scan-match
       const result = await registerBLEDevice(
         machineId,
-        deviceName,
+        bleDeviceId,
         detectedProtocol,
         dataReceived
       );
@@ -431,15 +455,16 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
             m.id === machineId
               ? {
                   ...m,
-                  sensor_id: deviceName,
+                  sensor_id: bleDeviceId,
                   sensor_paired_at: new Date().toISOString(),
-                  ble_protocol: detectedProtocol,
+                  ble_protocol: detectedProtocol === 'unknown' ? null : detectedProtocol,
                   protocol_verified: dataReceived,
                 }
               : m
           )
         );
-        toast.success(`BLE device registered: ${detectedProtocol.toUpperCase()}${dataReceived ? ' ✓ Data confirmed' : ''}`);
+        const protoLabel = detectedProtocol === 'unknown' ? 'Proprietary' : detectedProtocol.toUpperCase();
+        toast.success(`BLE device registered: ${deviceName} (${protoLabel})${dataReceived ? ' ✓ Data confirmed' : ''}`);
       } else {
         toast.error(`Failed to save: ${result.error}`);
       }
@@ -607,16 +632,20 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                         </div>
                         {isSuperAdmin && machine.sensor_id && (
                           <div className="mt-2 text-xs text-[#808080] flex items-center gap-2">
-                            <span>BLE: <span className="text-[#00E5FF]">{machine.sensor_id}</span></span>
-                            {machine.ble_protocol && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                                machine.protocol_verified 
+                            <span>BLE: <span className="text-[#00E5FF]" title={machine.sensor_id}>
+                              {machine.sensor_id.length > 16 ? `${machine.sensor_id.slice(0, 12)}…` : machine.sensor_id}
+                            </span></span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                              machine.ble_protocol
+                                ? machine.protocol_verified 
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
                                   : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                              }`}>
-                                {machine.ble_protocol.toUpperCase()}{machine.protocol_verified ? ' ✓' : ' ?'}
-                              </span>
-                            )}
+                                : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                            }`}>
+                              {machine.ble_protocol 
+                                ? `${machine.ble_protocol.toUpperCase()}${machine.protocol_verified ? ' ✓' : ' ?'}`
+                                : 'PROPRIETARY'}
+                            </span>
                           </div>
                         )}
                       </td>
@@ -1061,6 +1090,13 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                 Machine: {machines.find(m => m.id === bleRegistrationModal)?.name || 'Unknown'}
               </p>
 
+              {/* Scan mode indicator */}
+              {bleStatus.scanAll && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                  <p className="text-xs text-amber-400 font-medium">All Devices Mode — showing all nearby BLE devices</p>
+                </div>
+              )}
+
               {/* Step indicator */}
               <div className="space-y-3">
                 {/* Step 1: Scanning */}
@@ -1118,6 +1154,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                     <p className="text-sm font-medium text-white">Detect Protocol</p>
                     <p className="text-xs text-[#808080]">
                       {bleStatus.step === 'detecting' ? 'Checking FTMS, CSC, FitShow, KSFit...' :
+                       bleStatus.protocol === 'unknown' ? 'No standard protocol — proprietary device' :
                        bleStatus.protocol ? `Detected: ${bleStatus.protocol.toUpperCase()}` : 'Identify BLE protocol'}
                     </p>
                   </div>
@@ -1163,24 +1200,62 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                     {bleStatus.dataReceived ? '✓ Device registered & verified' : '⚠ Device registered (unverified)'}
                   </p>
                   <p className="text-xs text-[#808080] mt-1">
-                    {bleStatus.deviceName} — {bleStatus.protocol?.toUpperCase()}
+                    {bleStatus.deviceName} — {bleStatus.protocol === 'unknown' ? 'Proprietary Protocol' : bleStatus.protocol?.toUpperCase()}
                     {!bleStatus.dataReceived && ' — Start pedaling/walking to verify data stream'}
                   </p>
+                  {bleStatus.protocol === 'unknown' && (
+                    <p className="text-xs text-amber-400 mt-2">
+                      ⚠ This device uses a proprietary BLE protocol. Workout tracking requires a custom parser in the mobile app.
+                    </p>
+                  )}
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2">
                 {bleStatus.step === 'error' && (
-                  <button
-                    onClick={() => {
-                      setBleStatus({ step: 'idle' });
-                      handleBLERegistration(bleRegistrationModal);
-                    }}
-                    className="flex-1 px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
-                  >
-                    Retry
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setBleStatus({ step: 'idle' });
+                        handleBLERegistration(bleRegistrationModal, false);
+                      }}
+                      className="flex-1 px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+                    >
+                      Retry (Standard)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBleStatus({ step: 'idle', scanAll: true });
+                        handleBLERegistration(bleRegistrationModal, true);
+                      }}
+                      className="flex-1 px-4 py-2 bg-amber-500 text-black rounded-lg font-bold hover:bg-amber-400 transition-colors"
+                    >
+                      Scan All Devices
+                    </button>
+                  </div>
+                )}
+                {bleStatus.step === 'idle' && (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setBleStatus({ step: 'idle' });
+                        handleBLERegistration(bleRegistrationModal, false);
+                      }}
+                      className="flex-1 px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+                    >
+                      Standard Scan
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBleStatus({ step: 'idle', scanAll: true });
+                        handleBLERegistration(bleRegistrationModal, true);
+                      }}
+                      className="flex-1 px-4 py-2 bg-amber-500 text-black rounded-lg font-bold hover:bg-amber-400 transition-colors text-sm"
+                    >
+                      All Devices
+                    </button>
+                  </div>
                 )}
                 {(bleStatus.step === 'done' || bleStatus.step === 'error' || bleStatus.step === 'idle') && (
                   <button
@@ -1188,7 +1263,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                       setBleRegistrationModal(null);
                       setBleStatus({ step: 'idle' });
                     }}
-                    className="flex-1 px-4 py-2 bg-[#1A1A1A] text-white rounded-lg hover:bg-[#2A2A2A] transition-colors"
+                    className="w-full px-4 py-2 bg-[#1A1A1A] text-white rounded-lg hover:bg-[#2A2A2A] transition-colors"
                   >
                     Close
                   </button>
