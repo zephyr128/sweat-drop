@@ -65,7 +65,7 @@ export async function getGymMembers(
       .from('gym_memberships')
       .select(`
         user_id,
-        joined_at,
+        created_at,
         profiles:user_id (
           id,
           username,
@@ -107,7 +107,7 @@ export async function getGymMembers(
           total_drops: p.total_drops || 0,
           streak_days: p.streak_days || 0,
           last_visit_date: lastVisit,
-          joined_at: m.joined_at,
+          joined_at: m.created_at,
           days_inactive: daysInactive,
           status,
         };

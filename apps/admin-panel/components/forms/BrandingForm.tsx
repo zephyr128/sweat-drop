@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase-client';
 
 interface BrandingFormProps {
-  gymId: string;
+  ownerId: string;
   initialData?: {
     primary_color?: string;
     logo_url?: string;
@@ -12,7 +12,7 @@ interface BrandingFormProps {
   } | null;
 }
 
-export function BrandingForm({ gymId, initialData }: BrandingFormProps) {
+export function BrandingForm({ ownerId, initialData }: BrandingFormProps) {
   const [primaryColor, setPrimaryColor] = useState(initialData?.primary_color || '#00E5FF');
   const [logoUrl, setLogoUrl] = useState(initialData?.logo_url || '');
   const [backgroundUrl, setBackgroundUrl] = useState(initialData?.background_url || '');
@@ -28,8 +28,8 @@ export function BrandingForm({ gymId, initialData }: BrandingFormProps) {
 
     try {
       // Upsert branding
-      const { error } = await supabase.from('gym_branding').upsert({
-        gym_id: gymId,
+      const { error } = await supabase.from('owner_branding').upsert({
+        owner_id: ownerId,
         primary_color: primaryColor,
         logo_url: logoUrl || null,
         background_url: backgroundUrl || null,

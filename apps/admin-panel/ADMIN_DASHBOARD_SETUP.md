@@ -21,7 +21,7 @@ backend/supabase/migrations/20240101000004_admin_rbac_system.sql
 This migration:
 - Creates `user_role` enum (superadmin, gym_admin, receptionist, user)
 - Adds `role` and `admin_gym_id` columns to `profiles` table
-- Creates `gym_branding` table for theme customization
+- Creates `owner_branding` table for theme customization
 - Creates `leaderboard_rewards` table for top 3 rewards
 - Sets up comprehensive RLS policies for all roles
 - Creates helper functions for role checking
@@ -183,7 +183,7 @@ Visit `http://localhost:3000` and log in with your superadmin account.
 
 ### Gym Admin
 - Can only access rows where `gym_id = admin_gym_id`
-- Full CRUD on: challenges, rewards, gym_branding, leaderboard_rewards
+- Full CRUD on: challenges, rewards, owner_branding, leaderboard_rewards
 - Read-only on: profiles, sessions, redemptions
 
 ### Receptionist
