@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useKeepAwake } from 'expo-keep-awake';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -72,6 +73,8 @@ const AnimatedText = ({ text, style }: { text: SharedValue<string>; style?: any 
 };
 
 export default function WorkoutScreen() {
+  useKeepAwake();
+
   const { sessionId, equipmentId, gymId, machineType: paramMachineType, sensorId, planId, machineId, bleProtocol } = useLocalSearchParams<{
     sessionId?: string;
     equipmentId?: string;
@@ -90,7 +93,8 @@ export default function WorkoutScreen() {
   const [duration, setDuration] = useState(0);
   const [calories, setCalories] = useState(0);
   // REMOVED: pace useState - now using animatedPaceText SharedValue
-  const [targetDrops, setTargetDrops] = useState(500);
+  const [targetDrops, setTargetDrops] = useState(300);
+  const [targetChallengeName, setTargetChallengeName] = useState<string | null>(null);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -103,7 +107,9 @@ export default function WorkoutScreen() {
   const [showWorkoutSummary, setShowWorkoutSummary] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [showChallengesOverlay, setShowChallengesOverlay] = useState(false);
+  const [reconnectTrigger, setReconnectTrigger] = useState(0); // Increment to force BLE useEffect re-run after reconnect
   const reconnectAttemptRef = useRef<number>(0); // Track reconnect attempts for exponential backoff
+  const isPausedRef = useRef(false); // Stable ref for BLE callbacks (avoids stale closures & dep array issues)
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
   const [bleConnected, setBleConnected] = useState(false);
@@ -115,6 +121,7 @@ export default function WorkoutScreen() {
   // DropEmitter now uses drops prop instead of imperative API
   const [activeDrops, setActiveDrops] = useState<Array<{ id: string; startX: number; progress: number }>>([]);
   const isMountedRef = useRef<boolean>(true); // Track if component is mounted
+  const isAppInBackgroundRef = useRef<boolean>(false); // Track app foreground/background state
   const lastHapticTimeRef = useRef<number>(0); // Throttle haptic feedback (max 5/s)
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -148,6 +155,9 @@ export default function WorkoutScreen() {
   const ftmsPowerHistoryRef = useRef<number[]>([]);
   const ftmsDeviceCaloriesRef = useRef<number>(0);
   const ftmsProtocolActiveRef = useRef<boolean>(false);
+  const treadmillDropAccRef = useRef<number>(0);
+  const treadmillCalAccRef = useRef<number>(0); // Fractional calorie accumulator for treadmill
+  const treadmillLastMeasureTimeRef = useRef<number>(0); // For speed-based distance and calorie accumulation
   // Throttled sync: Track last sync time
   const lastSyncRef = useRef<number>(0);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -155,6 +165,7 @@ export default function WorkoutScreen() {
   // CRITICAL: Refs for BLE callback to avoid stale closures
   const currentPlanItemRef = useRef<any>(null); // Always has latest currentPlanItem value
   const isSmartCoachModeRef = useRef<boolean>(false); // Always has latest isSmartCoachMode value
+  const targetReachedRef = useRef<boolean>(false); // Prevents duplicate target-reached triggers
   // Explosion animation when BLE connects
   const explosionScale = useSharedValue(1);
   const explosionOpacity = useSharedValue(0);
@@ -173,7 +184,8 @@ export default function WorkoutScreen() {
   const progressShared = useSharedValue(0); // Progress (0 to 1) for LiquidGauge
   const caloriesShared = useSharedValue(0); // Calories (calculated from drops)
   const totalCrankRevolutionsShared = useSharedValue(0); // Total crank revolutions for bike (for kcal and pace calculation)
-  
+  const treadmillSpeedShared = useSharedValue(0); // km/h from FTMS treadmill for pace calculation
+
   // Dynamic Branding: Primary color as SharedValue for Reanimated interpolateColor
   const primaryColorShared = useSharedValue(branding.primary);
   
@@ -218,6 +230,11 @@ export default function WorkoutScreen() {
   useEffect(() => {
     isSmartCoachModeRef.current = isSmartCoachMode;
   }, [isSmartCoachMode]);
+
+  // Keep isPausedRef in sync for BLE callback (avoids stale closures, no dep array re-trigger)
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
   
   // Premium UI Animations
   const dropJumpScale = useSharedValue(1); // Drop animation: Jump animation when drops increase
@@ -231,6 +248,15 @@ export default function WorkoutScreen() {
     (session?.equipment?.name?.toLowerCase().includes('treadmill') ? 'treadmill' :
      session?.equipment?.name?.toLowerCase().includes('bike') ? 'bike' : null);
 
+  // Ring pulse intensity: speed-based for treadmill, RPM for bike/elliptical
+  // Maps treadmill speed (0–15 km/h) → 0–120 to match RPM color breakpoints in CircularProgressRing
+  const ringIntensityShared = useDerivedValue(() => {
+    if (machineType === 'treadmill') {
+      return Math.min(treadmillSpeedShared.value * 8, 150);
+    }
+    return smoothedRPMShared.value;
+  }, [treadmillSpeedShared, smoothedRPMShared, machineType]);
+
   // Sync JS state to SharedValues for useAnimatedReaction dependencies
   useEffect(() => {
     isPausedShared.value = isPaused ? 1 : 0;
@@ -240,23 +266,31 @@ export default function WorkoutScreen() {
     bleConnectedShared.value = bleConnected ? 1 : 0;
   }, [bleConnected, bleConnectedShared]);
 
-  // AppState listener: Disable heavy animations when app goes to background
+  // AppState listener: Track background state; keep BLE + data processing alive
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // Pause heavy animations (Skia) when app goes to background
-        // BLE connection remains active
-        console.log('[Workout] App went to background - animations paused');
+        isAppInBackgroundRef.current = true;
+        console.log('[Workout] App went to background — BLE + drops continue, UI paused');
       } else if (nextAppState === 'active') {
-        // Resume animations when app comes to foreground
-        console.log('[Workout] App came to foreground - animations resumed');
+        // Re-sync watchdog timestamp so it doesn't immediately zero RPM
+        lastPacketTime.value = Date.now();
+        isAppInBackgroundRef.current = false;
+        // Refresh signal indicator from BLE service's last-known state
+        const lastBLETime = bleService.getLastMeasurementTime();
+        if (Date.now() - lastBLETime < 5000) {
+          setSignalStatus('ok');
+        } else {
+          setSignalStatus('lost');
+        }
+        console.log('[Workout] App came to foreground — UI resumed');
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [lastPacketTime]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -299,6 +333,81 @@ export default function WorkoutScreen() {
     session?.gym_id || null,
     machineType
   );
+
+  // Dynamic target drops from challenges — use nearest uncompleted challenge target
+  useEffect(() => {
+    if (!challenges || challenges.length === 0) {
+      // Fallback: type-based default
+      const fallbackTarget = machineType === 'treadmill' ? 600 : 300;
+      setTargetDrops(fallbackTarget);
+      setTargetChallengeName(null);
+      return;
+    }
+
+    // Find active uncompleted challenges with valid targets
+    const activeUncompleted = challenges.filter(c =>
+      !c.is_completed &&
+      c.target_drops > 0 &&
+      c.current_drops < c.target_drops
+    );
+
+    if (activeUncompleted.length === 0) {
+      // All challenges done — ambitious target
+      const maxEarned = Math.max(...challenges.map(c => c.current_drops), 0);
+      setTargetDrops(Math.max(maxEarned + 100, 300));
+      setTargetChallengeName(null);
+      return;
+    }
+
+    // Nearest challenge (least remaining drops)
+    const nearest = activeUncompleted.reduce((prev, curr) => {
+      const prevRemaining = prev.target_drops - prev.current_drops;
+      const currRemaining = curr.target_drops - curr.current_drops;
+      return currRemaining < prevRemaining ? curr : prev;
+    });
+
+    setTargetDrops(nearest.target_drops);
+    setTargetChallengeName(nearest.challenge_name || null);
+  }, [challenges, machineType]);
+
+  // Reset targetReachedRef when targetDrops changes (new target set)
+  useEffect(() => {
+    targetReachedRef.current = false;
+  }, [targetDrops]);
+
+  // Handle target reached — advance to next challenge or set buffer target
+  const handleTargetReached = useCallback(() => {
+    if (targetReachedRef.current) return;
+    targetReachedRef.current = true;
+
+    // Haptic celebration
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Find next challenge target that is larger than current drops
+    const currentDrops = totalDropsShared.value;
+    const activeUncompleted = challenges?.filter(c =>
+      !c.is_completed &&
+      c.target_drops > 0 &&
+      c.target_drops > currentDrops
+    ) ?? [];
+
+    if (activeUncompleted.length > 0) {
+      // Sort by nearest (smallest target that is above current drops)
+      const next = activeUncompleted.sort(
+        (a, b) => a.target_drops - b.target_drops
+      )[0];
+
+      setTargetDrops(next.target_drops);
+      setTargetChallengeName(next.challenge_name || null);
+      // targetReachedRef resets via the useEffect above when targetDrops changes
+    } else {
+      // No more challenges — set +30% buffer target so gauge resets
+      const buffer = Math.ceil(currentDrops * 1.3);
+      setTargetDrops(Math.max(buffer, currentDrops + 100));
+      setTargetChallengeName(null);
+      // targetReachedRef resets via the useEffect above when targetDrops changes
+    }
+  }, [challenges, totalDropsShared]);
 
   // SmartCoach: Load plan item when planId and machineId are available
   useEffect(() => {
@@ -414,11 +523,13 @@ export default function WorkoutScreen() {
   }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, gymId, session?.gym_id, session?.gym?.smartcoach_enabled]);
 
   // BLE Monitoring - REQUIRED to start workout
+  // CRITICAL: isPaused removed from guard & dep array — pausing should NOT kill BLE connection.
+  // isPaused is read via isPausedRef.current inside BLE callbacks.
   useEffect(() => {
     // Use sensorId from params or from session.machine
     const activeSensorId = sensorId || session?.machine?.sensor_id;
     
-    if (!session?.machine_id || !activeSensorId || isPaused) {
+    if (!session?.machine_id || !activeSensorId) {
       setBleConnected(false);
       return;
     }
@@ -441,10 +552,9 @@ export default function WorkoutScreen() {
         }
         // else: auto-detect (default behavior)
         
-        // Set up status callback for UI feedback
         bleService.setStatusCallback((status: string) => {
+          if (isAppInBackgroundRef.current) return;
           setBleStatus(status);
-          // Update signal status based on status message
           if (status === 'Signal OK') {
             setSignalStatus('ok');
           } else if (status === 'Signal Lost') {
@@ -483,6 +593,7 @@ export default function WorkoutScreen() {
           // Exponential Backoff: Retry after 1s, 2s, 4s
           reconnectAttemptRef.current = 0;
           const attemptReconnect = async () => {
+            if (!isMountedRef.current) return; // Guard against unmounted component
             reconnectAttemptRef.current++;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 4000); // 1s, 2s, 4s max
             
@@ -497,8 +608,8 @@ export default function WorkoutScreen() {
                 setBleStatus('');
                 reconnectAttemptRef.current = 0;
                 
-                // Restart monitoring
-                await startBLEMonitoring();
+                // Trigger BLE useEffect re-run to restart monitoring (avoids stale closure)
+                setReconnectTrigger(prev => prev + 1);
               } else if (reconnectAttemptRef.current < 3) {
                 // Retry up to 3 times
                 reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
@@ -554,11 +665,9 @@ export default function WorkoutScreen() {
             const now = Date.now();
             
             // Hard Fix: Glitch Filter - Ignore sudden drop to 0 if we're currently moving fast (> 20 RPM)
-            // Ako je measurement.rpm === 0, ali je trenutna rawRPM.value > 20, to je verovatno glitch senzora
-            // Ignoriši taj paket i nemoj setovati nulu. Nulu postavi samo ako je prethodni RPM bio nizak ili ako Watchdog potvrdi tišinu
-            if (measurement.rpm === 0 && rawRPMShared.value > 20) {
-              // High RPM - this is likely a sensor glitch, ignore it
-              // Watchdog will handle real 0 when sensor actually stops
+            // Only applies to CSC protocol (Magene S3+) where BLE echo packets can glitch
+            // FTMS data comes directly from the machine and is reliable — skip glitch filter
+            if (measurement.rpm === 0 && rawRPMShared.value > 20 && measurement.protocol !== 'ftms') {
               return; // Skip this packet completely
             }
             
@@ -585,24 +694,26 @@ export default function WorkoutScreen() {
               lastCrankEventTime: measurement.lastCrankEventTime,
             };
             
-            console.log('[Workout] BLE Measurement:', measurement, 'RawRPM:', measurement.rpm);
+            if (!isAppInBackgroundRef.current) {
+              console.log('[Workout] BLE Measurement:', measurement, 'RawRPM:', measurement.rpm);
+            }
             // EXC_BAD_ACCESS fix: skip all setState/native calls if unmounted (BLE can fire after cleanup)
             if (!isMountedRef.current) return;
-            // Update signal status to OK when data arrives
-            setSignalStatus('ok');
+            // Skip UI-only setState when app is backgrounded (BLE data still processes below)
+            if (!isAppInBackgroundRef.current) {
+              setSignalStatus('ok');
+            }
             
             // Critical Fix: Update last packet timestamp immediately for Watchdog
             lastPacketTime.value = now;
             
             // ── FTMS Extended Metrics Capture ──
-            // When protocol is FTMS, capture device-reported metrics for raw_metrics
             if (measurement.protocol === 'ftms') {
               ftmsProtocolActiveRef.current = true;
               
               // Speed tracking (km/h)
               if (measurement.speed != null && measurement.speed > 0) {
                 ftmsSpeedHistoryRef.current.push(measurement.speed);
-                // Keep last 120 readings (~2 min at 1 Hz)
                 if (ftmsSpeedHistoryRef.current.length > 120) ftmsSpeedHistoryRef.current.shift();
                 if (measurement.speed > ftmsMaxSpeedRef.current) {
                   ftmsMaxSpeedRef.current = measurement.speed;
@@ -626,6 +737,57 @@ export default function WorkoutScreen() {
               // Device calories (kcal) - authoritative from machine
               if (measurement.calories != null && measurement.calories > 0) {
                 ftmsDeviceCaloriesRef.current = measurement.calories;
+              }
+
+              // Treadmill real-time display updates
+              if (machineType === 'treadmill') {
+                const spd = measurement.speed ?? 0;
+                animatedSpeedText.value = spd > 0 ? spd.toFixed(1) : '0.0';
+                treadmillSpeedShared.value = spd;
+                
+                // Pace from speed: pace (min/km) = 60 / speed (km/h)
+                if (spd > 0.5) {
+                  const paceSecondsPerKm = 3600 / spd;
+                  const paceMins = Math.floor(paceSecondsPerKm / 60);
+                  const paceSecs = Math.floor(paceSecondsPerKm % 60);
+                  animatedPaceText.value = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
+                } else {
+                  animatedPaceText.value = '--:--';
+                }
+                
+                if (measurement.incline != null) {
+                  animatedInclineText.value = measurement.incline.toFixed(1);
+                }
+                
+                // Time delta for distance + calorie accumulation
+                const measNow = Date.now();
+                const prevTime = treadmillLastMeasureTimeRef.current;
+                const dtSec = prevTime > 0 ? (measNow - prevTime) / 1000 : 0;
+                const validDt = dtSec > 0 && dtSec < 5;
+                treadmillLastMeasureTimeRef.current = measNow;
+
+                // Distance: use device value if available, otherwise accumulate from speed
+                if (measurement.distance != null && measurement.distance > 0) {
+                  ftmsTotalDistanceRef.current = measurement.distance;
+                } else if (spd > 0.3 && validDt) {
+                  ftmsTotalDistanceRef.current += (spd / 3.6) * dtSec;
+                }
+                
+                const dist = ftmsTotalDistanceRef.current;
+                if (dist > 0) {
+                  animatedDistanceText.value = dist >= 1000
+                    ? (dist / 1000).toFixed(2)
+                    : Math.round(dist).toString();
+                }
+
+                // Calories: device value (authoritative) or speed-based MET estimation
+                // ~1 kcal/min per km/h (approximation for 70 kg person)
+                if (measurement.calories != null && measurement.calories > 0) {
+                  caloriesShared.value = measurement.calories;
+                } else if (spd > 0.3 && validDt) {
+                  treadmillCalAccRef.current += (spd / 60) * dtSec;
+                  caloriesShared.value = Math.floor(treadmillCalAccRef.current);
+                }
               }
             }
             
@@ -727,7 +889,7 @@ export default function WorkoutScreen() {
             // Note: 'now' was already declared at the start of this callback
             
             // PRO-FITNESS: Auto-Resume - if crankRevolutions started growing again, auto-resume
-            if (currentRevolutions > lastCrankRevolutionsForAutoResumeRef.current && isPaused && isMountedRef.current) {
+            if (currentRevolutions > lastCrankRevolutionsForAutoResumeRef.current && isPausedRef.current && isMountedRef.current) {
               // Crank started moving - auto-resume
               // Battery Optimization: No logging in measurement callback
               runOnJS(setIsPaused)(false);
@@ -766,13 +928,20 @@ export default function WorkoutScreen() {
                 const isWalkingMode = (measurement.rpm > 0 && measurement.rpm < stepDetectionThreshold);
                 
                 // NATIVE-DRIVEN: Machine-specific drop logic
-                // Get machine type (treadmill or bike)
                 const currentMachineType = machineType || 'treadmill';
                 
-                // Machine-specific calibration
                 let newDrops = 0;
-                if (currentMachineType === 'treadmill') {
-                  // Treadmill: 1 impulse = 1 drop
+                if (currentMachineType === 'treadmill' && measurement.protocol === 'ftms') {
+                  // Treadmill FTMS: speed-based drops (~12 drops/min at 8 km/h)
+                  const speedKmh = measurement.speed ?? 0;
+                  if (speedKmh > 0.3) {
+                    treadmillDropAccRef.current += speedKmh * 0.025;
+                    newDrops = Math.floor(treadmillDropAccRef.current);
+                    treadmillDropAccRef.current -= newDrops;
+                  }
+                  lastCrankRevolutionsRef.current = currentRevolutions;
+                } else if (currentMachineType === 'treadmill') {
+                  // Non-FTMS treadmill (CSC sensor): 1 impulse = 1 drop
                   newDrops = revolutionDelta;
                 } else if (currentMachineType === 'bike') {
                   // Bike: 5 impulses = 1 drop
@@ -792,46 +961,43 @@ export default function WorkoutScreen() {
                     totalCrankRevolutionsShared.value = totalCrankRevolutionsShared.value + revolutionDelta;
                   }
                   
-                  // Get current progress for drop emitter
-                  const currentProgress = Math.min(totalDropsShared.value / targetDrops, 1);
-                  
-                  // PRO-FITNESS: Add drops to state array for DropEmitter
-                  const newDropObjects: Array<{ id: string; startX: number; progress: number }> = [];
-                  for (let i = 0; i < newDrops; i++) {
-                    const dropId = `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
-                    const gaugeWidth = 280;
-                    const padding = 40;
-                    const startX = padding + Math.random() * (gaugeWidth - padding * 2);
-                    newDropObjects.push({
-                      id: dropId,
-                      startX,
-                      progress: currentProgress,
-                    });
-                  }
-                  setActiveDrops((prev) => [...prev, ...newDropObjects]);
-                  
-                  // PRO-FITNESS: Trigger liquid gauge impact when new drop falls
-                  // EXC_BAD_ACCESS fix: try-catch in case native view was deallocated
-                  try {
-                    liquidGaugeRef.current?.triggerImpact();
-                  } catch (_) { /* ignore if unmounted/deallocated */ }
-                  
-                  // Trigger drop jump animation
-                  dropJumpScale.value = withSequence(
-                    withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
-                    withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
-                  );
-                  
-                  // Haptic feedback (throttled - max 5/s = 200ms minimum)
-                  const now = Date.now();
-                  if (!lastHapticTimeRef.current || now - lastHapticTimeRef.current >= 200) {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    lastHapticTimeRef.current = now;
+                  // UI-only: skip animations, haptics, and drop objects when backgrounded
+                  if (!isAppInBackgroundRef.current) {
+                    const currentProgress = Math.min(totalDropsShared.value / targetDrops, 1);
+                    
+                    const newDropObjects: Array<{ id: string; startX: number; progress: number }> = [];
+                    for (let i = 0; i < newDrops; i++) {
+                      const dropId = `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
+                      const gaugeWidth = 280;
+                      const padding = 40;
+                      const startX = padding + Math.random() * (gaugeWidth - padding * 2);
+                      newDropObjects.push({
+                        id: dropId,
+                        startX,
+                        progress: currentProgress,
+                      });
+                    }
+                    setActiveDrops((prev) => [...prev, ...newDropObjects]);
+                    
+                    try {
+                      liquidGaugeRef.current?.triggerImpact();
+                    } catch (_) { /* ignore if unmounted/deallocated */ }
+                    
+                    dropJumpScale.value = withSequence(
+                      withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
+                      withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
+                    );
+                    
+                    const now = Date.now();
+                    if (!lastHapticTimeRef.current || now - lastHapticTimeRef.current >= 200) {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      lastHapticTimeRef.current = now;
+                    }
                   }
                 }
                 
                 // Update last crank revolutions based on machine type
-                if (currentMachineType === 'treadmill') {
+                if (currentMachineType === 'treadmill' && measurement.protocol !== 'ftms') {
                   lastCrankRevolutionsRef.current = currentRevolutions;
                 } else if (currentMachineType === 'bike') {
                   const remainingRevolutions = revolutionDelta % 5;
@@ -1006,6 +1172,7 @@ export default function WorkoutScreen() {
         // Exponential Backoff: Retry after 1s, 2s, 4s
         reconnectAttemptRef.current = 0;
         const attemptReconnect = async () => {
+          if (!isMountedRef.current) return; // Guard against unmounted component
           reconnectAttemptRef.current++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 4000); // 1s, 2s, 4s max
           
@@ -1020,8 +1187,8 @@ export default function WorkoutScreen() {
               setBleStatus('');
               reconnectAttemptRef.current = 0;
               
-              // Restart monitoring
-              await startBLEMonitoring();
+              // Trigger BLE useEffect re-run to restart monitoring (avoids stale closure)
+              setReconnectTrigger(prev => prev + 1);
             } else if (reconnectAttemptRef.current < 3) {
               // Retry up to 3 times
               reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
@@ -1063,11 +1230,11 @@ export default function WorkoutScreen() {
           clearTimeout(autoPauseTimerRef.current);
         }
       };
-    }, [session?.machine_id, session?.machine?.sensor_id, sensorId, isPaused, authSession?.user]);
+    }, [session?.machine_id, session?.machine?.sensor_id, sensorId, authSession?.user, reconnectTrigger]);
 
-  // Heartbeat update (every 10 seconds) and RPM update (every 30 seconds)
+  // Heartbeat update (every 10 seconds) — keeps machine locked regardless of pause state
   useEffect(() => {
-    if (!session?.machine_id || !authSession?.user || isPaused) {
+    if (!session?.machine_id || !authSession?.user) {
       return;
     }
 
@@ -1091,7 +1258,7 @@ export default function WorkoutScreen() {
         clearInterval(heartbeatIntervalRef.current);
       }
     };
-  }, [session?.machine_id, authSession?.user, isPaused]);
+  }, [session?.machine_id, authSession?.user]);
 
   
   // Animation values
@@ -1276,9 +1443,14 @@ export default function WorkoutScreen() {
     // 2. How long since last packet?
     const diff = now - lastPacketTime.value;
     
+    // Background guard: if diff > 10s, the app was likely backgrounded and the frame
+    // callback just resumed. Skip zeroing — AppState 'active' handler re-syncs lastPacketTime.
+    if (diff > 10000) {
+      lastPacketTime.value = now;
+      return;
+    }
+    
     // Hard Fix: Watchdog Reset - If no data for more than 2.5s, force direct reset to 0
-    // Set rawRPM.value = 0 directly (without animation) to ensure total reset
-    // This guarantees exact 0.00 value, no settling on small values like 1-10
     if (diff > 2500 && rawRPMShared.value > 0) {
       // Cancel any running animation first
       cancelAnimation(rawRPMShared);
@@ -1564,6 +1736,9 @@ export default function WorkoutScreen() {
   const animatedDropsText = useSharedValue('0');
   const animatedCaloriesText = useSharedValue('0');
   const animatedPaceText = useSharedValue('0:00');
+  const animatedSpeedText = useSharedValue('0.0');
+  const animatedDistanceText = useSharedValue('0');
+  const animatedInclineText = useSharedValue('--');
   // GPU-Only: LiquidGauge display value (SharedValue, no useState to avoid JS thread blocking)
   const liquidGaugeDisplayValueShared = useSharedValue('0');
 
@@ -1675,16 +1850,16 @@ export default function WorkoutScreen() {
   );
 
   // PRO-FITNESS: Calculate Pace (min/km) using AnimatedText
-  // Pace = Time (seconds) / Distance (km) = seconds per km
-  // Then convert to min:sec format
-  // Distance for treadmill = total_drops * 0.0008 (average step 0.8m)
-  // Distance for bike = total_revolutions * 0.002 (2m circle)
-  // If RPM is 0 or distance is 0, display --:--
+  // Bike: Pace = Time / Distance, where Distance = total_revolutions * 0.002 km
+  // Treadmill: Pace is set directly from FTMS speed in measurement callback (60/speed)
   useAnimatedReaction(
     () => [duration, totalDropsShared.value, totalCrankRevolutionsShared.value, smoothedRPMShared.value, machineType] as const,
-    ([timeSeconds, drops, totalRevolutions, rpm, mType]) => {
+    ([timeSeconds, _drops, totalRevolutions, rpm, mType]) => {
       'worklet';
       const currentMachineType = mType || 'treadmill';
+      
+      // Treadmill pace is calculated from FTMS speed in the BLE measurement callback
+      if (currentMachineType === 'treadmill') return;
       
       // If RPM is 0, display --:--
       if (rpm === 0) {
@@ -1692,15 +1867,8 @@ export default function WorkoutScreen() {
         return;
       }
       
-      let distanceKm = 0;
-      
-      if (currentMachineType === 'treadmill') {
-        // Treadmill: Distance = drops * 0.0008 km (0.8m per step)
-        distanceKm = drops * 0.0008;
-      } else {
-        // Bike: Distance = total_revolutions * 0.002 (2m circle)
-        distanceKm = totalRevolutions * 0.002;
-      }
+      // Bike: Distance = total_revolutions * 0.002 (2m circle)
+      const distanceKm = totalRevolutions * 0.002;
       
       // Calculate pace: seconds per km
       if (distanceKm > 0 && timeSeconds > 0) {
@@ -1716,10 +1884,11 @@ export default function WorkoutScreen() {
   );
 
   // ============================================================================
-  // PREMIUM UI: LiquidGauge Progress Calculation with Damping
+  // PREMIUM UI: LiquidGauge Progress Calculation with Damping + Target Reached
   // ============================================================================
   // Advanced Liquid: Progress follows drops with slight damping to create realistic liquid bubbling effect
   // LiquidGauge already receives smoothedRPMShared for dynamic glow synchronization
+  // When progress reaches 100%, triggers handleTargetReached to advance to next challenge
   useAnimatedReaction(
     () => totalDropsShared.value,
     (drops) => {
@@ -1731,25 +1900,29 @@ export default function WorkoutScreen() {
         duration: 300, // Small delay creates realistic liquid bubbling effect
         easing: Easing.out(Easing.quad),
       });
+
+      // When target reached, advance to next challenge
+      if (targetProgress >= 1) {
+        runOnJS(handleTargetReached)();
+      }
     },
     [totalDropsShared, targetDrops]
   );
 
   // PRO-FITNESS: Calculate calories based on machine type
   // Bike: Kcal = (total_revolutions * 0.15)
-  // Treadmill: Kcal = (total_drops * 0.04)
+  // Treadmill: calories are accumulated from speed in the BLE measurement callback
   useAnimatedReaction(
     () => [totalDropsShared.value, totalCrankRevolutionsShared.value, machineType] as const,
-    ([drops, totalRevolutions, mType]) => {
+    ([_drops, totalRevolutions, mType]) => {
       'worklet';
       const currentMachineType = mType || 'treadmill';
       
+      // Treadmill calories are calculated from speed in the measurement callback
+      if (currentMachineType === 'treadmill') return;
+      
       if (currentMachineType === 'bike') {
-        // Bike formula: Kcal = (total_revolutions * 0.15)
         caloriesShared.value = Math.floor(totalRevolutions * 0.15);
-      } else {
-        // Treadmill formula: Kcal = (total_drops * 0.04)
-        caloriesShared.value = Math.floor(drops * 0.04);
       }
     },
     [totalDropsShared, totalCrankRevolutionsShared, machineType]
@@ -2187,6 +2360,8 @@ export default function WorkoutScreen() {
 
   // Pause/Resume
   const togglePause = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     if (isPaused) {
       // Resume
       if (pausedTime) {
@@ -2201,11 +2376,15 @@ export default function WorkoutScreen() {
       setPausedTime(null);
       setIsPaused(false);
       pausedOverlayOpacity.value = withSpring(0, { damping: 15, stiffness: 100, mass: 1 });
+      // Reset lastRPMTime so auto-pause timer doesn't fire immediately
+      lastRPMTimeRef.current = Date.now();
     } else {
       // Pause
       setPausedTime(new Date());
       setIsPaused(true);
       pausedOverlayOpacity.value = withSpring(1, { damping: 15, stiffness: 100, mass: 1 });
+      // Clear auto-pause overlay on manual pause
+      setShowAutoPauseOverlay(false);
     }
   };
 
@@ -2795,10 +2974,11 @@ export default function WorkoutScreen() {
           {/* LiquidGauge Component - Only show when BLE is connected */}
           {/* Render LiquidGauge FIRST so it's below CircularProgressRing */}
           {bleConnected && (
-            <Animated.View style={dropJumpStyle}>
+            <>
               {/* Premium UI: Advanced LiquidGauge with Damping Effect */}
               {/* LiquidGauge follows rawRPM via smoothedRPMShared (already has damping from smoothing chain) */}
               {/* This creates realistic liquid bubbling effect as you pedal */}
+              {/* dropJumpScale animates ONLY the center number, not the liquid itself */}
               <LiquidGauge
                 ref={liquidGaugeRef}
                 progress={progressShared} // Pass SharedValue directly for real-time updates (with damping)
@@ -2806,8 +2986,9 @@ export default function WorkoutScreen() {
                 size={280}
                 strokeWidth={4}
                 rpm={smoothedRPMShared} // Pass smoothed RPM for dynamic glow synchronization (damping already applied)
+                dropScale={dropJumpScale} // Scale animation for center number only
               />
-            </Animated.View>
+            </>
           )}
 
           {/* Circular Progress Ring - Only show when BLE is connected */}
@@ -2817,8 +2998,8 @@ export default function WorkoutScreen() {
               progress={progressJS}
               size={290}
               strokeWidth={3}
-              rpm={smoothedRPMShared} // Pass RPM for laser sweep speed
-              primaryColor={branding.primary} // Dynamic primary color from branding
+              rpm={ringIntensityShared}
+              primaryColor={branding.primary}
             />
           )}
 
@@ -2849,60 +3030,120 @@ export default function WorkoutScreen() {
         </View>
       </View>
 
-      {/* Stats Grid (Time, Calories, Pace, RPM) */}
-      <View style={styles.statsGrid}>
-        <View style={styles.statItem}>
-          <Ionicons name="time-outline" size={24} color={theme.colors.text} />
-          <Text style={[styles.statValue, getNumberStyle(20)]}>
-            {formatTime(duration)}
-          </Text>
-          <Text style={styles.statLabel}>Time</Text>
-        </View>
+      {/* Stats Grid */}
+      {machineType === 'treadmill' ? (
+        <View style={styles.statsGridTreadmill}>
+          <View style={styles.statItemTreadmill}>
+            <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+            <Text style={[styles.statValue, getNumberStyle(18)]}>
+              {formatTime(duration)}
+            </Text>
+            <Text style={styles.statLabel}>Time</Text>
+          </View>
 
-        <View style={styles.statItem}>
-          <Ionicons name="flame" size={24} color={theme.colors.error} />
-          <AnimatedText 
-            text={animatedCaloriesText}
-            style={[styles.statValue, getNumberStyle(20)]}
-          />
-          <Text style={styles.statLabel}>{t('kcal')}</Text>
-        </View>
-
-        <View style={styles.statItem}>
-          <Ionicons name="speedometer-outline" size={24} color={branding.primary} />
-          <AnimatedText 
-            text={animatedPaceText}
-            style={[styles.statValue, getNumberStyle(20)]}
-          />
-          <Text style={styles.statLabel}>{t('minPerKm')}</Text>
-        </View>
-
-        {/* Premium UI: RPM Display with Dynamic Color & Pulse Effect (only show if sensor is connected) */}
-        {(session?.machine?.sensor_id || sensorId) && (
-          <Animated.View style={[styles.statItem, rpmPulseStyle]}>
+          <View style={styles.statItemTreadmill}>
             <View style={styles.rpmHeader}>
-              <Ionicons 
-                name="pulse-outline" 
-                size={24} 
-                color={bleConnected ? branding.primary : theme.colors.textSecondary} 
-              />
-              {/* Live Signal Indicator */}
-              {bleConnected && (
-                <SignalIndicator status={signalStatus} />
-              )}
+              <Ionicons name="speedometer-outline" size={20} color={branding.primary} />
+              {bleConnected && <SignalIndicator status={signalStatus} />}
             </View>
-            <AnimatedText 
-              text={animatedRPMText}
-              style={[
-                styles.statValue, 
-                getNumberStyle(20),
-                rpmTextColorStyle, // Premium UI: Dynamic color based on RPM intensity
-              ]}
+            <AnimatedText
+              text={animatedSpeedText}
+              style={[styles.statValue, getNumberStyle(18)]}
             />
-            <Text style={styles.statLabel}>{t('rpm')}</Text>
-          </Animated.View>
-        )}
-      </View>
+            <Text style={styles.statLabel}>{t('kmh')}</Text>
+          </View>
+
+          <View style={styles.statItemTreadmill}>
+            <Ionicons name="timer-outline" size={20} color={branding.primary} />
+            <AnimatedText
+              text={animatedPaceText}
+              style={[styles.statValue, getNumberStyle(18)]}
+            />
+            <Text style={styles.statLabel}>{t('minPerKm')}</Text>
+          </View>
+
+          <View style={styles.statItemTreadmill}>
+            <Ionicons name="flame" size={20} color={theme.colors.error} />
+            <AnimatedText
+              text={animatedCaloriesText}
+              style={[styles.statValue, getNumberStyle(18)]}
+            />
+            <Text style={styles.statLabel}>{t('kcal')}</Text>
+          </View>
+
+          <View style={styles.statItemTreadmill}>
+            <Ionicons name="navigate-outline" size={20} color={branding.primary} />
+            <AnimatedText
+              text={animatedDistanceText}
+              style={[styles.statValue, getNumberStyle(18)]}
+            />
+            <Text style={styles.statLabel}>
+              {ftmsTotalDistanceRef.current >= 1000 ? 'km' : 'm'}
+            </Text>
+          </View>
+
+          <View style={styles.statItemTreadmill}>
+            <Ionicons name="trending-up-outline" size={20} color={branding.primary} />
+            <AnimatedText
+              text={animatedInclineText}
+              style={[styles.statValue, getNumberStyle(18)]}
+            />
+            <Text style={styles.statLabel}>{t('incline')} %</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.statsGrid}>
+          <View style={styles.statItem}>
+            <Ionicons name="time-outline" size={24} color={theme.colors.text} />
+            <Text style={[styles.statValue, getNumberStyle(20)]}>
+              {formatTime(duration)}
+            </Text>
+            <Text style={styles.statLabel}>Time</Text>
+          </View>
+
+          <View style={styles.statItem}>
+            <Ionicons name="flame" size={24} color={theme.colors.error} />
+            <AnimatedText
+              text={animatedCaloriesText}
+              style={[styles.statValue, getNumberStyle(20)]}
+            />
+            <Text style={styles.statLabel}>{t('kcal')}</Text>
+          </View>
+
+          <View style={styles.statItem}>
+            <Ionicons name="speedometer-outline" size={24} color={branding.primary} />
+            <AnimatedText
+              text={animatedPaceText}
+              style={[styles.statValue, getNumberStyle(20)]}
+            />
+            <Text style={styles.statLabel}>{t('minPerKm')}</Text>
+          </View>
+
+          {(session?.machine?.sensor_id || sensorId) && (
+            <Animated.View style={[styles.statItem, rpmPulseStyle]}>
+              <View style={styles.rpmHeader}>
+                <Ionicons
+                  name="pulse-outline"
+                  size={24}
+                  color={bleConnected ? branding.primary : theme.colors.textSecondary}
+                />
+                {bleConnected && (
+                  <SignalIndicator status={signalStatus} />
+                )}
+              </View>
+              <AnimatedText
+                text={animatedRPMText}
+                style={[
+                  styles.statValue,
+                  getNumberStyle(20),
+                  rpmTextColorStyle,
+                ]}
+              />
+              <Text style={styles.statLabel}>{t('rpm')}</Text>
+            </Animated.View>
+          )}
+        </View>
+      )}
 
       {/* Progress Bar */}
       <View style={styles.progressBarContainer}>
@@ -2918,9 +3159,14 @@ export default function WorkoutScreen() {
           />
         </View>
         <View style={styles.targetContainer}>
-          <Text style={styles.targetText}>{t('target')}</Text>
-          <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
-          <Ionicons name="water" size={16} color={theme.colors.primary} />
+          {targetChallengeName && (
+            <Text style={styles.targetChallengeLabel} numberOfLines={1}>🎯 {targetChallengeName}</Text>
+          )}
+          <View style={styles.targetRow}>
+            <Text style={styles.targetText}>{t('target')}</Text>
+            <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
+            <Ionicons name="water" size={16} color={theme.colors.primary} />
+          </View>
         </View>
       </View>
 
@@ -3232,6 +3478,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
   },
+  statsGridTreadmill: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    paddingHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+    rowGap: theme.spacing.md,
+  },
+  statItemTreadmill: {
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    width: '33%',
+  },
   rpmHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3267,9 +3526,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
   },
   targetContainer: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  targetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  targetChallengeLabel: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    maxWidth: 160,
+    textAlign: 'center',
   },
   targetText: {
     ...fontStyles.body,

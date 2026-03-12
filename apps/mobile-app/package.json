@@ -33,6 +33,7 @@
     "expo-font": "^55.0.4",
     "expo-haptics": "~14.0.0",
     "expo-image": "~3.0.11",
+    "expo-keep-awake": "^55.0.4",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.11",
     "expo-localization": "^55.0.8",
@@ -70,6 +71,7 @@
     "@typescript-eslint/parser": "^6.13.2",
     "eslint": "^8.55.0",
     "eslint-config-expo": "~10.0.0",
+    "eslint-config-prettier": "^10.1.8",
     "expo": "~54.0.31",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"

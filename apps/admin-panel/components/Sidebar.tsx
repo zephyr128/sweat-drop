@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserRole } from '@/lib/auth';
@@ -15,14 +15,15 @@ import {
   Ticket,
   Users,
   Building2,
-  Settings,
   Activity,
   Award,
   ShieldCheck,
   HeartPulse,
   Swords,
   History,
+  Mail,
 } from 'lucide-react';
+import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 
 interface SidebarProps {
   role: UserRole;
@@ -31,10 +32,11 @@ interface SidebarProps {
   email?: string | null;
 }
 
-export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
+export function Sidebar({ role, currentGymId, username: _username, email: _email }: SidebarProps) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [gymIdFromStorage, setGymIdFromStorage] = useState<string | null>(null);
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
   
   // Extract gym ID from URL if present
   const gymIdFromUrl = useMemo(() => {
@@ -61,6 +63,13 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
   // Use gymId from URL if available, then from sessionStorage, then fall back to prop
   const effectiveGymId = gymIdFromUrl || gymIdFromStorage || currentGymId;
 
+  // Fetch pending invitation count for gym owners/admins
+  useEffect(() => {
+    if (effectiveGymId && ['gym_owner', 'gym_admin'].includes(role)) {
+      getPendingInvitationCount(effectiveGymId).then(setPendingInviteCount);
+    }
+  }, [effectiveGymId, role]);
+
   const isActive = (path: string) => {
     if (!pathname) return false;
     // Exact match
@@ -77,7 +86,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
   };
 
   // Icon component helper
-  const Icon = ({ icon: IconComponent, isActive: active }: { icon: any; isActive: boolean }) => (
+  const Icon = ({ icon: IconComponent, isActive: active }: { icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>; isActive: boolean }) => (
     <IconComponent
       className={active ? 'text-[#00E5FF]' : 'text-zinc-500'}
       size={18}
@@ -110,6 +119,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
         { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
         { href: `${base}/machines`, label: 'Machines', icon: Cpu },
         { href: `${base}/arenas`, label: 'Local Arenas', icon: Swords },
+        { href: `${base}/invitations`, label: 'Invitations', icon: Mail, badge: pendingInviteCount },
         { href: `${base}/leaderboard-history`, label: 'Leaderboard History', icon: History },
       ],
       operations: [
@@ -140,6 +150,7 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
       management: [
         { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
         { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
+        { href: `${base}/invitations`, label: 'Invitations', icon: Mail, badge: pendingInviteCount },
         { href: `${base}/leaderboard-history`, label: 'Leaderboard History', icon: History },
       ],
       operations: [
@@ -161,7 +172,8 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
     };
   };
 
-  type CoreLinks = { href: string; label: string; icon: any }[];
+  type CoreLink = { href: string; label: string; icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>; badge?: number };
+  type CoreLinks = CoreLink[];
   type LinkGroups = {
     core?: CoreLinks;
     management?: CoreLinks;
@@ -295,7 +307,12 @@ export function Sidebar({ role, currentGymId, username, email }: SidebarProps) {
                     }`}
                   >
                     <Icon icon={link.icon} isActive={active} />
-                    <span className="text-sm font-medium">{link.label}</span>
+                    <span className="text-sm font-medium flex-1">{link.label}</span>
+                    {link.badge && link.badge > 0 ? (
+                      <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-[#00E5FF] text-black rounded-full min-w-[18px] text-center">
+                        {link.badge}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}

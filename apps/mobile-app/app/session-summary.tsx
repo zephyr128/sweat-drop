@@ -4,6 +4,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Stop,
+} from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { useSession } from '@/hooks/useSession';
@@ -18,9 +24,15 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  withSpring,
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedProps,
+  Easing,
+  interpolate,
 } from 'react-native-reanimated';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -29,6 +41,15 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(result[2], 16);
   const b = parseInt(result[3], 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function deriveSecondaryColor(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return '#33EBFF';
+  const r = Math.min(255, Math.round(parseInt(result[1], 16) * 0.6 + 100));
+  const g = Math.min(255, Math.round(parseInt(result[2], 16) * 0.7 + 80));
+  const b = Math.min(255, Math.round(parseInt(result[3], 16) * 0.5 + 60));
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1).toUpperCase()}`;
 }
 
 interface ChallengeProgressItem {
@@ -85,6 +106,61 @@ export default function SessionSummaryScreen() {
   const trophyAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: trophyScale.value }],
   }));
+
+  // ── Circular Progress Ring Animation ──
+  const innerColor = deriveSecondaryColor(branding.primary);
+  const RING_SIZE = 180;
+  const outerStroke = 8;
+  const innerStroke = 6;
+  const ringGap = 14;
+  const outerRadius = (RING_SIZE - outerStroke) / 2;
+  const innerRadius = outerRadius - outerStroke / 2 - ringGap - innerStroke / 2;
+  const outerCircumference = 2 * Math.PI * outerRadius;
+  const innerCircumference = 2 * Math.PI * innerRadius;
+
+  // Animated progress values (outer = % of a "daily goal" of 500, inner = session progress)
+  const animOuter = useSharedValue(0);
+  const animInner = useSharedValue(0);
+  const ringScale = useSharedValue(0.8);
+  const glowPulse = useSharedValue(0);
+
+  useEffect(() => {
+    // Outer ring: session drops as a % of 500 (a reasonable single-session goal)
+    const dropsNum = parseInt(drops || '0');
+    const outerTarget = Math.min(dropsNum / 500, 1);
+    animOuter.value = withTiming(outerTarget, { duration: 1400, easing: Easing.out(Easing.cubic) });
+
+    // Inner ring fills fully (represents the completed session)
+    animInner.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
+
+    // Scale in entrance
+    ringScale.value = withSpring(1, { damping: 12, stiffness: 140 });
+
+    // Glow pulse loop
+    glowPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+  }, [drops]);
+
+  const outerAnimatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: outerCircumference * (1 - animOuter.value),
+  }));
+  const innerAnimatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: innerCircumference * (1 - animInner.value),
+  }));
+  const ringScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ringScale.value }],
+  }));
+  const glowStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(glowPulse.value, [0, 1], [0.15, 0.45]);
+    const scale = interpolate(glowPulse.value, [0, 1], [1, 1.05]);
+    return { opacity, transform: [{ scale }] };
+  });
 
   useEffect(() => {
     loadSession();
@@ -320,265 +396,310 @@ export default function SessionSummaryScreen() {
           <Text style={styles.subtitle}>{t('summary.greatJob')}</Text>
         </Animated.View>
 
-        {/* Drops Hero */}
-        <Animated.View entering={FadeInDown.delay(400).duration(500)}>
-          <View style={[styles.dropsHero, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.dropsHeroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <View style={[styles.dropsIconCircle, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                <Ionicons name="water" size={36} color={branding.primary} />
+        {/* ── Drops Ring (matches home screen HeroDropsRing) ── */}
+        <Animated.View entering={FadeInDown.delay(350).duration(500)} style={[ringScaleStyle, { alignSelf: 'center' }]}>
+          <View style={[styles.ringWrapper, { width: RING_SIZE + 50, height: RING_SIZE + 50 }]}>
+            {/* Glow pulse */}
+            <Animated.View
+              style={[
+                styles.ringGlow,
+                {
+                  width: RING_SIZE + 30,
+                  height: RING_SIZE + 30,
+                  borderRadius: (RING_SIZE + 30) / 2,
+                  shadowColor: branding.primary,
+                  backgroundColor: hexToRgba(branding.primary, 0.05),
+                },
+                glowStyle,
+              ]}
+            />
+            {/* SVG Rings */}
+            <View style={[styles.ringContainer, { width: RING_SIZE, height: RING_SIZE }]}>
+              <Svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
+                <Defs>
+                  <SvgLinearGradient id="outerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <Stop offset="0%" stopColor={branding.primary} stopOpacity="1" />
+                    <Stop offset="50%" stopColor={branding.primaryDark || branding.primary} stopOpacity="1" />
+                    <Stop offset="100%" stopColor={branding.primary} stopOpacity="0.85" />
+                  </SvgLinearGradient>
+                  <SvgLinearGradient id="innerGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+                    <Stop offset="0%" stopColor={innerColor} stopOpacity="0.85" />
+                    <Stop offset="100%" stopColor={branding.primary} stopOpacity="0.4" />
+                  </SvgLinearGradient>
+                </Defs>
+
+                {/* Outer track */}
+                <Circle
+                  cx={RING_SIZE / 2}
+                  cy={RING_SIZE / 2}
+                  r={outerRadius}
+                  stroke={hexToRgba(branding.primary, 0.08)}
+                  strokeWidth={outerStroke}
+                  fill="transparent"
+                />
+                {/* Outer ring (progress) */}
+                <AnimatedCircle
+                  cx={RING_SIZE / 2}
+                  cy={RING_SIZE / 2}
+                  r={outerRadius}
+                  stroke="url(#outerGrad)"
+                  strokeWidth={outerStroke}
+                  fill="transparent"
+                  strokeDasharray={outerCircumference}
+                  animatedProps={outerAnimatedProps}
+                  strokeLinecap="round"
+                  rotation="-90"
+                  origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
+                />
+
+                {/* Inner track */}
+                <Circle
+                  cx={RING_SIZE / 2}
+                  cy={RING_SIZE / 2}
+                  r={innerRadius}
+                  stroke={hexToRgba(innerColor, 0.06)}
+                  strokeWidth={innerStroke}
+                  fill="transparent"
+                />
+                {/* Inner ring (session) */}
+                <AnimatedCircle
+                  cx={RING_SIZE / 2}
+                  cy={RING_SIZE / 2}
+                  r={innerRadius}
+                  stroke="url(#innerGrad)"
+                  strokeWidth={innerStroke}
+                  fill="transparent"
+                  strokeDasharray={innerCircumference}
+                  animatedProps={innerAnimatedProps}
+                  strokeLinecap="round"
+                  rotation="-90"
+                  origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
+                />
+              </Svg>
+
+              {/* Center text */}
+              <View style={styles.ringCenter}>
+                <Text
+                  style={[styles.ringDropsValue, getNumberStyle(36), { color: '#FFFFFF' }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  +{drops || '0'}
+                </Text>
+                <Text style={[styles.ringDropsLabel, { color: hexToRgba(branding.primary, 0.65) }]}>
+                  {t('summary.dropsEarned')}
+                </Text>
+                {streakMultiplier > 1.0 && (
+                  <View style={[styles.ringMultiplier, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                    <Ionicons name="flame" size={11} color={branding.primary} />
+                    <Text style={[styles.ringMultiplierText, { color: branding.primary }]}>
+                      x{streakMultiplier.toFixed(1)}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <Text style={[styles.dropsValue, getNumberStyle(48), { color: branding.primary }]}>
-                +{drops || '0'}
-              </Text>
-              <Text style={styles.dropsLabel}>{t('summary.dropsEarned')}</Text>
-              {streakMultiplier > 1.0 && (
-                <View style={[styles.multiplierBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="flame" size={14} color={branding.primary} />
-                  <Text style={[styles.multiplierText, { color: branding.primary }]}>
-                    {t('summary.streakBonus', { multiplier: streakMultiplier })}
-                  </Text>
-                </View>
-              )}
-            </BlurView>
+            </View>
           </View>
         </Animated.View>
 
-        {/* Stats Row */}
+        {/* Gym name under ring */}
+        {gymName && (
+          <Animated.View entering={FadeInDown.delay(500).duration(300)}>
+            <Text style={styles.gymNameText}>📍 {gymName}</Text>
+          </Animated.View>
+        )}
+
+        {/* ── Quick Stats Row (matches home screen pills) ── */}
         <Animated.View entering={FadeInDown.delay(550).duration(400)}>
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <Ionicons name="time" size={24} color={theme.colors.textSecondary} />
-                <Text style={[styles.statValue, getNumberStyle(24)]}>
-                  {formatTime(duration || '0')}
-                </Text>
-                <Text style={styles.statLabel}>{t('summary.duration')}</Text>
+            {/* Duration */}
+            <View style={styles.statPillWrapper}>
+              <BlurView intensity={50} tint="dark" style={styles.statPill}>
+                <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                  <Ionicons name="time-outline" size={16} color={branding.primary} />
+                </View>
+                <View style={styles.statPillTextCol}>
+                  <Text style={[styles.statPillValue, getNumberStyle(16)]}>
+                    {formatTime(duration || '0')}
+                  </Text>
+                  <Text style={styles.statPillLabel}>{t('summary.duration')}</Text>
+                </View>
               </BlurView>
             </View>
-            {session?.equipment && (
-              <View style={[styles.statCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                  <Ionicons name="barbell-outline" size={24} color={theme.colors.textSecondary} />
-                  <Text style={styles.statEquipment} numberOfLines={1}>
-                    {session.equipment.name}
+
+            {/* Streak */}
+            <View style={styles.statPillWrapper}>
+              <BlurView intensity={50} tint="dark" style={styles.statPill}>
+                <View style={[styles.statPillIconBg, { backgroundColor: streakDays > 0 ? hexToRgba('#FF6B35', 0.2) : hexToRgba(branding.primary, 0.1) }]}>
+                  <Ionicons name="flame" size={16} color={streakDays > 0 ? '#FF6B35' : '#808080'} />
+                </View>
+                <View style={styles.statPillTextCol}>
+                  <Text style={[styles.statPillValue, getNumberStyle(16), streakDays > 0 && { color: '#FF6B35' }]}>
+                    {streakDays}
                   </Text>
-                  <Text style={styles.statLabel}>{t('summary.equipment')}</Text>
+                  <Text style={styles.statPillLabel}>Streak</Text>
+                </View>
+              </BlurView>
+            </View>
+
+            {/* Rank or Percentile (whichever is available) */}
+            {userRank !== null ? (
+              <View style={styles.statPillWrapper}>
+                <BlurView intensity={50} tint="dark" style={styles.statPill}>
+                  <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                    <Text style={{ fontSize: 14 }}>
+                      {userRank === 1 ? '🥇' : userRank === 2 ? '🥈' : userRank === 3 ? '🥉' : '🏆'}
+                    </Text>
+                  </View>
+                  <View style={styles.statPillTextCol}>
+                    <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>
+                      #{userRank}
+                    </Text>
+                    <Text style={styles.statPillLabel}>{t('summary.rank') || 'Rang'}</Text>
+                  </View>
                 </BlurView>
               </View>
-            )}
+            ) : percentile !== null ? (
+              <View style={styles.statPillWrapper}>
+                <BlurView intensity={50} tint="dark" style={styles.statPill}>
+                  <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                    <Text style={{ fontSize: 14 }}>📊</Text>
+                  </View>
+                  <View style={styles.statPillTextCol}>
+                    <Text style={[styles.statPillValue, getNumberStyle(16)]}>
+                      Top {100 - percentile}%
+                    </Text>
+                    <Text style={styles.statPillLabel}>{t('summary.today') || 'Danas'}</Text>
+                  </View>
+                </BlurView>
+              </View>
+            ) : null}
           </View>
         </Animated.View>
 
-        {/* Streak & Multiplier Card */}
-        {streakDays > 0 && (
-          <Animated.View entering={FadeInDown.delay(650).duration(400)}>
-            <View style={[styles.streakCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.streakBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <LinearGradient
-                  colors={[hexToRgba(branding.primary, 0.06), 'transparent']}
-                  style={styles.streakGlow}
-                />
-                <View style={styles.streakContent}>
-                  <View style={styles.streakLeft}>
-                    <Text style={styles.streakEmoji}>{getStreakEmoji()}</Text>
-                    <View>
-                      <Text style={[styles.streakValue, getNumberStyle(28), { color: branding.primary }]}>
-                        {t('summary.streakDays', { count: streakDays })}
-                      </Text>
-                      <Text style={styles.streakLabel}>{t('summary.currentStreak')}</Text>
-                    </View>
-                  </View>
-                  {streakMultiplier > 1.0 && (
-                    <View style={[styles.multiplierPill, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                      <Text style={[styles.multiplierPillText, getNumberStyle(16), { color: branding.primary }]}>
-                        ×{streakMultiplier}
-                      </Text>
-                      <Text style={[styles.multiplierPillLabel, { color: hexToRgba(branding.primary, 0.7) }]}>
-                        {getMultiplierLabel()}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Leaderboard Rank Card */}
-        {userRank !== null && (
-          <Animated.View entering={FadeInDown.delay(700).duration(400)}>
-            <View style={[styles.rankCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.rankBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <LinearGradient
-                  colors={[hexToRgba(branding.primary, 0.08), 'transparent']}
-                  style={styles.rankGlow}
-                />
-                <View style={styles.rankContent}>
-                  <Text style={styles.rankEmoji}>
-                    {userRank === 1 ? '🥇' : userRank === 2 ? '🥈' : userRank === 3 ? '🥉' : '📊'}
-                  </Text>
-                  <View style={styles.rankTextContainer}>
-                    <Text style={styles.rankTitle}>
-                      {t('summary.rankThisWeek', { rank: userRank })}
-                    </Text>
-                    {gymName && (
-                      <Text style={styles.rankSubtitle}>
-                        {t('summary.atGym', { name: gymName })}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Percentile Card */}
-        {percentile !== null && session?.gym && (
-          <Animated.View entering={FadeInDown.delay(750).duration(400)}>
-            <View style={[styles.percentileCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.percentileBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <LinearGradient
-                  colors={[hexToRgba(branding.primary, 0.08), 'transparent']}
-                  style={styles.percentileGlow}
-                />
-                <View style={styles.percentileContent}>
-                  <Text style={styles.percentileEmoji}>🔥</Text>
-                  <Text style={styles.percentileText}>
-                    {t('summary.beatPercent', { percent: percentile, gym: session.gym.name })}
-                  </Text>
-                </View>
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Earned Badges — with celebration animation */}
+        {/* Earned Badges — horizontal scroll */}
         {earnedBadges.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(850).duration(400)}>
+          <Animated.View entering={FadeInDown.delay(700).duration(400)}>
             <View style={[styles.badgesSection, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.badgesBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <LinearGradient
-                  colors={[hexToRgba('#FFD700', 0.08), 'transparent']}
-                  style={styles.badgesGlow}
-                />
-                <Animated.View style={[styles.badgesHeader, trophyAnimStyle]}>
-                  <Ionicons name="trophy" size={24} color="#FFD700" />
-                  <Text style={styles.badgesSectionTitle}>
-                    {t('summary.newBadge', { count: earnedBadges.length })}
-                  </Text>
-                </Animated.View>
-                <View style={styles.badgesGrid}>
-                  {earnedBadges.map((badge, index) => (
-                    <Animated.View
-                      key={badge.badge_id}
-                      entering={ZoomIn.delay(1000 + index * 150).duration(500).springify()}
-                    >
-                      <View style={[styles.badgeCard, { borderColor: hexToRgba('#FFD700', 0.25) }]}>
-                        {badge.badge_image_url ? (
-                          <Image
-                            source={{ uri: badge.badge_image_url }}
-                            style={styles.badgeImage}
-                            resizeMode="contain"
-                          />
-                        ) : (
-                          <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
-                            <Ionicons name="trophy" size={28} color="#FFD700" />
-                          </View>
-                        )}
-                        <Text style={styles.badgeName} numberOfLines={2}>
-                          {badge.challenge_name}
-                        </Text>
-                      </View>
-                    </Animated.View>
-                  ))}
-                </View>
-              </BlurView>
+              <Animated.View style={[styles.badgesHeader, trophyAnimStyle]}>
+                <Ionicons name="trophy" size={20} color="#FFD700" />
+                <Text style={styles.badgesSectionTitle}>
+                  {t('summary.newBadge', { count: earnedBadges.length })}
+                </Text>
+              </Animated.View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.badgesScroll}
+              >
+                {earnedBadges.map((badge, index) => (
+                  <Animated.View
+                    key={badge.badge_id}
+                    entering={ZoomIn.delay(800 + index * 100).duration(400).springify()}
+                  >
+                    <View style={[styles.badgeCard, { borderColor: hexToRgba('#FFD700', 0.25) }]}>
+                      {badge.badge_image_url ? (
+                        <Image
+                          source={{ uri: badge.badge_image_url }}
+                          style={styles.badgeImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
+                          <Ionicons name="trophy" size={24} color="#FFD700" />
+                        </View>
+                      )}
+                      <Text style={styles.badgeName} numberOfLines={2}>
+                        {badge.challenge_name}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                ))}
+              </ScrollView>
             </View>
           </Animated.View>
         )}
 
         {/* Challenge Progress Section */}
         {challengeProgress.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(950).duration(400)}>
+          <Animated.View entering={FadeInDown.delay(850).duration(400)}>
             <View style={[styles.challengeSection, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <View style={styles.challengeHeader}>
-                  <Ionicons name="flag" size={20} color={branding.primary} />
-                  <Text style={styles.challengeSectionTitle}>{t('summary.challengeProgress')}</Text>
-                </View>
-                {challengeProgress.map((challenge, index) => {
-                  const progressPercent = challenge.target_drops > 0
-                    ? Math.min((challenge.current_drops / challenge.target_drops) * 100, 100)
-                    : 0;
-                  const unit = challenge.challenge_type === 'streak' ? t('summary.days') : t('drops');
+              <View style={styles.challengeHeader}>
+                <Ionicons name="flag" size={18} color={branding.primary} />
+                <Text style={styles.challengeSectionTitle}>{t('summary.challengeProgress')}</Text>
+              </View>
+              {challengeProgress.map((challenge, index) => {
+                const progressPercent = challenge.target_drops > 0
+                  ? Math.min((challenge.current_drops / challenge.target_drops) * 100, 100)
+                  : 0;
+                const unit = challenge.challenge_type === 'streak' ? t('summary.days') : t('drops');
 
-                  return (
-                    <Animated.View
-                      key={challenge.challenge_id}
-                      entering={SlideInRight.delay(1050 + index * 100).duration(400)}
-                    >
-                      <View style={[
-                        styles.challengeItem,
-                        index < challengeProgress.length - 1 && styles.challengeItemBorder,
-                      ]}>
-                        <View style={styles.challengeItemHeader}>
-                          <Text style={styles.challengeItemName} numberOfLines={1}>
-                            {challenge.challenge_name}
-                          </Text>
-                          {challenge.is_completed && (
-                            <View style={styles.completedPill}>
-                              <Ionicons name="checkmark-circle" size={14} color={theme.colors.secondary} />
-                              <Text style={styles.completedPillText}>{t('summary.done')}</Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.challengeProgressBar}>
-                          <View style={[styles.challengeProgressTrack, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                            <View
-                              style={[
-                                styles.challengeProgressFill,
-                                {
-                                  width: `${progressPercent}%`,
-                                  backgroundColor: challenge.is_completed
-                                    ? theme.colors.secondary
-                                    : branding.primary,
-                                },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.challengeProgressText}>
-                            <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                              {challenge.current_drops}
-                            </Text>
-                            <Text style={styles.challengeProgressDivider}> / </Text>
-                            <Text style={[getNumberStyle(12), { color: theme.colors.textSecondary }]}>
-                              {challenge.target_drops}
-                            </Text>
-                            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
-                              {' '}{unit}
-                            </Text>
-                          </Text>
-                        </View>
-                        {!challenge.is_completed && challenge.reward_drops > 0 && (
-                          <View style={styles.challengeReward}>
-                            <Ionicons name="water" size={12} color={hexToRgba(branding.primary, 0.6)} />
-                            <Text style={[styles.challengeRewardText, { color: hexToRgba(branding.primary, 0.6) }]}>
-                              {t('summary.dropsReward', { count: challenge.reward_drops })}
-                            </Text>
+                return (
+                  <Animated.View
+                    key={challenge.challenge_id}
+                    entering={SlideInRight.delay(950 + index * 80).duration(350)}
+                  >
+                    <View style={[
+                      styles.challengeItem,
+                      index < challengeProgress.length - 1 && styles.challengeItemBorder,
+                    ]}>
+                      <View style={styles.challengeItemHeader}>
+                        <Text style={styles.challengeItemName} numberOfLines={1}>
+                          {challenge.challenge_name}
+                        </Text>
+                        {challenge.is_completed && (
+                          <View style={styles.completedPill}>
+                            <Ionicons name="checkmark-circle" size={14} color={theme.colors.secondary} />
+                            <Text style={styles.completedPillText}>{t('summary.done')}</Text>
                           </View>
                         )}
                       </View>
-                    </Animated.View>
-                  );
-                })}
-              </BlurView>
+                      <View style={styles.challengeProgressBar}>
+                        <View style={[styles.challengeProgressTrack, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                          <View
+                            style={[
+                              styles.challengeProgressFill,
+                              {
+                                width: `${progressPercent}%`,
+                                backgroundColor: challenge.is_completed
+                                  ? theme.colors.secondary
+                                  : branding.primary,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.challengeProgressText}>
+                          <Text style={[getNumberStyle(12), { color: branding.primary }]}>
+                            {challenge.current_drops}
+                          </Text>
+                          <Text style={styles.challengeProgressDivider}> / </Text>
+                          <Text style={[getNumberStyle(12), { color: theme.colors.textSecondary }]}>
+                            {challenge.target_drops}
+                          </Text>
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {' '}{unit}
+                          </Text>
+                        </Text>
+                      </View>
+                      {!challenge.is_completed && challenge.reward_drops > 0 && (
+                        <View style={styles.challengeReward}>
+                          <Ionicons name="water" size={12} color={hexToRgba(branding.primary, 0.6)} />
+                          <Text style={[styles.challengeRewardText, { color: hexToRgba(branding.primary, 0.6) }]}>
+                            {t('summary.dropsReward', { count: challenge.reward_drops })}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </Animated.View>
+                );
+              })}
             </View>
           </Animated.View>
         )}
 
         {/* Action Button */}
-        <Animated.View entering={FadeInDown.delay(1100).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(1000).duration(400)}>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: branding.primary }]}
             onPress={async () => {
@@ -591,9 +712,7 @@ export default function SessionSummaryScreen() {
                 // If user still has no home gym (first workout), use the session's gym
                 if (!currentHomeGymId && gymId) {
                   console.log('[SessionSummary] No home gym in store — setting from session:', gymId);
-                  // 1. Set in store immediately so home screen picks it up
                   useGymStore.getState().setHomeGymId(gymId);
-                  // 2. Persist to DB
                   try {
                     const { data: { session: authSession } } = await supabase.auth.getSession();
                     if (authSession?.user) {
@@ -607,10 +726,8 @@ export default function SessionSummaryScreen() {
                   }
                 }
 
-                // Refresh auth profile so it stays in sync
                 await useAuthStore.getState().refreshProfile();
 
-                // Sync gymStore from refreshed profile (confirms DB is correct)
                 const latestProfile = useAuthStore.getState().profile;
                 if (latestProfile?.home_gym_id) {
                   useGymStore.getState().setHomeGymId(latestProfile.home_gym_id);
@@ -619,7 +736,6 @@ export default function SessionSummaryScreen() {
                 console.warn('[SessionSummary] Failed to sync state:', e);
               }
 
-              // Dismiss all pushed/modal screens to return to the original home screen
               if (router.canDismiss()) {
                 router.dismissAll();
               } else {
@@ -650,291 +766,178 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: theme.spacing.lg,
-    paddingBottom: theme.spacing['3xl'],
+    padding: theme.spacing.md,
+    paddingBottom: theme.spacing['2xl'],
+    gap: 8,
   },
   /* Celebration */
   celebrationHeader: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
-    paddingTop: theme.spacing.xl,
+    marginBottom: theme.spacing.xs,
+    paddingTop: theme.spacing.md,
   },
   emoji: {
-    fontSize: 64,
-    marginBottom: theme.spacing.md,
+    fontSize: 40,
+    marginBottom: theme.spacing.xs,
   },
   title: {
     ...fontStyles.heading,
-    fontSize: 30,
+    fontSize: 28,
     color: theme.colors.text,
   },
   subtitle: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.base,
+    fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
     letterSpacing: 0.3,
   },
-  /* Drops Hero */
-  dropsHero: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-  },
-  dropsHeroBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.xl,
-    alignItems: 'center',
-  },
-  dropsIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  /* ── Drops Ring (matches HeroDropsRing) ── */
+  ringWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
   },
-  dropsValue: {
-    ...fontStyles.number,
-    marginBottom: theme.spacing.xs,
+  ringGlow: {
+    position: 'absolute',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 30,
+    elevation: 16,
   },
-  dropsLabel: {
+  ringContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringCenter: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 999,
+  },
+  ringDropsValue: {
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+    includeFontPadding: false,
+  },
+  ringDropsLabel: {
     ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.textSecondary,
+    fontSize: 10,
+    letterSpacing: 2,
+    marginTop: 1,
   },
-  multiplierBadge: {
+  ringMultiplier: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
+    gap: 3,
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: theme.borderRadius.full,
   },
-  multiplierText: {
+  ringMultiplierText: {
     ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: 11,
     letterSpacing: 0.3,
   },
-  /* Stats Row */
-  statsRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  statBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.lg,
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  statValue: {
-    ...fontStyles.number,
-    fontSize: 22,
-    color: theme.colors.text,
-  },
-  statEquipment: {
-    ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.text,
+  /* Gym name */
+  gymNameText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
     textAlign: 'center',
     letterSpacing: 0.3,
   },
-  statLabel: {
-    ...fontStyles.heading,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-  },
-  /* Streak */
-  streakCard: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-  },
-  streakBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.lg,
-  },
-  streakGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: theme.borderRadius.xl,
-  },
-  streakContent: {
+  /* ── Quick Stats Row (matches QuickStatsRow pills) ── */
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
   },
-  streakLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-  },
-  streakEmoji: {
-    fontSize: 32,
-  },
-  streakValue: {
-    ...fontStyles.number,
-  },
-  streakLabel: {
-    ...fontStyles.heading,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  multiplierPill: {
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.lg,
-  },
-  multiplierPillText: {
-    ...fontStyles.number,
-  },
-  multiplierPillLabel: {
-    ...fontStyles.heading,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  /* Rank */
-  rankCard: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-  },
-  rankBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.lg,
-  },
-  rankGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: theme.borderRadius.xl,
-  },
-  rankContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-  },
-  rankEmoji: {
-    fontSize: 32,
-  },
-  rankTextContainer: {
+  statPillWrapper: {
     flex: 1,
-  },
-  rankTitle: {
-    ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.text,
-    letterSpacing: 0.3,
-  },
-  rankSubtitle: {
-    ...fontStyles.body,
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-    letterSpacing: 0.3,
-  },
-  /* Percentile */
-  percentileCard: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 14,
     overflow: 'hidden',
-    marginBottom: theme.spacing.md,
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  percentileBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.lg,
-  },
-  percentileGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: theme.borderRadius.xl,
-  },
-  percentileContent: {
+  statPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
   },
-  percentileEmoji: {
-    fontSize: 28,
+  statPillIconBg: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  percentileText: {
-    ...fontStyles.bodySemiBold,
+  statPillTextCol: {
     flex: 1,
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.text,
-    letterSpacing: 0.3,
-    lineHeight: 22,
+    minWidth: 0,
   },
-  /* Badges */
+  statPillValue: {
+    color: '#FFFFFF',
+    lineHeight: 20,
+  },
+  statPillLabel: {
+    ...fontStyles.bodyMedium,
+    fontSize: 10,
+    color: '#808080',
+    letterSpacing: 0.3,
+    marginTop: 1,
+  },
+  /* Badges — horizontal scroll */
   badgesSection: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
-    marginBottom: theme.spacing.md,
     borderWidth: 1,
-  },
-  badgesBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.lg,
-  },
-  badgesGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: theme.borderRadius.xl,
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    padding: theme.spacing.md,
   },
   badgesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
   },
   badgesSectionTitle: {
     ...fontStyles.heading,
-    fontSize: 20,
+    fontSize: 18,
     color: '#FFD700',
   },
-  badgesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+  badgesScroll: {
+    gap: 8,
+    paddingHorizontal: 2,
   },
   badgeCard: {
-    width: 100,
+    width: 80,
     alignItems: 'center',
     backgroundColor: 'rgba(255, 215, 0, 0.04)',
     borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
+    padding: theme.spacing.sm,
     borderWidth: 1,
   },
   badgeImage: {
-    width: 56,
-    height: 56,
-    marginBottom: theme.spacing.sm,
+    width: 44,
+    height: 44,
+    marginBottom: 4,
   },
   badgePlaceholder: {
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
     borderRadius: theme.borderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.sm,
+    marginBottom: 4,
   },
   badgeName: {
     ...fontStyles.bodyMedium,
-    fontSize: theme.typography.fontSize.xs,
+    fontSize: 10,
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.3,
@@ -943,27 +946,23 @@ const styles = StyleSheet.create({
   challengeSection: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
-    marginBottom: theme.spacing.lg,
     borderWidth: 1,
-  },
-  challengeBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: theme.spacing.lg,
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    padding: theme.spacing.md,
   },
   challengeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   challengeSectionTitle: {
     ...fontStyles.heading,
-    fontSize: 20,
+    fontSize: 18,
     color: theme.colors.text,
   },
   challengeItem: {
-    paddingVertical: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   challengeItemBorder: {
     borderBottomWidth: 1,
@@ -973,7 +972,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: theme.spacing.sm,
+    marginBottom: 4,
   },
   challengeItemName: {
     ...fontStyles.bodySemiBold,
@@ -1034,6 +1033,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     borderRadius: theme.borderRadius.xl,
     alignItems: 'center',
+    marginTop: theme.spacing.sm,
   },
   buttonText: {
     ...fontStyles.heading,

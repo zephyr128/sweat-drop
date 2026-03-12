@@ -31,6 +31,18 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+interface RawMetrics {
+  avg_cadence?: number | null;
+  avg_speed_kmh?: number | null;
+  max_speed_kmh?: number | null;
+  avg_power_watts?: number | null;
+  max_power_watts?: number | null;
+  total_distance?: number | null;
+  device_calories?: number | null;
+  calories_source?: string;
+  ble_protocol?: string;
+}
+
 interface SessionRow {
   id: string;
   started_at: string;
@@ -39,7 +51,10 @@ interface SessionRow {
   drops_earned: number;
   calories: number | null;
   multiplier: number | null;
+  raw_metrics: RawMetrics | null;
+  gym_id: string;
   machines: { name: string; type: string } | null;
+  gyms: { name: string } | null;
 }
 
 const MACHINE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -81,6 +96,7 @@ export default function WorkoutHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
 
   const loadSessions = useCallback(async () => {
     if (!session?.user) return;
@@ -96,7 +112,10 @@ export default function WorkoutHistoryScreen() {
           drops_earned,
           calories,
           multiplier,
-          machines ( name, type )
+          raw_metrics,
+          gym_id,
+          machines ( name, type ),
+          gyms ( name )
         `)
         .eq('user_id', session.user.id)
         .eq('is_active', false)
@@ -230,6 +249,68 @@ export default function WorkoutHistoryScreen() {
     return groups;
   }, [filteredSessions]);
 
+  // ── Streak calculations (current + max) ──
+  const streakInfo = useMemo(() => {
+    if (sessions.length === 0) return { current: 0, max: 0 };
+
+    const uniqueDates = new Set<string>();
+    for (const s of sessions) {
+      if (s.started_at) {
+        uniqueDates.add(new Date(s.started_at).toISOString().split('T')[0]);
+      }
+    }
+
+    const sortedDates = Array.from(uniqueDates).sort().reverse();
+    if (sortedDates.length === 0) return { current: 0, max: 0 };
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+    // Current streak: walk backward from today (or yesterday if no session today)
+    let current = 0;
+    let checkDate = new Date();
+    checkDate.setHours(0, 0, 0, 0);
+    if (!uniqueDates.has(todayStr)) {
+      if (!uniqueDates.has(yesterdayStr)) {
+        current = 0;
+      } else {
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+    }
+    if (uniqueDates.has(todayStr) || uniqueDates.has(yesterdayStr)) {
+      while (true) {
+        const ds = checkDate.toISOString().split('T')[0];
+        if (uniqueDates.has(ds)) {
+          current++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Max streak: find longest consecutive run
+    let maxStreak = 0;
+    let streak = 1;
+    const ascending = Array.from(uniqueDates).sort();
+    for (let i = 1; i < ascending.length; i++) {
+      const prev = new Date(ascending[i - 1] + 'T12:00:00');
+      const curr = new Date(ascending[i] + 'T12:00:00');
+      const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) {
+        streak++;
+      } else {
+        maxStreak = Math.max(maxStreak, streak);
+        streak = 1;
+      }
+    }
+    maxStreak = Math.max(maxStreak, streak);
+
+    return { current, max: maxStreak };
+  }, [sessions]);
+
   // ── Stats for selected month ──
   const monthStats = useMemo(() => {
     let totalDrops = 0;
@@ -344,9 +425,45 @@ export default function WorkoutHistoryScreen() {
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
+        {/* STREAK SECTION                               */}
+        {/* ═══════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(180).duration(400)}>
+          <View style={[styles.streakCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={50} tint="dark" style={[styles.streakCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <View style={styles.streakRow}>
+                <View style={styles.streakItem}>
+                  <View style={[styles.streakIconBg, { backgroundColor: streakInfo.current > 0 ? 'rgba(255, 107, 53, 0.2)' : hexToRgba(branding.primary, 0.1) }]}>
+                    <Ionicons name="flame" size={22} color={streakInfo.current > 0 ? '#FF6B35' : '#808080'} />
+                  </View>
+                  <Text style={[styles.streakValue, getNumberStyle(28), streakInfo.current > 0 && { color: '#FF6B35' }]}>
+                    {streakInfo.current}
+                  </Text>
+                  <Text style={styles.streakLabel}>{t('currentStreak')}</Text>
+                  <Text style={styles.streakUnit}>{t('days')}</Text>
+                </View>
+                <View style={[styles.streakDivider, { backgroundColor: hexToRgba(branding.primary, 0.12) }]} />
+                <View style={styles.streakItem}>
+                  <View style={[styles.streakIconBg, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                    <Ionicons name="trophy" size={22} color={branding.primary} />
+                  </View>
+                  <Text style={[styles.streakValue, getNumberStyle(28), { color: branding.primary }]}>
+                    {streakInfo.max}
+                  </Text>
+                  <Text style={styles.streakLabel}>{t('maxStreak')}</Text>
+                  <Text style={styles.streakUnit}>{t('days')}</Text>
+                </View>
+              </View>
+              <Text style={styles.streakHint}>
+                {streakInfo.current > 0 ? t('streakActive') : t('streakInactive')}
+              </Text>
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ═══════════════════════════════════════════ */}
         {/* MONTH STATS                                 */}
         {/* ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(260).duration(400)}>
           <View style={styles.statsRow}>
             <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
               <Ionicons name="barbell-outline" size={16} color={branding.primary} />
@@ -378,7 +495,7 @@ export default function WorkoutHistoryScreen() {
         ) : (
           <View style={styles.sessionsList}>
             {groupedByDay.map((group, groupIdx) => (
-              <View key={group.dateStr}>
+              <View key={group.dateStr} style={styles.dayGroup}>
                 {/* Day section header */}
                 <Animated.View entering={FadeInDown.delay(300 + groupIdx * 80).duration(400)}>
                   <View style={styles.daySectionHeader}>
@@ -392,14 +509,21 @@ export default function WorkoutHistoryScreen() {
                 {group.sessions.map((s, index) => {
                   const machineType = s.machines?.type || 'treadmill';
                   const machineName = s.machines?.name || t('unknownMachine');
+                  const gymName = s.gyms?.name || '';
                   const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
+                  const isExpanded = expandedSessionId === s.id;
+                  const metrics = s.raw_metrics as RawMetrics | null;
 
                   return (
                     <Animated.View
                       key={s.id}
                       entering={FadeInDown.delay(350 + groupIdx * 80 + index * 60).duration(400)}
                     >
-                      <View style={[styles.sessionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => setExpandedSessionId(isExpanded ? null : s.id)}
+                        style={[styles.sessionCard, { borderColor: hexToRgba(branding.primary, isExpanded ? 0.3 : 0.12) }]}
+                      >
                         <BlurView intensity={40} tint="dark" style={[styles.sessionCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
                           <View style={styles.sessionCardRow}>
                             {/* Machine Icon */}
@@ -410,7 +534,10 @@ export default function WorkoutHistoryScreen() {
                             {/* Info */}
                             <View style={styles.sessionInfo}>
                               <Text style={styles.sessionMachine} numberOfLines={1}>{machineName}</Text>
-                              <Text style={styles.sessionDate}>{formatTime(s.started_at)} • {formatDuration(s.duration_seconds)}</Text>
+                              <Text style={styles.sessionDate}>
+                                {formatTime(s.started_at)} • {formatDuration(s.duration_seconds)}
+                                {gymName ? ` • ${gymName}` : ''}
+                              </Text>
                             </View>
 
                             {/* Stats */}
@@ -421,10 +548,15 @@ export default function WorkoutHistoryScreen() {
                                   {s.drops_earned || 0}
                                 </Text>
                               </View>
+                              <Ionicons
+                                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                size={14}
+                                color={theme.colors.textTertiary}
+                              />
                             </View>
                           </View>
 
-                          {/* Bottom detail row */}
+                          {/* Chip row (calories, multiplier) */}
                           {(s.calories || (s.multiplier && s.multiplier > 1)) && (
                             <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.08) }]}>
                               {s.calories ? (
@@ -445,8 +577,125 @@ export default function WorkoutHistoryScreen() {
                               ) : null}
                             </View>
                           )}
+
+                          {/* ── Expanded Detail Panel ── */}
+                          {isExpanded && (
+                            <View style={[styles.expandedPanel, { borderTopColor: hexToRgba(branding.primary, 0.1) }]}>
+                              <View style={styles.expandedGrid}>
+                                {/* Duration */}
+                                <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                  <Ionicons name="time-outline" size={16} color={branding.primary} />
+                                  <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                    {formatDuration(s.duration_seconds)}
+                                  </Text>
+                                  <Text style={styles.expandedStatLabel}>{t('duration')}</Text>
+                                </View>
+
+                                {/* Calories */}
+                                <View style={[styles.expandedStat, { backgroundColor: 'rgba(255, 145, 0, 0.06)' }]}>
+                                  <Ionicons name="flame-outline" size={16} color={theme.colors.secondary} />
+                                  <Text style={[styles.expandedStatValue, getNumberStyle(18), { color: theme.colors.secondary }]}>
+                                    {s.calories ? `${Math.round(Number(s.calories))}` : '—'}
+                                  </Text>
+                                  <Text style={styles.expandedStatLabel}>{t('kcal')}</Text>
+                                </View>
+
+                                {/* Distance */}
+                                {metrics?.total_distance != null && metrics.total_distance > 0 && (
+                                  <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                    <Ionicons name="navigate-outline" size={16} color={branding.primary} />
+                                    <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                      {metrics.total_distance >= 1000
+                                        ? `${(metrics.total_distance / 1000).toFixed(1)}`
+                                        : `${Math.round(metrics.total_distance)}`}
+                                    </Text>
+                                    <Text style={styles.expandedStatLabel}>
+                                      {metrics.total_distance >= 1000 ? t('km') : 'm'}
+                                    </Text>
+                                  </View>
+                                )}
+
+                                {/* Avg Speed */}
+                                {metrics?.avg_speed_kmh != null && metrics.avg_speed_kmh > 0 && (
+                                  <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                    <Ionicons name="speedometer-outline" size={16} color={branding.primary} />
+                                    <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                      {metrics.avg_speed_kmh.toFixed(1)}
+                                    </Text>
+                                    <Text style={styles.expandedStatLabel}>km/h avg</Text>
+                                  </View>
+                                )}
+
+                                {/* Max Speed */}
+                                {metrics?.max_speed_kmh != null && metrics.max_speed_kmh > 0 && (
+                                  <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                    <Ionicons name="flash-outline" size={16} color={branding.primary} />
+                                    <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                      {metrics.max_speed_kmh.toFixed(1)}
+                                    </Text>
+                                    <Text style={styles.expandedStatLabel}>km/h max</Text>
+                                  </View>
+                                )}
+
+                                {/* Avg Cadence / RPM */}
+                                {metrics?.avg_cadence != null && metrics.avg_cadence > 0 && (
+                                  <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                    <Ionicons name="sync-outline" size={16} color={branding.primary} />
+                                    <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                      {Math.round(metrics.avg_cadence)}
+                                    </Text>
+                                    <Text style={styles.expandedStatLabel}>
+                                      {machineType === 'treadmill' ? 'spm' : 'rpm'} avg
+                                    </Text>
+                                  </View>
+                                )}
+
+                                {/* Avg Power */}
+                                {metrics?.avg_power_watts != null && metrics.avg_power_watts > 0 && (
+                                  <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                    <Ionicons name="pulse-outline" size={16} color={branding.primary} />
+                                    <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                      {metrics.avg_power_watts}
+                                    </Text>
+                                    <Text style={styles.expandedStatLabel}>W avg</Text>
+                                  </View>
+                                )}
+
+                                {/* Max Power */}
+                                {metrics?.max_power_watts != null && metrics.max_power_watts > 0 && (
+                                  <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                                    <Ionicons name="pulse-outline" size={16} color={branding.primary} />
+                                    <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
+                                      {metrics.max_power_watts}
+                                    </Text>
+                                    <Text style={styles.expandedStatLabel}>W max</Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              {/* Protocol badge */}
+                              {metrics?.ble_protocol && (
+                                <View style={styles.protocolRow}>
+                                  <View style={[styles.protocolBadge, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                                    <Ionicons name="bluetooth" size={10} color={theme.colors.textTertiary} />
+                                    <Text style={styles.protocolText}>
+                                      {metrics.ble_protocol.toUpperCase()}
+                                    </Text>
+                                  </View>
+                                  {metrics.calories_source === 'device' && (
+                                    <View style={[styles.protocolBadge, { backgroundColor: 'rgba(255, 145, 0, 0.08)' }]}>
+                                      <Ionicons name="checkmark-circle" size={10} color={theme.colors.secondary} />
+                                      <Text style={[styles.protocolText, { color: theme.colors.secondary }]}>
+                                        Device calories
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              )}
+                            </View>
+                          )}
                         </BlurView>
-                      </View>
+                      </TouchableOpacity>
                     </Animated.View>
                   );
                 })}
@@ -565,6 +814,66 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 
+  // ── Streak Card ──
+  streakCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginBottom: theme.spacing.lg,
+  },
+  streakCardBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    padding: 20,
+  },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  streakIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  streakValue: {
+    color: '#FFFFFF',
+    lineHeight: 32,
+  },
+  streakLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  streakUnit: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
+  },
+  streakDivider: {
+    width: 1,
+    height: 60,
+    marginHorizontal: 16,
+  },
+  streakHint: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: 14,
+    letterSpacing: 0.2,
+  },
+
   // ── Stats Row ──
   statsRow: {
     flexDirection: 'row',
@@ -617,8 +926,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 6,
-    marginBottom: 10,
   },
   daySectionLabel: {
     ...fontStyles.bodySemiBold,
@@ -633,6 +940,9 @@ const styles = StyleSheet.create({
 
   // ── Session Cards ──
   sessionsList: {
+    gap: 24,
+  },
+  dayGroup: {
     gap: 10,
   },
   sessionCard: {
@@ -708,5 +1018,55 @@ const styles = StyleSheet.create({
   detailChipText: {
     ...fontStyles.bodySemiBold,
     fontSize: 11,
+  },
+
+  // ── Expanded Detail Panel ──
+  expandedPanel: {
+    borderTopWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  expandedGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  expandedStat: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    gap: 2,
+  },
+  expandedStatValue: {
+    color: '#FFFFFF',
+    lineHeight: 22,
+  },
+  expandedStatLabel: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
+  },
+  protocolRow: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  protocolBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  protocolText: {
+    ...fontStyles.body,
+    fontSize: 9,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.3,
   },
 });

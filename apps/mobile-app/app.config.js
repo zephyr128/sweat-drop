@@ -23,6 +23,7 @@ module.exports = {
           'SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.',
         NSBluetoothPeripheralUsageDescription:
           'SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.',
+        UIBackgroundModes: ['bluetooth-central'],
       },
     },
     android: {

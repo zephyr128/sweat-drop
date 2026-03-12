@@ -35,5 +35,10 @@
   "thu": "Čet",
   "fri": "Pet",
   "sat": "Sub",
-  "sun": "Ned"
+  "sun": "Ned",
+  "currentStreak": "Trenutni niz",
+  "maxStreak": "Najbolji niz",
+  "days": "dana",
+  "streakActive": "U vatri si! Nastavi tako.",
+  "streakInactive": "Treniraj danas da započneš novi niz!"
 }

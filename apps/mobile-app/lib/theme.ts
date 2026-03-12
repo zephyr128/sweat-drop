@@ -203,6 +203,20 @@ export const getNumberStyle = (fontSize: number) => ({
   color: theme.colors.text,
 });
 
+/**
+ * Returns '#000000' for light backgrounds, '#FFFFFF' for dark backgrounds.
+ * Uses W3C relative luminance formula for human-perceived brightness.
+ */
+export function getContrastColor(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return '#FFFFFF';
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? '#000000' : '#FFFFFF';
+}
+
 // Export individual color values for convenience
 export const colors = theme.colors;
 export const spacing = theme.spacing;

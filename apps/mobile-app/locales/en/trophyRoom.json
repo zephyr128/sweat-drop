@@ -10,5 +10,8 @@
   "tryAdjustingSearch": "Try adjusting your search",
   "completeWorkouts": "Complete workouts to earn badges!",
   "sectionEarned": "Earned",
-  "sectionInProgress": "In progress"
+  "sectionInProgress": "In progress",
+  "shareBadge": "Share Badge",
+  "progress": "Progress",
+  "earned": "Earned"
 }

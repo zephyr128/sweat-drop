@@ -1,13 +1,16 @@
 // Edge Function: finalize-arena
-// Description: Finalizes ended arenas by calling finalize_arena() RPC and sending push notifications to winners.
+// Description: Finalizes ended arenas by calling finalize_arena() RPC and sending push notifications.
 // Called by cron job: Daily at 00:30 UTC
 //
-// AGENT NOTE: [2026-03-03] - supabase-dba (Phase 3.2)
-// Reference: docs/plans/phase3_audit_and_arenas_plan.md — Phase 3.2, Section 4.6
+// AGENT NOTE: [2026-03-11] - supabase-dba
+// Reference: docs/plans/arena_expiration_and_results_flow.md — Step 1
+//
+// FIX: Changed redemptions filter from 'claimed' to 'pending' (new redemptions start as pending)
+// ENHANCEMENT: Now notifies ALL participants (not just winners) with arena_ended push
 //
 // INTERFACE CONTRACT:
 //   Input:  { arena_id?: UUID } (optional, processes all ended arenas if not provided)
-//   Output: { success: boolean, arenas_processed: number, winners_notified: number, errors: string[] }
+//   Output: { success: boolean, arenas_processed: number, winners_notified: number, participants_notified: number, errors: string[] }
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
@@ -84,6 +87,7 @@ serve(async (req) => {
 
     let arenasProcessed = 0;
     let winnersNotified = 0;
+    let participantsNotified = 0;
     const errors: string[] = [];
 
     // Process each arena
@@ -108,35 +112,32 @@ serve(async (req) => {
         }
 
         const { winners_count } = result[0];
+        const winnerUserIds: string[] = [];
 
         if (winners_count > 0) {
-          // Fetch winners' redemption codes and push tokens
-          const { data: redemptions, error: redemptionsError } = await supabase
-            .from('redemptions')
-            .select('user_id, redemption_code, profiles!inner(expo_push_token)')
-            .eq('source_type', 'arena_prize')
-            .eq('status', 'claimed')
-            .gte('created_at', new Date(Date.now() - 60000).toISOString()) // Last minute
-            .not('profiles.expo_push_token', 'is', null)
-            .in(
-              'user_id',
-              (
-                await supabase
-                  .from('arena_results')
-                  .select('user_id')
-                  .eq('arena_id', arena.id)
-                  .not('redemption_id', 'is', null)
-              ).data?.map((r: any) => r.user_id) || []
-            );
+          // Fetch winners with prizes (redemption_id IS NOT NULL in arena_results)
+          const { data: winnerResults } = await supabase
+            .from('arena_results')
+            .select('user_id')
+            .eq('arena_id', arena.id)
+            .not('redemption_id', 'is', null);
 
-          if (!redemptionsError && redemptions && redemptions.length > 0) {
-            // Send push notifications to winners
-            const tokens = redemptions
-              .map((r: any) => r.profiles?.expo_push_token)
+          const winnerIds = winnerResults?.map((r: any) => r.user_id) || [];
+          winnerUserIds.push(...winnerIds);
+
+          if (winnerIds.length > 0) {
+            // Fetch winners' push tokens
+            const { data: winnerProfiles } = await supabase
+              .from('profiles')
+              .select('id, expo_push_token')
+              .in('id', winnerIds)
+              .not('expo_push_token', 'is', null);
+
+            const winnerTokens = (winnerProfiles || [])
+              .map((p: any) => p.expo_push_token)
               .filter((t: string | null) => t && t.startsWith('ExponentPushToken'));
 
-            if (tokens.length > 0) {
-              // Call send-push edge function
+            if (winnerTokens.length > 0) {
               const pushResponse = await fetch(
                 `${supabaseUrl}/functions/v1/send-push`,
                 {
@@ -146,7 +147,7 @@ serve(async (req) => {
                     Authorization: `Bearer ${supabaseServiceKey}`,
                   },
                   body: JSON.stringify({
-                    tokens,
+                    tokens: winnerTokens,
                     title: '🏆 Arena Prize Won!',
                     body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
                     data: {
@@ -166,6 +167,46 @@ serve(async (req) => {
           }
         }
 
+        // Notify ALL participants (non-winners) that the arena has ended
+        const { data: allParticipants } = await supabase
+          .from('arena_participants')
+          .select('user_id, profiles!inner(expo_push_token)')
+          .eq('arena_id', arena.id)
+          .not('profiles.expo_push_token', 'is', null);
+
+        const nonWinnerTokens = (allParticipants || [])
+          .filter((p: any) => !winnerUserIds.includes(p.user_id))
+          .map((p: any) => p.profiles?.expo_push_token)
+          .filter((t: string | null) => t && t.startsWith('ExponentPushToken'));
+
+        if (nonWinnerTokens.length > 0) {
+          const pushResponse = await fetch(
+            `${supabaseUrl}/functions/v1/send-push`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${supabaseServiceKey}`,
+              },
+              body: JSON.stringify({
+                tokens: nonWinnerTokens,
+                title: '🏁 Arena Ended',
+                body: `${arena.name} has ended. Check your final ranking!`,
+                data: {
+                  type: 'arena_ended',
+                  arena_id: arena.id,
+                  arena_name: arena.name,
+                },
+              }),
+            }
+          );
+
+          if (pushResponse.ok) {
+            const pushResult = await pushResponse.json();
+            participantsNotified += pushResult.sent || 0;
+          }
+        }
+
         arenasProcessed++;
       } catch (error: any) {
         errors.push(`Arena ${arena.name} (${arena.id}): ${error.message}`);
@@ -177,6 +218,7 @@ serve(async (req) => {
         success: errors.length === 0,
         arenas_processed: arenasProcessed,
         winners_notified: winnersNotified,
+        participants_notified: participantsNotified,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

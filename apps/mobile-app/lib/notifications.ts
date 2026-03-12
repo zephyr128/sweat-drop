@@ -48,7 +48,9 @@ type NotificationTrigger =
   | 'reengagement_7d'
   | 'reengagement_14d'
   | 'drops_expiry_30d'
-  | 'drops_expiry_7d';
+  | 'drops_expiry_7d'
+  | 'arena_prize'
+  | 'arena_ended';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  NOTIFICATION HANDLER CONFIGURATION
@@ -193,6 +195,8 @@ interface NotificationData {
   gym_id?: string;
   new_rank?: string;
   period?: string;
+  arena_id?: string;
+  arena_name?: string;
 }
 
 /**
@@ -243,6 +247,14 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
     case 'drops_expiry_7d':
       // Navigate to store to spend drops
       return '/store';
+
+    case 'arena_prize':
+      if (data.arena_id) return `/arena/${data.arena_id}`;
+      return '/redemptions';
+
+    case 'arena_ended':
+      if (data.arena_id) return `/arena/${data.arena_id}`;
+      return '/arenas';
 
     default:
       return '/home';

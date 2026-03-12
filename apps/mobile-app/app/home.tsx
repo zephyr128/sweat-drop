@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, ImageBackground, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -85,6 +85,7 @@ export default function HomeScreen() {
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnce = useRef(false); // Track if we've ever successfully loaded — prevents full-screen loader on re-focus
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -142,18 +143,20 @@ export default function HomeScreen() {
   });
 
   // Load data when session or active gym changes
+  // First load shows spinner, subsequent gym switches refresh silently
   useEffect(() => {
     if (session?.user) {
-      loadData();
+      loadData(hasLoadedOnce.current); // silent if already loaded once
       refreshLocalDrops();
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
 
   // Refresh ALL data when screen is focused (including profile drops)
+  // CRITICAL: Use silent=true to avoid showing the full-screen loader and resetting scroll position
   useFocusEffect(
     useCallback(() => {
       if (session?.user) {
-        loadData();
+        loadData(true); // silent refresh — no loader, no scroll reset
         refreshLocalDrops();
         if (activeGymId) {
           refreshChallenges?.();
@@ -181,9 +184,13 @@ export default function HomeScreen() {
       });
   }, [homeGymId]);
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     if (!session?.user) return;
-    setLoading(true);
+
+    // Only show full-screen loader on the very first load
+    if (!silent && !hasLoadedOnce.current) {
+      setLoading(true);
+    }
 
     try {
       const { data: profileData } = await supabase
@@ -195,6 +202,7 @@ export default function HomeScreen() {
       if (profileData) {
         setProfile(profileData);
       }
+      hasLoadedOnce.current = true;
     } catch (error) {
       console.error('Error loading home data:', error);
     } finally {
@@ -560,6 +568,7 @@ export default function HomeScreen() {
           todayDrops={homeStats.todayDrops}
           lastWorkout={homeStats.lastWorkout}
           brandPrimary={branding.primary}
+          onStreakPress={() => router.push('/workout-history')}
         />
 
         {/* ═══════════════════════════════════════════ */}
@@ -811,61 +820,87 @@ export default function HomeScreen() {
                   decelerationRate="fast"
                 >
                   {availableArenas.slice(0, 5).map((arena) => {
-                    const daysLeft = Math.max(0, Math.ceil((new Date(arena.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                    const isUpcoming = arena.arena_status === 'upcoming';
+                    const targetDate = isUpcoming ? new Date(arena.start_date) : new Date(arena.end_date);
+                    const daysLeft = Math.max(0, Math.ceil((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
                     const scoringIcons: Record<string, string> = { total_drops: '💧', days_visited: '📅', variety_score: '🏋️', streak_days: '🔥' };
                     const scoringIcon = scoringIcons[arena.scoring_model] || '💧';
+
+                    // Custom branding per arena
+                    const arenaPrimary = arena.card_color || branding.primary;
+                    const arenaText = arena.card_text_color || theme.colors.text;
+                    const arenaGradientEnd = arena.card_gradient_end || 'rgba(20, 20, 35, 0.9)';
 
                     return (
                       <View key={arena.arena_id} style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
                         <TouchableOpacity
-                          style={[styles.challengeCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                          style={[styles.challengeCard, { borderColor: hexToRgba(arenaPrimary, isUpcoming ? 0.25 : 0.15) }]}
                           onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
                           activeOpacity={0.9}
                         >
                           <BlurView intensity={50} tint="dark" style={styles.challengeBlur}>
                             <LinearGradient
-                              colors={[hexToRgba(branding.primary, 0.06), 'rgba(20, 20, 35, 0.9)', hexToRgba(branding.primary, 0.03)]}
+                              colors={[hexToRgba(arenaPrimary, 0.08), arenaGradientEnd, hexToRgba(arenaPrimary, 0.04)]}
                               start={{ x: 0, y: 0 }}
                               end={{ x: 1, y: 1 }}
                               style={styles.challengeGradient}
                             >
                               <View style={styles.challengeContent}>
+                                {/* Coming Soon badge for upcoming arenas */}
+                                {isUpcoming && (
+                                  <View style={[styles.arenaComingSoonBadge, { backgroundColor: hexToRgba(arenaPrimary, 0.2), borderColor: hexToRgba(arenaPrimary, 0.3) }]}>
+                                    <Ionicons name="time-outline" size={10} color={arenaPrimary} />
+                                    <Text style={[styles.arenaComingSoonText, { color: arenaPrimary }]}>{t('comingSoon')}</Text>
+                                  </View>
+                                )}
+
                                 {/* Arena Header */}
                                 <View style={styles.challengeHeader}>
                                   <View style={styles.arenaHeaderRow}>
                                     {arena.sponsor_logo ? (
                                       <Image source={{ uri: arena.sponsor_logo }} style={styles.arenaSponsorLogo} resizeMode="contain" />
                                     ) : (
-                                      <View style={[styles.arenaSponsorPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                                        <Ionicons name="trophy" size={14} color={branding.primary} />
+                                      <View style={[styles.arenaSponsorPlaceholder, { backgroundColor: hexToRgba(arenaPrimary, 0.15) }]}>
+                                        <Ionicons name="trophy" size={14} color={arenaPrimary} />
                                       </View>
                                     )}
-                                    <Text style={[styles.challengeType, { color: branding.primary }]}>{arena.sponsor_name}</Text>
+                                    <Text style={[styles.challengeType, { color: arenaPrimary }]}>{arena.sponsor_name}</Text>
                                     <Text style={styles.arenaScoringIcon}>{scoringIcon}</Text>
                                   </View>
-                                  <Text style={styles.challengeName} numberOfLines={2}>{arena.name}</Text>
+                                  <Text style={[styles.challengeName, { color: arenaText }]} numberOfLines={2}>{arena.name}</Text>
                                 </View>
 
                                 {/* Arena Stats */}
                                 <View style={styles.arenaHomeStats}>
                                   <Text style={styles.arenaHomeStat}>{arena.participant_count} {t('participants')}</Text>
-                                  <Text style={[styles.arenaHomeStat, daysLeft <= 3 && { color: theme.colors.secondary }]}>
-                                    {daysLeft} {t('daysLeft')}
-                                  </Text>
+                                  {isUpcoming ? (
+                                    <Text style={[styles.arenaHomeStat, { color: arenaPrimary }]}>
+                                      {t('startsIn', { days: daysLeft })}
+                                    </Text>
+                                  ) : (
+                                    <Text style={[styles.arenaHomeStat, daysLeft <= 3 && { color: theme.colors.secondary }]}>
+                                      {daysLeft} {t('daysLeft')}
+                                    </Text>
+                                  )}
                                 </View>
 
                                 {/* User rank or Join CTA */}
-                                <View style={[styles.challengeReward, { borderTopColor: 'rgba(255, 255, 255, 0.08)' }]}>
+                                <View style={[styles.challengeReward, { borderTopColor: hexToRgba(arenaPrimary, 0.08) }]}>
                                   {arena.user_opted_in ? (
                                     <>
-                                      <Text style={[styles.arenaRankLabel, { color: branding.primary }]}>
+                                      <Text style={[styles.arenaRankLabel, { color: arenaPrimary }]}>
                                         {t('yourRank', { rank: arena.user_rank ?? '—' })}
                                       </Text>
                                     </>
+                                  ) : isUpcoming ? (
+                                    <>
+                                      <Ionicons name="time-outline" size={16} color={arenaPrimary} />
+                                      <Text style={[styles.challengeRewardText, { color: arenaPrimary }]}>{t('joinArena')}</Text>
+                                    </>
                                   ) : (
                                     <>
-                                      <Ionicons name="add-circle-outline" size={16} color={branding.primary} />
-                                      <Text style={[styles.challengeRewardText, { color: branding.primary }]}>{t('joinArena')}</Text>
+                                      <Ionicons name="add-circle-outline" size={16} color={arenaPrimary} />
+                                      <Text style={[styles.challengeRewardText, { color: arenaPrimary }]}>{t('joinArena')}</Text>
                                     </>
                                   )}
                                 </View>
@@ -1325,6 +1360,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.3,
   },
+  arenaComingSoonBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  arenaComingSoonText: {
+    ...fontStyles.heading,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
   arenaHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1692,6 +1743,7 @@ const es = StyleSheet.create({
     overflow: 'hidden',
   },
   statPillBlur: {
+    flex: 1,
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',

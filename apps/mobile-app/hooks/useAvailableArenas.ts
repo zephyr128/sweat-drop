@@ -20,6 +20,20 @@ export interface AvailableArena {
   user_rank: number | null;
   user_score: number | null;
   prizes: Array<{ rank: number; prize: string; value?: string }>;
+  // v2 fields — opt-in requirements, branding, status
+  opt_in_type: string;         // 'free' | 'drops' | 'streak' | 'level'
+  opt_in_value: number;
+  card_color: string | null;
+  card_text_color: string | null;
+  card_gradient_end: string | null;
+  arena_status: string;        // 'upcoming' | 'active' | 'ended'
+  // v2.1 — cross-gym scoring breakdown
+  gym_score_breakdown: Array<{
+    gym_id: string;
+    gym_name: string;
+    score: number;
+    sessions: number;
+  }> | null;                   // Per-gym score breakdown (only for opted-in users)
 }
 
 /**

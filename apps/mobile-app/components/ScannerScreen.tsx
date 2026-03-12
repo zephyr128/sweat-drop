@@ -28,6 +28,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymData } from '@/hooks/useGymData';
 import { useGymStore } from '@/lib/stores/useGymStore';
+import { useBranding } from '@/lib/hooks/useBranding';
 import { theme, fontStyles } from '@/lib/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -68,6 +69,7 @@ export function ScannerScreen() {
   }>();
   const { session } = useSession();
   const { updateHomeGym } = useGymData();
+  const branding = useBranding();
   const device = useCameraDevice('back');
   const hasScannedRef = useRef(false);
 
@@ -699,19 +701,19 @@ export function ScannerScreen() {
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color={theme.colors.primary} />
+          <Ionicons name="camera-outline" size={64} color={branding.primary} />
           <Text style={styles.permissionTitle}>{t('permissionRequired')}</Text>
           <Text style={styles.permissionText}>
             {t('permissionDesc')}
           </Text>
           <TouchableOpacity
-            style={styles.permissionButton}
+            style={[styles.permissionButton, { backgroundColor: branding.primary }]}
             onPress={checkCameraPermission}
           >
-            <Text style={styles.permissionButtonText}>{t('grantPermission')}</Text>
+            <Text style={[styles.permissionButtonText, { color: branding.onPrimary }]}>{t('grantPermission')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.settingsButton}
+            style={[styles.settingsButton, { borderColor: branding.primary }]}
             onPress={() => {
               if (Platform.OS === 'ios') {
                 Linking.openURL('app-settings:');
@@ -720,7 +722,7 @@ export function ScannerScreen() {
               }
             }}
           >
-            <Text style={styles.settingsButtonText}>{t('openSettings')}</Text>
+            <Text style={[styles.settingsButtonText, { color: branding.primary }]}>{t('openSettings')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -737,7 +739,7 @@ export function ScannerScreen() {
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={branding.primary} />
           <Text style={styles.loadingText}>{t('initializingCamera')}</Text>
         </View>
       </SafeAreaView>
@@ -749,14 +751,7 @@ export function ScannerScreen() {
   const scanAreaLeft = (SCREEN_WIDTH - SCAN_AREA_SIZE) / 2;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <LinearGradient
-        colors={['#000000', '#0A0E1A', '#000000']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-      
+    <View style={styles.cameraContainer}>
       {isScanning && !isProcessing && (
         <Camera
           style={StyleSheet.absoluteFillObject}
@@ -767,8 +762,18 @@ export function ScannerScreen() {
         />
       )}
 
+      {/* Dark fallback behind camera (visible when camera not active) */}
+      {(!isScanning || isProcessing) && (
+        <LinearGradient
+          colors={['#000000', '#0A0E1A', '#000000']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      )}
+
       {/* Premium Overlay - Clean flex approach without gaps */}
-      <View style={styles.overlayContainer}>
+      <View style={styles.overlayContainer} pointerEvents="box-none">
         {/* Top overlay */}
         <View style={[styles.overlaySection, { height: scanAreaTop }]} />
         
@@ -779,20 +784,20 @@ export function ScannerScreen() {
           {/* Scan Frame with Premium Animations */}
           <Animated.View style={[styles.scanFrameContainer, frameAnimatedStyle]}>
             <View style={styles.scanFrame}>
-              {/* Corner indicators - Premium style */}
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
+              {/* Corner indicators - Branding color */}
+              <View style={[styles.corner, styles.topLeft, { borderColor: branding.primary }]} />
+              <View style={[styles.corner, styles.topRight, { borderColor: branding.primary }]} />
+              <View style={[styles.corner, styles.bottomLeft, { borderColor: branding.primary }]} />
+              <View style={[styles.corner, styles.bottomRight, { borderColor: branding.primary }]} />
               
-              {/* Laser Sweep Effect */}
+              {/* Laser Sweep Effect - Branding color */}
               {isScanning && !isProcessing && (
-                <Animated.View style={[styles.laserSweep, laserAnimatedStyle, laserGlowStyle]}>
+                <Animated.View style={[styles.laserSweep, laserAnimatedStyle, laserGlowStyle, { shadowColor: branding.primary }]}>
                   <LinearGradient
                     colors={[
                       'transparent',
-                      theme.colors.primary + 'FF',
-                      theme.colors.primary + 'FF',
+                      branding.primary + 'FF',
+                      branding.primary + 'FF',
                       'transparent',
                     ]}
                     start={{ x: 0, y: 0 }}
@@ -815,7 +820,7 @@ export function ScannerScreen() {
       <View style={styles.instructionsContainer}>
         {isProcessing ? (
           <View style={styles.processingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <ActivityIndicator size="large" color={branding.primary} />
             <Text style={styles.processingText}>{t('processingQr')}</Text>
           </View>
         ) : (
@@ -849,7 +854,7 @@ export function ScannerScreen() {
             <Ionicons
               name={torchEnabled ? 'flash' : 'flash-outline'}
               size={24}
-              color={torchEnabled ? theme.colors.primary : theme.colors.text}
+              color={torchEnabled ? branding.primary : theme.colors.text}
             />
           </BlurView>
         </TouchableOpacity>
@@ -867,11 +872,11 @@ export function ScannerScreen() {
           <Ionicons
             name="code-slash"
             size={24}
-            color={isProcessing ? theme.colors.textSecondary : theme.colors.primary}
+            color={isProcessing ? theme.colors.textSecondary : branding.primary}
           />
         </BlurView>
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -879,6 +884,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -905,7 +914,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: CORNER_LENGTH,
     height: CORNER_LENGTH,
-    borderColor: theme.colors.primary,
   },
   topLeft: {
     top: 0,
@@ -940,7 +948,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     elevation: 10,
@@ -1042,7 +1049,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   permissionButton: {
-    backgroundColor: theme.colors.primary,
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
@@ -1050,20 +1056,17 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: {
     ...fontStyles.heading,
-    color: '#000000',
     fontSize: 18,
   },
   settingsButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: theme.colors.primary,
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
   },
   settingsButtonText: {
     ...fontStyles.heading,
-    color: theme.colors.primary,
     fontSize: 18,
   },
   loadingContainer: {

@@ -26,6 +26,8 @@
   "noArenasSubtitle": "Sponsor-branded competitions with prizes will appear here",
   "participants": "participants",
   "daysLeft": "days left",
+  "comingSoon": "Coming Soon",
+  "startsIn": "Starts in {{days}}d",
   "yourRank": "Your rank: #{{rank}}",
   "joinArena": "Join arena",
   "smartCoach": "SmartCoach",

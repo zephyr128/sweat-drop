@@ -30,5 +30,10 @@
   "thu": "Thu",
   "fri": "Fri",
   "sat": "Sat",
-  "sun": "Sun"
+  "sun": "Sun",
+  "currentStreak": "Current streak",
+  "maxStreak": "Best streak",
+  "days": "days",
+  "streakActive": "You're on fire! Keep it going.",
+  "streakInactive": "Train today to start a new streak!"
 }

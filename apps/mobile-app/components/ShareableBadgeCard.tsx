@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
@@ -23,6 +24,7 @@ function hexToRgba(hex: string, alpha: number): string {
 export interface ShareableBadgeData {
   badgeName: string;
   badgeDescription?: string | null;
+  badgeImageUrl?: string | null;
   badgeType: 'global' | 'gym';
   earnedAt?: string | null;
   gymName?: string | null;
@@ -86,11 +88,21 @@ export function ShareableBadgeCard({ data }: { data: ShareableBadgeData }) {
                 styles.innerRing,
                 {
                   borderColor: categoryColor,
-                  backgroundColor: hexToRgba(categoryColor, 0.08),
+                  backgroundColor: 'transparent',
                 },
               ]}
             >
-              <Ionicons name="trophy" size={48} color={categoryColor} />
+              {data.badgeImageUrl ? (
+                <View style={styles.badgeImageClip}>
+                  <Image
+                    source={{ uri: data.badgeImageUrl }}
+                    style={styles.badgeImageInner}
+                    contentFit="cover"
+                  />
+                </View>
+              ) : (
+                <Ionicons name="trophy" size={48} color={categoryColor} />
+              )}
             </View>
           </View>
 
@@ -135,12 +147,6 @@ export function ShareableBadgeCard({ data }: { data: ShareableBadgeData }) {
             {data.username && (
               <Text style={styles.username}>@{data.username}</Text>
             )}
-            <View style={styles.footerBrand}>
-              <Ionicons name="water" size={12} color={hexToRgba(brandColor, 0.3)} />
-              <Text style={[styles.footerApp, { color: hexToRgba(brandColor, 0.3) }]}>
-                sweatdrop.app
-              </Text>
-            </View>
           </View>
         </View>
       </LinearGradient>
@@ -152,8 +158,6 @@ const styles = StyleSheet.create({
   cardWrapper: {
     width: CARD_SIZE,
     height: CARD_SIZE,
-    borderRadius: 24,
-    overflow: 'hidden',
     alignSelf: 'center',
   },
   card: {
@@ -169,7 +173,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 160,
-    borderRadius: 24,
   },
   brandHeader: {
     position: 'absolute',
@@ -202,6 +205,19 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  badgeImageClip: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeImageInner: {
+    width: 72,
+    height: 72,
   },
   checkBadge: {
     position: 'absolute',
@@ -277,15 +293,5 @@ const styles = StyleSheet.create({
     ...fontStyles.bodySemiBold,
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.4)',
-  },
-  footerBrand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  footerApp: {
-    ...fontStyles.heading,
-    fontSize: 12,
-    letterSpacing: 0.5,
   },
 });

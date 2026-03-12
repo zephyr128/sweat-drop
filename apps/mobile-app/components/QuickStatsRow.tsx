@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { getNumberStyle, fontStyles } from '@/lib/theme';
@@ -14,6 +14,7 @@ interface QuickStatsRowProps {
     endedAt: string;
   } | null;
   brandPrimary: string;
+  onStreakPress?: () => void;
 }
 
 /* ── Helpers ──────────────────────────────────────── */
@@ -46,6 +47,7 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
   todayDrops,
   lastWorkout,
   brandPrimary,
+  onStreakPress,
 }) => {
   // Decide what to show for the "last workout" pill
   const lastLabel = lastWorkout
@@ -58,7 +60,7 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
   return (
     <View style={styles.row}>
       {/* 🔥 Streak */}
-      <View style={styles.pillWrapper}>
+      <TouchableOpacity style={styles.pillWrapper} onPress={onStreakPress} activeOpacity={onStreakPress ? 0.7 : 1}>
         <BlurView intensity={50} tint="dark" style={styles.pill}>
           <View style={[styles.pillIconBg, { backgroundColor: streakActive ? hexToRgba('#FF6B35', 0.2) : hexToRgba(brandPrimary, 0.1) }]}>
             <Ionicons
@@ -74,7 +76,7 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
             <Text style={styles.pillLabel}>Streak</Text>
           </View>
         </BlurView>
-      </View>
+      </TouchableOpacity>
 
       {/* 💧 Today's drops */}
       <View style={styles.pillWrapper}>

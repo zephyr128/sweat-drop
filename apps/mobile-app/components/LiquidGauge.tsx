@@ -11,7 +11,7 @@ import {
   Circle,
   Blur,
 } from '@shopify/react-native-skia';
-import { useSharedValue, withTiming, useDerivedValue, useAnimatedReaction, useFrameCallback, cancelAnimation, Easing, withSpring, SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, withTiming, useDerivedValue, useAnimatedReaction, useAnimatedStyle, useFrameCallback, cancelAnimation, Easing, withSpring, SharedValue } from 'react-native-reanimated';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 
 interface LiquidGaugeProps {
@@ -20,6 +20,7 @@ interface LiquidGaugeProps {
   size?: number; // Diameter of the gauge
   strokeWidth?: number; // Width of the border
   rpm?: SharedValue<number>; // RPM for dynamic glow synchronization
+  dropScale?: SharedValue<number>; // Scale animation for center number only (not liquid)
 }
 
 export interface LiquidGaugeRef {
@@ -46,6 +47,7 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
   size = 280,
   strokeWidth = 4,
   rpm,
+  dropScale,
 }, ref) => {
   const radius = size / 2;
   const center = { x: radius, y: radius };
@@ -399,7 +401,11 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
       </Canvas>
 
       {/* Center Content - Premium shadow and blur for readability */}
-      <View style={styles.centerContent}>
+      {/* dropScale animates ONLY the number, not the liquid */}
+      <Animated.View style={[
+        styles.centerContent,
+        dropScale ? { transform: [{ scale: dropScale }] } : undefined,
+      ]}>
         {typeof value === 'string' && value.includes('\n') ? (
           // Multi-line message (for challenge completion)
           <Text style={[styles.messageText, { fontSize: size * 0.12, lineHeight: size * 0.15 }]}>
@@ -416,7 +422,7 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
             {displayValue}
           </Text>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 });

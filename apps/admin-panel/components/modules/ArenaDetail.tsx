@@ -15,17 +15,37 @@ import {
   RefreshCw,
   Flag,
   ArrowLeft,
+  Ban,
+  Lock,
+  CheckCircle,
+  XCircle,
+  Ticket,
+  Bell,
+  Mail,
+  Copy,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   getArenaParticipants,
   finalizeArena,
+  cancelArena,
+  notifyArenaParticipants,
   type Arena,
+  type ParticipantWithBreakdown,
+  type ParticipantGymBreakdown,
 } from '@/lib/actions/arena-actions';
-import { getCurrentLeaderboard } from '@/lib/actions/leaderboard-actions';
+import {
+  getArenaResults,
+  getArenaInvitations,
+  type ArenaResult,
+  type ArenaInvitation,
+  type GymScoreEntry,
+} from '@/lib/actions/arena-invitation-actions';
 
 interface ArenaDetailProps {
   arena: Arena;
   isSuperadmin: boolean;
+  viewingGymId?: string;
   onBack: () => void;
 }
 
@@ -60,38 +80,65 @@ function formatDate(dateStr: string): string {
   });
 }
 
-interface Participant {
-  user_id: string;
-  username: string;
-  avatar_url: string | null;
-  gym_name: string;
-  current_score: number;
-  rank: number;
-  opted_in_at: string;
+type Tab = 'leaderboard' | 'results' | 'invitations';
+
+// Helper to check if a breakdown is an array (superadmin view)
+function isFullBreakdown(b: ParticipantWithBreakdown['gym_breakdown']): b is ParticipantGymBreakdown[] {
+  return Array.isArray(b);
 }
 
-export function ArenaDetail({ arena, isSuperadmin, onBack }: ArenaDetailProps) {
-  const [participants, setParticipants] = useState<Participant[]>([]);
+// Helper to check if a breakdown is a privacy object (gym owner view)
+function isPrivacyBreakdown(b: ParticipantWithBreakdown['gym_breakdown']): b is { own_gym_score: number; other_gyms_score: number; total_sessions: number } {
+  return b !== null && !Array.isArray(b) && 'own_gym_score' in b;
+}
+
+// Helper to check if ArenaResult gym_breakdown is full array (superadmin)
+function isResultFullBreakdown(b: ArenaResult['gym_breakdown']): b is GymScoreEntry[] {
+  return Array.isArray(b);
+}
+
+export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: ArenaDetailProps) {
+  const [participants, setParticipants] = useState<ParticipantWithBreakdown[]>([]);
+  const [results, setResults] = useState<ArenaResult[]>([]);
+  const [invitations, setInvitations] = useState<ArenaInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [copiedEmails, setCopiedEmails] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>('leaderboard');
 
   const loadParticipants = useCallback(async () => {
-    const result = await getArenaParticipants(arena.id);
+    const result = await getArenaParticipants(arena.id, viewingGymId);
     if (result.success && result.data) {
       setParticipants(result.data);
+    }
+  }, [arena.id, viewingGymId]);
+
+  const loadResults = useCallback(async () => {
+    if (!arena.is_finalized) return;
+    const result = await getArenaResults(arena.id, viewingGymId);
+    if (result.success && result.data) {
+      setResults(result.data);
+    }
+  }, [arena.id, arena.is_finalized, viewingGymId]);
+
+  const loadInvitations = useCallback(async () => {
+    const result = await getArenaInvitations(arena.id);
+    if (result.success && result.data) {
+      setInvitations(result.data);
     }
   }, [arena.id]);
 
   useEffect(() => {
     setLoading(true);
-    loadParticipants().finally(() => setLoading(false));
-  }, [loadParticipants]);
+    Promise.all([loadParticipants(), loadResults(), loadInvitations()]).finally(() => setLoading(false));
+  }, [loadParticipants, loadResults, loadInvitations]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadParticipants();
+    await Promise.all([loadParticipants(), loadResults(), loadInvitations()]);
     setRefreshing(false);
-    toast.success('Leaderboard refreshed');
+    toast.success('Data refreshed');
   };
 
   const handleFinalize = async () => {
@@ -99,9 +146,49 @@ export function ArenaDetail({ arena, isSuperadmin, onBack }: ArenaDetailProps) {
     const result = await finalizeArena(arena.id);
     if (result.success) {
       toast.success(`Arena finalized! ${result.winnersCount || 0} prize(s) distributed.`);
+      await loadResults();
+      setActiveTab('results');
     } else {
       toast.error(result.error || 'Failed to finalize');
     }
+  };
+
+  const handleCancel = async () => {
+    if (!confirm('Cancel this arena? All participants will be refunded if drops were paid. This cannot be undone.')) return;
+    const result = await cancelArena(arena.id);
+    if (result.success) {
+      toast.success(`Arena cancelled. ${result.participantsRefunded || 0} participant(s) refunded.`);
+      onBack();
+    } else {
+      toast.error(result.error || 'Failed to cancel arena');
+    }
+  };
+
+  const handleNotify = async (winnersOnly: boolean) => {
+    const label = winnersOnly ? 'winners' : 'all participants';
+    if (!confirm(`Send push notifications to ${label}?`)) return;
+    setNotifying(true);
+    const result = await notifyArenaParticipants(arena.id, winnersOnly);
+    setNotifying(false);
+    if (result.success) {
+      toast.success(`Notifications sent to ${result.notifiedCount || 0} ${label}`);
+    } else {
+      toast.error(result.error || 'Failed to send notifications');
+    }
+  };
+
+  const handleCopyWinnerEmails = () => {
+    const winnerEmails = results
+      .filter((r) => r.prize && r.email)
+      .map((r) => r.email!);
+    if (winnerEmails.length === 0) {
+      toast.error('No winner emails available');
+      return;
+    }
+    navigator.clipboard.writeText(winnerEmails.join(', '));
+    setCopiedEmails(true);
+    toast.success(`Copied ${winnerEmails.length} winner email(s) to clipboard`);
+    setTimeout(() => setCopiedEmails(false), 2000);
   };
 
   const now = new Date();
@@ -144,6 +231,15 @@ export function ArenaDetail({ arena, isSuperadmin, onBack }: ArenaDetailProps) {
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
+          {isSuperadmin && !arena.is_finalized && arena.is_active && (
+            <button
+              onClick={handleCancel}
+              className="flex items-center gap-2 px-4 py-2.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-sm text-orange-400 hover:bg-orange-500/20 transition-all"
+            >
+              <Ban className="w-4 h-4" />
+              Cancel
+            </button>
+          )}
           {isSuperadmin && !arena.is_finalized && (
             <button
               onClick={handleFinalize}
@@ -155,6 +251,18 @@ export function ArenaDetail({ arena, isSuperadmin, onBack }: ArenaDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Opt-In Info */}
+      {arena.opt_in_type && arena.opt_in_type !== 'free' && (
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-2.5 flex items-center gap-2">
+          <Lock className="w-4 h-4 text-amber-400" />
+          <span className="text-sm text-amber-300">
+            {arena.opt_in_type === 'drops' ? `Entry fee: ${arena.opt_in_value} drops` :
+             arena.opt_in_type === 'streak' ? `Requires ${arena.opt_in_value}-day streak` :
+             `Requires ${arena.opt_in_value} total drops (level)`}
+          </span>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-4 gap-4">
@@ -222,89 +330,366 @@ export function ArenaDetail({ arena, isSuperadmin, onBack }: ArenaDetailProps) {
         </div>
       )}
 
-      {/* Live Leaderboard */}
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-[#333]">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-[#00E5FF]" />
-            Live Leaderboard
-          </h3>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center text-[#808080]">Loading participants...</div>
-        ) : participants.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-12 h-12 text-[#333] mx-auto mb-3" />
-            <p className="text-[#808080]">No participants yet</p>
-            <p className="text-xs text-[#555] mt-1">Members need to opt-in to appear</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#1A1A1A]">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase w-12">Rank</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Member</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Gym</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-[#808080] uppercase">Score</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-[#808080] uppercase">Joined</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1A1A1A]">
-                {participants.map((p, idx) => {
-                  const isTop3 = idx < 3;
-                  const RankIcon = isTop3 ? RANK_ICONS[idx] : null;
-                  const unit = SCORING_UNITS[arena.scoring_model] || '';
-                  return (
-                    <tr key={p.user_id} className={`hover:bg-[#1A1A1A]/50 ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}>
-                      <td className="px-4 py-3">
-                        {isTop3 && RankIcon ? (
-                          <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${RANK_COLORS[idx]} flex items-center justify-center`}>
-                            <RankIcon className="w-4 h-4 text-black" />
-                          </div>
-                        ) : (
-                          <span className="text-[#808080] font-mono text-sm">#{p.rank}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-xs text-white">
-                            {p.avatar_url ? (
-                              <img src={p.avatar_url} alt={p.username} className="w-8 h-8 rounded-full object-cover" />
-                            ) : (
-                              (p.username || '?')[0].toUpperCase()
-                            )}
-                          </div>
-                          <span className={`text-sm font-medium ${isTop3 ? RANK_TEXT_COLORS[idx] : 'text-white'}`}>
-                            {p.username}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs text-[#808080] flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {p.gym_name}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`text-sm font-bold ${isTop3 ? 'text-white' : 'text-[#808080]'}`}>
-                          {Number(p.current_score).toLocaleString()} {unit}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-xs text-[#808080]">
-                          {new Date(p.opted_in_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Tabs */}
+      <div className="flex border-b border-[#1A1A1A]">
+        {(['leaderboard', ...(arena.is_finalized ? ['results'] as const : []), ...(isSuperadmin ? ['invitations'] as const : [])] as Tab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-3 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === tab
+                ? 'text-[#00E5FF] border-[#00E5FF]'
+                : 'text-[#808080] border-transparent hover:text-white'
+            }`}
+          >
+            {tab === 'leaderboard' ? 'Leaderboard' :
+             tab === 'results' ? 'Results' :
+             `Invitations${invitations.length > 0 ? ` (${invitations.length})` : ''}`}
+          </button>
+        ))}
       </div>
+
+      {/* Leaderboard Tab */}
+      {activeTab === 'leaderboard' && (
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
+          <div className="p-4 border-b border-[#333]">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-[#00E5FF]" />
+              Live Leaderboard
+            </h3>
+          </div>
+
+          {loading ? (
+            <div className="p-8 text-center text-[#808080]">Loading participants...</div>
+          ) : participants.length === 0 ? (
+            <div className="p-12 text-center">
+              <Users className="w-12 h-12 text-[#333] mx-auto mb-3" />
+              <p className="text-[#808080]">No participants yet</p>
+              <p className="text-xs text-[#555] mt-1">Members need to opt-in to appear</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#1A1A1A]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase w-12">Rank</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Member</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Gym</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#808080] uppercase">Score</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Gym Breakdown</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#808080] uppercase">Joined</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1A1A1A]">
+                  {participants.map((p, idx) => {
+                    const isTop3 = idx < 3;
+                    const RankIcon = isTop3 ? RANK_ICONS[idx] : null;
+                    const unit = SCORING_UNITS[arena.scoring_model] || '';
+                    return (
+                      <tr key={p.user_id} className={`hover:bg-[#1A1A1A]/50 ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}>
+                        <td className="px-4 py-3">
+                          {isTop3 && RankIcon ? (
+                            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${RANK_COLORS[idx]} flex items-center justify-center`}>
+                              <RankIcon className="w-4 h-4 text-black" />
+                            </div>
+                          ) : (
+                            <span className="text-[#808080] font-mono text-sm">#{p.rank}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-xs text-white">
+                              {p.avatar_url ? (
+                                <img src={p.avatar_url} alt={p.username} className="w-8 h-8 rounded-full object-cover" />
+                              ) : (
+                                (p.username || '?')[0].toUpperCase()
+                              )}
+                            </div>
+                            <span className={`text-sm font-medium ${isTop3 ? RANK_TEXT_COLORS[idx] : 'text-white'}`}>
+                              {p.username}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-[#808080] flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {p.gym_name}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`text-sm font-bold ${isTop3 ? 'text-white' : 'text-[#808080]'}`}>
+                            {Number(p.current_score).toLocaleString()} {unit}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.gym_breakdown ? (
+                            isFullBreakdown(p.gym_breakdown) ? (
+                              <div className="flex flex-col gap-0.5">
+                                {p.gym_breakdown.map((gb) => (
+                                  <span key={gb.gym_id} className="text-xs text-[#808080]">
+                                    <span className="text-[#555]">{gb.gym_name}:</span>{' '}
+                                    <span className="text-white font-medium">{gb.score.toLocaleString()}</span>
+                                    <span className="text-[#555] ml-1">({gb.sessions}s)</span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : isPrivacyBreakdown(p.gym_breakdown) ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-xs text-[#808080]">
+                                  <span className="text-emerald-400">Your gym:</span>{' '}
+                                  <span className="text-white font-medium">{p.gym_breakdown.own_gym_score.toLocaleString()}</span>
+                                </span>
+                                <span className="text-xs text-[#808080]">
+                                  <span className="text-[#555]">Other gyms:</span>{' '}
+                                  <span className="text-white font-medium">{p.gym_breakdown.other_gyms_score.toLocaleString()}</span>
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-[#555]">—</span>
+                            )
+                          ) : (
+                            <span className="text-xs text-[#555]">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-xs text-[#808080]">
+                            {new Date(p.opted_in_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Results Tab (finalized arenas only) */}
+      {activeTab === 'results' && arena.is_finalized && (
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
+          <div className="p-4 border-b border-[#333] flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              Final Results
+            </h3>
+            {isSuperadmin && results.length > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleNotify(true)}
+                  disabled={notifying}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-400 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  {notifying ? 'Sending...' : 'Notify Winners'}
+                </button>
+                <button
+                  onClick={() => handleNotify(false)}
+                  disabled={notifying}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] border border-[#333] rounded-lg text-xs text-[#808080] hover:text-white transition-all disabled:opacity-50"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  {notifying ? 'Sending...' : 'Notify All'}
+                </button>
+                <button
+                  onClick={handleCopyWinnerEmails}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] border border-[#333] rounded-lg text-xs text-[#808080] hover:text-white transition-all"
+                >
+                  {copiedEmails ? (
+                    <ClipboardCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  {copiedEmails ? 'Copied!' : 'Copy Winner Emails'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {results.length === 0 ? (
+            <div className="p-12 text-center">
+              <Trophy className="w-12 h-12 text-[#333] mx-auto mb-3" />
+              <p className="text-[#808080]">No results yet</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#1A1A1A]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase w-12">Rank</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Member</th>
+                    {isSuperadmin && (
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Email</th>
+                    )}
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Gym</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#808080] uppercase">Final Score</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Gym Breakdown</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Prize</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#808080] uppercase">Redemption</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1A1A1A]">
+                  {results.map((r, idx) => {
+                    const isTop3 = idx < 3;
+                    const RankIcon = isTop3 ? RANK_ICONS[idx] : null;
+                    return (
+                      <tr key={r.user_id} className={`hover:bg-[#1A1A1A]/50 ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}>
+                        <td className="px-4 py-3">
+                          {isTop3 && RankIcon ? (
+                            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${RANK_COLORS[idx]} flex items-center justify-center`}>
+                              <RankIcon className="w-4 h-4 text-black" />
+                            </div>
+                          ) : (
+                            <span className="text-[#808080] font-mono text-sm">#{r.rank}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-xs text-white">
+                              {r.avatar_url ? (
+                                <img src={r.avatar_url} alt={r.username} className="w-8 h-8 rounded-full object-cover" />
+                              ) : (
+                                (r.username || '?')[0].toUpperCase()
+                              )}
+                            </div>
+                            <span className={`text-sm font-medium ${isTop3 ? RANK_TEXT_COLORS[idx] : 'text-white'}`}>
+                              {r.username}
+                            </span>
+                          </div>
+                        </td>
+                        {isSuperadmin && (
+                          <td className="px-4 py-3">
+                            {r.email ? (
+                              <span className="text-xs text-[#808080] flex items-center gap-1">
+                                <Mail className="w-3 h-3 shrink-0" />
+                                <span className="truncate max-w-[180px]">{r.email}</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-[#555]">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-[#808080] flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {r.gym_name}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`text-sm font-bold ${isTop3 ? 'text-white' : 'text-[#808080]'}`}>
+                            {Number(r.final_score).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.gym_breakdown ? (
+                            isResultFullBreakdown(r.gym_breakdown) ? (
+                              <div className="flex flex-col gap-0.5">
+                                {r.gym_breakdown.map((gb) => (
+                                  <span key={gb.gym_id} className="text-xs text-[#808080]">
+                                    <span className="text-[#555]">{gb.gym_name}:</span>{' '}
+                                    <span className="text-white font-medium">{gb.score.toLocaleString()}</span>
+                                    <span className="text-[#555] ml-1">({gb.sessions}s)</span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : !Array.isArray(r.gym_breakdown) && 'own_gym_score' in r.gym_breakdown ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-xs text-[#808080]">
+                                  <span className="text-emerald-400">Your gym:</span>{' '}
+                                  <span className="text-white font-medium">{r.gym_breakdown.own_gym_score.toLocaleString()}</span>
+                                </span>
+                                <span className="text-xs text-[#808080]">
+                                  <span className="text-[#555]">Other gyms:</span>{' '}
+                                  <span className="text-white font-medium">{r.gym_breakdown.other_gyms_score.toLocaleString()}</span>
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-[#555]">—</span>
+                            )
+                          ) : (
+                            <span className="text-xs text-[#555]">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.prize ? (
+                            <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-1 rounded">
+                              {r.prize}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[#555]">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.redemption_code ? (
+                            <div className="flex items-center gap-2">
+                              <code className="text-xs bg-[#1A1A1A] text-[#00E5FF] px-2 py-1 rounded font-mono">
+                                {r.redemption_code}
+                              </code>
+                              {r.redemption_status === 'redeemed' ? (
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Ticket className="w-3.5 h-3.5 text-yellow-400" />
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-[#555]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invitations Tab (superadmin only) */}
+      {activeTab === 'invitations' && isSuperadmin && (
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
+          <div className="p-4 border-b border-[#333]">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-[#00E5FF]" />
+              Gym Invitations
+            </h3>
+          </div>
+
+          {invitations.length === 0 ? (
+            <div className="p-12 text-center">
+              <MapPin className="w-12 h-12 text-[#333] mx-auto mb-3" />
+              <p className="text-[#808080]">No invitations sent yet</p>
+              <p className="text-xs text-[#555] mt-1">Use the Invite button from the arenas list</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-[#1A1A1A]">
+              {invitations.map((inv) => (
+                <div key={inv.id} className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white">{inv.gym_name}</p>
+                    <p className="text-xs text-[#808080] mt-0.5">
+                      Sent {new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {inv.revenue_share_percent > 0 && ` • ${inv.revenue_share_percent}% revenue share`}
+                    </p>
+                  </div>
+                  <span className={`text-xs px-3 py-1 rounded font-medium flex items-center gap-1 ${
+                    inv.status === 'accepted'
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : inv.status === 'declined'
+                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                      : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                  }`}>
+                    {inv.status === 'accepted' ? <CheckCircle className="w-3 h-3" /> :
+                     inv.status === 'declined' ? <XCircle className="w-3 h-3" /> : null}
+                    {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Participating Gyms */}
       {arena.gyms && arena.gyms.length > 0 && (

@@ -52,6 +52,8 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const [filterType, setFilterType] = useState<'all' | 'this_gym' | 'earned' | 'locked'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
+  const [selectedBadgeLocked, setSelectedBadgeLocked] = useState(false);
+  const [selectedBadgeProgress, setSelectedBadgeProgress] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
 
   const loading = badgesLoading || allBadgesLoading;
@@ -180,16 +182,26 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const totalAvailable = allBadgesWithProgress.length;
 
   const handleBadgePress = (badge: BadgeWithProgress) => {
-    if (!badge.is_earned) return;
-
+    // Build a UserBadge-compatible object for both earned and locked
     const earnedBadge = earnedBadges.find(
       (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type
     );
 
-    if (earnedBadge) {
-      setSelectedBadge(earnedBadge);
-      setModalVisible(true);
-    }
+    const badgeForModal: UserBadge = earnedBadge || {
+      badge_id: badge.id,
+      badge_name: badge.name,
+      badge_description: badge.description,
+      badge_image_url: badge.badge_image_url,
+      earned_at: badge.earned_at || '',
+      badge_type: badge.badge_type,
+      gym_name: badge.gym_name,
+      gym_id: badge.gym_id || null,
+    };
+
+    setSelectedBadge(badgeForModal);
+    setSelectedBadgeLocked(!badge.is_earned);
+    setSelectedBadgeProgress(badge.progress);
+    setModalVisible(true);
   };
 
   const renderBadgeItem = (badge: BadgeWithProgress) => {
@@ -376,9 +388,13 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       <BadgeDetailModal
         visible={modalVisible}
         badge={selectedBadge}
+        isLocked={selectedBadgeLocked}
+        progress={selectedBadgeProgress}
         onClose={() => {
           setModalVisible(false);
           setSelectedBadge(null);
+          setSelectedBadgeLocked(false);
+          setSelectedBadgeProgress(0);
         }}
       />
     </SafeAreaView>
@@ -531,6 +547,7 @@ const styles = StyleSheet.create({
   badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 4,
   },
   /* Empty state */
   emptyState: {

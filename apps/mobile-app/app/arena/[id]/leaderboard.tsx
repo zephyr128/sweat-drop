@@ -195,9 +195,7 @@ export default function ArenaLeaderboardScreen() {
                         <Text style={[styles.podiumName, isCurrentUser(entry.user_id) && { color: branding.primary }]} numberOfLines={1}>
                           {entry.username}
                         </Text>
-                        {entry.gym_name && (
-                          <Text style={styles.podiumGym} numberOfLines={1}>{entry.gym_name}</Text>
-                        )}
+                        {/* gym_name hidden for arena leaderboards — arenas are cross-gym */}
                         <Text style={[styles.podiumScore, { color: branding.primary }]} numberOfLines={1}>
                           {entry.score_label}
                         </Text>
@@ -257,9 +255,7 @@ export default function ArenaLeaderboardScreen() {
                           <Text style={[styles.listUsername, isCurrent && { color: branding.primary }]}>
                             {entry.username}{isCurrent ? t('youSuffix') : ''}
                           </Text>
-                          {entry.gym_name && (
-                            <Text style={styles.listGymName}>{entry.gym_name}</Text>
-                          )}
+                          {/* gym_name hidden for arena leaderboards — arenas are cross-gym */}
                         </View>
 
                         <Text style={[styles.scoreLabel, { color: isCurrent ? branding.primary : theme.colors.textSecondary }]}>

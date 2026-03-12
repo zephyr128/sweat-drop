@@ -26,6 +26,8 @@
   "noArenasSubtitle": "Sponzorisana takmičenja sa nagradama će se pojaviti ovde",
   "participants": "učesnika",
   "daysLeft": "dana preostalo",
+  "comingSoon": "Uskoro",
+  "startsIn": "Počinje za {{days}}d",
   "yourRank": "Tvoj rang: #{{rank}}",
   "joinArena": "Pridruži se areni",
   "smartCoach": "SmartCoach",
