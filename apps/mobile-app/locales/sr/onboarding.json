@@ -55,5 +55,62 @@
     "benefit1": "Streak podsetnici",
     "benefit2": "Novi izazovi i takmičenja",
     "benefit3": "Ekskluzivne nagrade"
+  },
+  "profileSetup": {
+    "skip": "Preskoči",
+    "next": "DALJE",
+    "finish": "ZAVRŠI",
+    "stepOf": "Korak {{step}} od {{total}}",
+    "gender": {
+      "title": "KOJI SI POL?",
+      "male": "MUŠKI",
+      "female": "ŽENSKI"
+    },
+    "weight": {
+      "title": "KOLIKO IMAŠ KILOGRAMA?",
+      "subtitle": "Koristimo ovo za precizno računanje kalorija",
+      "unit": "kg",
+      "placeholder": "70"
+    },
+    "height": {
+      "title": "KOLIKO SI VISOK/A?",
+      "subtitle": "Za precizne fitness izveštaje",
+      "unit": "cm",
+      "placeholder": "175"
+    },
+    "birthday": {
+      "title": "KADA SI ROĐEN/A?",
+      "subtitle": "Minimum 13 godina",
+      "ageDisplay": "Imaš {{age}} godina",
+      "tooYoung": "Moraš imati najmanje 13 godina",
+      "invalidDate": "Nevažeći datum",
+      "day": "Dan",
+      "month": "Mesec",
+      "year": "Godina"
+    },
+    "goal": {
+      "title": "KOJI JE TVOJ CILJ?",
+      "weight_loss": "MRŠAVLJENJE",
+      "strength": "SNAGA",
+      "cardio": "KONDICIJA",
+      "health": "ZDRAVLJE",
+      "weight_loss_desc": "Sagoreti kalorije i smanjiti telesnu masu",
+      "strength_desc": "Izgraditi mišićnu masu i snagu",
+      "cardio_desc": "Poboljšati izdržljivost i kardio",
+      "health_desc": "Opšte zdravlje i aktivni životni stil"
+    },
+    "profile": {
+      "sectionTitle": "MOJI PODACI",
+      "editButton": "Uredi",
+      "completeBanner": "Popuni profil za personalizovano iskustvo",
+      "completeButton": "Popuni sada",
+      "goalLabel": "Cilj",
+      "years": "god"
+    },
+    "skipConfirmTitle": "Preskoči postavljanje profila?",
+    "skipConfirmMessage": "Možeš popuniti podatke kasnije iz svog profila.",
+    "skipConfirmYes": "Preskoči",
+    "skipConfirmNo": "Nastavi",
+    "saveError": "Greška pri čuvanju"
   }
 }

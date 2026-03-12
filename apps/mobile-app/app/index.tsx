@@ -61,10 +61,19 @@ export default function Index() {
               if (!pushAsked) {
                 router.replace('/(onboarding)/notifications');
               } else {
-                // Already asked — skip to home
-                useAuthStore.getState().setOnboardingStep('done');
-                router.replace('/home');
+                // Already asked — re-fetch profile to determine next step
+                await useAuthStore.getState().fetchProfile();
+                const nextStep = useAuthStore.getState().onboardingStep;
+                if (nextStep === 'profile_setup') {
+                  router.replace('/(onboarding)/step-gender');
+                } else {
+                  useAuthStore.getState().setOnboardingStep('done');
+                  router.replace('/home');
+                }
               }
+              break;
+            case 'profile_setup':
+              router.replace('/(onboarding)/step-gender');
               break;
             default:
               router.replace('/home');

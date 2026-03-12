@@ -61,6 +61,12 @@ interface ProfileData {
   streak_days: number;
   is_newcomer: boolean;
   created_at: string;
+  gender: string | null;
+  weight_kg: number | null;
+  height_cm: number | null;
+  date_of_birth: string | null;
+  fitness_goal: string | null;
+  onboarding_completed: boolean;
 }
 
 interface ProfileStats {
@@ -85,6 +91,7 @@ export default function ProfileScreen() {
   const { homeGymId } = useGymStore();
   const hasGym = !!homeGymId;
   const { t, i18n } = useTranslation('profile');
+  const { t: tOnboarding } = useTranslation('onboarding');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
   const [loading, setLoading] = useState(true);
@@ -96,7 +103,7 @@ export default function ProfileScreen() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar_url, total_drops, available_drops, weekly_drops, monthly_drops, streak_days, is_newcomer, created_at')
+        .select('id, username, full_name, avatar_url, total_drops, available_drops, weekly_drops, monthly_drops, streak_days, is_newcomer, created_at, gender, weight_kg, height_cm, date_of_birth, fitness_goal, onboarding_completed')
         .eq('id', session.user.id)
         .single();
 
@@ -507,6 +514,73 @@ export default function ProfileScreen() {
               </View>
             </BlurView>
           </View>
+        </Animated.View>
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* MOJI PODACI — Profile Data Section          */}
+        {/* ═══════════════════════════════════════════ */}
+        <Animated.View entering={FadeInDown.delay(350).duration(400)}>
+          {profile && (profile.gender || profile.weight_kg || profile.height_cm || profile.date_of_birth || profile.fitness_goal) ? (
+            <View style={[styles.myDataCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+              <BlurView intensity={40} tint="dark" style={[styles.myDataBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                <View style={styles.myDataHeader}>
+                  <Text style={styles.sectionTitle}>{tOnboarding('profileSetup.profile.sectionTitle')}</Text>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(onboarding)/step-gender?edit=true')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.myDataEditBtn, { color: branding.primary }]}>
+                      {tOnboarding('profileSetup.profile.editButton')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.myDataRow}>
+                  {profile.gender && (
+                    <Text style={styles.myDataPill}>
+                      {profile.gender === 'male' ? '♂' : '♀'}
+                    </Text>
+                  )}
+                  {profile.weight_kg && (
+                    <Text style={styles.myDataPill}>{profile.weight_kg} kg</Text>
+                  )}
+                  {profile.height_cm && (
+                    <Text style={styles.myDataPill}>{profile.height_cm} cm</Text>
+                  )}
+                  {profile.date_of_birth && (
+                    <Text style={styles.myDataPill}>
+                      {Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} {tOnboarding('profileSetup.profile.years')}
+                    </Text>
+                  )}
+                </View>
+                {profile.fitness_goal && (
+                  <Text style={styles.myDataGoal}>
+                    {tOnboarding('profileSetup.profile.goalLabel')}: {(() => {
+                      const goalEmojis: Record<string, string> = { weight_loss: '🔥', strength: '💪', cardio: '🏃', health: '❤️' };
+                      return `${goalEmojis[profile.fitness_goal] || ''} ${tOnboarding(`profileSetup.goal.${profile.fitness_goal}`)}`;
+                    })()}
+                  </Text>
+                )}
+              </BlurView>
+            </View>
+          ) : (
+            <View style={[styles.myDataBanner, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+              <BlurView intensity={40} tint="dark" style={[styles.myDataBannerBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                <TouchableOpacity
+                  style={styles.myDataBannerContent}
+                  onPress={() => router.push('/(onboarding)/step-gender?edit=false')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="person-outline" size={20} color={branding.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.myDataBannerText}>{tOnboarding('profileSetup.profile.completeBanner')}</Text>
+                  </View>
+                  <View style={[styles.myDataBannerBtn, { backgroundColor: branding.primary }]}>
+                    <Text style={styles.myDataBannerBtnText}>{tOnboarding('profileSetup.profile.completeButton')}</Text>
+                  </View>
+                </TouchableOpacity>
+              </BlurView>
+            </View>
+          )}
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
@@ -1021,6 +1095,84 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: theme.spacing.lg,
     opacity: 0.6,
+  },
+
+  // ── No-Gym Banner ──
+  // ── Moji podaci ──
+  myDataCard: {
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.md,
+  },
+  myDataBlur: {
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
+  },
+  myDataHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  myDataEditBtn: {
+    ...fontStyles.bodyMedium,
+    fontSize: 14,
+  },
+  myDataRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  myDataPill: {
+    ...fontStyles.bodyMedium,
+    fontSize: 14,
+    color: theme.colors.text,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    overflow: 'hidden',
+  },
+  myDataGoal: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+  },
+  myDataBanner: {
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.md,
+  },
+  myDataBannerBlur: {
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+  },
+  myDataBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: theme.spacing.md,
+  },
+  myDataBannerText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+  },
+  myDataBannerBtn: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  myDataBannerBtnText: {
+    ...fontStyles.heading,
+    fontSize: 12,
+    color: '#000000',
   },
 
   // ── No-Gym Banner ──

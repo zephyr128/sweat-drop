@@ -24,6 +24,7 @@ export type OnboardingStep =
   | 'display_name'
   | 'avatar'
   | 'notifications'
+  | 'profile_setup'
   | 'done';
 
 /** Profile row returned by get_my_profile() RPC */
@@ -45,6 +46,12 @@ export interface ProfileData {
   updated_at: string;
   email: string | null;
   last_visit_date: string | null;
+  gender: string | null;
+  weight_kg: number | null;
+  height_cm: number | null;
+  date_of_birth: string | null;
+  fitness_goal: string | null;
+  onboarding_completed: boolean;
 }
 
 interface AuthState {
@@ -96,8 +103,11 @@ function computeOnboardingStep(
 
   // ── First sign-in (currentStep is still 'auth') ──
   if (currentStep === 'auth') {
-    // Returning user — profile already complete → skip onboarding
-    if (usernameValid && hasAvatar) return 'done';
+    if (usernameValid && hasAvatar) {
+      // Returning user with complete profile but hasn't done profile setup wizard
+      if (!profile.onboarding_completed) return 'profile_setup';
+      return 'done';
+    }
     // New user — show stepper intro
     return 'stepper';
   }
@@ -112,6 +122,11 @@ function computeOnboardingStep(
   // Check if push notifications need asking (only if enabled)
   if (PUSH_NOTIFICATIONS_ENABLED && !profile.expo_push_token) {
     return 'notifications';
+  }
+
+  // Profile setup wizard (gender, weight, height, birthday, goal)
+  if (!profile.onboarding_completed) {
+    return 'profile_setup';
   }
 
   return 'done';

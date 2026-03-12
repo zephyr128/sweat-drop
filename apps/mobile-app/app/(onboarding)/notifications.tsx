@@ -63,8 +63,8 @@ export default function NotificationsScreen() {
 
   const completeOnboarding = async () => {
     await AsyncStorage.setItem('pushNotificationsAsked', 'true');
-    setOnboardingStep('done');
-    router.replace('/home');
+    setOnboardingStep('profile_setup');
+    router.replace('/(onboarding)/step-gender');
   };
 
   const handleEnable = async () => {

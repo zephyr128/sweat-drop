@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect, type ComponentType } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserRole } from '@/lib/auth';
 import { GymSwitcher } from './GymSwitcher';
+import type { LucideIcon } from 'lucide-react';
 import {
   Palette,
   LayoutDashboard,
@@ -86,7 +87,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
   };
 
   // Icon component helper
-  const Icon = ({ icon: IconComponent, isActive: active }: { icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>; isActive: boolean }) => (
+  const Icon = ({ icon: IconComponent, isActive: active }: { icon: LucideIcon; isActive: boolean }) => (
     <IconComponent
       className={active ? 'text-[#00E5FF]' : 'text-zinc-500'}
       size={18}
@@ -172,7 +173,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     };
   };
 
-  type CoreLink = { href: string; label: string; icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>; badge?: number };
+  type CoreLink = { href: string; label: string; icon: LucideIcon; badge?: number };
   type CoreLinks = CoreLink[];
   type LinkGroups = {
     core?: CoreLinks;

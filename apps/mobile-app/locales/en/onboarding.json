@@ -55,5 +55,62 @@
     "benefit1": "Streak reminders",
     "benefit2": "New challenges and competitions",
     "benefit3": "Exclusive rewards"
+  },
+  "profileSetup": {
+    "skip": "Skip",
+    "next": "NEXT",
+    "finish": "FINISH",
+    "stepOf": "Step {{step}} of {{total}}",
+    "gender": {
+      "title": "WHAT'S YOUR GENDER?",
+      "male": "MALE",
+      "female": "FEMALE"
+    },
+    "weight": {
+      "title": "HOW MUCH DO YOU WEIGH?",
+      "subtitle": "We use this for accurate calorie calculations",
+      "unit": "kg",
+      "placeholder": "70"
+    },
+    "height": {
+      "title": "HOW TALL ARE YOU?",
+      "subtitle": "For accurate fitness reports",
+      "unit": "cm",
+      "placeholder": "175"
+    },
+    "birthday": {
+      "title": "WHEN WERE YOU BORN?",
+      "subtitle": "Minimum 13 years old",
+      "ageDisplay": "You are {{age}} years old",
+      "tooYoung": "You must be at least 13 years old",
+      "invalidDate": "Invalid date",
+      "day": "Day",
+      "month": "Month",
+      "year": "Year"
+    },
+    "goal": {
+      "title": "WHAT'S YOUR GOAL?",
+      "weight_loss": "WEIGHT LOSS",
+      "strength": "STRENGTH",
+      "cardio": "CARDIO",
+      "health": "HEALTH",
+      "weight_loss_desc": "Burn calories and reduce body weight",
+      "strength_desc": "Build muscle mass and strength",
+      "cardio_desc": "Improve endurance and cardio",
+      "health_desc": "Overall health and active lifestyle"
+    },
+    "profile": {
+      "sectionTitle": "MY DATA",
+      "editButton": "Edit",
+      "completeBanner": "Complete your profile for a personalized experience",
+      "completeButton": "Complete now",
+      "goalLabel": "Goal",
+      "years": "yo"
+    },
+    "skipConfirmTitle": "Skip profile setup?",
+    "skipConfirmMessage": "You can fill in your data later from your profile.",
+    "skipConfirmYes": "Skip",
+    "skipConfirmNo": "Continue",
+    "saveError": "Error saving data"
   }
 }

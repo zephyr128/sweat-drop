@@ -78,8 +78,8 @@ export default function AvatarScreen() {
       setOnboardingStep('notifications');
       router.replace('/(onboarding)/notifications');
     } else {
-      setOnboardingStep('done');
-      router.replace('/home');
+      setOnboardingStep('profile_setup');
+      router.replace('/(onboarding)/step-gender');
     }
   };
 

@@ -9,6 +9,11 @@ export default function OnboardingLayout() {
       <Stack.Screen name="username" />
       <Stack.Screen name="avatar" />
       <Stack.Screen name="notifications" />
+      <Stack.Screen name="step-gender" />
+      <Stack.Screen name="step-weight" />
+      <Stack.Screen name="step-height" />
+      <Stack.Screen name="step-birthday" />
+      <Stack.Screen name="step-goal" />
     </Stack>
   );
 }
