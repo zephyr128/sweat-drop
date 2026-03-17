@@ -9,6 +9,8 @@
   "monthlyChallenge": "Mesečni izazov",
   "streakChallenge": "Streak izazov",
   "milestoneChallenge": "Milestone izazov",
+  "checkinStreakChallenge": "Check-in streak izazov",
+  "checkinCountChallenge": "Check-in count izazov",
   "challenge": "Izazov",
   "treadmill": "Traka",
   "bike": "Bicikl",
@@ -28,5 +30,6 @@
   "hoursLeft": "{{hours}}h {{minutes}}m preostalo",
   "minutesLeft": "{{minutes}}m preostalo",
   "unit_days": "dana",
-  "unit_drops": "drops"
+  "unit_drops": "drops",
+  "unit_checkins": "check-in-ova"
 }

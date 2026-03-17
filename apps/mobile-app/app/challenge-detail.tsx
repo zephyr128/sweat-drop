@@ -106,6 +106,8 @@ export default function ChallengeDetailScreen() {
       case 'monthly': return t('monthlyChallenge');
       case 'streak': return t('streakChallenge');
       case 'milestone': return t('milestoneChallenge');
+      case 'checkin_streak': return t('checkinStreakChallenge');
+      case 'checkin_count': return t('checkinCountChallenge');
       default: return t('challenge');
     }
   };
@@ -117,6 +119,8 @@ export default function ChallengeDetailScreen() {
       case 'monthly': return 'trophy-outline';
       case 'streak': return 'flame-outline';
       case 'milestone': return 'flag-outline';
+      case 'checkin_streak': return 'flame-outline';
+      case 'checkin_count': return 'location-outline';
       default: return 'star-outline';
     }
   };
@@ -159,14 +163,14 @@ export default function ChallengeDetailScreen() {
   let target = 0;
   if (challenge?.challenge_type === 'milestone') {
     target = challenge.milestone_threshold || 0;
-  } else if (challenge?.challenge_type === 'streak') {
+  } else if (challenge?.challenge_type === 'streak' || challenge?.challenge_type === 'checkin_streak') {
     target = challenge.streak_days || challenge.target_drops || 0;
   } else {
     target = challenge?.target_drops || 0;
   }
 
   let current = 0;
-  if (challenge?.challenge_type === 'streak') {
+  if (challenge?.challenge_type === 'streak' || challenge?.challenge_type === 'checkin_streak') {
     current = challengeProgress?.current_streak_days || progress?.current_streak_days || 0;
   } else {
     current = challengeProgress?.current_drops || progress?.current_drops || 0;
@@ -177,7 +181,11 @@ export default function ChallengeDetailScreen() {
   const isCompleted = dbCompleted || (target > 0 && current >= target);
   const progressRatio = target > 0 ? Math.min(current / target, 1) : 0;
   const rewardDrops = challenge?.reward_drops || 0;
-  const unit = challenge.challenge_type === 'streak' ? t('unit_days') : t('unit_drops');
+  const unit = (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak')
+    ? t('unit_days')
+    : challenge.challenge_type === 'checkin_count'
+      ? t('unit_checkins')
+      : t('unit_drops');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

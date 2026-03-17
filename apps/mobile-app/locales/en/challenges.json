@@ -9,6 +9,8 @@
   "monthlyChallenge": "Monthly challenge",
   "streakChallenge": "Streak challenge",
   "milestoneChallenge": "Milestone challenge",
+  "checkinStreakChallenge": "Check-in streak challenge",
+  "checkinCountChallenge": "Check-in count challenge",
   "challenge": "Challenge",
   "treadmill": "Treadmill",
   "bike": "Bike",
@@ -28,5 +30,6 @@
   "hoursLeft": "{{hours}}h {{minutes}}m left",
   "minutesLeft": "{{minutes}}m left",
   "unit_days": "days",
-  "unit_drops": "drops"
+  "unit_drops": "drops",
+  "unit_checkins": "check-ins"
 }

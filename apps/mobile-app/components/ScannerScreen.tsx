@@ -24,6 +24,7 @@ import Animated, {
   interpolate,
   runOnJS,
 } from 'react-native-reanimated';
+import * as Location from 'expo-location';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymData } from '@/hooks/useGymData';
@@ -242,6 +243,75 @@ export function ScannerScreen() {
     }
   };
 
+  const handleCheckin = async (gymId: string) => {
+    const currentSession = sessionRef.current;
+    if (!currentSession?.user || isProcessing) return;
+    setIsProcessing(true);
+
+    let lat: number | null = null;
+    let lng: number | null = null;
+
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+
+      if (status === 'granted') {
+        const location = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+        ]);
+        if (location && typeof location === 'object' && 'coords' in location) {
+          lat = location.coords.latitude;
+          lng = location.coords.longitude;
+        }
+      } else if (status === 'undetermined') {
+        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+        if (newStatus === 'granted') {
+          const location = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+          ]);
+          if (location && typeof location === 'object' && 'coords' in location) {
+            lat = location.coords.latitude;
+            lng = location.coords.longitude;
+          }
+        }
+      }
+    } catch (locationError) {
+      console.warn('[CheckIn] GPS error, proceeding without location:', locationError);
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('perform_checkin', {
+        p_gym_id: gymId,
+        p_lat: lat,
+        p_lng: lng,
+      });
+      if (error) throw error;
+
+      const result = data as Record<string, unknown>;
+      router.replace({
+        pathname: '/checkin-result',
+        params: {
+          status: result.success ? 'success' : String(result.error || 'error'),
+          dropsEarned: String(result.drops_earned || 0),
+          gymName: String(result.gym_name || ''),
+          streakDays: String(result.streak_days || 0),
+          checkinDrops: String(result.checkin_drops || 0),
+          distanceM: String(result.distance_m || 0),
+          radiusM: String(result.radius_m || 0),
+        },
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      router.replace({
+        pathname: '/checkin-result',
+        params: { status: 'error', errorMessage: msg },
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleQRCodeScanned = async (qrCode: string) => {
     // Prevent multiple scans
     if (hasScannedRef.current || isProcessing) {
@@ -256,6 +326,13 @@ export function ScannerScreen() {
     runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
+      // Check-in QR: sweatdrop://checkin/{gymId}
+      if (qrCode.startsWith('sweatdrop://checkin/')) {
+        const gymId = qrCode.replace('sweatdrop://checkin/', '').trim();
+        await handleCheckin(gymId);
+        return;
+      }
+
       // Parse QR code
       let qrUuid: string | null = null;
       let sensorType: string | null = null;

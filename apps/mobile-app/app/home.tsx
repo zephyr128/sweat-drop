@@ -53,6 +53,7 @@ const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
 export default function HomeScreen() {
   const router = useRouter();
   const { t } = useTranslation('home');
+  const { t: tCheckin } = useTranslation('checkin');
   const { session } = useSession();
   const { theme, activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
@@ -94,6 +95,24 @@ export default function HomeScreen() {
 
   // Available arenas
   const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
+
+  // Check-in status
+  const [checkinStatus, setCheckinStatus] = useState<{
+    already_checked_in: boolean;
+    checkin_drops: number;
+    gym_name: string;
+    total_checkins: number;
+  } | null>(null);
+
+  const loadCheckinStatus = useCallback(async () => {
+    if (!session?.user || !homeGymId) return;
+    try {
+      const { data, error } = await supabase.rpc('get_checkin_status', { p_gym_id: homeGymId });
+      if (!error && data) setCheckinStatus(data as any);
+    } catch {
+      // Non-critical
+    }
+  }, [session?.user, homeGymId]);
 
   // Badge notifications with confetti
   const { newBadge, clearNewBadge } = useBadgeNotifications({
@@ -158,6 +177,7 @@ export default function HomeScreen() {
       if (session?.user) {
         loadData(true); // silent refresh — no loader, no scroll reset
         refreshLocalDrops();
+        loadCheckinStatus();
         if (activeGymId) {
           refreshChallenges?.();
           refreshStats?.();
@@ -572,6 +592,46 @@ export default function HomeScreen() {
         />
 
         {/* ═══════════════════════════════════════════ */}
+        {/* CHECK-IN CARD                                */}
+        {/* ═══════════════════════════════════════════ */}
+        {checkinStatus && checkinStatus.checkin_drops > 0 && (
+          <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+            {checkinStatus.already_checked_in ? (
+              <View style={[styles.checkinCard, { borderColor: 'rgba(76, 175, 80, 0.2)' }]}>
+                <BlurView intensity={40} tint="dark" style={[styles.checkinCardBlur, { backgroundColor: 'rgba(20, 30, 20, 0.7)' }]}>
+                  <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.checkinCardTitle, { color: '#4CAF50' }]}>
+                      ✅ {tCheckin('homeCardDone')}
+                    </Text>
+                    <Text style={styles.checkinCardSub}>{checkinStatus.gym_name}</Text>
+                  </View>
+                </BlurView>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.checkinCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}
+                onPress={() => router.push('/scan')}
+                activeOpacity={0.8}
+              >
+                <BlurView intensity={40} tint="dark" style={[styles.checkinCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                  <View style={[styles.checkinIconCircle, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                    <Ionicons name="qr-code-outline" size={22} color={branding.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.checkinCardTitle}>{tCheckin('homeCardTitle')}</Text>
+                    <Text style={[styles.checkinCardDrops, { color: branding.primary }]}>
+                      {tCheckin('homeCardDrops', { drops: checkinStatus.checkin_drops })}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+                </BlurView>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
         {/* WEEKLY ACTIVITY CHART                        */}
         {/* ═══════════════════════════════════════════ */}
         {homeStats.weeklyActivity.length > 0 && (
@@ -689,13 +749,17 @@ export default function HomeScreen() {
                       case 'monthly': return t('monthly');
                       case 'streak': return t('streak');
                       case 'milestone': return t('milestone');
+                      case 'checkin_streak': return t('checkinStreak');
+                      case 'checkin_count': return t('checkinCount');
                       default: return t('challenge');
                     }
                   };
 
                   const getProgressLabel = () => {
-                    if (challenge.challenge_type === 'streak') {
-                      return { current: challenge.current_streak_days, target: challenge.target_drops, unit: 'days' };
+                    if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
+                      return { current: challenge.current_streak_days, target: challenge.target_drops, unit: t('unitDays') };
+                    } else if (challenge.challenge_type === 'checkin_count') {
+                      return { current: challenge.current_drops, target: challenge.target_drops, unit: t('unitCheckins') };
                     } else {
                       return { current: challenge.current_drops, target: challenge.target_drops, unit: 'drops' };
                     }
@@ -1628,6 +1692,45 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  /* ─── Check-in Card ────────────────────── */
+  checkinCard: {
+    marginBottom: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden' as const,
+  },
+  checkinCardBlur: {
+    borderRadius: 16,
+    overflow: 'hidden' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: 14,
+    gap: 12,
+  },
+  checkinIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  checkinCardTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: appTheme.colors.text,
+  },
+  checkinCardSub: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: appTheme.colors.textSecondary,
+    marginTop: 1,
+  },
+  checkinCardDrops: {
+    ...fontStyles.heading,
+    fontSize: 14,
+    marginTop: 1,
   },
 
 });

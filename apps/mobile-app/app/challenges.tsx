@@ -146,7 +146,7 @@ export default function ChallengesScreen() {
     const progressMap: Record<string, any> = {};
     challenges.forEach((c: any) => {
       if (c.progress) {
-        const current = c.challenge_type === 'streak'
+        const current = (c.challenge_type === 'streak' || c.challenge_type === 'checkin_streak')
           ? (c.progress.current_streak_days || 0)
           : (c.progress.current_drops || 0);
 
@@ -177,12 +177,14 @@ export default function ChallengesScreen() {
 
   const getChallengeTypeLabel = (type: string) => {
     switch (type) {
-      case 'daily': return 'Daily';
-      case 'weekly': return 'Weekly';
-      case 'monthly': return 'Monthly';
-      case 'streak': return 'Streak';
-      case 'milestone': return 'Milestone';
-      default: return type;
+      case 'daily': return t('dailyChallenge');
+      case 'weekly': return t('weeklyChallenge');
+      case 'monthly': return t('monthlyChallenge');
+      case 'streak': return t('streakChallenge');
+      case 'milestone': return t('milestoneChallenge');
+      case 'checkin_streak': return t('checkinStreakChallenge');
+      case 'checkin_count': return t('checkinCountChallenge');
+      default: return t('challenge');
     }
   };
 
@@ -193,6 +195,8 @@ export default function ChallengesScreen() {
       case 'monthly': return 'trophy-outline';
       case 'streak': return 'flame-outline';
       case 'milestone': return 'flag-outline';
+      case 'checkin_streak': return 'flame-outline';
+      case 'checkin_count': return 'location-outline';
       default: return 'star-outline';
     }
   };
@@ -237,14 +241,14 @@ export default function ChallengesScreen() {
             let target = 0;
             if (challenge.challenge_type === 'milestone') {
               target = challenge.milestone_threshold || 0;
-            } else if (challenge.challenge_type === 'streak') {
+            } else if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
               target = challenge.streak_days || challenge.target_drops || 0;
             } else {
               target = challenge.target_drops || 0;
             }
 
             let current = 0;
-            if (challenge.challenge_type === 'streak') {
+            if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
               current = userProgress?.current_streak_days || 0;
             } else {
               current = userProgress?.current_drops || userProgress?.current_minutes || 0;
@@ -318,7 +322,11 @@ export default function ChallengesScreen() {
                           <Text style={styles.progressDivider}> / </Text>
                           <Text style={[getNumberStyle(14), { color: theme.colors.textSecondary }]}>{target}</Text>
                           <Text style={styles.progressUnit}>
-                            {' '}{challenge.challenge_type === 'streak' ? 'days' : 'drops'}
+                            {' '}{(challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak')
+                              ? t('unit_days')
+                              : challenge.challenge_type === 'checkin_count'
+                                ? t('unit_checkins')
+                                : t('unit_drops')}
                           </Text>
                         </Text>
                         <Text style={[styles.progressPercent, getNumberStyle(12)]}>

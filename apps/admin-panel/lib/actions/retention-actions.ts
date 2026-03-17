@@ -105,7 +105,7 @@ export async function getRetentionData(gymId: string) {
         .from('gym_memberships')
         .select(`
           user_id,
-          joined_at,
+          created_at,
           profiles:user_id (
             id,
             username,

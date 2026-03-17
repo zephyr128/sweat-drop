@@ -19,7 +19,7 @@ interface TierInput {
 const challengeSchema = z.object({
   name: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
-  challengeType: z.enum(['daily', 'weekly', 'monthly', 'streak', 'milestone']),
+  challengeType: z.enum(['daily', 'weekly', 'monthly', 'streak', 'milestone', 'checkin_streak', 'checkin_count']),
   // Conditional fields based on challengeType
   targetDrops: z.number().int().positive().optional(), // For daily/weekly/monthly
   milestoneThreshold: z.number().int().positive().optional(), // For milestone
@@ -36,16 +36,16 @@ const challengeSchema = z.object({
   prizeDescription: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Conditional validation with specific field errors
-  if (data.challengeType === 'daily' || data.challengeType === 'weekly' || data.challengeType === 'monthly') {
+  if (data.challengeType === 'daily' || data.challengeType === 'weekly' || data.challengeType === 'monthly' || data.challengeType === 'checkin_count') {
     if (!data.targetDrops || data.targetDrops <= 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Target drops is required for this challenge type',
+        message: data.challengeType === 'checkin_count' ? 'Number of check-ins is required' : 'Target drops is required for this challenge type',
         path: ['targetDrops'],
       });
     }
   }
-  if (data.challengeType === 'streak') {
+  if (data.challengeType === 'streak' || data.challengeType === 'checkin_streak') {
     if (!data.streakDays || data.streakDays <= 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -148,9 +148,10 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   });
 
   const watchedChallengeType = watch('challengeType');
-  const isStreakChallenge = watchedChallengeType === 'streak';
+  const isStreakChallenge = watchedChallengeType === 'streak' || watchedChallengeType === 'checkin_streak';
   const isMilestoneChallenge = watchedChallengeType === 'milestone';
   const isDropsBasedChallenge = watchedChallengeType === 'daily' || watchedChallengeType === 'weekly' || watchedChallengeType === 'monthly';
+  const isCheckinCountChallenge = watchedChallengeType === 'checkin_count';
 
   // Badge image upload dropzone
   const badgeDropzone = useDropzone({
@@ -461,7 +462,15 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {challenge.challenge_type === 'streak' && challenge.streak_days ? (
+                      {challenge.challenge_type === 'checkin_streak' && challenge.streak_days ? (
+                        <span className="text-white font-bold">
+                          📍 {challenge.streak_days} day visit streak
+                        </span>
+                      ) : challenge.challenge_type === 'checkin_count' && challenge.target_drops ? (
+                        <span className="text-white font-bold">
+                          🗓️ {challenge.target_drops} check-ins
+                        </span>
+                      ) : challenge.challenge_type === 'streak' && challenge.streak_days ? (
                         <span className="text-white font-bold">
                           {challenge.streak_days} days streak
                         </span>
@@ -619,6 +628,8 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   <option value="monthly">Monthly (Resets every month)</option>
                   <option value="streak">Streak (Consecutive days)</option>
                   <option value="milestone">Milestone (All-time drops in gym)</option>
+                  <option value="checkin_streak">📍 Check-in Streak (reception)</option>
+                  <option value="checkin_count">🗓️ Check-in Count (reception)</option>
                 </select>
                 {errors.challengeType && (
                   <p className="mt-1 text-sm text-[#FF5252]">{errors.challengeType.message}</p>
@@ -626,20 +637,22 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
               </div>
 
               {/* Conditional fields based on challenge type */}
-              {isDropsBasedChallenge && (
+              {(isDropsBasedChallenge || isCheckinCountChallenge) && (
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Target Drops *
+                    {isCheckinCountChallenge ? 'Number of Check-ins *' : 'Target Drops *'}
                   </label>
                   <input
                     type="number"
                     {...register('targetDrops', { valueAsNumber: true })}
                     min={1}
                     className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white placeholder-[#808080] focus:border-[#00E5FF] focus:outline-none"
-                    placeholder="100"
+                    placeholder={isCheckinCountChallenge ? '10' : '100'}
                   />
                   <p className="mt-1 text-xs text-[#808080]">
-                    Total drops required to complete this challenge
+                    {isCheckinCountChallenge
+                      ? 'Number of reception check-ins required to complete the challenge'
+                      : 'Total drops required to complete this challenge'}
                   </p>
                   {errors.targetDrops && (
                     <p className="mt-1 text-sm text-[#FF5252]">
@@ -652,7 +665,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
               {isStreakChallenge && (
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Streak Days *
+                    {watchedChallengeType === 'checkin_streak' ? 'Consecutive Visit Days *' : 'Streak Days *'}
                   </label>
                   <input
                     type="number"
@@ -662,7 +675,9 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     placeholder="3"
                   />
                   <p className="mt-1 text-xs text-[#808080]">
-                    Number of consecutive days required (minimum 1 drop per day)
+                    {watchedChallengeType === 'checkin_streak'
+                      ? 'Number of consecutive days the member must check in at reception'
+                      : 'Number of consecutive days required (minimum 1 drop per day)'}
                   </p>
                   {errors.streakDays && (
                     <p className="mt-1 text-sm text-[#FF5252]">

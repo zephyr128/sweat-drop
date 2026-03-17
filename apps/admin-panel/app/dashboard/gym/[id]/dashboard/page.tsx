@@ -10,6 +10,7 @@ import { AnalyticsSection } from '@/components/analytics/AnalyticsSection';
 import { NetworkOverviewToggle } from '@/components/dashboards/NetworkOverviewToggle';
 import { notFound } from 'next/navigation';
 import { SmartCoachToggle } from '@/components/SmartCoachToggle';
+import { CheckinStatsModule } from '@/components/modules/CheckinStatsModule';
 
 interface DashboardPageProps {
   params: Promise<{ id: string }>;
@@ -217,6 +218,11 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
           accent="cyan"
           priority="secondary"
         />
+      </div>
+
+      {/* Check-in Stats */}
+      <div className="mb-6">
+        <CheckinStatsModule gymId={id} />
       </div>
 
       {/* Analytics Section with Time Filter */}

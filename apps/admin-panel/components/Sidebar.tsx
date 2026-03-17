@@ -23,6 +23,7 @@ import {
   Swords,
   History,
   Mail,
+  Settings,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 
@@ -127,6 +128,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
         { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
         { href: `${base}/team`, label: 'Team', icon: Users },
+        { href: `${base}/settings`, label: 'Settings', icon: Settings },
       ],
     };
   };
@@ -157,6 +159,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
       operations: [
         { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
         { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
+        { href: `${base}/settings`, label: 'Settings', icon: Settings },
       ],
     };
   };

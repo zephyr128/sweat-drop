@@ -55,6 +55,13 @@ module.exports = {
           iosUrlScheme: 'com.googleusercontent.apps.620444177181-ar724tn6j7lfr28h97fpaosbn2o48352',
         },
       ],
+      [
+        'expo-location',
+        {
+          locationWhenInUsePermission:
+            'SweatDrop koristi lokaciju da potvrdi da si u teretani pri čekiranju.',
+        },
+      ],
       // expo-apple-authentication does NOT need a config plugin
       // It works automatically when bundleIdentifier is set
       //

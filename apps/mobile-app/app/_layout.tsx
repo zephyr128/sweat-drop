@@ -102,6 +102,7 @@ function StackNavigator() {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen name="checkin-result" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
       <Stack.Screen name="workout" options={{ headerShown: false }} />
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
       <Stack.Screen name="workout-history" options={{ headerShown: false }} />

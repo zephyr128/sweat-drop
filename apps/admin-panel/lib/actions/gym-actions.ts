@@ -258,6 +258,151 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
 }
 
 /**
+ * Update gym check-in settings (checkin_drops, GPS coords, radius)
+ */
+export async function updateGymCheckinSettings(
+  gymId: string,
+  input: {
+    checkin_drops?: number;
+    lat?: number | null;
+    lng?: number | null;
+    gps_radius_m?: number;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available.' };
+    }
+
+    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (input.checkin_drops !== undefined) updateData.checkin_drops = input.checkin_drops;
+    if (input.lat !== undefined) updateData.lat = input.lat;
+    if (input.lng !== undefined) updateData.lng = input.lng;
+    if (input.gps_radius_m !== undefined) updateData.gps_radius_m = input.gps_radius_m;
+
+    const { error } = await (supabaseAdmin as any)
+      .from('gyms')
+      .update(updateData)
+      .eq('id', gymId);
+
+    if (error) throw error;
+
+    revalidatePath(`/dashboard/gym/${gymId}/settings`);
+    revalidatePath(`/dashboard/gym/${gymId}/dashboard`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get gym check-in stats (today, this week, total)
+ */
+export async function getGymCheckinStats(gymId: string): Promise<{
+  success: boolean;
+  data?: { today: number; week: number; total: number };
+  error?: string;
+}> {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available.' };
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + 1).toISOString();
+
+    const [todayRes, weekRes, totalRes] = await Promise.all([
+      supabaseAdmin.from('gym_checkins').select('id', { count: 'exact', head: true })
+        .eq('gym_id', gymId).gte('checked_in_at', todayStart),
+      supabaseAdmin.from('gym_checkins').select('id', { count: 'exact', head: true })
+        .eq('gym_id', gymId).gte('checked_in_at', weekStart),
+      supabaseAdmin.from('gym_checkins').select('id', { count: 'exact', head: true })
+        .eq('gym_id', gymId),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        today: todayRes.count || 0,
+        week: weekRes.count || 0,
+        total: totalRes.count || 0,
+      },
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get recent check-ins for a gym (last 50)
+ */
+export async function getGymCheckins(gymId: string): Promise<{
+  success: boolean;
+  data?: Array<{
+    id: string;
+    user_id: string;
+    username: string;
+    avatar_url: string | null;
+    checked_in_at: string;
+    drops_earned: number;
+    gps_verified: boolean;
+    gps_distance_m: number | null;
+  }>;
+  error?: string;
+}> {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available.' };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('gym_checkins')
+      .select(`
+        id,
+        user_id,
+        checked_in_at,
+        drops_earned,
+        gps_verified,
+        gps_distance_m,
+        profiles:user_id (username, avatar_url)
+      `)
+      .eq('gym_id', gymId)
+      .order('checked_in_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    const checkins = ((data || []) as any[]).map((c) => ({
+      id: c.id,
+      user_id: c.user_id,
+      username: c.profiles?.username || 'Unknown',
+      avatar_url: c.profiles?.avatar_url || null,
+      checked_in_at: c.checked_in_at,
+      drops_earned: c.drops_earned,
+      gps_verified: c.gps_verified,
+      gps_distance_m: c.gps_distance_m,
+    }));
+
+    return { success: true, data: checkins };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Update SmartCoach enabled status for a gym (SuperAdmin only)
  */
 export async function updateGymSmartCoach(gymId: string, enabled: boolean) {

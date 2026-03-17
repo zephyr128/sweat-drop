@@ -1,0 +1,18 @@
+{
+  "success": "CHECKED IN!",
+  "dropsEarned": "+{{drops}} DROPS",
+  "streakDays": "🔥 {{streak}} DAYS IN A ROW",
+  "alreadyCheckedIn": "Already checked in today",
+  "comeBackTomorrow": "Come back tomorrow for +{{drops}} drops",
+  "tooFar": "Not at the gym",
+  "tooFarSub": "You are {{distance}} from the gym (allowed {{radius}})",
+  "tooFarHint": "Enter the gym and try again",
+  "gymNotFound": "Gym not found",
+  "gymSuspended": "Gym is suspended",
+  "checkinDisabled": "Check-in is disabled for this gym",
+  "error": "Check-in error",
+  "close": "Close",
+  "homeCardTitle": "Check in today?",
+  "homeCardDone": "Checked in today",
+  "homeCardDrops": "+{{drops}} drops"
+}

@@ -6,7 +6,7 @@ export interface ChallengeProgress {
   challenge_id: string;
   challenge_name: string;
   description: string | null;
-  challenge_type: 'daily' | 'weekly' | 'monthly' | 'streak' | 'milestone';
+  challenge_type: 'daily' | 'weekly' | 'monthly' | 'streak' | 'milestone' | 'checkin_streak' | 'checkin_count';
   target_drops: number;
   milestone_threshold: number | null; // Only for milestone challenges
   reward_drops: number;
@@ -104,8 +104,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         let target = 0;
         if (challenge.challenge_type === 'milestone') {
           target = challenge.milestone_threshold || 0;
-        } else if (challenge.challenge_type === 'streak') {
-          // For streak, target is streak_days from challenge
+        } else if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
           target = challenge.streak_days || challenge.target_drops || 0;
         } else {
           target = challenge.target_drops || 0;
@@ -113,7 +112,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         
         // Calculate current progress based on challenge type
         let current = 0;
-        if (challenge.challenge_type === 'streak') {
+        if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
           current = progress?.current_streak_days || 0;
         } else if (challenge.challenge_type === 'milestone') {
           // For milestone, we need to query gym_memberships.local_drops_balance
@@ -132,7 +131,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
           challenge_id: challenge.id,
           challenge_name: challenge.name,
           description: challenge.description,
-          challenge_type: challenge.challenge_type as 'daily' | 'weekly' | 'monthly' | 'streak' | 'milestone',
+          challenge_type: challenge.challenge_type as ChallengeProgress['challenge_type'],
           target_drops: target,
           milestone_threshold: challenge.milestone_threshold,
           reward_drops: challenge.reward_drops,

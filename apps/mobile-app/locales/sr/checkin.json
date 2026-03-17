@@ -1,0 +1,18 @@
+{
+  "success": "ČEKIRAN!",
+  "dropsEarned": "+{{drops}} DROPS",
+  "streakDays": "🔥 {{streak}} DANA ZAREDOM",
+  "alreadyCheckedIn": "Već si čekiran danas",
+  "comeBackTomorrow": "Vrati se sutra za još +{{drops}} drops",
+  "tooFar": "Nisi u teretani",
+  "tooFarSub": "Nalaziš se {{distance}} od teretane (dozvoljeno {{radius}})",
+  "tooFarHint": "Uđi u teretanu i pokušaj ponovo",
+  "gymNotFound": "Teretana nije pronađena",
+  "gymSuspended": "Teretana je suspendovana",
+  "checkinDisabled": "Check-in je onemogućen za ovu teretanu",
+  "error": "Greška pri čekiranju",
+  "close": "Zatvori",
+  "homeCardTitle": "Čekiraš se danas?",
+  "homeCardDone": "Čekiran danas",
+  "homeCardDrops": "+{{drops}} drops"
+}

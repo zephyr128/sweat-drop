@@ -65,6 +65,12 @@
     <string>SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.</string>
     <key>NSCameraUsageDescription</key>
     <string>SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your location</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your location</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>SweatDrop koristi lokaciju da potvrdi da si u teretani pri čekiranju.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSUserActivityTypes</key>

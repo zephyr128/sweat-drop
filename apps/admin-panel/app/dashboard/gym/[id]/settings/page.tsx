@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
 import { LeaderboardRewardsModule } from '@/components/modules/LeaderboardRewardsModule';
+import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
 
 interface SettingsPageProps {
   params: Promise<{ id: string }>;
@@ -14,8 +15,8 @@ interface SettingsPageProps {
 
 interface GymData {
   id: string;
-  leaderboard_config: Record<string, any> | null;
   owner_id: string | null;
+  [key: string]: unknown;
 }
 
 interface LeaderboardConfig {
@@ -78,7 +79,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   try {
     const { data: gymData, error: gymError } = await supabase
       .from('gyms')
-      .select('id, leaderboard_config, owner_id')
+      .select('*')
       .eq('id', id)
       .single();
     
@@ -104,26 +105,54 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     }
   }
 
-  // 5. Parse leaderboard config with safe defaults
-  const config: LeaderboardConfig = (gym.leaderboard_config && typeof gym.leaderboard_config === 'object') 
-    ? (gym.leaderboard_config as LeaderboardConfig)
+  // 5. Parse configs with safe defaults (columns may not exist until migrations are applied)
+  const rawConfig = gym.leaderboard_config;
+  const config: LeaderboardConfig = (rawConfig && typeof rawConfig === 'object')
+    ? (rawConfig as LeaderboardConfig)
     : {};
 
+  const checkinDrops = typeof gym.checkin_drops === 'number' ? gym.checkin_drops : 20;
+  const gymLat = typeof gym.lat === 'number' ? gym.lat : null;
+  const gymLng = typeof gym.lng === 'number' ? gym.lng : null;
+  const gpsRadiusM = typeof gym.gps_radius_m === 'number' ? gym.gps_radius_m : 200;
+  const gymAddress = typeof gym.address === 'string' ? gym.address : null;
+  const gymCity = typeof gym.city === 'string' ? gym.city : null;
+
   return (
-    <div>
-      <div className="mb-8 pt-16 md:pt-0">
-        <h1 className="text-4xl font-bold text-white mb-2">Leaderboard Rewards</h1>
-        <p className="text-[#808080]">Define rewards for top ranked users</p>
+    <div className="space-y-12">
+      <div>
+        <div className="mb-8 pt-16 md:pt-0">
+          <h1 className="text-4xl font-bold text-white mb-2">Settings</h1>
+          <p className="text-[#808080]">Manage gym check-in and leaderboard settings</p>
+        </div>
+
+        <CheckinSettingsModule
+          gymId={id}
+          initialData={{
+            checkin_drops: checkinDrops,
+            lat: gymLat,
+            lng: gymLng,
+            gps_radius_m: gpsRadiusM,
+            address: gymAddress,
+            city: gymCity,
+          }}
+        />
       </div>
 
-      <LeaderboardRewardsModule
-        gymId={id}
-        initialData={{
-          rank1: config.rank1 || '',
-          rank2: config.rank2 || '',
-          rank3: config.rank3 || '',
-        }}
-      />
+      <div className="border-t border-[#222] pt-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-white mb-1">Leaderboard Rewards</h2>
+          <p className="text-[#808080]">Define rewards for top ranked users</p>
+        </div>
+        <LeaderboardRewardsModule
+          gymId={id}
+          initialData={{
+            rank1: config.rank1 || '',
+            rank2: config.rank2 || '',
+            rank3: config.rank3 || '',
+          }}
+        />
+      </div>
     </div>
   );
 }
