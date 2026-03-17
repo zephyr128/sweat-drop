@@ -1,11 +1,10 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
 import { getCurrentProfile } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { MemberList } from '@/components/modules/MemberList';
+import { MembersPageTabs } from '@/components/modules/MembersPageTabs';
 
 export default async function MembersPage({
   params,
@@ -33,7 +32,7 @@ export default async function MembersPage({
         </p>
       </div>
 
-      <MemberList gymId={gymId} />
+      <MembersPageTabs gymId={gymId} />
     </div>
   );
 }

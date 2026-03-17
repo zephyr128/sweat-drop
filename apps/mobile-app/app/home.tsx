@@ -277,27 +277,27 @@ export default function HomeScreen() {
             style={StyleSheet.absoluteFillObject}
           />
 
-          <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-            {/* ─── SECTION 1 — HEADER ─── */}
-            <View style={es.header}>
-              <TouchableOpacity
-                style={es.headerLeft}
-                onPress={() => router.push('/profile')}
-                activeOpacity={0.7}
-              >
-                <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
-                  {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                    <Image source={{ uri: profile.avatar_url }} style={es.avatarImage} />
-                  ) : (
-                    <Text style={es.avatarText}>
-                      {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
-                    </Text>
-                  )}
-                </View>
-                <Text style={es.username}>{profile?.username || 'User'}</Text>
-              </TouchableOpacity>
-            </View>
+          {/* ─── SECTION 1 — HEADER (fixed) ─── */}
+          <View style={es.header}>
+            <TouchableOpacity
+              style={es.headerLeft}
+              onPress={() => router.push('/profile')}
+              activeOpacity={0.7}
+            >
+              <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
+                {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+                  <Image source={{ uri: profile.avatar_url }} style={es.avatarImage} />
+                ) : (
+                  <Text style={es.avatarText}>
+                    {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
+                  </Text>
+                )}
+              </View>
+              <Text style={es.username}>{profile?.username || 'User'}</Text>
+            </TouchableOpacity>
+          </View>
 
+          <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
             {/* ─── SECTION 2 — DROPS HERO (dimmed preview) ─── */}
             <Animated.View entering={FadeInDown.delay(0).duration(500)}>
               <View style={es.dropsHero}>
@@ -513,7 +513,7 @@ export default function HomeScreen() {
           resizeMode="cover"
         >
           <LinearGradient
-            colors={['rgba(0,0,0,0.85)', 'rgba(8,8,8,0.92)', 'rgba(0,0,0,0.88)']}
+            colors={['rgba(0,0,0,0.55)', 'rgba(8,8,8,0.70)', 'rgba(0,0,0,0.80)']}
             style={StyleSheet.absoluteFillObject}
           />
         </ImageBackground>
@@ -526,42 +526,42 @@ export default function HomeScreen() {
         />
       )}
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ═══════════════════════════════════════════ */}
-        {/* DYNAMIC HEADER                              */}
-        {/* ═══════════════════════════════════════════ */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.headerLeft}
-            onPress={() => router.push('/profile')}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-              {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-              ) : (
-                <Text style={styles.avatarText}>
-                  {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
-                </Text>
-              )}
-            </View>
-            <Text style={styles.username}>{profile?.username || 'User'}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.headerRight}>
-            {activeGym && (
-              <Animated.View
-                entering={FadeIn.duration(400)}
-                style={styles.gymNameBadge}
-              >
-                <Text style={styles.gymNameText} numberOfLines={1}>
-                  {activeGym.name}
-                </Text>
-              </Animated.View>
+      {/* ═══════════════════════════════════════════ */}
+      {/* DYNAMIC HEADER (fixed, does not scroll)      */}
+      {/* ═══════════════════════════════════════════ */}
+      <View style={styles.stickyHeader}>
+        <TouchableOpacity
+          style={styles.headerLeft}
+          onPress={() => router.push('/profile')}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+            {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>
+                {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
+              </Text>
             )}
           </View>
-        </View>
+          <Text style={styles.username}>{profile?.username || 'User'}</Text>
+        </TouchableOpacity>
 
+        <View style={styles.headerRight}>
+          {activeGym && (
+            <Animated.View
+              entering={FadeIn.duration(400)}
+              style={styles.gymNameBadge}
+            >
+              <Text style={styles.gymNameText} numberOfLines={1}>
+                {activeGym.name}
+              </Text>
+            </Animated.View>
+          )}
+        </View>
+      </View>
+
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* ═══════════════════════════════════════════ */}
         {/* DUAL-PROGRESS HERO SECTION                  */}
         {/* ═══════════════════════════════════════════ */}
@@ -765,7 +765,70 @@ export default function HomeScreen() {
                     }
                   };
 
+                  const getTimeUntilMidnight = (): string => {
+                    const now = new Date();
+                    const midnight = new Date(now);
+                    midnight.setHours(24, 0, 0, 0);
+                    const diff = midnight.getTime() - now.getTime();
+                    const h = Math.floor(diff / (1000 * 60 * 60));
+                    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    return `${h}h ${m}m`;
+                  };
+
+                  const getTimeUntilSunday = (): string => {
+                    const now = new Date();
+                    const dayOfWeek = now.getDay();
+                    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+                    const sunday = new Date(now);
+                    sunday.setDate(sunday.getDate() + daysUntilSunday);
+                    sunday.setHours(0, 0, 0, 0);
+                    const diff = sunday.getTime() - now.getTime();
+                    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    if (d > 0) return `${d}d ${h}h`;
+                    return `${h}h`;
+                  };
+
+                  const getChallengeTimeInfo = (): { text: string; style: 'countdown' | 'recurring' | 'permanent' | 'completed' } | null => {
+                    if (challenge.is_completed) {
+                      if (challenge.challenge_type === 'daily') {
+                        return { text: t('completedResetsIn', { time: getTimeUntilMidnight() }), style: 'completed' };
+                      }
+                      if (challenge.challenge_type === 'weekly') {
+                        return { text: t('completedResetsSunday', { time: getTimeUntilSunday() }), style: 'completed' };
+                      }
+                      return { text: t('completedLabel'), style: 'completed' };
+                    }
+
+                    if (challenge.challenge_type === 'milestone') {
+                      return { text: t('ongoing'), style: 'permanent' };
+                    }
+
+                    if (!challenge.end_date) {
+                      return { text: t('ongoing'), style: 'permanent' };
+                    }
+
+                    const end = new Date(challenge.end_date + 'T23:59:59');
+                    const diff = end.getTime() - Date.now();
+                    if (diff <= 0) return { text: t('ended'), style: 'countdown' };
+
+                    if (challenge.challenge_type === 'daily') {
+                      return { text: t('resetsIn', { time: getTimeUntilMidnight() }), style: 'recurring' };
+                    }
+                    if (challenge.challenge_type === 'weekly') {
+                      return { text: t('resetsIn', { time: getTimeUntilSunday() }), style: 'recurring' };
+                    }
+
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    if (days > 0) return { text: t('timeLeft', { days, hours }), style: 'countdown' };
+                    if (hours > 0) return { text: t('hoursLeft', { hours }), style: 'countdown' };
+                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    return { text: t('minutesLeft', { minutes }), style: 'countdown' };
+                  };
+
                   const progressLabel = getProgressLabel();
+                  const timeInfo = getChallengeTimeInfo();
                   
                   return (
                     <View
@@ -793,9 +856,41 @@ export default function HomeScreen() {
                           >
                             <View style={styles.challengeContent}>
                               <View style={styles.challengeHeader}>
-                                <Text style={[styles.challengeType, { color: branding.primary }]}>
-                                  {getChallengeTypeLabel()}
-                                </Text>
+                                <View style={styles.challengeHeaderRow}>
+                                  <Text style={[styles.challengeType, { color: branding.primary }]}>
+                                    {getChallengeTypeLabel()}
+                                  </Text>
+                                  {timeInfo && (
+                                    <View style={[
+                                      styles.challengeTimeBadge,
+                                      { backgroundColor: timeInfo.style === 'completed'
+                                        ? 'rgba(74, 222, 128, 0.1)'
+                                        : timeInfo.style === 'recurring'
+                                          ? 'rgba(96, 165, 250, 0.1)'
+                                          : timeInfo.style === 'permanent'
+                                            ? 'rgba(255, 255, 255, 0.03)'
+                                            : hexToRgba(branding.primary, 0.1)
+                                      },
+                                    ]}>
+                                      <Ionicons
+                                        name={
+                                          timeInfo.style === 'completed' ? 'checkmark-circle' :
+                                          timeInfo.style === 'permanent' ? 'infinite' :
+                                          timeInfo.style === 'recurring' ? 'refresh' :
+                                          'time-outline'
+                                        }
+                                        size={10}
+                                        color={timeInfo.style === 'completed' ? '#4ade80' : theme.colors.textSecondary}
+                                      />
+                                      <Text style={[
+                                        styles.challengeTimeBadgeText,
+                                        timeInfo.style === 'completed' && { color: '#4ade80' },
+                                      ]}>
+                                        {timeInfo.text}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
                                 <Text style={styles.challengeName} numberOfLines={2}>
                                   {challenge.challenge_name}
                                 </Text>
@@ -1006,6 +1101,9 @@ export default function HomeScreen() {
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>{t('nextBadge')}</Text>
+                <TouchableOpacity onPress={() => router.push('/trophy-room')} activeOpacity={0.7}>
+                  <Text style={[styles.viewAllLink, { color: branding.primary }]}>{t('viewAll')}</Text>
+                </TouchableOpacity>
               </View>
               <View style={styles.progressWidgetContainer}>
                 <ProgressWidget />
@@ -1197,6 +1295,15 @@ const styles = StyleSheet.create({
   },
 
   /* ─── Header ────────────────────────────── */
+  stickyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+    gap: 12,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1298,6 +1405,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: '#FFFFFF',
   },
+  viewAllLink: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
 
   /* ─── Challenges ────────────────────────── */
   challengesSection: {
@@ -1350,11 +1462,29 @@ const styles = StyleSheet.create({
   challengeHeader: {
     marginBottom: 12,
   },
+  challengeHeaderRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 4,
+  },
   challengeType: {
     ...fontStyles.heading,
     fontSize: 12,
-    marginBottom: 4,
     letterSpacing: 1,
+  },
+  challengeTimeBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  challengeTimeBadgeText: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: appTheme.colors.textSecondary,
   },
   challengeName: {
     ...fontStyles.bodySemiBold,

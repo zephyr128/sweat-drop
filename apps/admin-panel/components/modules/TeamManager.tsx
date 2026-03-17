@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { createStaffInvitation, cancelInvitation, StaffInvitation } from '@/lib/actions/staff-actions';
 import { X, Mail, UserPlus, Trash2, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 
 const invitationSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -66,7 +67,7 @@ export function TeamManager({ gymId, initialInvitations, initialStaff, isGymOwne
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
-    if (!confirm('Are you sure you want to cancel this invitation?')) return;
+    if (!(await confirmAction({ title: 'Cancel Invitation', message: 'Are you sure you want to cancel this invitation?', confirmLabel: 'Cancel Invitation', variant: 'warning' }))) return;
 
     setCancellingId(invitationId);
     try {

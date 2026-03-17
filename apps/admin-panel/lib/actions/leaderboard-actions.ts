@@ -89,7 +89,7 @@ export async function getLeaderboardSnapshots(
 
 export async function getCurrentLeaderboard(
   gymId: string,
-  period: 'weekly' | 'monthly' = 'weekly',
+  period: 'weekly' | 'monthly' | 'all_time' = 'weekly',
   limit: number = 10
 ): Promise<{
   success: boolean;
@@ -146,6 +146,55 @@ export async function getCurrentLeaderboard(
     };
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Failed to fetch leaderboard';
+    return { success: false, error: errMsg };
+  }
+}
+
+export async function getLeaderboardRewards(
+  gymId: string,
+  period: 'weekly' | 'monthly'
+): Promise<{
+  success: boolean;
+  data?: { rank1: string; rank2: string; rank3: string };
+  error?: string;
+}> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available.' };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('leaderboard_rewards')
+      .select('rank_position, reward_name')
+      .eq('gym_id', gymId)
+      .eq('period', period)
+      .eq('is_active', true)
+      .order('rank_position', { ascending: true });
+
+    if (error) throw error;
+
+    const rewards = { rank1: '', rank2: '', rank3: '' };
+    if (data) {
+      for (const row of data as { rank_position: number; reward_name: string }[]) {
+        if (row.rank_position === 1) rewards.rank1 = row.reward_name;
+        if (row.rank_position === 2) rewards.rank2 = row.reward_name;
+        if (row.rank_position === 3) rewards.rank3 = row.reward_name;
+      }
+    }
+
+    return { success: true, data: rewards };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to fetch leaderboard rewards';
     return { success: false, error: errMsg };
   }
 }

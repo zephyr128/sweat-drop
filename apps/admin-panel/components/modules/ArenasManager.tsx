@@ -25,6 +25,7 @@ import {
   Send,
   Upload,
 } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
 import {
@@ -283,7 +284,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
   };
 
   const handleDelete = async (arenaId: string) => {
-    if (!confirm('Are you sure you want to delete this arena? This cannot be undone.')) return;
+    if (!(await confirmAction({ title: 'Delete Arena', message: 'Are you sure you want to delete this arena? This cannot be undone.', confirmLabel: 'Delete', variant: 'danger' }))) return;
     const result = await deleteArena(arenaId);
     if (result.success) {
       setArenas(arenas.filter((a) => a.id !== arenaId));
@@ -304,7 +305,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
   };
 
   const handleFinalize = async (arenaId: string) => {
-    if (!confirm('Finalize this arena? This will calculate final rankings and distribute prizes.')) return;
+    if (!(await confirmAction({ title: 'Finalize Arena', message: 'This will calculate final rankings and distribute prizes. This cannot be undone.', confirmLabel: 'Finalize', variant: 'warning' }))) return;
     const result = await finalizeArena(arenaId);
     if (result.success) {
       toast.success(`Arena finalized! ${result.winnersCount || 0} prize(s) distributed.`);
@@ -315,7 +316,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
   };
 
   const handleCancel = async (arenaId: string) => {
-    if (!confirm('Cancel this arena? All participants will be refunded if drops were paid. This cannot be undone.')) return;
+    if (!(await confirmAction({ title: 'Cancel Arena', message: 'All participants will be refunded if drops were paid. This cannot be undone.', confirmLabel: 'Cancel Arena', variant: 'danger' }))) return;
     const result = await cancelArena(arenaId);
     if (result.success) {
       toast.success(`Arena cancelled. ${result.participantsRefunded || 0} participant(s) refunded.`);

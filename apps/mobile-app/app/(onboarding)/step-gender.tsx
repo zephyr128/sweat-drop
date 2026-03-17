@@ -35,11 +35,11 @@ export default function StepGenderScreen() {
         date_of_birth: profile.date_of_birth,
         fitness_goal: profile.fitness_goal as any,
       });
-    } else {
+    } else if (!isEdit) {
       setEditMode(false);
       reset();
     }
-  }, [isEdit]);
+  }, [isEdit, profile]);
 
   const handleSelect = (g: Gender) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

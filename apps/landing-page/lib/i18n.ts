@@ -25,9 +25,9 @@ export const translations = {
       title: 'BE THE FIRST GYM',
       titleLine2: 'IN BELGRADE',
       titleLine3: 'WITH SWEATDROP.',
-      subtitle: 'Turn your cardio floor into a daily competition.\nMembers earn drops, climb leaderboards, win real prizes.\nYou get retention data that proves the ROI.\n90 days free. We handle everything.',
-      scarcity: '3 PILOT SPOTS — 1 ALREADY RESERVED',
-      ctaPrimary: 'Apply for Free Pilot — 2 Spots Left',
+      subtitle: 'Every visit becomes a competition.\nMembers earn drops, climb leaderboards, win real prizes.\nYour gym becomes the one they can\'t stop talking about.\n90 days free. We handle everything.',
+      pilotBadge: 'PILOT PROGRAM — Q2 2026',
+      ctaPrimary: 'Apply for Free Pilot',
       ctaSecondary: 'See How It Works',
       phoneMockup: {
         availableDrops: 'AVAILABLE DROPS',
@@ -375,6 +375,7 @@ export const translations = {
       forSponsors: 'For Sponsors',
       privacy: 'Privacy',
       terms: 'Terms',
+      copyright: '© 2026 SweatDrop',
     },
     contact: {
       title: 'Contact Us',
@@ -425,7 +426,7 @@ export const translations = {
       successTitle: 'Proposal Request Received',
       successMessage: "Proposal request received! We'll send you custom numbers within 24 hours.",
       foundingBadge: "🏷 You're applying for the Founding Sponsor Program",
-      foundingNote: '50% off first 3 arenas · 3 spots remaining',
+      foundingNote: '50% off first 3 arenas',
       fields: {
         company: 'Company name',
         name: 'Your name',
@@ -463,6 +464,9 @@ export const translations = {
       sensors: 'sensors',
       members: 'members',
       upTo: 'Up to',
+      upToMachines: 'Up to',
+      machines: 'machines',
+      receptionCheckin: 'Reception check-in (QR)',
       unlimited: 'Unlimited',
       perMonth: '/mo',
       perYear: '/yr',
@@ -497,6 +501,7 @@ export const translations = {
           apiAccess: 'API access',
           quarterlyBusinessReview: 'Quarterly business review',
           accountManager: 'Account manager',
+          receptionCheckin: 'Reception check-in (QR)',
         },
       },
     },
@@ -506,58 +511,67 @@ export const translations = {
       items: [
         {
           question: 'Do I need to modify my equipment?',
-          answer: 'No. Sensors clip on or connect wirelessly. Nothing permanent. Nothing invasive.',
+          answer: 'No. Smart machines connect directly via Bluetooth. For older machines we use a small sensor that mounts in 60 seconds — no tools, no drilling.',
         },
         {
           question: 'How long does installation take?',
-          answer: '90 minutes for a standard cardio floor of 10–15 machines.',
+          answer: 'Our team comes to your gym and everything is done in 90 minutes.',
         },
         {
           question: 'What if members don\'t download the app?',
-          answer: 'Even partial adoption creates competition. When some members see others on the leaderboard, adoption spreads quickly. Typically reaches 60–70% of active members in the first two weeks.',
+          answer: 'Reception check-in works without the app — members just scan a QR code. For full gamification (leaderboard, challenges, rewards) the app is needed, but it\'s free and easy to download.',
         },
         {
-          question: 'Can I set my own rewards and prizes?',
-          answer: 'Yes. You control everything — what\'s available, how many drops it costs, stock limits, and expiry dates.',
+          question: 'Can I set my own rewards and challenges?',
+          answer: 'Yes. You define rewards in the store, prices in drops, and challenge duration. Everything is under your control.',
         },
         {
-          question: 'What happens after the 90-day pilot?',
-          answer: 'We present your retention data and recommend the right plan. No pressure. No automatic billing.',
+          question: 'What happens after the 90 days?',
+          answer: 'You choose a paid plan or cancel. If you cancel, we remove the sensors. Zero obligation. You keep all member data.',
         },
         {
           question: 'Is my member data secure?',
-          answer: 'All data is encrypted and stored on EU servers. We never sell member data. Full GDPR compliance.',
+          answer: 'Yes. All data is stored on secure EU servers and is not shared with third parties. You retain full ownership of your data.',
         },
         {
           question: 'Do you work with multiple locations?',
-          answer: 'Yes. Elite plan supports up to 3 locations. For larger chains, contact us for enterprise pricing.',
+          answer: 'Yes. PRO plan supports one location, ELITE plan up to 3 locations. For chains with more than 3 gyms, contact us for enterprise pricing.',
         },
       ],
+    },
+    brandAppPreview: {
+      title: 'YOUR BRAND. YOUR APP.',
+      subtitle: 'Members don\'t see "SweatDrop" — they see your gym.\nSet your colors once. Every screen reflects your identity.',
+      tryYourColor: 'Try your color',
+      whatYouCustomize: 'What you customize:',
+      primaryColor: 'Primary color — every button, ring, and accent',
+      gymName: 'Gym name — displayed on every member\'s home screen',
+      yourLogo: 'Your logo — visible on member profiles',
     },
     howItWorks: {
       steps: [
         {
           number: 1,
-          title: 'WE SET EVERYTHING UP',
-          description: 'Our team visits your gym and connects to your existing cardio machines. Smart treadmills connect directly. Bikes and ellipticals use a small clip-on sensor. Takes 90 minutes. No drilling. No wiring.',
+          title: 'WE COME AND SET EVERYTHING UP',
+          description: 'Our team comes to your gym and connects your existing cardio machines. Smart machines connect directly. For older machines we have a sensor that mounts in 60 seconds — no drilling, no wiring. Everything is ready in 90 minutes.',
         },
         {
           number: 2,
           title: 'MEMBERS COMPETE FROM DAY ONE',
-          description: 'Members download SweatDrop, enter your gym code, and the leaderboard goes live immediately. Every session earns drops. Every drop is a step closer to winning.',
+          description: 'Members download SweatDrop, scan the QR code at your gym, and the leaderboard goes live. Every session earns drops. Every drop pulls them back.',
         },
         {
           number: 3,
-          title: 'YOU WATCH THE NUMBERS CHANGE',
-          description: 'Your admin dashboard shows visit frequency, at-risk members, and retention trends week by week. We send you a report every Monday.',
+          title: 'YOU SEE WHAT\'S HAPPENING',
+          description: 'Your admin dashboard shows who\'s coming, who\'s active, and who might be about to quit. You get a report every Monday.',
         },
       ],
     },
     finalCTA: {
-      title: 'TWO SPOTS LEFT.',
-      subtitle: 'YOUR COMPETITORS WILL TAKE THEM.',
+      title: 'BE AMONG THE FIRST.',
+      subtitle: 'PILOT PROGRAM — Q2 2026',
       description: '90 days free. Full setup included.\nZero commitment. Real results.',
-      button: 'Apply for Free Pilot Now',
+      button: 'Apply for Free Pilot',
     },
     pilotProgram: {
       title: 'THE 90-DAY PILOT PROGRAM',
@@ -590,8 +604,8 @@ export const translations = {
         },
       },
       bottomNote: 'After 90 days: choose a paid plan or cancel.\nWe remove the sensors. Zero obligation.',
-      button: 'Apply for Free Pilot — 2 Spots Left',
-      availability: '● 1 SPOT ALREADY RESERVED — 2 REMAINING',
+      button: 'Apply for Free Pilot',
+      availability: '',
     },
     whyItWorks: {
       badge: 'WHY IT WORKS',
@@ -600,15 +614,15 @@ export const translations = {
       features: [
         {
           title: 'MEMBERS COME BACK',
-          description: 'When every session has a score, members return to improve it. Leaderboards create weekly habits. Challenges create monthly goals. The average member visits more often when they\'re competing.',
+          description: 'When every visit has a score, members come back to improve it. Leaderboards create weekly habits. Challenges create monthly goals.',
         },
         {
           title: 'SPONSORS PAY YOU',
           description: 'Local supplement brands, spas, and sports shops sponsor challenges on your gym floor. They provide prizes. You earn revenue. You keep 70% of every sponsorship deal closed through your gym.',
         },
         {
-          title: 'YOU SEE WHO\'S AT RISK',
-          description: 'Members who stop showing up appear in your at-risk dashboard before you lose them. One automated message brings most of them back.',
+          title: 'YOUR GYM STANDS OUT',
+          description: 'In a city full of gyms, members choose the one that feels different. SweatDrop turns ordinary workouts into something worth talking about. When members compete, they bring friends. When they win prizes, they post about it. Word of mouth. No ad budget needed.',
         },
       ],
       visuals: {
@@ -620,9 +634,9 @@ export const translations = {
           title: 'OLIMP PROTEIN CHALLENGE',
           description: '€200 prize pool · 47 members competing',
         },
-        dashboard: {
-          title: 'AT-RISK MEMBERS',
-          inactive: '7 days inactive',
+        gymStandsOut: {
+          title: 'WORD OF MOUTH',
+          description: 'Member sharing achievement · Leaderboard',
         },
       },
     },
@@ -664,21 +678,27 @@ export const translations = {
       equipment: {
         treadmill: {
           title: 'TREADMILL',
-          description: 'Smart treadmills connect directly via Bluetooth. No sensor needed.',
+          description: 'Smart treadmills connect in minutes. Older models work too — we have a solution for every machine.',
           compatible: 'COMPATIBLE:',
         },
         bike: {
           title: 'BIKE',
-          description: 'Magene S3+ sensor clips onto the crank arm. Install in 60 seconds. No tools.',
+          description: 'Every bike works with SweatDrop — built-in Bluetooth or clip-on sensor. For bikes without built-in Bluetooth, we attach a small clip-on sensor to the crank arm. No tools. No drilling. Takes 60 seconds.',
           compatible: 'COMPATIBLE:',
         },
         elliptical: {
           title: 'ELLIPTICAL',
-          description: 'Same Magene S3+ sensor. Works on any elliptical regardless of brand or age.',
+          description: 'Works with any elliptical — smart models connect directly, older models use the same clip-on sensor.',
           compatible: 'COMPATIBLE:',
         },
       },
-      comingSoon: 'Weight machines and resistance equipment — coming in a future update.',
+      comingSoon: 'Weight machines, group classes, and free weights? → Members check in at reception and earn drops for every visit. No equipment needed.',
+    },
+    checkIn: {
+      title: 'EVERY MEMBER. EVERY VISIT.',
+      subtitle: 'Not everyone uses cardio machines.\nSweatDrop works for your entire gym — not just the cardio floor.',
+      cardTitle: 'RECEPTION CHECK-IN',
+      cardBody: 'Members scan a QR code at your front desk when they arrive.\nThey earn drops. Their streak grows. They compete on the leaderboard.\n\nWeights. Classes. Pool. Yoga.\nEvery visit counts.\n\nOne QR code. Print it once. Works forever.',
     },
     membersHowItWorks: {
       steps: [
@@ -735,11 +755,15 @@ export const translations = {
       screens: {
         home: {
           label: 'Home',
-          desc: 'Drops balance, streak, challenge',
+          desc: 'Drops balance, streak, check-in',
         },
-        liveSession: {
-          label: 'Live Session',
-          desc: 'Machine connected, drops ticking',
+        workoutSession: {
+          label: 'Workout Session',
+          desc: 'Live metrics, drops earned',
+        },
+        workoutSummary: {
+          label: 'Workout Complete',
+          desc: 'Summary, challenges progress',
         },
         leaderboard: {
           label: 'Leaderboard',
@@ -1141,10 +1165,10 @@ export const translations = {
       title: 'BUDI PRVA TERETANA',
       titleLine2: 'U BEOGRADU',
       titleLine3: 'SA SWEATDROP-OM.',
-      subtitle: 'Pretvori svoj kardio deo u dnevno takmičenje.\nČlanovi zarađuju kapi, penju se na rang liste, osvajaju stvarne nagrade.\nDobijaš podatke o zadržavanju koji dokazuju ROI.\n90 dana besplatno. Mi sve rešavamo.',
-      scarcity: '3 PILOT MESTA — 1 VEĆ REZERVISANO',
-      ctaPrimary: 'Prijavi se za Besplatan Pilot — 2 Mesta Preostalo',
-      ctaSecondary: 'Vidi Kako Radi',
+      subtitle: 'Svaki dolazak u teretanu postaje takmičenje.\nTvoji članovi zarađuju kapi, takmiče se na rang listi, osvajaju prave nagrade.\nTvoja teretana postaje ona o kojoj svi pričaju.\n90 dana besplatno. Mi se brinemo za sve.',
+      pilotBadge: 'PILOT PROGRAM — Q2 2026',
+      ctaPrimary: 'Prijavi se za besplatni pilot',
+      ctaSecondary: 'Pogledaj kako radi',
       phoneMockup: {
         availableDrops: 'DOSTUPNE KAPI',
         sessions: 'Sesije',
@@ -1484,13 +1508,14 @@ export const translations = {
       applyForPilot: 'Prijavi se za Pilot',
     },
     footer: {
-      tagline: 'Digitalni sloj za moderne teretane.',
-      forGyms: 'Za Teretane',
+      tagline: 'Gamifikacija za moderne teretane.',
+      forGyms: 'Za teretane',
       sweatArenas: 'Sweat Arenas',
-      forMembers: 'Za Članove',
-      forSponsors: 'Za Sponzore',
+      forMembers: 'Za članove',
+      forSponsors: 'Za sponzore',
       privacy: 'Privatnost',
-      terms: 'Uslovi',
+      terms: 'Uslovi korišćenja',
+      copyright: '© 2026 SweatDrop',
     },
     contact: {
       title: 'Kontaktiraj Nas',
@@ -1541,7 +1566,7 @@ export const translations = {
       successTitle: 'Zahtev za Predlog Primljen',
       successMessage: 'Zahtev za predlog primljen! Poslaćemo ti prilagođene brojke u roku od 24 sata.',
       foundingBadge: '🏷 Prijavljuješ se za Program Osnivačkog Sponzora',
-      foundingNote: '50% popusta na prve 3 arene · 3 mesta preostalo',
+      foundingNote: '50% popusta na prve 3 arene',
       fields: {
         company: 'Naziv Kompanije',
         name: 'Tvoje Ime',
@@ -1579,10 +1604,13 @@ export const translations = {
       sensors: 'senzora',
       members: 'članova',
       upTo: 'Do',
+      upToMachines: 'Do',
+      machines: 'sprava',
+      receptionCheckin: 'Čekiranje na recepciji (QR)',
       unlimited: 'Neograničeno',
       perMonth: '/mesec',
       perYear: '/god',
-      startFreePilot: 'Pokreni Besplatni Pilot',
+      startFreePilot: 'Počni besplatni pilot',
       enterprise: {
         text: 'Imaš 3+ lokacije? →',
         link: 'Kontaktiraj nas za enterprise cenovnik',
@@ -1595,24 +1623,25 @@ export const translations = {
         features: {
           weeklyLeaderboard: 'Nedeljna rang lista',
           basicRewardStore: 'Osnovna prodavnica nagrada (5 nagrada)',
-          emailSupport: 'Email podrška',
+          emailSupport: 'Podrška putem emaila',
           cardioZoneCoverage: 'Pokrivenost kardio zone',
-          monthlyLeaderboard: 'Nedeljna + Mesečna rang lista',
-          fullRewardStore: 'Puna prodavnica nagrada',
+          monthlyLeaderboard: 'Nedeljna i mesečna rang lista',
+          fullRewardStore: 'Kompletna prodavnica nagrada',
           twoActiveChallenges: '2 aktivna izazova',
-          retentionDashboard: 'Dashboard zadržavanja',
-          reEngagementNotifications: 'Obaveštenja za ponovno angažovanje',
+          retentionDashboard: 'Praćenje aktivnosti članova',
+          reEngagementNotifications: 'Obaveštenja za neaktivne članove',
           prioritySupport: 'Prioritetna podrška',
           allLeaderboards: 'Sve rang liste',
           unlimitedChallenges: 'Neograničeni izazovi',
-          atRiskMemberAlerts: 'Upozorenja za članove pod rizikom',
-          sweatArenaSupport: 'Podrška za Sweat Arenu',
-          dedicatedOnboardingCall: 'Dedicirani poziv za onboarding',
+          atRiskMemberAlerts: 'Upozorenja za članove koji prestaju da dolaze',
+          sweatArenaSupport: 'Podrška za Sweat Arenas',
+          dedicatedOnboardingCall: 'Uvodni poziv sa našim timom',
           everythingInPro: 'Sve iz Pro paketa',
           upToThreeLocations: 'Do 3 lokacije',
           apiAccess: 'API pristup',
           quarterlyBusinessReview: 'Kvartalni pregled poslovanja',
-          accountManager: 'Menadžer naloga',
+          accountManager: 'Dedicirani account manager',
+          receptionCheckin: 'Čekiranje na recepciji (QR)',
         },
       },
     },
@@ -1621,93 +1650,102 @@ export const translations = {
       title: 'ČESTA PITANJA',
       items: [
         {
-          question: 'Da li moram da modifikujem opremu?',
-          answer: 'Ne. Senzori se pričvršćuju ili se povezuju bežično. Ništa trajno. Ništa invazivno.',
+          question: 'Da li treba da menjam opremu?',
+          answer: 'Ne. Pametne sprave se povezuju direktno putem Bluetooth-a. Za starije sprave koristimo mali senzor koji se montira za 60 sekundi bez alata i bez bušenja.',
         },
         {
-          question: 'Koliko traje instalacija?',
-          answer: '90 minuta za standardni kardio pod od 10–15 mašina.',
+          question: 'Koliko dugo traje instalacija?',
+          answer: 'Naš tim dolazi u teretanu i sve je gotovo za 90 minuta.',
         },
         {
           question: 'Šta ako članovi ne preuzmu aplikaciju?',
-          answer: 'Čak i delimična usvajanje stvara konkurenciju. Kada neki članovi vide druge na rang listi, usvajanje se brzo širi. Obično dostigne 60–70% aktivnih članova u prve dve nedelje.',
+          answer: 'Čekiranje na recepciji radi bez aplikacije — član samo skenira QR kod. Za punu gamifikaciju (rang lista, izazovi, nagrade) potrebna je aplikacija, ali je preuzimanje besplatno i jednostavno.',
         },
         {
-          question: 'Mogu li da postavim svoje nagrade i nagrade?',
-          answer: 'Da. Ti kontrolišeš sve — šta je dostupno, koliko kapi košta, ograničenja zaliha i datume isteka.',
+          question: 'Mogu li da postavim sopstvene nagrade i izazove?',
+          answer: 'Da. Ti definišeš nagrade u prodavnici, cene u kapima i period trajanja izazova. Sve je pod tvojom kontrolom.',
         },
         {
-          question: 'Šta se dešava nakon 90-dnevnog pilota?',
-          answer: 'Predstavljamo ti podatke o zadržavanju i preporučujemo pravi plan. Bez pritiska. Bez automatskog naplaćivanja.',
+          question: 'Šta se dešava posle 90 dana?',
+          answer: 'Biraš plaćeni plan ili odustaješ. Ako odustaneš, uklanjamo senzore. Nula obaveza, zadržavaš sve podatke o članovima.',
         },
         {
-          question: 'Da li su podaci mojih članova sigurni?',
-          answer: 'Svi podaci su šifrovani i čuvaju se na EU serverima. Nikada ne prodajemo podatke članova. Potpuna GDPR usklađenost.',
+          question: 'Da li su podaci o članovima sigurni?',
+          answer: 'Da. Svi podaci su smešteni na sigurnim serverima u EU i nisu dostupni trećim stranama. Ti zadržavaš puno vlasništvo nad podacima.',
         },
         {
           question: 'Radite li sa više lokacija?',
-          answer: 'Da. Elite plan podržava do 3 lokacije. Za veće lance, kontaktiraj nas za enterprise cenovnik.',
+          answer: 'Da. PRO plan podržava jednu lokaciju, ELITE plan do 3 lokacije. Za lance sa više od 3 teretane, kontaktiraj nas za enterprise ponudu.',
         },
       ],
+    },
+    brandAppPreview: {
+      title: 'TVOJ BREND. TVOJA APLIKACIJA.',
+      subtitle: 'Članovi ne vide "SweatDrop" — vide tvoju teretanu.\nPodesi boje jednom. Svaki ekran odražava tvoj identitet.',
+      tryYourColor: 'Isprobaj svoju boju',
+      whatYouCustomize: 'Šta možeš da podesiš:',
+      primaryColor: 'Primarna boja — svako dugme, prsten i akcent',
+      gymName: 'Naziv teretane — prikazan na početnom ekranu svakog člana',
+      yourLogo: 'Tvoj logo — vidljiv na profilima članova',
     },
     howItWorks: {
       steps: [
         {
           number: 1,
-          title: 'MI SVE POSTAVLJAMO',
-          description: 'Naš tim poseti tvoju teretanu i poveže se sa tvojom postojećom kardio opremom. Pametne trake se povezuju direktno. Bicikli i eliptični koriste mali senzor koji se pričvršćuje. Traje 90 minuta. Bez bušenja. Bez žica.',
+          title: 'MI DOLAZIMO I SVE INSTALIRAMO',
+          description: 'Naš tim dolazi u tvoju teretanu i povezuje postojeće kardio sprave. Pametne sprave se povezuju direktno. Za starije sprave imamo senzor koji se montira za 60 sekundi — bez bušenja, bez kablova. Sve je spremno za 90 minuta.',
         },
         {
           number: 2,
           title: 'ČLANOVI SE TAKMIČE OD PRVOG DANA',
-          description: 'Članovi preuzmu SweatDrop, unesu kod tvoje teretane, i rang lista odmah postaje aktivna. Svaka sesija zarađuje kapi. Svaka kap je korak bliže pobedi.',
+          description: 'Članovi preuzmu SweatDrop, skeniraju QR kod u tvojoj teretani, i rang lista odmah krene. Svaka sesija donosi kapi. Svaka kap ih vuče nazad.',
         },
         {
           number: 3,
-          title: 'TI POSMATRAŠ KAKO SE BROJEVI MENJAJU',
-          description: 'Tvoj admin dashboard pokazuje učestalost poseta, članove pod rizikom i trendove zadržavanja nedelju za nedeljom. Šaljemo ti izveštaj svakog ponedeljka.',
+          title: 'PRATIŠ ŠTA SE DEŠAVA',
+          description: 'Tvoj admin panel prikazuje ko dolazi, ko je aktivan i ko preti da odustane. Svaki ponedeljak dobijaš izveštaj.',
         },
       ],
     },
     finalCTA: {
-      title: 'DVA MESTA PREOSTALA.',
-      subtitle: 'TVOJI KONKURENTI ĆE IH UZETI.',
+      title: 'BUDI MEĐU PRVIMA.',
+      subtitle: 'PILOT PROGRAM — Q2 2026',
       description: '90 dana besplatno. Kompletna instalacija uključena.\nNula obaveza. Stvarni rezultati.',
-      button: 'Prijavi se za Besplatni Pilot Sada',
+      button: 'Prijavi se odmah',
     },
     pilotProgram: {
       title: '90-DNEVNI PILOT PROGRAM',
       subtitle: 'Sve uključeno. Nula obaveza.',
       columns: {
         weProvide: {
-          title: 'MI OBESBEĐUJEMO',
+          title: 'MI OBEZBEĐUJEMO',
           items: [
             'Sve senzore',
             'Instalaciju',
-            'Kompletnu postavku',
-            'PRO funkcije',
+            'Kompletno podešavanje',
+            'PRO funkcionalnosti',
             'Nedeljne izveštaje',
             'Direktnu podršku',
           ],
         },
         youProvide: {
-          title: 'TI OBESBEĐUJEŠ',
+          title: 'TI OBEZBEĐUJEŠ',
           items: [
             'Pristup kardio podu',
-            '90 minuta tvog vremena',
+            '90 minuta svog vremena',
           ],
         },
         youKeep: {
           title: 'TI ZADRŽAVAŠ',
           items: [
-            'Sve podatke članova',
+            'Sve podatke o članovima',
             '100% prihoda od sponzora tokom pilota',
           ],
         },
       },
-      bottomNote: 'Nakon 90 dana: izaberi plaćeni plan ili otkaži.\nUklanjamo senzore. Nula obaveza.',
-      button: 'Prijavi se za Besplatni Pilot — 2 Mesta Preostala',
-      availability: '● 1 MESTO VEĆ REZERVISANO — 2 PREOSTALA',
+      bottomNote: 'Posle 90 dana: izaberi plaćeni plan ili odustani.\nUklanjamo senzore. Nula obaveza.',
+      button: 'Prijavi se za besplatni pilot',
+      availability: '',
     },
     whyItWorks: {
       badge: 'ZAŠTO RADI',
@@ -1715,16 +1753,16 @@ export const translations = {
       titleHighlight: 'BIRAJU SWEATDROP',
       features: [
         {
-          title: 'ČLANOVI SE VRATAJU',
-          description: 'Kada svaka sesija ima rezultat, članovi se vraćaju da ga poboljšaju. Rang liste stvaraju nedeljne navike. Izazovi stvaraju mesečne ciljeve. Prosečan član posjećuje češće kada se takmiči.',
+          title: 'ČLANOVI SE VRAĆAJU',
+          description: 'Kad svaki dolazak ima skor, članovi se vraćaju da ga poboljšaju. Rang lista stvara nedeljne navike. Izazovi stvaraju mesečne ciljeve.',
         },
         {
-          title: 'SPONZORI TE PLATE',
-          description: 'Lokalni brendovi suplemenata, spa centri i sportske radnje sponzorišu izazove na tvom kardio podu. Oni obezbeđuju nagrade. Ti zarađuješ prihod. Zadržavaš 70% od svakog sponzorskog ugovora zaključenog kroz tvoju teretanu.',
+          title: 'SPONZORI TI PLAĆAJU',
+          description: 'Lokalni brendovi suplemenata, sportske radnje i spa centri sponzorišu izazove u tvojoj teretani. Oni obezbeđuju nagrade. Ti zarađuješ prihod. Zadržavaš 70% od svakog sponzorstva.',
         },
         {
-          title: 'VIDIŠ KO JE POD RIZIKOM',
-          description: 'Članovi koji prestanu da dolaze pojavljuju se u tvom dashboard-u pod rizikom pre nego što ih izgubiš. Jedna automatska poruka vraća većinu njih nazad.',
+          title: 'TVOJA TERETANA SE IZDVAJA',
+          description: 'U gradu punom teretana, članovi biraju onu koja se oseća drugačije. SweatDrop pretvara obične treninge u nešto o čemu se priča. Kad se članovi takmiče, dovode prijatelje. Kad osvajaju nagrade, pišu o tome. Word of mouth. Bez budžeta za reklamu.',
         },
       ],
       visuals: {
@@ -1736,9 +1774,9 @@ export const translations = {
           title: 'OLIMP PROTEIN IZAZOV',
           description: '€200 nagradni fond · 47 članova se takmiči',
         },
-        dashboard: {
-          title: 'ČLANOVI POD RIZIKOM',
-          inactive: '7 dana neaktivno',
+        gymStandsOut: {
+          title: 'WORD OF MOUTH',
+          description: 'Član deli dostignuće · Rang lista',
         },
       },
     },
@@ -1780,21 +1818,27 @@ export const translations = {
       equipment: {
         treadmill: {
           title: 'TRAKA ZA TRČANJE',
-          description: 'Pametne trake se povezuju direktno preko Bluetooth-a. Senzor nije potreban.',
+          description: 'Pametne trake se povezuju za nekoliko minuta. Starije sprave? Imamo rešenje za svaku.',
           compatible: 'KOMPATIBILNO:',
         },
         bike: {
           title: 'BICIKL',
-          description: 'Magene S3+ senzor se pričvršćuje na ručicu pedale. Instalira se za 60 sekundi. Bez alata.',
+          description: 'Svaki bicikl radi sa SweatDrop-om — sa ugrađenim Bluetooth-om ili sa malim senzorom koji montiramo za 60 sekundi.',
           compatible: 'KOMPATIBILNO:',
         },
         elliptical: {
-          title: 'ELIPTIČNI',
-          description: 'Isti Magene S3+ senzor. Radi na bilo kom eliptičnom bez obzira na brend ili starost.',
+          title: 'ELIPTIČAR',
+          description: 'Bilo koji eliptičar, bilo kojeg brenda, bilo koje starosti. Mi se brinemo o konekciji.',
           compatible: 'KOMPATIBILNO:',
         },
       },
-      comingSoon: 'Mašine za snagu i oprema za otpor — dolazi u budućem ažuriranju.',
+      comingSoon: 'Tegovi, grupni treninzi, slobodne vežbe? → Članovi se čekiraju na recepciji i zarađuju kapi za svaki dolazak. Nije potrebna nikakva oprema.',
+    },
+    checkIn: {
+      title: 'SVAKI ČLAN. SVAKI DOLAZAK.',
+      subtitle: 'Nisu svi u teretani zbog kardio sprava.\nSweatDrop radi za celu teretanu — ne samo za kardio pod.',
+      cardTitle: 'ČEKIRANJE NA RECEPCIJI',
+      cardBody: 'Član skenira QR kod na ulazu kad dođe.\nZarađuje kapi. Streak raste. Takmiči se na rang listi.\n\nTegovi. Grupni časovi. Bazen. Joga.\nSvaki dolazak se računa.\n\nJedan QR kod. Odštampaj jednom. Radi zauvek.',
     },
     membersHowItWorks: {
       steps: [
@@ -1851,11 +1895,15 @@ export const translations = {
       screens: {
         home: {
           label: 'Početna',
-          desc: 'Stanje kapi, serija, izazov',
+          desc: 'Stanje kapi, serija, čekiranje',
         },
-        liveSession: {
+        workoutSession: {
           label: 'Aktivna Sesija',
-          desc: 'Mašina povezana, kapi se povećavaju',
+          desc: 'Metrike uživo, zarađene kapi',
+        },
+        workoutSummary: {
+          label: 'Trening Završen',
+          desc: 'Rezime, napredak izazova',
         },
         leaderboard: {
           label: 'Rang Lista',
@@ -2177,7 +2225,7 @@ export const translations = {
       title: 'TAKMIČI SE ZA NAGRADE BRENDOVA.',
       description: 'Sweat Arenas su opciona takmičenja koja sponzorišu lokalni brendovi.\nPrijavi se, treniraj naporno, osvoj njihove nagrade.\n\nSpa vikend. Paket suplemenata. Sportska oprema.\nNove arene se pokreću redovno.',
       note: 'Arene su opcione — ti biraš u koje se prijavljuješ.\nTvoj redovni rang na rang listi nikada nije utiče.',
-      learnMore: 'Saznaj Više o Sweat Arenama',
+      learnMore: 'Saznaj više o Sweat Arenas',
       visual: {
         sponsoredBy: 'SPONZORIŠE OLIMP',
         arenaName: 'OLIMP PROTEIN ARENA',
@@ -2227,7 +2275,7 @@ export const translations = {
       title: 'ZARAĐUJ VIŠE PRIHODA SA',
       titleHighlight: 'SPONZORISANIM TAKMIČENJIMA',
       description: 'Brendovi sponzorišu namenska takmičenja u tvojoj teretani.\nČlanovi se takmiče za njihove nagrade. Ti zarađuješ prihod\nbez da pomeriš prst. 70% od svakog sponzorstva\nide direktno tebi.',
-      learnMore: 'Saznaj Više o Sweat Arenama',
+      learnMore: 'Saznaj više o Sweat Arenas',
       visual: {
         sponsoredBy: 'SPONZORIŠE OLIMP',
         arenaName: 'OLIMP PROTEIN ARENA',

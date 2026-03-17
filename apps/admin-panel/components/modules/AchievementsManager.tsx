@@ -24,6 +24,7 @@ import {
   GripVertical,
   Award,
 } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
 
@@ -257,7 +258,7 @@ export function AchievementsManager({
 
   // ---------- Delete ----------
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this global achievement? This cannot be undone.')) return;
+    if (!(await confirmAction({ title: 'Delete Achievement', message: 'Delete this global achievement? This cannot be undone.', confirmLabel: 'Delete', variant: 'danger' }))) return;
     setDeletingId(id);
     try {
       const result = await deleteAchievement(id);

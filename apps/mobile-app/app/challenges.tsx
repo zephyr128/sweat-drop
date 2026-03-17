@@ -80,7 +80,7 @@ export default function ChallengesScreen() {
       .eq('gym_id', gymId)
       .eq('is_active', true)
       .lte('start_date', today)
-      .gte('end_date', today);
+      .or(`end_date.gte.${today},end_date.is.null`);
 
     if (challengesError) {
       console.error('Error loading challenges:', challengesError);
@@ -161,18 +161,73 @@ export default function ChallengesScreen() {
     setProgress(progressMap);
   };
 
-  const getTimeRemaining = (endDate: string) => {
-    const end = new Date(endDate);
+  const getTimeUntilMidnight = (): string => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const diff = midnight.getTime() - now.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
+
+  const getTimeUntilSunday = (): string => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+    const sunday = new Date(now);
+    sunday.setDate(sunday.getDate() + daysUntilSunday);
+    sunday.setHours(0, 0, 0, 0);
+    const diff = sunday.getTime() - now.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    if (days > 0) return `${days}d ${hours}h`;
+    return `${hours}h`;
+  };
+
+  const getChallengeTimeDisplay = (
+    challengeType: string,
+    endDate: string | null,
+    isCompleted: boolean
+  ): { text: string; style: 'countdown' | 'recurring' | 'permanent' | 'completed' } | null => {
+    if (isCompleted) {
+      if (challengeType === 'daily') {
+        return { text: t('completedResetsIn', { time: getTimeUntilMidnight() }), style: 'completed' };
+      }
+      if (challengeType === 'weekly') {
+        return { text: t('completedResetsSunday', { time: getTimeUntilSunday() }), style: 'completed' };
+      }
+      return { text: t('completedLabel'), style: 'completed' };
+    }
+
+    if (challengeType === 'milestone') {
+      return { text: t('ongoing'), style: 'permanent' };
+    }
+
+    if (!endDate) {
+      return { text: t('ongoing'), style: 'permanent' };
+    }
+
+    const end = new Date(endDate + 'T23:59:59');
     const now = new Date();
     const diff = end.getTime() - now.getTime();
 
-    if (diff <= 0) return 'Ended';
+    if (diff <= 0) return { text: t('ended'), style: 'countdown' };
+
+    if (challengeType === 'daily') {
+      return { text: t('resetsIn', { time: getTimeUntilMidnight() }), style: 'recurring' };
+    }
+    if (challengeType === 'weekly') {
+      return { text: t('resetsIn', { time: getTimeUntilSunday() }), style: 'recurring' };
+    }
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-    if (days > 0) return `${days}d ${hours}h left`;
-    return `${hours}h left`;
+    if (days > 0) return { text: t('timeLeft', { days, hours, minutes }), style: 'countdown' };
+    if (hours > 0) return { text: t('hoursLeft', { hours, minutes }), style: 'countdown' };
+    return { text: t('minutesLeft', { minutes }), style: 'countdown' };
   };
 
   const getChallengeTypeLabel = (type: string) => {
@@ -289,12 +344,42 @@ export default function ChallengesScreen() {
                           <Text style={styles.challengeName}>{challenge.name}</Text>
                         </View>
                       </View>
-                      {challenge.end_date && (
-                        <View style={styles.timeBadge}>
-                          <Ionicons name="time-outline" size={12} color={theme.colors.textSecondary} />
-                          <Text style={styles.timeRemaining}>{getTimeRemaining(challenge.end_date)}</Text>
-                        </View>
-                      )}
+                      {(() => {
+                        const timeInfo = getChallengeTimeDisplay(
+                          challenge.challenge_type,
+                          challenge.end_date,
+                          isCompleted
+                        );
+                        if (!timeInfo) return null;
+                        return (
+                          <View style={[
+                            styles.timeBadge,
+                            timeInfo.style === 'completed' && styles.timeBadgeCompleted,
+                            timeInfo.style === 'permanent' && styles.timeBadgePermanent,
+                            timeInfo.style === 'recurring' && styles.timeBadgeRecurring,
+                          ]}>
+                            <Ionicons
+                              name={
+                                timeInfo.style === 'completed' ? 'checkmark-circle' :
+                                timeInfo.style === 'permanent' ? 'infinite' :
+                                timeInfo.style === 'recurring' ? 'refresh' :
+                                'time-outline'
+                              }
+                              size={12}
+                              color={
+                                timeInfo.style === 'completed' ? '#4ade80' :
+                                theme.colors.textSecondary
+                              }
+                            />
+                            <Text style={[
+                              styles.timeRemaining,
+                              timeInfo.style === 'completed' && { color: '#4ade80' },
+                            ]}>
+                              {timeInfo.text}
+                            </Text>
+                          </View>
+                        );
+                      })()}
                     </View>
 
                     {challenge.description && (
@@ -466,6 +551,15 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.md,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  timeBadgeCompleted: {
+    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+  },
+  timeBadgePermanent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  timeBadgeRecurring: {
+    backgroundColor: 'rgba(96, 165, 250, 0.1)',
   },
   timeRemaining: {
     ...fontStyles.body,

@@ -126,7 +126,7 @@ export default function StoreScreen() {
           text: t('redeem'),
           onPress: async () => {
             try {
-              const { data, error } = await supabase.rpc('create_redemption', {
+              const { data, error } = await supabase.rpc('claim_reward', {
                 p_user_id: session.user.id,
                 p_reward_id: reward.id,
                 p_gym_id: activeGymId,

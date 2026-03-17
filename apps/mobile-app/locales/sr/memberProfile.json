@@ -1,0 +1,11 @@
+{
+  "title": "Profil",
+  "userNotFound": "Korisnik nije pronađen",
+  "memberSince": "Član od {{date}}",
+  "newcomer": "Novajlija",
+  "totalDrops": "Ukupno drops",
+  "streak": "Streak",
+  "badges": "Bedževi",
+  "earnedBadges": "Osvojeni bedževi",
+  "noBadgesYet": "Još nema osvojenih bedževa"
+}

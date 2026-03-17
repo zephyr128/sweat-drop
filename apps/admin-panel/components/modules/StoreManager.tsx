@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { createStoreItem, deleteStoreItem, updateStoreItem } from '@/lib/actions/store-actions';
 import { uploadFile } from '@/lib/utils/storage';
 import { X, Trash2, Edit2, Droplet, Smartphone, Building2, Calendar } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 
 const storeItemSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -181,7 +182,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    if (!(await confirmAction({ title: 'Delete Store Item', message: 'Are you sure you want to delete this item?', confirmLabel: 'Delete', variant: 'danger' }))) return;
 
     setDeletingId(itemId);
     try {

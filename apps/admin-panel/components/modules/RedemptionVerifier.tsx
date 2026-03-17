@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { validateRedemptionCode, confirmRedemption, cancelRedemption } from '@/lib/actions/redemption-actions';
 import { CheckCircle2, XCircle, Droplet, Gift, Clock, User, ShieldCheck } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { formatDateTime } from '@/lib/utils/date';
 
 interface RedemptionResult {
@@ -138,7 +139,7 @@ export function RedemptionVerifier({ gymId }: RedemptionVerifierProps) {
 
   const handleReject = async () => {
     if (!result) return;
-    if (!confirm('Reject this redemption? Drops will be refunded to the member.')) return;
+    if (!(await confirmAction({ title: 'Reject Redemption', message: 'Reject this redemption? Drops will be refunded to the member.', confirmLabel: 'Reject', variant: 'danger' }))) return;
     setIsProcessing(true);
     try {
       const res = await cancelRedemption(result.id, gymId, 'Rejected by staff');

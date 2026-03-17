@@ -9,7 +9,6 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Palette,
   LayoutDashboard,
-  Dumbbell,
   Trophy,
   ShoppingBag,
   Cpu,
@@ -19,11 +18,12 @@ import {
   Activity,
   Award,
   ShieldCheck,
-  HeartPulse,
   Swords,
-  History,
-  Mail,
   Settings,
+  Target,
+  QrCode,
+  ClipboardList,
+  UserCog,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 
@@ -113,21 +113,18 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
       core: [
         { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
         { href: `${base}/members`, label: 'Members', icon: Users },
-        { href: `${base}/retention`, label: 'Retention', icon: HeartPulse },
-        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: Dumbbell },
+        { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
       ],
       management: [
-        { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
-        { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
+        { href: `${base}/challenges`, label: 'Challenges', icon: Target },
+        { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
+        { href: `${base}/store`, label: 'Store', icon: ShoppingBag },
         { href: `${base}/machines`, label: 'Machines', icon: Cpu },
-        { href: `${base}/arenas`, label: 'Local Arenas', icon: Swords },
-        { href: `${base}/invitations`, label: 'Invitations', icon: Mail, badge: pendingInviteCount },
-        { href: `${base}/leaderboard-history`, label: 'Leaderboard History', icon: History },
+        { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
       ],
       operations: [
-        { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
-        { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
-        { href: `${base}/team`, label: 'Team', icon: Users },
+        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
+        { href: `${base}/team`, label: 'Team', icon: UserCog },
         { href: `${base}/settings`, label: 'Settings', icon: Settings },
       ],
     };
@@ -147,18 +144,16 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
       core: [
         { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
         { href: `${base}/members`, label: 'Members', icon: Users },
-        { href: `${base}/retention`, label: 'Retention', icon: HeartPulse },
-        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: Dumbbell },
+        { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
       ],
       management: [
-        { href: `${base}/challenges`, label: 'Challenges', icon: Trophy },
-        { href: `${base}/store`, label: 'Store Manager', icon: ShoppingBag },
-        { href: `${base}/invitations`, label: 'Invitations', icon: Mail, badge: pendingInviteCount },
-        { href: `${base}/leaderboard-history`, label: 'Leaderboard History', icon: History },
+        { href: `${base}/challenges`, label: 'Challenges', icon: Target },
+        { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
+        { href: `${base}/store`, label: 'Store', icon: ShoppingBag },
+        { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
       ],
       operations: [
-        { href: `${base}/redemptions`, label: 'Redemptions', icon: Ticket },
-        { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
+        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
         { href: `${base}/settings`, label: 'Settings', icon: Settings },
       ],
     };

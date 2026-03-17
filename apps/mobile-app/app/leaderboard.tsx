@@ -436,9 +436,7 @@ export default function LeaderboardScreen() {
               <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
               <Text style={styles.emptyText}>{t('noRankings')}</Text>
               <Text style={styles.emptySubtext}>
-                {activeTab === 'gym' 
-                  ? 'Be the first to earn drops at this gym!' 
-                  : 'Be the first to earn drops globally!'}
+                {activeTab === 'gym' ? t('beFirstGym') : t('beFirstGlobal')}
               </Text>
               {__DEV__ && (
                 <Text style={[styles.emptySubtext, { marginTop: 8, fontSize: 12 }]}>
@@ -557,8 +555,10 @@ export default function LeaderboardScreen() {
                       const rank = getRankDisplay(entry.rank);
                       const isCurrent = isCurrentUser(entry.user_id);
                       return (
-                        <View
+                        <TouchableOpacity
                           key={entry.user_id}
+                          activeOpacity={0.7}
+                          onPress={() => router.push({ pathname: '/user/[id]', params: { id: entry.user_id } })}
                           style={[
                             styles.listItem,
                             index < leaderboard.length - 1 && styles.listItemBorder,
@@ -618,7 +618,7 @@ export default function LeaderboardScreen() {
                           ]}>
                             {entry.score_label}
                           </Text>
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </BlurView>
@@ -642,7 +642,7 @@ export default function LeaderboardScreen() {
               {activeTab === 'gym' && period !== 'all_time' && (
                 <Animated.View entering={FadeInDown.delay(600).duration(400)}>
                   <Text style={styles.resetNote}>
-                    Prizes reset every {period === 'weekly' ? 'week' : 'month'}
+                    {period === 'weekly' ? t('prizesResetWeekly') : t('prizesResetMonthly')}
                   </Text>
                 </Animated.View>
               )}

@@ -1,20 +1,18 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useAnimatedStyle,
-  interpolate,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
-import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, fontStyles } from '@/lib/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -35,9 +33,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export const ProgressWidget: React.FC = () => {
-  const router = useRouter();
   const { t } = useTranslation('home');
-  const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { globalAchievements, gymChallenges } = useAllBadges();
   const { badges: earnedBadges } = useUserBadges();
@@ -49,27 +45,36 @@ export const ProgressWidget: React.FC = () => {
       ...globalAchievements.map((a) => ({
         id: a.id,
         name: a.name,
+        badge_image_url: a.badge_image_url as string | null,
         badge_type: 'global' as const,
+        display_order: a.display_order,
         progress: userProgress.find((p) => p.global_achievement_id === a.id),
         is_earned: earnedBadges.some((b) => b.badge_type === 'global' && b.badge_name === a.name),
       })),
       ...gymChallenges.map((c) => ({
         id: c.id,
         name: c.name,
+        badge_image_url: c.badge_image_url,
         badge_type: 'gym' as const,
+        display_order: 999,
         progress: userProgress.find((p) => p.gym_challenge_id === c.id),
         is_earned: earnedBadges.some((b) => b.badge_type === 'gym' && b.badge_name === c.name),
       })),
     ];
 
-    // Filter out earned badges and find the one with highest progress
     const unearnedBadges = allBadges
       .filter((b) => !b.is_earned)
       .map((b) => {
         const progressPercent = b.progress?.progress_percent ?? 0;
-        return { ...b, progressPercent };
+        const isCompleted = b.progress?.is_completed ?? false;
+        return { ...b, progressPercent, isCompleted };
       })
-      .sort((a, b) => b.progressPercent - a.progressPercent);
+      .filter((b) => !b.isCompleted && b.progressPercent < 100)
+      .sort((a, b) => {
+        const progressDiff = b.progressPercent - a.progressPercent;
+        if (progressDiff !== 0) return progressDiff;
+        return a.display_order - b.display_order;
+      });
 
     return unearnedBadges[0] || null;
   }, [globalAchievements, gymChallenges, userProgress, earnedBadges]);
@@ -93,28 +98,33 @@ export const ProgressWidget: React.FC = () => {
 
   return (
     <View style={[styles.wrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-      <TouchableOpacity
+      <View
         style={[
           styles.container,
           {
             borderColor: hexToRgba(branding.primary, 0.3),
           },
         ]}
-        onPress={() => router.push('/trophy-room')}
-        activeOpacity={0.8}
       >
         <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
           <View style={styles.content}>
             <View style={styles.header}>
-              <Ionicons name="trophy" size={20} color={branding.primary} />
-              <Text style={[styles.title, { color: branding.primary }]}>
-                {t('nextBadge')}
-              </Text>
+              {nextBadge.badge_image_url ? (
+                <Image source={{ uri: nextBadge.badge_image_url }} style={styles.badgeIcon} />
+              ) : (
+                <View style={[styles.badgeIconPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                  <Ionicons name="ribbon" size={18} color={branding.primary} />
+                </View>
+              )}
+              <View style={styles.headerText}>
+                <Text style={[styles.title, { color: branding.primary }]}>
+                  {t('nextBadge')}
+                </Text>
+                <Text style={styles.badgeName} numberOfLines={1}>
+                  {nextBadge.name}
+                </Text>
+              </View>
             </View>
-
-            <Text style={styles.badgeName} numberOfLines={1}>
-              {nextBadge.name}
-            </Text>
 
             <View style={styles.progressContainer}>
               <View style={[styles.progressBar, { backgroundColor: hexToRgba(branding.primary, 0.2) }]}>
@@ -129,51 +139,54 @@ export const ProgressWidget: React.FC = () => {
               </View>
               <Text style={styles.progressText}>{Math.round(progressPercent)}%</Text>
             </View>
-
-            <View style={styles.footer}>
-              <Text style={[styles.footerText, { color: branding.primary }]}>{t('viewTrophyRoom')}</Text>
-              <Ionicons name="arrow-forward" size={16} color={branding.primary} />
-            </View>
           </View>
         </BlurView>
-      </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  wrapper: {
-    // Width is set dynamically via inline style
-  },
+  wrapper: {},
   container: {
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    height: 160, // Same height as feature cards
   },
   cardBlur: {
     borderRadius: 20,
     padding: theme.spacing.md,
-    flex: 1,
-    justifyContent: 'space-between',
-    height: '100%',
     backgroundColor: 'rgba(20, 20, 30, 0.75)',
     overflow: 'hidden',
   },
   content: {
-    gap: theme.spacing.sm,
-    flex: 1,
-    justifyContent: 'space-between',
+    gap: theme.spacing.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 12,
+  },
+  headerText: {
+    flex: 1,
+    gap: 2,
+  },
+  badgeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+  },
+  badgeIconPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     ...fontStyles.heading,
-    fontSize: 16,
+    fontSize: 13,
     letterSpacing: 0.3,
   },
   badgeName: {
@@ -196,17 +209,6 @@ const styles = StyleSheet.create({
   },
   progressText: {
     ...fontStyles.bodyMedium,
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: theme.spacing.xs,
-  },
-  footerText: {
-    ...fontStyles.bodySemiBold,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
   },

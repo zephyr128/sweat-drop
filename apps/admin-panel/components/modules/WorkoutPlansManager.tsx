@@ -12,6 +12,7 @@ import {
 } from '@/lib/actions/workout-plan-actions';
 import { WORKOUT_TEMPLATES, filterTemplates, type TemplateGoal, type TemplateStructure, type TemplateEquipment } from '@/lib/utils/workout-templates';
 import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles, TrendingUp, TrendingDown, Minus, Users, Target, DollarSign, Trophy, Dumbbell } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 
 interface WorkoutPlan {
   id: string;
@@ -378,7 +379,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
   };
 
   const handleDeletePlan = async (planId: string) => {
-    if (!confirm('Are you sure you want to delete this workout plan?')) return;
+    if (!(await confirmAction({ title: 'Delete Workout Plan', message: 'Are you sure you want to delete this workout plan?', confirmLabel: 'Delete', variant: 'danger' }))) return;
 
     setDeletingId(planId);
     try {

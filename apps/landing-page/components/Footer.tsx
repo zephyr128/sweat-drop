@@ -5,15 +5,15 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/use-language';
 
 export const Footer = memo(function Footer() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const footerLinks = [
     { href: '/#pricing', label: t.footer.forGyms },
     { href: '/sweat-arenas', label: t.footer.sweatArenas },
     { href: '/members', label: t.footer.forMembers },
     { href: '/sponsors', label: t.footer.forSponsors },
-    { href: '/privacy', label: t.footer.privacy },
-    { href: '/terms', label: t.footer.terms },
+    { href: `/privacy?lang=${language}`, label: t.footer.privacy },
+    { href: `/terms?lang=${language}`, label: t.footer.terms },
   ];
 
   return (
@@ -53,7 +53,7 @@ export const Footer = memo(function Footer() {
               <button className="hover:text-text transition-colors">SR</button>
             </div>
             <p className="text-xs text-text-3 mono">
-              © 2025 SweatDrop
+              {t.footer.copyright}
             </p>
           </div>
         </div>

@@ -192,7 +192,7 @@ export async function getRetentionData(gymId: string) {
           id: profileData.id,
           username: profileData.username || 'Unknown',
           email: profileData.email || '',
-          avatar_url: profileData.avatar_url || null,
+          avatar_url: (profileData.avatar_url && typeof profileData.avatar_url === 'string' && profileData.avatar_url.startsWith('http')) ? profileData.avatar_url : null,
           total_drops: profileData.total_drops || 0,
           streak_days: profileData.streak_days || 0,
           last_visit_date: lastVisit,

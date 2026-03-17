@@ -14,6 +14,8 @@ export interface ChallengeProgress {
   current_streak_days: number; // Only for streak challenges
   is_completed: boolean;
   progress_percentage: number;
+  start_date: string | null;
+  end_date: string | null;
 }
 
 export function useChallengeProgress(gymId: string | null, machineType: string | null) {
@@ -68,7 +70,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         .eq('gym_id', gymId)
         .eq('is_active', true)
         .lte('start_date', today)
-        .gte('end_date', today);
+        .or(`end_date.gte.${today},end_date.is.null`);
 
       if (challengesError) {
         console.error('Error loading challenges:', challengesError);
@@ -139,6 +141,8 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
           current_streak_days: progress?.current_streak_days || 0,
           is_completed: progress?.is_completed || false,
           progress_percentage: progressPercent,
+          start_date: challenge.start_date,
+          end_date: challenge.end_date,
         };
       });
 

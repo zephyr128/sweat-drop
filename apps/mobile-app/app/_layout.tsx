@@ -110,6 +110,7 @@ function StackNavigator() {
       <Stack.Screen name="arenas" options={{ headerShown: false }} />
       <Stack.Screen name="arena" options={{ headerShown: false }} />
       <Stack.Screen name="gyms" options={{ headerShown: false }} />
+      <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -6,7 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { createChallenge, updateChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats, getChallengeDetailedProgress, closeChallenge } from '@/lib/actions/challenge-actions';
-import { X, Trash2, Power, Droplet, Upload, Image, BarChart3, Users, CheckCircle2, XCircle, Building2, Plus, Minus, Pencil } from 'lucide-react';
+import { X, Trash2, Power, Droplet, Upload, Image, BarChart3, Users, CheckCircle2, XCircle, Building2, Plus, Minus, Pencil, Info, CalendarDays, Infinity } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
 
@@ -75,7 +76,7 @@ interface Challenge {
   challenge_type: string;
   is_active: boolean;
   start_date: string;
-  end_date: string;
+  end_date: string | null;
   target_drops: number | null;
   milestone_threshold: number | null;
   streak_days: number | null;
@@ -147,11 +148,33 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
     },
   });
 
+  const [showDateRange, setShowDateRange] = useState(false);
+
   const watchedChallengeType = watch('challengeType');
   const isStreakChallenge = watchedChallengeType === 'streak' || watchedChallengeType === 'checkin_streak';
   const isMilestoneChallenge = watchedChallengeType === 'milestone';
   const isDropsBasedChallenge = watchedChallengeType === 'daily' || watchedChallengeType === 'weekly' || watchedChallengeType === 'monthly';
   const isCheckinCountChallenge = watchedChallengeType === 'checkin_count';
+
+  const lifecycleInfo: Record<string, { text: string; icon: string }> = {
+    daily: { text: 'Progress resets every day at midnight. Users can earn rewards repeatedly across the campaign window.', icon: '🔄' },
+    weekly: { text: 'Progress resets every Sunday. Users can earn rewards each week across the campaign window.', icon: '📅' },
+    monthly: { text: 'One chance to complete within the month. Does not reset.', icon: '📆' },
+    streak: { text: 'User must train on consecutive days within the time window. Streak resets if a day is missed.', icon: '🔥' },
+    checkin_streak: { text: 'User must check in on consecutive days within the time window. Streak resets if a day is missed.', icon: '📍' },
+    checkin_count: { text: 'Count check-ins within the date range. Does not reset.', icon: '🗓️' },
+    milestone: { text: 'Permanent challenge with no deadline. Users work toward it indefinitely — it never expires.', icon: '🏆' },
+  };
+
+  const defaultDateHint: Record<string, string> = {
+    daily: 'Default: 1 year from start (progress resets daily)',
+    weekly: 'Default: 1 year from start (progress resets weekly)',
+    monthly: 'Default: end of current month',
+    streak: 'Default: streak days × 2',
+    checkin_streak: 'Default: streak days × 2',
+    checkin_count: 'Default: end of current month',
+    milestone: 'No end date (permanent)',
+  };
 
   // Badge image upload dropzone
   const badgeDropzone = useDropzone({
@@ -213,6 +236,8 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   const openEdit = (challenge: Challenge) => {
     setEditingChallenge(challenge);
     const challengeType = challenge.challenge_type as ChallengeFormData['challengeType'];
+    const hasCustomDates = !!challenge.start_date || !!challenge.end_date;
+    setShowDateRange(hasCustomDates);
     reset({
       name: challenge.name,
       description: challenge.description || undefined,
@@ -283,6 +308,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
         reset();
         setBadgePreview(null);
         setSponsorLogoPreview(null);
+        setShowDateRange(false);
         setEnableTiers(false);
         setTiers([
           { label: 'Bronze', target: 100, drops: 25 },
@@ -300,7 +326,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   };
 
   const handleDelete = async (challengeId: string) => {
-    if (!confirm('Are you sure you want to delete this challenge?')) return;
+    if (!(await confirmAction({ title: 'Delete Challenge', message: 'Are you sure you want to delete this challenge?', confirmLabel: 'Delete', variant: 'danger' }))) return;
 
     setDeletingId(challengeId);
     try {
@@ -387,7 +413,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
   };
 
   const handleCloseChallenge = async (challengeId: string) => {
-    if (!confirm('End this challenge early? It will be deactivated immediately.')) return;
+    if (!(await confirmAction({ title: 'End Challenge', message: 'End this challenge early? It will be deactivated immediately.', confirmLabel: 'End Now', variant: 'warning' }))) return;
     setClosingId(challengeId);
     try {
       const result = await closeChallenge(challengeId, gymId);
@@ -456,8 +482,17 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100] capitalize">
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100] capitalize w-fit">
                           {challenge.challenge_type || challenge.frequency}
+                        </span>
+                        <span className="text-[10px] text-zinc-600 pl-1">
+                          {challenge.challenge_type === 'milestone'
+                            ? '∞ Ongoing'
+                            : (challenge.challenge_type === 'daily' || challenge.challenge_type === 'weekly')
+                            ? `🔄 Recurring`
+                            : challenge.end_date
+                            ? `Until ${challenge.end_date}`
+                            : '∞ No deadline'}
                         </span>
                       </div>
                     </td>
@@ -579,6 +614,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 onClick={() => {
                   setIsModalOpen(false);
                   setEditingChallenge(null);
+                  setShowDateRange(false);
                   reset();
                   setBadgePreview(null);
                 }}
@@ -633,6 +669,17 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 </select>
                 {errors.challengeType && (
                   <p className="mt-1 text-sm text-[#FF5252]">{errors.challengeType.message}</p>
+                )}
+
+                {/* Lifecycle info banner */}
+                {lifecycleInfo[watchedChallengeType] && (
+                  <div className="mt-3 flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-[#1A1A1A] border border-[#333]">
+                    <Info className="w-4 h-4 text-[#00E5FF] mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      <span className="mr-1">{lifecycleInfo[watchedChallengeType].icon}</span>
+                      {lifecycleInfo[watchedChallengeType].text}
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -709,6 +756,57 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   )}
                 </div>
               )}
+
+              {/* Custom Date Range (collapsible) */}
+              <div className="border border-[#1A1A1A] rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowDateRange(!showDateRange)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-[#1A1A1A]/50 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4" />
+                    Custom date range
+                  </span>
+                  <span className="text-xs">{showDateRange ? '▲' : '▼'}</span>
+                </button>
+
+                {showDateRange && (
+                  <div className="px-4 pb-4 pt-1 space-y-4 border-t border-[#1A1A1A]">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          {...register('startDate')}
+                          style={{ colorScheme: 'dark' }}
+                          className="w-full px-3 py-2 bg-[#1A1A1A] border border-[#333] rounded-lg text-white text-sm focus:border-[#00E5FF] focus:outline-none"
+                        />
+                        <p className="mt-1 text-xs text-zinc-600">Default: today</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">
+                          {isMilestoneChallenge ? (
+                            <span className="flex items-center gap-1">
+                              End Date <Infinity className="w-3 h-3 text-zinc-600" />
+                            </span>
+                          ) : 'End Date'}
+                        </label>
+                        <input
+                          type="date"
+                          {...register('endDate')}
+                          disabled={isMilestoneChallenge}
+                          style={{ colorScheme: 'dark' }}
+                          className="w-full px-3 py-2 bg-[#1A1A1A] border border-[#333] rounded-lg text-white text-sm focus:border-[#00E5FF] focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                        <p className="mt-1 text-xs text-zinc-600">
+                          {defaultDateHint[watchedChallengeType] || 'Auto-calculated'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
@@ -1004,6 +1102,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   onClick={() => {
                     setIsModalOpen(false);
                     setEditingChallenge(null);
+                    setShowDateRange(false);
                     reset();
                     setBadgePreview(null);
                     setSponsorLogoPreview(null);

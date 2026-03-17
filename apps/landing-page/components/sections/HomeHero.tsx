@@ -70,15 +70,15 @@ export const HomeHero = memo(function HomeHero() {
               ))}
             </motion.p>
 
-            {/* Scarcity line */}
+            {/* Pilot badge */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
-              className="mono text-[11px] text-orange mb-8"
+              className="mono text-[11px] text-accent mb-8"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              ● {t.homeHero.scarcity}
+              ● {t.homeHero.pilotBadge}
             </motion.p>
 
             {/* CTAs */}

@@ -83,20 +83,73 @@ export default function ChallengeDetailScreen() {
     }
   };
 
-  const getTimeRemaining = (endDate: string) => {
-    const end = new Date(endDate);
+  const getTimeUntilMidnight = (): string => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const diff = midnight.getTime() - now.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
+
+  const getTimeUntilSunday = (): string => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+    const sunday = new Date(now);
+    sunday.setDate(sunday.getDate() + daysUntilSunday);
+    sunday.setHours(0, 0, 0, 0);
+    const diff = sunday.getTime() - now.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    if (days > 0) return `${days}d ${hours}h`;
+    return `${hours}h`;
+  };
+
+  const getChallengeTimeDisplay = (
+    challengeType: string,
+    endDate: string | null,
+    challengeCompleted: boolean
+  ): { text: string; style: 'countdown' | 'recurring' | 'permanent' | 'completed' } | null => {
+    if (challengeCompleted) {
+      if (challengeType === 'daily') {
+        return { text: t('completedResetsIn', { time: getTimeUntilMidnight() }), style: 'completed' };
+      }
+      if (challengeType === 'weekly') {
+        return { text: t('completedResetsSunday', { time: getTimeUntilSunday() }), style: 'completed' };
+      }
+      return { text: t('completedLabel'), style: 'completed' };
+    }
+
+    if (challengeType === 'milestone') {
+      return { text: t('ongoing'), style: 'permanent' };
+    }
+
+    if (!endDate) {
+      return { text: t('ongoing'), style: 'permanent' };
+    }
+
+    const end = new Date(endDate + 'T23:59:59');
     const now = new Date();
     const diff = end.getTime() - now.getTime();
 
-    if (diff <= 0) return t('ended');
+    if (diff <= 0) return { text: t('ended'), style: 'countdown' };
+
+    if (challengeType === 'daily') {
+      return { text: t('resetsIn', { time: getTimeUntilMidnight() }), style: 'recurring' };
+    }
+    if (challengeType === 'weekly') {
+      return { text: t('resetsIn', { time: getTimeUntilSunday() }), style: 'recurring' };
+    }
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-    if (days > 0) return t('timeLeft', { days, hours, minutes });
-    if (hours > 0) return t('hoursLeft', { hours, minutes });
-    return t('minutesLeft', { minutes });
+    if (days > 0) return { text: t('timeLeft', { days, hours, minutes }), style: 'countdown' };
+    if (hours > 0) return { text: t('hoursLeft', { hours, minutes }), style: 'countdown' };
+    return { text: t('minutesLeft', { minutes }), style: 'countdown' };
   };
 
   const getChallengeTypeLabel = (challengeType: string) => {
@@ -238,12 +291,42 @@ export default function ChallengeDetailScreen() {
                   <Ionicons name="water" size={16} color={branding.primary} />
                   <Text style={styles.infoPillText}>{t('dropsReward', { count: rewardDrops })}</Text>
                 </View>
-                {challenge.end_date && (
-                  <View style={[styles.infoPill, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
-                    <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} />
-                    <Text style={styles.infoPillText}>{getTimeRemaining(challenge.end_date)}</Text>
-                  </View>
-                )}
+                {(() => {
+                  const timeInfo = getChallengeTimeDisplay(
+                    challenge.challenge_type,
+                    challenge.end_date,
+                    isCompleted
+                  );
+                  if (!timeInfo) return null;
+                  return (
+                    <View style={[
+                      styles.infoPill,
+                      { backgroundColor: timeInfo.style === 'completed'
+                        ? 'rgba(74, 222, 128, 0.1)'
+                        : timeInfo.style === 'recurring'
+                          ? 'rgba(96, 165, 250, 0.1)'
+                          : 'rgba(255, 255, 255, 0.05)'
+                      },
+                    ]}>
+                      <Ionicons
+                        name={
+                          timeInfo.style === 'completed' ? 'checkmark-circle' :
+                          timeInfo.style === 'permanent' ? 'infinite' :
+                          timeInfo.style === 'recurring' ? 'refresh' :
+                          'time-outline'
+                        }
+                        size={16}
+                        color={timeInfo.style === 'completed' ? '#4ade80' : theme.colors.textSecondary}
+                      />
+                      <Text style={[
+                        styles.infoPillText,
+                        timeInfo.style === 'completed' && { color: '#4ade80' },
+                      ]}>
+                        {timeInfo.text}
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
             </BlurView>
           </View>

@@ -2,12 +2,12 @@
 
 import { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, DollarSign, AlertTriangle } from 'lucide-react';
+import { Trophy, DollarSign, Megaphone } from 'lucide-react';
 import { useLanguage } from '@/lib/use-language';
 import { GlassCard } from '@/components/ui/GlassCard';
 
-const icons = [Trophy, DollarSign, AlertTriangle];
-const visuals = ['leaderboard', 'challenge', 'dashboard'] as const;
+const icons = [Trophy, DollarSign, Megaphone];
+const visuals = ['leaderboard', 'challenge', 'gymStandsOut'] as const;
 
 export const WhyItWorks = memo(function WhyItWorks() {
   const { t } = useLanguage();
@@ -99,19 +99,14 @@ export const WhyItWorks = memo(function WhyItWorks() {
                         </div>
                       </div>
                     )}
-                    {feature.visual === 'dashboard' && (
+                    {feature.visual === 'gymStandsOut' && (
                       <div className="space-y-3">
                         <div className="mono text-xs text-text-3 mb-4" style={{ fontFamily: 'var(--font-mono)' }}>
-                          {t.whyItWorks.visuals.dashboard.title}
+                          {t.whyItWorks.visuals.gymStandsOut.title}
                         </div>
-                        {['John D.', 'Maria S.', 'Tom K.'].map((name) => (
-                          <div key={name} className="flex items-center justify-between p-3 bg-bg-card2 rounded-lg border border-orange/20">
-                            <span className="text-text">{name}</span>
-                            <span className="mono text-xs text-orange" style={{ fontFamily: 'var(--font-mono)' }}>
-                              {t.whyItWorks.visuals.dashboard.inactive}
-                            </span>
-                          </div>
-                        ))}
+                        <div className="text-text-2 text-sm">
+                          {t.whyItWorks.visuals.gymStandsOut.description}
+                        </div>
                       </div>
                     )}
                   </GlassCard>

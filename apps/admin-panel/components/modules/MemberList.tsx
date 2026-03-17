@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   getGymMembers,
   GymMember,
@@ -28,6 +29,7 @@ interface MemberListProps {
 const PAGE_SIZE = 25;
 
 export function MemberList({ gymId }: MemberListProps) {
+  const router = useRouter();
   const [members, setMembers] = useState<GymMember[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -238,14 +240,27 @@ export function MemberList({ gymId }: MemberListProps) {
               </thead>
               <tbody className="divide-y divide-[#1A1A1A]">
                 {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-[#111] transition-colors">
+                  <tr
+                    key={member.id}
+                    onClick={() => router.push(`/dashboard/gym/${gymId}/members/${member.id}`)}
+                    className="hover:bg-[#111] transition-colors cursor-pointer"
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-bold text-[#808080]">
-                            {member.username.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
+                        {member.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={member.avatar_url}
+                            alt={member.username}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-[#808080]">
+                              {member.username.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-white truncate">{member.username}</p>
                           <p className="text-xs text-[#808080] truncate">{member.email}</p>

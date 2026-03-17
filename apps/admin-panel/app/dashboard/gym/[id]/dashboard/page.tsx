@@ -1,16 +1,14 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { StatsCard } from '@/components/StatsCard';
 import { AnalyticsSection } from '@/components/analytics/AnalyticsSection';
 import { NetworkOverviewToggle } from '@/components/dashboards/NetworkOverviewToggle';
-import { notFound } from 'next/navigation';
 import { SmartCoachToggle } from '@/components/SmartCoachToggle';
-import { CheckinStatsModule } from '@/components/modules/CheckinStatsModule';
 
 interface DashboardPageProps {
   params: Promise<{ id: string }>;
@@ -32,25 +30,17 @@ interface SessionData {
 export default async function GymDashboardPage({ params }: DashboardPageProps) {
   const { id } = await params;
   
-  // Initialize Supabase client
   const supabase = await createClient();
   
-  // 1. Check authentication first
   let user;
   try {
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      redirect('/login');
-    }
-    
+    if (authError || !authUser) redirect('/login');
     user = authUser;
-  } catch (error) {
-    console.error('[GymDashboardPage] Auth check failed:', error);
+  } catch {
     redirect('/login');
   }
 
-  // 2. Fetch user profile
   let profile;
   try {
     const { data: profileData, error: profileError } = await supabase
@@ -59,10 +49,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profileData) {
-      console.error('[GymDashboardPage] Profile fetch failed:', profileError);
-      notFound();
-    }
+    if (profileError || !profileData) notFound();
 
     profile = {
       id: profileData.id,
@@ -73,12 +60,10 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
       owner_id: profileData.owner_id,
       home_gym_id: profileData.home_gym_id,
     };
-  } catch (error) {
-    console.error('[GymDashboardPage] Unexpected error fetching profile:', error);
+  } catch {
     notFound();
   }
 
-  // 3. Fetch gym details
   let gym: GymData;
   try {
     const { data: gymData, error: gymError } = await supabase
@@ -87,35 +72,38 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
       .eq('id', id)
       .single();
 
-    if (gymError || !gymData) {
-      console.error('[GymDashboardPage] Gym fetch failed:', gymError);
-      notFound();
-    }
+    if (gymError || !gymData) notFound();
 
     gym = gymData as GymData;
-    // Ensure smartcoach_enabled has a default value if not present
     if (typeof gym.smartcoach_enabled !== 'boolean') {
       gym.smartcoach_enabled = false;
     }
-  } catch (error) {
-    console.error('[GymDashboardPage] Unexpected error fetching gym:', error);
+  } catch {
     notFound();
   }
 
-  // 4. Fetch gym-specific stats with error handling
   let members = 0;
   let challenges = 0;
   let storeItems = 0;
   let weeklyDropsEarned = 0;
   let pendingRedemptionsCount = 0;
+  let checkinToday = 0;
+  let checkinWeek = 0;
 
   try {
+    const supabaseAdmin = getAdminClient();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
     const [
       membersResult,
       challengesResult,
       storeItemsResult,
       recentSessionsResult,
       pendingRedemptionsResult,
+      checkinTodayResult,
+      checkinWeekResult,
     ] = await Promise.all([
       supabase
         .from('gym_memberships')
@@ -135,21 +123,36 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         .from('sessions')
         .select('drops_earned')
         .eq('gym_id', id)
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-        .limit(100),
+        .gte('created_at', weekAgo.toISOString())
+        .limit(500),
       supabase
         .from('redemptions')
         .select('*', { count: 'exact', head: true })
         .eq('gym_id', id)
         .eq('status', 'pending'),
+      supabaseAdmin
+        ? supabaseAdmin
+            .from('gym_checkins')
+            .select('id', { count: 'exact', head: true })
+            .eq('gym_id', id)
+            .gte('checked_in_at', todayStart.toISOString())
+        : Promise.resolve({ count: 0 }),
+      supabaseAdmin
+        ? supabaseAdmin
+            .from('gym_checkins')
+            .select('id', { count: 'exact', head: true })
+            .eq('gym_id', id)
+            .gte('checked_in_at', weekAgo.toISOString())
+        : Promise.resolve({ count: 0 }),
     ]);
 
     members = membersResult.count || 0;
     challenges = challengesResult.count || 0;
     storeItems = storeItemsResult.count || 0;
     pendingRedemptionsCount = pendingRedemptionsResult.count || 0;
+    checkinToday = (checkinTodayResult as { count: number | null }).count || 0;
+    checkinWeek = (checkinWeekResult as { count: number | null }).count || 0;
 
-    // Calculate weekly drops
     if (recentSessionsResult.data && Array.isArray(recentSessionsResult.data)) {
       weeklyDropsEarned = recentSessionsResult.data.reduce((sum, s: SessionData) => {
         return sum + (s.drops_earned || 0);
@@ -157,11 +160,10 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
     }
   } catch (error) {
     console.error('[GymDashboardPage] Error fetching stats:', error);
-    // Continue with default values
   }
 
-  // Get owner_id for network overview (if user is gym owner)
   const ownerId = gym.owner_id || profile.id;
+  const base = `/dashboard/gym/${id}`;
 
   return (
     <div>
@@ -173,12 +175,10 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         </p>
       </div>
 
-      {/* Network Overview Toggle (only for gym owners with multiple gyms) */}
       {profile.role === 'gym_owner' && gym.owner_id && (
         <NetworkOverviewToggle ownerId={ownerId} currentGymId={id} />
       )}
 
-      {/* SmartCoach Toggle (only for superadmin) */}
       {profile.role === 'superadmin' && (
         <div className="mb-6 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
           <SmartCoachToggle 
@@ -188,44 +188,58 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         </div>
       )}
 
-      {/* Header Row: Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatsCard
           title="Members"
           value={members}
           icon="Users"
           accent="cyan"
           priority="primary"
+          subtitle="Total registered members"
+          href={`${base}/members`}
+        />
+        <StatsCard
+          title="Drops Earned"
+          value={weeklyDropsEarned.toLocaleString()}
+          icon="Droplet"
+          accent="cyan"
+          subtitle="Last 7 days"
+          href={`${base}/leaderboard-history`}
+        />
+        <StatsCard
+          title="Check-ins Today"
+          value={checkinToday}
+          icon="QrCode"
+          accent="emerald"
+          subtitle={`${checkinWeek.toLocaleString()} this week`}
+          href={`${base}/checkin`}
         />
         <StatsCard
           title="Active Challenges"
           value={challenges}
-          icon="Trophy"
+          icon="Target"
           accent="amber"
-          priority="secondary"
+          subtitle="Running campaigns"
+          href={`${base}/challenges`}
         />
         <StatsCard
-          title="Store Items"
+          title="Store Rewards"
           value={storeItems}
           icon="ShoppingBag"
           accent="purple"
-          priority="secondary"
+          subtitle={pendingRedemptionsCount > 0 ? `${pendingRedemptionsCount} pending pickup${pendingRedemptionsCount !== 1 ? 's' : ''}` : 'All pickups fulfilled'}
+          href={`${base}/store`}
         />
         <StatsCard
-          title="Drops Earned (7d)"
-          value={weeklyDropsEarned}
-          icon="Droplet"
-          accent="cyan"
-          priority="secondary"
+          title="Pending Pickups"
+          value={pendingRedemptionsCount}
+          icon="Ticket"
+          accent={pendingRedemptionsCount > 0 ? 'rose' : 'emerald'}
+          subtitle={pendingRedemptionsCount > 0 ? 'Awaiting member collection' : 'No pending pickups'}
+          href={`${base}/store`}
         />
       </div>
 
-      {/* Check-in Stats */}
-      <div className="mb-6">
-        <CheckinStatsModule gymId={id} />
-      </div>
-
-      {/* Analytics Section with Time Filter */}
       <AnalyticsSection gymId={id} pendingRedemptions={pendingRedemptionsCount} />
     </div>
   );

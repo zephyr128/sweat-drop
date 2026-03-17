@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { confirmRedemption, cancelRedemption, validateRedemptionCode } from '@/lib/actions/redemption-actions';
 import { CheckCircle2, XCircle, Clock, CheckCircle, Droplet, Ticket, Coffee, GlassWater, Shirt, Gift, Trophy, Swords, Filter, ShoppingBag } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { QRValidator } from '@/components/QRValidator';
 import { supabase } from '@/lib/supabase-client';
 import { formatDateTime } from '@/lib/utils/date';
@@ -105,7 +106,7 @@ export function RedemptionsManager({
   };
 
   const handleCancel = async (redemptionId: string, reason?: string) => {
-    if (!confirm('Cancel this redemption? Drops will be refunded to the user.')) return;
+    if (!(await confirmAction({ title: 'Cancel Redemption', message: 'Cancel this redemption? Drops will be refunded to the user.', confirmLabel: 'Cancel Redemption', variant: 'danger' }))) return;
 
     setProcessingId(redemptionId);
     try {

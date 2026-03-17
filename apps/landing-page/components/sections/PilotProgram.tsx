@@ -88,9 +88,11 @@ export const PilotProgram = memo(function PilotProgram() {
           >
             {t.pilotProgram.button}
           </button>
-          <p className="mono text-[10px] text-orange" style={{ fontFamily: 'var(--font-mono)' }}>
-            {t.pilotProgram.availability}
-          </p>
+          {t.pilotProgram.availability ? (
+            <p className="mono text-[10px] text-orange" style={{ fontFamily: 'var(--font-mono)' }}>
+              {t.pilotProgram.availability}
+            </p>
+          ) : null}
         </div>
       </div>
     </section>

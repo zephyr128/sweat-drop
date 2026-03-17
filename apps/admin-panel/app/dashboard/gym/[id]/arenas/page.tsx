@@ -7,7 +7,7 @@ import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { notFound } from 'next/navigation';
-import { ArenasManager } from '@/components/modules/ArenasManager';
+import { ArenasPageTabs } from '@/components/modules/ArenasPageTabs';
 
 export default async function GymArenasPage({
   params,
@@ -42,13 +42,13 @@ export default async function GymArenasPage({
   return (
     <div className="min-h-screen p-6 md:p-10">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Local Arenas</h1>
+        <h1 className="text-2xl font-bold text-white">Arenas</h1>
         <p className="text-[#808080] mt-1">
-          Arena competitions for {(gym as { name: string }).name}.
+          Arena competitions and invitations for {(gym as { name: string }).name}.
         </p>
       </div>
 
-      <ArenasManager
+      <ArenasPageTabs
         gymId={gymId}
         isSuperadmin={profile.role === 'superadmin'}
       />

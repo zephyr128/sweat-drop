@@ -3,14 +3,16 @@ import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { HomeHero } from '@/components/sections/HomeHero';
 import { HowItWorks } from '@/components/sections/HowItWorks';
+import { BrandAppPreview } from '@/components/sections/BrandAppPreview';
 import { CompatibleEquipment } from '@/components/sections/CompatibleEquipment';
+import { CheckInSection } from '@/components/sections/CheckInSection';
 import { WhyItWorks } from '@/components/sections/WhyItWorks';
 import { Pricing } from '@/components/sections/Pricing';
 import { SweatArenasPreview } from '@/components/sections/SweatArenasPreview';
 import { PilotProgram } from '@/components/sections/PilotProgram';
 import { FAQ } from '@/components/sections/FAQ';
 import { FinalCTA } from '@/components/sections/FinalCTA';
-import { getStructuredData, getOrganizationData } from './structured-data';
+import { getStructuredData, getOrganizationData, getFAQStructuredData } from './structured-data';
 
 export const metadata: Metadata = {
   title: 'SweatDrop — Gym Gamification Platform Belgrade',
@@ -25,6 +27,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   const structuredData = getStructuredData();
   const organizationData = getOrganizationData();
+  const faqStructuredData = getFAQStructuredData();
 
   return (
     <>
@@ -36,11 +39,17 @@ export default function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationData) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData) }}
+      />
       <Navigation />
       <main>
         <HomeHero />
         <HowItWorks />
+        <BrandAppPreview />
         <CompatibleEquipment />
+        <CheckInSection />
         <WhyItWorks />
         <Pricing />
         <SweatArenasPreview />

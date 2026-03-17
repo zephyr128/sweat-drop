@@ -41,7 +41,70 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
   const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
   const [currentUserEntry, setCurrentUserEntry] = useState<LeaderboardEntry | null>(null);
+  const [activePeriod, setActivePeriod] = useState<string>('weekly');
   const [loading, setLoading] = useState(true);
+
+  const fetchPeriod = useCallback(async (period: string): Promise<LeaderboardEntry[]> => {
+    if (!gymId) return [];
+
+    const { data, error } = await supabase.rpc('get_leaderboard', {
+      p_type: 'gym',
+      p_scope_id: gymId,
+      p_period: period,
+      p_limit: 50,
+      p_newcomer_only: false,
+    });
+
+    if (error) {
+      const { data: fallbackData, error: fallbackErr } = await supabase.rpc('get_local_leaderboard', {
+        p_gym_id: gymId,
+        p_period: period,
+        p_limit: 50,
+        p_newcomer_only: false,
+      });
+
+      if (!fallbackErr && fallbackData) {
+        return (fallbackData as any[]).map((entry) => ({
+          user_id: entry.user_id,
+          username: entry.username || 'Unknown',
+          drops: entry.drops || entry.score || 0,
+          score_label: entry.score_label,
+        }));
+      }
+
+      if (period === 'all_time') {
+        const { data: directData } = await supabase
+          .from('gym_memberships')
+          .select('user_id, local_drops_balance, profiles:user_id(username)')
+          .eq('gym_id', gymId)
+          .order('local_drops_balance', { ascending: false })
+          .limit(50);
+
+        if (directData) {
+          return directData
+            .map((entry: any) => ({
+              user_id: entry.user_id,
+              username: entry.profiles?.username || 'Unknown',
+              drops: entry.local_drops_balance || 0,
+            }))
+            .sort((a, b) => b.drops - a.drops);
+        }
+      }
+
+      return [];
+    }
+
+    if (data) {
+      return (data as any[]).map((entry) => ({
+        user_id: entry.user_id,
+        username: entry.username || 'Unknown',
+        drops: entry.score || 0,
+        score_label: entry.score_label,
+      }));
+    }
+
+    return [];
+  }, [gymId]);
 
   const loadLeaderboard = useCallback(async () => {
     if (!session?.user || !gymId) {
@@ -50,88 +113,26 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     }
 
     try {
-      // Use generic get_leaderboard() RPC (Phase 3.1)
-      const { data, error } = await supabase.rpc('get_leaderboard', {
-        p_type: 'gym',
-        p_scope_id: gymId,
-        p_period: 'weekly',
-        p_limit: 50,
-        p_newcomer_only: false,
-      });
+      const periods = ['weekly', 'monthly', 'all_time'] as const;
+      let entries: LeaderboardEntry[] = [];
+      let usedPeriod = 'weekly';
 
-      if (error) {
-        // Try fallback RPC first
-        // get_leaderboard RPC failed, trying fallback RPC
-        const { data: fallbackRpcData, error: fallbackRpcError } = await supabase.rpc('get_local_leaderboard', {
-          p_gym_id: gymId,
-          p_period: 'weekly',
-          p_limit: 50,
-          p_newcomer_only: false,
-        });
-
-        if (!fallbackRpcError && fallbackRpcData) {
-          const entries: LeaderboardEntry[] = (fallbackRpcData as any[]).map((entry) => ({
-            user_id: entry.user_id,
-            username: entry.username || 'Unknown',
-            drops: entry.drops || entry.score || 0,
-            score_label: entry.score_label,
-          }));
-
-          setTopUsers(entries.slice(0, 3));
-          const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
-          if (userIndex !== -1) {
-            setCurrentUserRank(userIndex + 1);
-            if (userIndex >= 3) setCurrentUserEntry(entries[userIndex]);
-          }
-          setLoading(false);
-          return;
+      for (const period of periods) {
+        entries = await fetchPeriod(period);
+        if (entries.length > 0) {
+          usedPeriod = period;
+          break;
         }
-
-        // Final fallback: direct query
-        // Fallback RPC also failed, using direct query
-        const { data: fallbackData } = await supabase
-          .from('gym_memberships')
-          .select('user_id, local_drops_balance, profiles:user_id(username)')
-          .eq('gym_id', gymId)
-          .order('local_drops_balance', { ascending: false })
-          .limit(50);
-
-        if (fallbackData) {
-          const entries: LeaderboardEntry[] = fallbackData
-            .map((entry: any) => ({
-              user_id: entry.user_id,
-              username: entry.profiles?.username || 'Unknown',
-              drops: entry.local_drops_balance || 0,
-            }))
-            .sort((a, b) => b.drops - a.drops);
-
-          setTopUsers(entries.slice(0, 3));
-          const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
-          if (userIndex !== -1) {
-            setCurrentUserRank(userIndex + 1);
-            if (userIndex >= 3) setCurrentUserEntry(entries[userIndex]);
-          }
-        }
-        setLoading(false);
-        return;
       }
 
-      if (data) {
-        const entries: LeaderboardEntry[] = (data as any[]).map((entry) => ({
-          user_id: entry.user_id,
-          username: entry.username || 'Unknown',
-          drops: entry.score || 0,
-          score_label: entry.score_label,
-        }));
+      setActivePeriod(usedPeriod);
+      setTopUsers(entries.slice(0, 3));
 
-        setTopUsers(entries.slice(0, 3));
-
-        const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
-        if (userIndex !== -1) {
-          setCurrentUserRank(userIndex + 1);
-          if (userIndex >= 3) {
-            setCurrentUserEntry(entries[userIndex]);
-          }
+      const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
+      if (userIndex !== -1) {
+        setCurrentUserRank(userIndex + 1);
+        if (userIndex >= 3) {
+          setCurrentUserEntry(entries[userIndex]);
         }
       }
     } catch (err) {
@@ -139,7 +140,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, gymId]);
+  }, [session?.user?.id, gymId, fetchPeriod]);
 
   useEffect(() => {
     loadLeaderboard();
@@ -172,7 +173,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
             <View style={styles.row}>
-              <Text style={[styles.username, { color: theme.colors.textSecondary }]}>No leaderboard data yet</Text>
+              <Text style={[styles.username, { color: theme.colors.textSecondary }]}>{t('noLeaderboardData')}</Text>
             </View>
           </BlurView>
         </View>
@@ -180,13 +181,26 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
     );
   }
 
+  const periodLabel = activePeriod === 'weekly'
+    ? t('weeklyPeriod')
+    : activePeriod === 'monthly'
+      ? t('monthlyPeriod')
+      : t('allTimePeriod');
+
   const isCurrentUser = (userId: string) => userId === session?.user?.id;
 
   return (
     <View style={styles.container}>
       {/* Section Header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
+        <View style={styles.sectionHeaderLeft}>
+          <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
+          {activePeriod !== 'weekly' && (
+            <View style={[styles.periodBadge, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+              <Text style={[styles.periodBadgeText, { color: branding.primary }]}>{periodLabel}</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           onPress={() => {
             if (!isUnlocked) return;
@@ -285,6 +299,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  periodBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  periodBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.3,
   },
   sectionTitle: {
     ...fontStyles.heading,

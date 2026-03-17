@@ -1,6 +1,7 @@
 import { getCurrentProfile, getCurrentUser } from '@/lib/auth';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 // CRITICAL: Force dynamic rendering to avoid React.cache issues during build
 export const dynamic = 'force-dynamic';
@@ -92,6 +93,7 @@ export default async function DashboardLayout({
         email={profile.email}
       />
       <div className="w-full p-4 md:pl-[17rem] md:pr-8 md:pt-24 md:pb-8 transition-all min-h-screen">{children}</div>
+      <ConfirmDialog />
     </div>
   );
 }

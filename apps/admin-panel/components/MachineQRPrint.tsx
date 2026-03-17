@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { Printer } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface MachineQRPrintProps {
   machineName: string;
@@ -22,7 +23,7 @@ export function MachineQRPrint({ machineName, qrUuid, machineType, gymName }: Ma
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Please allow popups to print the label');
+      toast.error('Please allow popups to print the label');
       return;
     }
 

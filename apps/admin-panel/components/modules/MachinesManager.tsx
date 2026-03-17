@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine, registerBLEDevice } from '@/lib/actions/machine-actions';
 import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save, Eye } from 'lucide-react';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase-client';
 import { MachineQRPrint } from '@/components/MachineQRPrint';
@@ -156,7 +157,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   };
 
   const handleDelete = async (machineId: string) => {
-    if (!confirm('Are you sure you want to delete this machine?')) return;
+    if (!(await confirmAction({ title: 'Delete Machine', message: 'Are you sure you want to delete this machine?', confirmLabel: 'Delete', variant: 'danger' }))) return;
 
     setDeletingId(machineId);
     try {

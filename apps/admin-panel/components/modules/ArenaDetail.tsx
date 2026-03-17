@@ -41,6 +41,7 @@ import {
   type ArenaInvitation,
   type GymScoreEntry,
 } from '@/lib/actions/arena-invitation-actions';
+import { confirmAction } from '@/components/ui/ConfirmDialog';
 
 interface ArenaDetailProps {
   arena: Arena;
@@ -142,7 +143,7 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
   };
 
   const handleFinalize = async () => {
-    if (!confirm('Finalize this arena? This will calculate final rankings and distribute prizes. This cannot be undone.')) return;
+    if (!(await confirmAction({ title: 'Finalize Arena', message: 'This will calculate final rankings and distribute prizes. This cannot be undone.', confirmLabel: 'Finalize', variant: 'warning' }))) return;
     const result = await finalizeArena(arena.id);
     if (result.success) {
       toast.success(`Arena finalized! ${result.winnersCount || 0} prize(s) distributed.`);
@@ -154,7 +155,7 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
   };
 
   const handleCancel = async () => {
-    if (!confirm('Cancel this arena? All participants will be refunded if drops were paid. This cannot be undone.')) return;
+    if (!(await confirmAction({ title: 'Cancel Arena', message: 'All participants will be refunded if drops were paid. This cannot be undone.', confirmLabel: 'Cancel Arena', variant: 'danger' }))) return;
     const result = await cancelArena(arena.id);
     if (result.success) {
       toast.success(`Arena cancelled. ${result.participantsRefunded || 0} participant(s) refunded.`);
@@ -166,7 +167,7 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
 
   const handleNotify = async (winnersOnly: boolean) => {
     const label = winnersOnly ? 'winners' : 'all participants';
-    if (!confirm(`Send push notifications to ${label}?`)) return;
+    if (!(await confirmAction({ title: 'Send Notifications', message: `Send push notifications to ${label}?`, confirmLabel: 'Send' }))) return;
     setNotifying(true);
     const result = await notifyArenaParticipants(arena.id, winnersOnly);
     setNotifying(false);

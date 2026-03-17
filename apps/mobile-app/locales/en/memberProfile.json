@@ -1,0 +1,11 @@
+{
+  "title": "Profile",
+  "userNotFound": "User not found",
+  "memberSince": "Member since {{date}}",
+  "newcomer": "Newcomer",
+  "totalDrops": "Total Drops",
+  "streak": "Streak",
+  "badges": "Badges",
+  "earnedBadges": "Earned Badges",
+  "noBadgesYet": "No badges earned yet"
+}

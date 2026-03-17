@@ -20,6 +20,7 @@ export const Pricing = memo(function Pricing() {
       sensors: 5,
       members: 150,
       features: [
+        t.pricing.plans.features.receptionCheckin,
         t.pricing.plans.features.weeklyLeaderboard,
         t.pricing.plans.features.basicRewardStore,
         t.pricing.plans.features.emailSupport,
@@ -34,6 +35,7 @@ export const Pricing = memo(function Pricing() {
       sensors: 10,
       members: 300,
       features: [
+        t.pricing.plans.features.receptionCheckin,
         t.pricing.plans.features.monthlyLeaderboard,
         t.pricing.plans.features.fullRewardStore,
         t.pricing.plans.features.twoActiveChallenges,
@@ -50,6 +52,7 @@ export const Pricing = memo(function Pricing() {
       sensors: 20,
       members: 600,
       features: [
+        t.pricing.plans.features.receptionCheckin,
         t.pricing.plans.features.allLeaderboards,
         t.pricing.plans.features.unlimitedChallenges,
         t.pricing.plans.features.atRiskMemberAlerts,
@@ -65,6 +68,7 @@ export const Pricing = memo(function Pricing() {
       sensors: 40,
       members: 'unlimited',
       features: [
+        t.pricing.plans.features.receptionCheckin,
         t.pricing.plans.features.everythingInPro,
         t.pricing.plans.features.upToThreeLocations,
         t.pricing.plans.features.apiAccess,
@@ -166,8 +170,8 @@ export const Pricing = memo(function Pricing() {
 
                 <div className="space-y-3 mb-6 pb-6 border-b border-border">
                   <div className="flex items-center gap-2 text-sm text-text-2">
-                    <span>📊</span>
-                    <span>{plan.sensors} {t.pricing.sensors}</span>
+                    <span>🏋️</span>
+                    <span>{t.pricing.upToMachines} {plan.sensors} {t.pricing.machines}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-text-2">
                     <span>👥</span>

@@ -73,10 +73,9 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
   try {
     const validated = createChallengeSchema.parse(input);
 
-    // Set default dates based on challenge type
     const now = new Date();
     let startDate: Date;
-    let endDate: Date;
+    let endDate: Date | null;
 
     if (validated.startDate) {
       startDate = new Date(validated.startDate);
@@ -87,35 +86,42 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
 
     if (validated.endDate) {
       endDate = new Date(validated.endDate);
-    } else if (validated.challengeType === 'daily') {
-      endDate = new Date(now);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'weekly') {
-      endDate = new Date(now);
-      // Set to end of current week (Sunday)
-      const dayOfWeek = endDate.getDay();
-      const daysUntilSunday = 7 - dayOfWeek;
-      endDate.setDate(endDate.getDate() + daysUntilSunday);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'monthly') {
-      endDate = new Date(now);
-      // Set to end of current month
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0); // Last day of current month
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'streak' || validated.challengeType === 'checkin_streak') {
-      endDate = new Date(now);
-      const streakDays = validated.streakDays || 3;
-      endDate.setDate(endDate.getDate() + streakDays * 2);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'checkin_count') {
-      endDate = new Date(now);
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0);
-      endDate.setHours(23, 59, 59, 999);
     } else {
-      endDate = new Date(now);
-      endDate.setFullYear(endDate.getFullYear() + 10);
+      switch (validated.challengeType) {
+        case 'daily':
+        case 'weekly':
+          // Recurring challenges: active for 1 year (progress resets on cycle)
+          endDate = new Date(startDate);
+          endDate.setFullYear(endDate.getFullYear() + 1);
+          break;
+
+        case 'monthly':
+        case 'checkin_count':
+          endDate = new Date(now);
+          endDate.setMonth(endDate.getMonth() + 1);
+          endDate.setDate(0);
+          break;
+
+        case 'streak':
+        case 'checkin_streak': {
+          endDate = new Date(startDate);
+          const streakDays = validated.streakDays || 3;
+          endDate.setDate(endDate.getDate() + streakDays * 2);
+          break;
+        }
+
+        case 'milestone':
+          endDate = null;
+          break;
+
+        default:
+          endDate = new Date(startDate);
+          endDate.setFullYear(endDate.getFullYear() + 1);
+      }
+    }
+
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
     }
 
     // Build criteria JSONB based on challenge type
@@ -146,7 +152,7 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
         gym_id: validated.gymId,
         date_range: {
           start: startDate.toISOString().split('T')[0],
-          end: endDate.toISOString().split('T')[0],
+          end: endDate ? endDate.toISOString().split('T')[0] : null,
         },
       };
     } else if (validated.challengeType === 'milestone') {
@@ -164,20 +170,21 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
         value: validated.targetDrops || 100,
         scope: 'gym',
         gym_id: validated.gymId,
-        date_range: {
-          start: startDate.toISOString().split('T')[0],
-          end: endDate.toISOString().split('T')[0],
-        },
+        ...(endDate && {
+          date_range: {
+            start: startDate.toISOString().split('T')[0],
+            end: endDate.toISOString().split('T')[0],
+          },
+        }),
       };
     }
 
-    // Build insert object for challenge
     const insertData: any = {
       gym_id: validated.gymId,
       name: validated.name,
       description: validated.description || null,
-      start_date: startDate.toISOString().split('T')[0], // DATE format
-      end_date: endDate.toISOString().split('T')[0], // DATE format
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate ? endDate.toISOString().split('T')[0] : null,
       is_active: true,
       challenge_type: validated.challengeType, // Keep for backward compatibility
       criteria: criteria, // New JSONB field
@@ -237,10 +244,9 @@ export async function updateChallenge(
   try {
     const validated = createChallengeSchema.parse(input);
 
-    // Set default dates based on challenge type
     const now = new Date();
     let startDate: Date;
-    let endDate: Date;
+    let endDate: Date | null;
 
     if (validated.startDate) {
       startDate = new Date(validated.startDate);
@@ -251,36 +257,43 @@ export async function updateChallenge(
 
     if (validated.endDate) {
       endDate = new Date(validated.endDate);
-    } else if (validated.challengeType === 'daily') {
-      endDate = new Date(now);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'weekly') {
-      endDate = new Date(now);
-      const dayOfWeek = endDate.getDay();
-      const daysUntilSunday = 7 - dayOfWeek;
-      endDate.setDate(endDate.getDate() + daysUntilSunday);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'monthly') {
-      endDate = new Date(now);
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'streak' || validated.challengeType === 'checkin_streak') {
-      endDate = new Date(now);
-      const streakDays = validated.streakDays || 3;
-      endDate.setDate(endDate.getDate() + streakDays * 2);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (validated.challengeType === 'checkin_count') {
-      endDate = new Date(now);
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0);
-      endDate.setHours(23, 59, 59, 999);
     } else {
-      endDate = new Date(now);
-      endDate.setFullYear(endDate.getFullYear() + 10);
+      switch (validated.challengeType) {
+        case 'daily':
+        case 'weekly':
+          endDate = new Date(startDate);
+          endDate.setFullYear(endDate.getFullYear() + 1);
+          break;
+
+        case 'monthly':
+        case 'checkin_count':
+          endDate = new Date(now);
+          endDate.setMonth(endDate.getMonth() + 1);
+          endDate.setDate(0);
+          break;
+
+        case 'streak':
+        case 'checkin_streak': {
+          endDate = new Date(startDate);
+          const streakDays = validated.streakDays || 3;
+          endDate.setDate(endDate.getDate() + streakDays * 2);
+          break;
+        }
+
+        case 'milestone':
+          endDate = null;
+          break;
+
+        default:
+          endDate = new Date(startDate);
+          endDate.setFullYear(endDate.getFullYear() + 1);
+      }
     }
 
-    // Build criteria JSONB
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
+    }
+
     let criteria: any;
     if (validated.challengeType === 'streak') {
       criteria = {
@@ -307,7 +320,7 @@ export async function updateChallenge(
         gym_id: validated.gymId,
         date_range: {
           start: startDate.toISOString().split('T')[0],
-          end: endDate.toISOString().split('T')[0],
+          end: endDate ? endDate.toISOString().split('T')[0] : null,
         },
       };
     } else if (validated.challengeType === 'milestone') {
@@ -325,10 +338,12 @@ export async function updateChallenge(
         value: validated.targetDrops || 100,
         scope: 'gym',
         gym_id: validated.gymId,
-        date_range: {
-          start: startDate.toISOString().split('T')[0],
-          end: endDate.toISOString().split('T')[0],
-        },
+        ...(endDate && {
+          date_range: {
+            start: startDate.toISOString().split('T')[0],
+            end: endDate.toISOString().split('T')[0],
+          },
+        }),
       };
     }
 
@@ -336,7 +351,7 @@ export async function updateChallenge(
       name: validated.name,
       description: validated.description || null,
       start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
+      end_date: endDate ? endDate.toISOString().split('T')[0] : null,
       challenge_type: validated.challengeType,
       criteria: criteria,
       target_drops: validated.challengeType === 'checkin_count'

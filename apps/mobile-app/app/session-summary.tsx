@@ -633,7 +633,9 @@ export default function SessionSummaryScreen() {
                 const progressPercent = challenge.target_drops > 0
                   ? Math.min((challenge.current_drops / challenge.target_drops) * 100, 100)
                   : 0;
-                const unit = challenge.challenge_type === 'streak' ? t('summary.days') : t('drops');
+                const unit = (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak')
+                  ? t('summary.days')
+                  : t('drops');
 
                 return (
                   <Animated.View

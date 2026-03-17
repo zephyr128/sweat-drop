@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { 
   Users, 
   Trophy, 
@@ -12,6 +13,9 @@ import {
   Pause,
   Dumbbell,
   BarChart3,
+  QrCode,
+  Ticket,
+  ArrowRight,
   LucideIcon,
   TrendingUp,
   TrendingDown
@@ -20,11 +24,13 @@ import {
 interface StatsCardProps {
   title: string;
   value: string | number;
-  icon: string | 'Users' | 'Trophy' | 'ShoppingBag' | 'Droplet' | 'Building2' | 'Target' | 'DollarSign' | 'CheckCircle2' | 'Pause' | 'Dumbbell' | 'BarChart3';
+  icon: string;
   trend?: {
     value: number;
     isPositive: boolean;
   };
+  subtitle?: string;
+  href?: string;
   accent?: 'cyan' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple';
   priority?: 'primary' | 'secondary';
 }
@@ -41,6 +47,8 @@ const iconMap: Record<string, LucideIcon> = {
   Pause,
   Dumbbell,
   BarChart3,
+  QrCode,
+  Ticket,
 };
 
 const accentColors = {
@@ -86,7 +94,9 @@ export function StatsCard({
   title, 
   value, 
   icon, 
-  trend, 
+  trend,
+  subtitle,
+  href,
   accent = 'cyan',
   priority = 'secondary'
 }: StatsCardProps) {
@@ -94,33 +104,20 @@ export function StatsCard({
   const colors = accentColors[accent];
   const isPrimary = priority === 'primary';
 
-  return (
-    <div 
-      className={`
-        relative overflow-hidden rounded-xl
-        bg-gradient-to-br from-[#0A0A0A] to-[#111]
-        border border-zinc-800/50 ${colors.border} border-t-2
-        p-6
-        transition-all duration-300 ease-out
-        hover:-translate-y-1 hover:border-zinc-700/50
-        ${colors.glow}
-        ${isPrimary ? 'ring-1 ring-zinc-700/30' : ''}
-      `}
-    >
-      {/* Icon Container */}
+  const cardContent = (
+    <>
       {IconComponent && (
         <div className={`absolute top-4 right-4 w-12 h-12 rounded-lg ${colors.iconBg} flex items-center justify-center`}>
           <IconComponent className={`w-6 h-6 ${colors.iconColor}`} strokeWidth={1.5} />
         </div>
       )}
 
-      {/* Content */}
       <div className="relative z-10">
         <p className="text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wide">
           {title}
         </p>
         
-        <div className="flex items-baseline gap-3 mb-2">
+        <div className="flex items-baseline gap-3 mb-1">
           <p className={`${isPrimary ? 'text-3xl' : 'text-2xl'} font-bold text-white`}>
             {typeof value === 'number' ? value.toLocaleString() : value}
           </p>
@@ -142,10 +139,46 @@ export function StatsCard({
             </div>
           )}
         </div>
+
+        {subtitle && (
+          <p className="text-xs text-zinc-500">{subtitle}</p>
+        )}
+
+        {href && (
+          <div className="flex items-center gap-1 mt-3 text-xs text-zinc-500 group-hover:text-zinc-300 transition-colors">
+            <span>View details</span>
+            <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+          </div>
+        )}
       </div>
 
-      {/* Subtle gradient overlay for depth */}
       <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-zinc-900/20 pointer-events-none" />
+    </>
+  );
+
+  const className = `
+    group relative overflow-hidden rounded-xl
+    bg-gradient-to-br from-[#0A0A0A] to-[#111]
+    border border-zinc-800/50 ${colors.border} border-t-2
+    p-6
+    transition-all duration-300 ease-out
+    hover:-translate-y-1 hover:border-zinc-700/50
+    ${colors.glow}
+    ${isPrimary ? 'ring-1 ring-zinc-700/30' : ''}
+    ${href ? 'cursor-pointer' : ''}
+  `;
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {cardContent}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={className}>
+      {cardContent}
     </div>
   );
 }

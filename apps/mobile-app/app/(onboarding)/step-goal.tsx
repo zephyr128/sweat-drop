@@ -39,7 +39,7 @@ export default function StepGoalScreen() {
     const result = await submit();
     if (result.success) {
       if (isEdit) {
-        router.back();
+        router.replace('/profile');
       } else {
         setOnboardingStep('done');
         router.replace('/home');

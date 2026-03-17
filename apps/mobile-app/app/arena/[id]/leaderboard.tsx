@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -46,6 +46,7 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export default function ArenaLeaderboardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('arena');
@@ -219,8 +220,10 @@ export default function ArenaLeaderboardScreen() {
                     const rank = getRankDisplay(entry.rank);
                     const isCurrent = isCurrentUser(entry.user_id);
                     return (
-                      <View
+                      <TouchableOpacity
                         key={entry.user_id}
+                        activeOpacity={0.7}
+                        onPress={() => router.push({ pathname: '/user/[id]', params: { id: entry.user_id } })}
                         style={[
                           styles.listItem,
                           index < leaderboard.length - 1 && styles.listItemBorder,
@@ -255,13 +258,12 @@ export default function ArenaLeaderboardScreen() {
                           <Text style={[styles.listUsername, isCurrent && { color: branding.primary }]}>
                             {entry.username}{isCurrent ? t('youSuffix') : ''}
                           </Text>
-                          {/* gym_name hidden for arena leaderboards — arenas are cross-gym */}
                         </View>
 
                         <Text style={[styles.scoreLabel, { color: isCurrent ? branding.primary : theme.colors.textSecondary }]}>
                           {entry.score_label}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </BlurView>

@@ -1,17 +1,17 @@
 {
-  "title": "Nagrade",
+  "title": "Soba trofeja",
   "ofEarned": "od {{total}} osvojeno",
   "filterAll": "Sve",
   "filterThisGym": "Ova teretana",
   "filterEarned": "Osvojeno",
   "filterLocked": "Zaključano",
-  "searchPlaceholder": "Pretraži značke...",
-  "noBadgesFound": "Nema pronađenih znački",
-  "tryAdjustingSearch": "Pokušaj prilagoditi pretragu",
-  "completeWorkouts": "Završi treninge da osvojiš značke!",
+  "searchPlaceholder": "Pretraži bedževe...",
+  "noBadgesFound": "Nema pronađenih bedževa",
+  "tryAdjustingSearch": "Pokušaj da prilagodiš pretragu",
+  "completeWorkouts": "Završi treninge da osvojiš bedževe!",
   "sectionEarned": "Osvojeno",
   "sectionInProgress": "U toku",
-  "shareBadge": "Podeli značku",
+  "shareBadge": "Podeli bedž",
   "progress": "Napredak",
   "earned": "Osvojeno"
 }
