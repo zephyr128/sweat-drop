@@ -22,10 +22,10 @@ export const translations = {
     },
     homeHero: {
       eyebrow: 'LAUNCHING Q2 2026 IN BELGRADE',
-      title: 'BE THE FIRST GYM',
-      titleLine2: 'IN BELGRADE',
-      titleLine3: 'WITH SWEATDROP.',
-      subtitle: 'Every visit becomes a competition.\nMembers earn drops, climb leaderboards, win real prizes.\nYour gym becomes the one they can\'t stop talking about.\n90 days free. We handle everything.',
+      title: 'BE THE FIRST GYM IN YOUR CITY WITH SWEATDROP.',
+      titleLine2: '',
+      titleLine3: '',
+      subtitle: 'Every visit becomes a competition.\nMembers earn drops, climb leaderboards, win real prizes —\nand spend their drops at your bar and reception.\nYour gym becomes the one they can\'t stop talking about.\n90 days free. We handle everything.',
       pilotBadge: 'PILOT PROGRAM — Q2 2026',
       ctaPrimary: 'Apply for Free Pilot',
       ctaSecondary: 'See How It Works',
@@ -184,7 +184,7 @@ export const translations = {
       },
       cost: {
         title: 'The Cost of Doing Nothing',
-        description: 'While you wait, your competitors are winning. Every day without digitalization is another day of lost revenue, uncontrolled trainers, and blind decision-making. The question isn\'t whether you can afford to implement Smart-Gym—it\'s whether you can afford not to.',
+        description: 'While you wait, your competitors are winning. Every day without digitalization is another day of lost revenue, uncontrolled trainers, and blind decision-making. The question isn\'t whether you can afford SweatDrop — it\'s how much each day without it costs you.',
       },
     },
     dropCounter: {
@@ -272,7 +272,7 @@ export const translations = {
       retention: {
         title: 'Retention & Loyalty',
         subtitle: 'Indirect Income - Lock-in Effect',
-        description: 'Gamification turns every calorie and every rep into "Sweat Drops." Members use points to pay for supplements at the bar or get discounts on membership. This creates a powerful lock-in effect—members won\'t switch gyms because they\'d lose their accumulated progress and digital wallet.',
+        description: 'Gamification turns every calorie and every rep into "Sweat Drops." Members use points to pay for supplements at the bar or get discounts on membership. This creates a powerful lock-in effect—members won\'t switch gyms because they\'d lose their accumulated drops and progress.',
         revenue: 'Retention Revenue',
       },
       marketplace: {
@@ -312,7 +312,7 @@ export const translations = {
       subtitle: 'Transform your gym into a data-driven, multi-revenue business',
       retention: {
         title: 'Increase Retention',
-        description: 'Gamified workouts keep members engaged longer. Sweat Drops create a lock-in effect—members won\'t switch gyms because they\'d lose their accumulated progress and digital wallet.',
+        description: 'Gamified workouts keep members engaged longer. Sweat Drops create a lock-in effect—members won\'t switch gyms because they\'d lose their accumulated drops and progress.',
       },
       engagement: {
         title: 'Boost Engagement',
@@ -320,7 +320,7 @@ export const translations = {
       },
       competitive: {
         title: 'Market Leadership',
-        description: 'Become the first digitized fitness chain in the Balkans. While competitors compete on price, you compete on technology and innovation. Attract higher-paying clients who value efficiency and digital tracking.',
+        description: 'Become the first digitized fitness chain in the Balkans. While competitors compete on price, you compete on technology and innovation. Attract members who value innovation and are willing to pay for a better experience.',
       },
       data: {
         title: 'Data-Driven Management',
@@ -423,6 +423,8 @@ export const translations = {
     },
     sponsorProposal: {
       title: 'Request Arena Proposal',
+      formTitle: 'YOUR CUSTOMERS ARE ALREADY AT THE GYM.',
+      formSubtitle: 'Request a proposal and we\'ll send you projected numbers specific to your target audience and budget.\nNo commitment. Response within 24 hours.',
       successTitle: 'Proposal Request Received',
       successMessage: "Proposal request received! We'll send you custom numbers within 24 hours.",
       foundingBadge: "🏷 You're applying for the Founding Sponsor Program",
@@ -444,10 +446,19 @@ export const translations = {
         network: 'Network Arena (all gyms) — from €1,500/month',
         notSure: 'Not sure yet',
       },
+      planOptionsShort: {
+        select: 'Select...',
+        local: 'Local',
+        regional: 'Regional',
+        network: 'Network',
+        notSure: 'Not sure',
+      },
       messagePlaceholder: 'Product category, target audience, prize idea you have in mind...',
       submit: 'Send Proposal Request',
       cancel: 'Cancel',
       close: 'Close',
+      formFooter: 'We respond within 24 hours.\nNo sales pressure. Just numbers.',
+      successNote: "We'll be in touch within 24 hours.\nNo sales pressure. Just numbers.",
       errors: {
         required: 'Required',
         email: 'Valid email required',
@@ -482,11 +493,11 @@ export const translations = {
         elite: 'ELITE',
         features: {
           weeklyLeaderboard: 'Weekly leaderboard',
-          basicRewardStore: 'Basic reward store (5 rewards)',
+          basicRewardStore: 'Reward store — members spend drops at your bar (5 items)',
           emailSupport: 'Email support',
           cardioZoneCoverage: 'Cardio zone coverage',
           monthlyLeaderboard: 'Weekly + Monthly leaderboard',
-          fullRewardStore: 'Full reward store',
+          fullRewardStore: 'Full reward store — unlimited items, members spend drops at your bar and reception',
           twoActiveChallenges: '2 active challenges',
           retentionDashboard: 'Retention dashboard',
           reEngagementNotifications: 'Re-engagement notifications',
@@ -563,7 +574,7 @@ export const translations = {
         {
           number: 3,
           title: 'YOU SEE WHAT\'S HAPPENING',
-          description: 'Your admin dashboard shows who\'s coming, who\'s active, and who might be about to quit. You get a report every Monday.',
+          description: 'Your admin dashboard shows who\'s coming, who earns the most, and what\'s selling in the store. You get a report every Monday.',
         },
       ],
     },
@@ -591,7 +602,7 @@ export const translations = {
         youProvide: {
           title: 'YOU PROVIDE',
           items: [
-            'Access to cardio floor',
+            'Access to your gym',
             '90 min of your time',
           ],
         },
@@ -609,7 +620,7 @@ export const translations = {
     },
     whyItWorks: {
       badge: 'WHY IT WORKS',
-      title: 'THREE REASONS GYM OWNERS',
+      title: 'FOUR REASONS GYM OWNERS',
       titleHighlight: 'CHOOSE SWEATDROP',
       features: [
         {
@@ -619,6 +630,10 @@ export const translations = {
         {
           title: 'SPONSORS PAY YOU',
           description: 'Local supplement brands, spas, and sports shops sponsor challenges on your gym floor. They provide prizes. You earn revenue. You keep 70% of every sponsorship deal closed through your gym.',
+        },
+        {
+          title: 'YOUR BAR SELLS MORE',
+          description: 'Members earn drops and spend them at your gym — protein shakes, PT sessions, free passes. You define the rewards. You set the prices in drops. Every drop earned is a reason to buy something from you, not from a competitor.',
         },
         {
           title: 'YOUR GYM STANDS OUT',
@@ -638,12 +653,16 @@ export const translations = {
           title: 'WORD OF MOUTH',
           description: 'Member sharing achievement · Leaderboard',
         },
+        rewardStore: {
+          title: 'REWARD STORE',
+          description: 'Members redeem drops at your bar and reception',
+        },
       },
     },
     sponsorsHero: {
-      title: 'REACH ACTIVE GYM MEMBERS.',
-      titleLine2: 'NOT IMPRESSIONS.',
-      titleHighlight: 'COMPETITORS.',
+      title: 'YOUR BRAND IN EVERY WORKOUT.',
+      titleLine2: 'NOT BORING ADS —',
+      titleHighlight: 'REAL CHALLENGES.',
       subtitle: 'Sweat Arenas put your brand at the center of a 30-day gym competition.\nMembers train to win your prizes. You get session data.',
       button: 'Request Arena Proposal',
       visual: {
@@ -696,9 +715,9 @@ export const translations = {
     },
     checkIn: {
       title: 'EVERY MEMBER. EVERY VISIT.',
-      subtitle: 'Not everyone uses cardio machines.\nSweatDrop works for your entire gym — not just the cardio floor.',
+      subtitle: 'Not everyone uses cardio machines.\nSweatDrop works for your entire gym — not just the machines.',
       cardTitle: 'RECEPTION CHECK-IN',
-      cardBody: 'Members scan a QR code at your front desk when they arrive.\nThey earn drops. Their streak grows. They compete on the leaderboard.\n\nWeights. Classes. Pool. Yoga.\nEvery visit counts.\n\nOne QR code. Print it once. Works forever.',
+      cardBody: 'Members scan a QR code at the front desk when they arrive.\nThey earn drops. Their streak grows. They compete on the leaderboard.\n\nEvery visit counts — whether they\'re lifting, doing cardio, or joining a class.\n\nOne QR code. Print it once. Works forever.',
     },
     membersHowItWorks: {
       steps: [
@@ -709,13 +728,13 @@ export const translations = {
         },
         {
           number: 2,
-          title: 'WALK UP TO ANY MACHINE',
-          description: 'SweatDrop connects automatically via Bluetooth. No pairing. No setup. Just start training.',
+          title: 'SCAN THE QR CODE ON ANY MACHINE',
+          description: 'Walk up to a treadmill or bike, scan the QR code on the machine, and your session starts. No pairing. No setup. Just train.',
         },
         {
           number: 3,
           title: 'EARN DROPS. WIN PRIZES.',
-          description: 'Every calorie burns drops. Every drop climbs the leaderboard. Top 10 every week wins.',
+          description: 'Every session earns drops. Every drop climbs the leaderboard. Top 3 every week wins.',
         },
       ],
     },
@@ -725,12 +744,12 @@ export const translations = {
         {
           title: 'DROPS',
           subtitle: 'EARN DROPS',
-          description: 'Earn drops every session based on how hard you train. The longer and harder the session, the more drops. Streak bonuses multiply your earnings.',
+          description: 'Earn drops every time you train — the longer and harder the session, the more you earn. Streak bonuses multiply your earnings.',
         },
         {
           title: 'WEEKLY PRIZES',
           subtitle: 'WIN REAL PRIZES',
-          description: 'Top 10 on your gym\'s weekly leaderboard win real prizes — free memberships, PT sessions, supplement packages, spa vouchers. New prizes every Monday.',
+          description: 'Top 3 on your gym\'s weekly leaderboard win real prizes — free memberships, PT sessions, supplement packages, spa vouchers. New prizes every Monday.',
         },
         {
           title: 'BADGES',
@@ -743,12 +762,11 @@ export const translations = {
       title: 'SPEND YOUR DROPS.',
       subtitle: 'Your gym\'s reward store is stocked with real rewards you can claim with drops.\nNo cash. Just train and claim.',
       rewards: {
-        proteinDiscount: 'Protein discount',
-        freeShaker: 'Free shaker',
+        proteinDiscount: 'Protein shake',
+        freeShirt: 'Sports shirt',
         ptSession: 'PT session',
         freeWeekPass: 'Free week pass',
       },
-      expiryNote: 'Drops expire after 90 days — another reason to keep training.',
     },
     appScreenshots: {
       title: 'SEE IT IN ACTION',
@@ -851,7 +869,7 @@ export const translations = {
         profiles: [
           {
             title: 'SUPPLEMENT & NUTRITION',
-            description: 'Your exact customer. Already spending money on protein, vitamins, and training gear. Competing for your product creates trial. Trial converts.',
+            description: 'Your exact customer. Already spending money on protein, vitamins, and training gear. When someone tries your product as a prize, they\'re more likely to buy it next time.',
             examples: 'Protein brands, supplement shops, health food stores',
           },
           {
@@ -1033,8 +1051,8 @@ export const translations = {
     },
     membersFinalCTA: {
       readyToStart: 'READY TO START EARNING?',
-      beFirst: 'BE FIRST IN YOUR GYM.',
-      bonus: 'Members who join in the first week start with a 200 drop bonus\nand newcomer leaderboard advantage.',
+      beFirst: 'READY TO COMPETE?',
+      bonus: 'SweatDrop is launching in Belgrade in Q2 2026.\nJoin the waitlist — we\'ll notify you the moment your gym goes live.',
       joinWaitlist: 'Join Waitlist',
       appStore: 'App Store',
       googlePlay: 'Google Play',
@@ -1071,15 +1089,11 @@ export const translations = {
       delivery: 'Delivered within 5 days of arena close\nFormat: PDF + CSV export',
     },
     leaderboardSection: {
-      badge: 'WEEKLY LEADERBOARD',
-      title: 'COMPETE WITH YOUR GYM.',
+      badge: 'LEADERBOARD',
+      title: 'YOUR GYM.',
       titleLine2: 'EVERY WEEK.',
-      description: 'The leaderboard resets every Monday.\nEveryone starts from zero.\nThat means anyone can win.',
-      updates: 'Your rank updates every 5 minutes.\nWhen someone passes you, you\'ll get a notification.\nYou\'ll want to go back.',
-      newcomer: {
-        badge: 'NEW MEMBERS — YOU\'RE PROTECTED',
-        description: 'First 30 days: separate newcomer leaderboard.\nSame prizes. Only other new members.\nFair start guaranteed.',
-      },
+      description: 'The weekly leaderboard resets every Monday —\neveryone starts from zero, anyone can win.\n\nThe monthly leaderboard rewards consistency —\nshow up regularly and you\'ll be at the top by month\'s end.',
+      updates: 'Your rank updates regularly. When someone passes you,\nyou\'ll get a notification. You\'ll want to go back.',
     },
     arenasForMembers: {
       title: 'COMPETE FOR BRAND PRIZES.',
@@ -1162,10 +1176,10 @@ export const translations = {
     },
     homeHero: {
       eyebrow: 'POKRETANJE Q2 2026 U BEOGRADU',
-      title: 'BUDI PRVA TERETANA',
-      titleLine2: 'U BEOGRADU',
-      titleLine3: 'SA SWEATDROP-OM.',
-      subtitle: 'Svaki dolazak u teretanu postaje takmičenje.\nTvoji članovi zarađuju kapi, takmiče se na rang listi, osvajaju prave nagrade.\nTvoja teretana postaje ona o kojoj svi pričaju.\n90 dana besplatno. Mi se brinemo za sve.',
+      title: 'BUDI PRVA TERETANA U SVOM GRADU SA SWEATDROP-OM.',
+      titleLine2: '',
+      titleLine3: '',
+      subtitle: 'Svaki dolazak u teretanu postaje takmičenje.\nTvoji članovi zarađuju kapi, takmiče se na rang listi, osvajaju nagrade —\ni troše kapi na šanku i recepciji.\nTvoja teretana postaje ona o kojoj svi pričaju.\n90 dana besplatno. Mi se brinemo za sve.',
       pilotBadge: 'PILOT PROGRAM — Q2 2026',
       ctaPrimary: 'Prijavi se za besplatni pilot',
       ctaSecondary: 'Pogledaj kako radi',
@@ -1185,7 +1199,7 @@ export const translations = {
       submit: 'Pošalji Zahtev',
       cancel: 'Otkaži',
       close: 'Zatvori',
-      success: 'Kontaktiraćemo vas u roku od 24 sata.',
+      success: 'Kontaktiraćemo te u roku od 24 sata.',
       fields: {
         fullName: 'Ime i Prezime',
         gymName: 'Naziv Teretane',
@@ -1216,8 +1230,8 @@ export const translations = {
         cityCountry: 'Grad / Država',
         activeMembers: 'Broj Aktivnih Članova',
         cardioMachines: 'Broj Kardio Mašina',
-        multipleLocations: 'Da li imate više lokacija?',
-        whyJoin: 'Zašto želite da se pridružite pilot programu?',
+        multipleLocations: 'Da li imaš više lokacija?',
+        whyJoin: 'Zašto želiš da se pridružiš pilot programu?',
       },
       multipleLocations: {
         yes: 'Da',
@@ -1324,7 +1338,7 @@ export const translations = {
       },
       cost: {
         title: 'Trošak Nečinjenja Ničega',
-        description: 'Dok čekaš, tvoji konkurenti pobedjuju. Svaki dan bez digitalizacije je još jedan dan izgubljenog prihoda, nekontrolisanih trenera i slepih odluka. Pitanje nije da li možeš sebi da priuštiš implementaciju Smart-Gym-a—već da li možeš sebi da priuštiš da ne implementiraš.',
+        description: 'Dok čekaš, tvoji konkurenti pobedjuju. Svaki dan bez digitalizacije je još jedan dan izgubljenog prihoda, nekontrolisanih trenera i slepih odluka. Pitanje nije da li možeš da priuštiš SweatDrop — već koliko te košta svaki dan bez njega.',
       },
     },
     dropCounter: {
@@ -1343,7 +1357,7 @@ export const translations = {
         description: 'Takmiči se sa svetom. Vidi gde se nalaziš među elitom.',
       },
       badges: {
-        title: 'Sistem Badžova',
+        title: 'Sistem Bedževa',
         description: 'Otključaj dostignuća. Izgradi svoju ostavštinu. Pokaži od čega si napravljen.',
       },
     },
@@ -1364,7 +1378,7 @@ export const translations = {
     why: {
       title: 'Zašto Sweat Drop Radi',
       subtitle: 'Psihologija Gejmifikacije',
-      description: 'Tradicionalne fitnes aplikacije se oslanjaju na volju. Sweat Drop koristi nešto dublje: ljudsku potrebu za dostignućem, priznanjem i napretkom. Svaka zarađena kap je mikro-pobeda. Svaka pozicija na rang listi je validacija. Svaki badž je dokaz. Ovo nije samo praćenje—ovo je transformacija.',
+      description: 'Tradicionalne fitnes aplikacije se oslanjaju na volju. Sweat Drop koristi nešto dublje: ljudsku potrebu za dostignućem, priznanjem i napretkom. Svaka zarađena kap je mikro-pobeda. Svaka pozicija na rang listi je validacija. Svaki bedž je dokaz. Ovo nije samo praćenje—ovo je transformacija. Za vlasnike teretana, ova psihologija se direktno prevodi u poslovne rezultate: angažovani članovi dolaze češće, ostaju duže i postaju ambasadori brenda.',
     },
     coverage: {
       title: 'Matrica Pokrivenosti Senzora',
@@ -1412,7 +1426,7 @@ export const translations = {
       retention: {
         title: 'Zadržavanje i Lojalnost',
         subtitle: 'Indirektan Prihod - Lock-in Efekat',
-        description: 'Gejmifikacija pretvara svaku kaloriju i svako ponavljanje u "Sweat Drops." Članovi koriste poene da plate suplemente na šanku ili dobiju popust na sledeću članarinu. Ovo stvara snažan lock-in efekat—članovi neće preći u drugu teretanu jer bi izgubili svoj akumulirani progres i digitalni novčanik.',
+        description: 'Gejmifikacija pretvara svaku kaloriju i svako ponavljanje u "Sweat Drops." Članovi koriste poene da plate suplemente na šanku ili dobiju popust na sledeću članarinu. Ovo stvara snažan lock-in efekat—članovi neće preći u drugu teretanu jer bi izgubili svoje zarađene kapi i napredak.',
         revenue: 'Prihod od Zadržavanja',
       },
       marketplace: {
@@ -1452,7 +1466,7 @@ export const translations = {
       subtitle: 'Transformiši svoju teretanu u biznis baziran na podacima sa više izvora prihoda',
       retention: {
         title: 'Povećaj Zadržavanje',
-        description: 'Gejmifikovani treningovi drže članove angažovanim duže. Sweat Drops stvaraju lock-in efekat—članovi neće preći u drugu teretanu jer bi izgubili svoj akumulirani progres i digitalni novčanik.',
+        description: 'Gejmifikovani treningovi drže članove angažovanim duže. Sweat Drops stvaraju lock-in efekat—članovi neće preći u drugu teretanu jer bi izgubili svoje zarađene kapi i napredak.',
       },
       engagement: {
         title: 'Povećaj Angažovanost',
@@ -1460,7 +1474,7 @@ export const translations = {
       },
       competitive: {
         title: 'Tržišno Liderstvo',
-        description: 'Postani prvi digitalizovani fitnes lanac na Balkanu. Dok se konkurenti takmiče cenom, ti se takmičiš tehnologijom i inovacijama. Privuci klijente veće platežne moći koji vrednuju efikasnost i digitalno praćenje.',
+        description: 'Postani prvi digitalizovani fitnes lanac na Balkanu. Dok se konkurenti takmiče cenom, ti se takmičiš tehnologijom i inovacijama. Privuci članove koji cene inovaciju i spremni su da plate za bolji doživljaj.',
       },
       data: {
         title: 'Menadžment Baziran na Podacima',
@@ -1520,7 +1534,7 @@ export const translations = {
     contact: {
       title: 'Kontaktiraj Nas',
       successTitle: 'Poruka Poslata',
-      successMessage: 'Hvala! Kontaktiraćemo vas u roku od 24 sata.',
+      successMessage: 'Hvala! Kontaktiraćemo te u roku od 24 sata.',
       fields: {
         name: 'Tvoje Ime',
         company: 'Kompanija / Naziv Teretane',
@@ -1543,7 +1557,7 @@ export const translations = {
         required: 'Obavezno',
         email: 'Validna email adresa je obavezna',
       },
-      errorGeneric: 'Nešto je pošlo po zlu. Molimo pokušajte ponovo.',
+      errorGeneric: 'Nešto je pošlo po zlu. Pokušaj ponovo.',
     },
     waitlist: {
       title: 'Pridruži se Listi Čekanja',
@@ -1559,10 +1573,12 @@ export const translations = {
       },
       submit: 'Pridruži se Listi',
       close: 'Zatvori',
-      errorGeneric: 'Nešto je pošlo po zlu. Molimo pokušajte ponovo.',
+      errorGeneric: 'Nešto je pošlo po zlu. Pokušaj ponovo.',
     },
     sponsorProposal: {
       title: 'Zatraži Predlog za Arenu',
+      formTitle: 'TVOJI KUPCI SU VEĆ U TERETANI.',
+      formSubtitle: 'Zatraži predlog i poslaćemo ti projekcije prilagođene tvojoj ciljnoj publici i budžetu.\nBez obaveza. Odgovor u roku od 24 sata.',
       successTitle: 'Zahtev za Predlog Primljen',
       successMessage: 'Zahtev za predlog primljen! Poslaćemo ti prilagođene brojke u roku od 24 sata.',
       foundingBadge: '🏷 Prijavljuješ se za Program Osnivačkog Sponzora',
@@ -1584,15 +1600,24 @@ export const translations = {
         network: 'Mrežna Arena (sve teretane) — od €1,500/mesec',
         notSure: 'Još nisam siguran',
       },
+      planOptionsShort: {
+        select: 'Izaberi...',
+        local: 'Lokalna',
+        regional: 'Regionalna',
+        network: 'Mrežna',
+        notSure: 'Još nisam siguran',
+      },
       messagePlaceholder: 'Kategorija proizvoda, ciljna publika, ideja za nagradu koju imaš na umu...',
       submit: 'Pošalji Zahtev za Predlog',
       cancel: 'Otkaži',
       close: 'Zatvori',
+      formFooter: 'Odgovaramo u roku od 24 sata.\nBez prodajnog pritiska. Samo brojke.',
+      successNote: 'Javićemo ti se u roku od 24 sata.\nBez prodajnog pritiska. Samo brojke.',
       errors: {
         required: 'Obavezno',
         email: 'Validna email adresa je obavezna',
       },
-      errorGeneric: 'Nešto je pošlo po zlu. Molimo pokušajte ponovo.',
+      errorGeneric: 'Nešto je pošlo po zlu. Pokušaj ponovo.',
     },
     pricing: {
       badge: 'CENOVNIK',
@@ -1622,11 +1647,11 @@ export const translations = {
         elite: 'ELITE',
         features: {
           weeklyLeaderboard: 'Nedeljna rang lista',
-          basicRewardStore: 'Osnovna prodavnica nagrada (5 nagrada)',
+          basicRewardStore: 'Prodavnica nagrada — članovi troše kapi na šanku (5 stavki)',
           emailSupport: 'Podrška putem emaila',
           cardioZoneCoverage: 'Pokrivenost kardio zone',
           monthlyLeaderboard: 'Nedeljna i mesečna rang lista',
-          fullRewardStore: 'Kompletna prodavnica nagrada',
+          fullRewardStore: 'Kompletna prodavnica nagrada — neograničen broj stavki, kapi se troše na šanku i recepciji',
           twoActiveChallenges: '2 aktivna izazova',
           retentionDashboard: 'Praćenje aktivnosti članova',
           reEngagementNotifications: 'Obaveštenja za neaktivne članove',
@@ -1698,12 +1723,12 @@ export const translations = {
         {
           number: 2,
           title: 'ČLANOVI SE TAKMIČE OD PRVOG DANA',
-          description: 'Članovi preuzmu SweatDrop, skeniraju QR kod u tvojoj teretani, i rang lista odmah krene. Svaka sesija donosi kapi. Svaka kap ih vuče nazad.',
+          description: 'Članovi preuzmu SweatDrop, skeniraju QR kod u tvojoj teretani, i rang lista odmah krene. Svaki trening donosi kapi. Svaka kap ih vuče nazad.',
         },
         {
           number: 3,
           title: 'PRATIŠ ŠTA SE DEŠAVA',
-          description: 'Tvoj admin panel prikazuje ko dolazi, ko je aktivan i ko preti da odustane. Svaki ponedeljak dobijaš izveštaj.',
+          description: 'Tvoj admin panel prikazuje ko dolazi, ko zarađuje najviše i šta se prodaje u store-u. Svaki ponedeljak dobijaš izveštaj.',
         },
       ],
     },
@@ -1731,7 +1756,7 @@ export const translations = {
         youProvide: {
           title: 'TI OBEZBEĐUJEŠ',
           items: [
-            'Pristup kardio podu',
+            'Pristup tvojoj teretani',
             '90 minuta svog vremena',
           ],
         },
@@ -1749,7 +1774,7 @@ export const translations = {
     },
     whyItWorks: {
       badge: 'ZAŠTO RADI',
-      title: 'TRI RAZLOGA ZAŠTO VLASNICI TERETANA',
+      title: 'ČETIRI RAZLOGA ZAŠTO VLASNICI TERETANA',
       titleHighlight: 'BIRAJU SWEATDROP',
       features: [
         {
@@ -1759,6 +1784,10 @@ export const translations = {
         {
           title: 'SPONZORI TI PLAĆAJU',
           description: 'Lokalni brendovi suplemenata, sportske radnje i spa centri sponzorišu izazove u tvojoj teretani. Oni obezbeđuju nagrade. Ti zarađuješ prihod. Zadržavaš 70% od svakog sponzorstva.',
+        },
+        {
+          title: 'TVOJ ŠANK PRODAJE VIŠE',
+          description: 'Članovi zarađuju kapi i troše ih u tvojoj teretani — protein šejk, PT sesija, besplatna poseta. Ti definišeš nagrade. Ti postavljaš cene u kapima. Svaka zarađena kap je razlog da kupe nešto od tebe, a ne od konkurencije.',
         },
         {
           title: 'TVOJA TERETANA SE IZDVAJA',
@@ -1778,12 +1807,16 @@ export const translations = {
           title: 'WORD OF MOUTH',
           description: 'Član deli dostignuće · Rang lista',
         },
+        rewardStore: {
+          title: 'PRODAVNICA NAGRADA',
+          description: 'Članovi troše kapi na šanku i recepciji',
+        },
       },
     },
     sponsorsHero: {
-      title: 'DOSTIGNI AKTIVNE ČLANOVE TERETANE.',
-      titleLine2: 'NE IMPRESIJE.',
-      titleHighlight: 'KONKURENTE.',
+      title: 'TVOJ BREND U SVAKOM TRENINGU.',
+      titleLine2: 'NE DOSADNI OGLASI —',
+      titleHighlight: 'PRAVI IZAZOVI.',
       subtitle: 'Sweat Arenas stavljaju tvoj brend u centar 30-dnevnog takmičenja u teretani.\nČlanovi treniraju da osvoje tvoje nagrade. Ti dobijaš podatke o sesijama.',
       button: 'Zatraži Predlog za Arenu',
       visual: {
@@ -1807,8 +1840,8 @@ export const translations = {
     sweatArenasHero: {
       badge: 'SWEAT ARENAS',
       title: 'SPONZORISANA TAKMIČENJA.',
-      titleLine2: 'NA TVOJEM KARDIO PODU.',
-      subtitle: 'Brendovi sponzorišu namenske rang liste unutar SweatDrop-a.\nČlanovi se takmiče za nagrade. Teretane zarađuju prihod. Brendovi dobijaju stvarne podatke.',
+      titleLine2: 'U TVOJOJ TERETANI.',
+      subtitle: 'Brendovi sponzorišu takmičenja u tvojoj teretani.\nČlanovi se takmiče za nagrade. Teretane zarađuju prihod. Brendovi dobijaju stvarne podatke.',
       imAGymOwner: 'Ja sam Vlasnik Teretane',
       imABrand: 'Ja sam Brend',
     },
@@ -1827,8 +1860,8 @@ export const translations = {
           compatible: 'KOMPATIBILNO:',
         },
         elliptical: {
-          title: 'ELIPTIČAR',
-          description: 'Bilo koji eliptičar, bilo kojeg brenda, bilo koje starosti. Mi se brinemo o konekciji.',
+          title: 'ELIPTIK',
+          description: 'Bilo koji eliptik, bilo kojeg brenda, bilo koje starosti. Mi se brinemo o konekciji.',
           compatible: 'KOMPATIBILNO:',
         },
       },
@@ -1836,26 +1869,26 @@ export const translations = {
     },
     checkIn: {
       title: 'SVAKI ČLAN. SVAKI DOLAZAK.',
-      subtitle: 'Nisu svi u teretani zbog kardio sprava.\nSweatDrop radi za celu teretanu — ne samo za kardio pod.',
+      subtitle: 'Nisu svi u teretani zbog kardio sprava.\nSweatDrop radi za celu teretanu — ne samo za sprave.',
       cardTitle: 'ČEKIRANJE NA RECEPCIJI',
-      cardBody: 'Član skenira QR kod na ulazu kad dođe.\nZarađuje kapi. Streak raste. Takmiči se na rang listi.\n\nTegovi. Grupni časovi. Bazen. Joga.\nSvaki dolazak se računa.\n\nJedan QR kod. Odštampaj jednom. Radi zauvek.',
+      cardBody: 'Član skenira QR kod na ulazu kad dođe.\nZarađuje kapi. Streak raste. Takmiči se na rang listi.\n\nSvaki dolazak se računa — bez obzira da li ideš na kardio, tegove ili grupni čas.\n\nJedan QR kod. Odštampaj jednom. Radi zauvek.',
     },
     membersHowItWorks: {
       steps: [
         {
           number: 1,
-          title: 'PREUZMI I PRIDRUŽI SE SVOJ TERETANI',
+          title: 'PREUZMI I PRIDRUŽI SE SVOJOJ TERETANI',
           description: 'Preuzmi SweatDrop i kreiraj svoj profil. Besplatno zauvek. Traje 30 sekundi.',
         },
         {
           number: 2,
-          title: 'PRIĐI BILO KOJOJ MAŠINI',
-          description: 'SweatDrop se automatski povezuje preko Bluetooth-a. Bez uparivanja. Bez podešavanja. Samo počni da treniraš.',
+          title: 'SKENIRAJ QR KOD NA SPRAVI',
+          description: 'Priđi traci ili biciklu, skeniraj QR kod na spravi i sesija počinje. Bez uparivanja. Bez podešavanja. Samo treniraš.',
         },
         {
           number: 3,
           title: 'ZARAĐUJ KAPI. OSVAJAJ NAGRADE.',
-          description: 'Svaka kalorija zarađuje kapi. Svaka kap te penje na rang listu. Top 10 svake nedelje pobedjuje.',
+          description: 'Svaki trening donosi kapi. Svaka kap te penje na rang listu. Top 3 svake nedelje pobeđuje.',
         },
       ],
     },
@@ -1865,17 +1898,17 @@ export const translations = {
         {
           title: 'KAPI',
           subtitle: 'ZARAĐUJ KAPI',
-          description: 'Zarađuj kapi svaku sesiju na osnovu toga koliko naporno treniraš. Što duža i napornija sesija, to više kapi. Bonus za seriju umnožava tvoju zaradu.',
+          description: 'Zarađuješ kapi svaki put kad treniraš — što duži i naporniji trening, to više kapi. Bonus za seriju umnožava tvoju zaradu.',
         },
         {
           title: 'NEDELJNE NAGRADE',
           subtitle: 'OSVAJAJ STVARNE NAGRADE',
-          description: 'Top 10 na nedeljnoj rang listi tvoje teretane osvaja stvarne nagrade — besplatne članarine, PT sesije, pakete suplemenata, spa vaučere. Nove nagrade svakog ponedeljka.',
+          description: 'Top 3 na nedeljnoj rang listi tvoje teretane osvaja stvarne nagrade — besplatne članarine, PT sesije, pakete suplemenata, spa vaučere. Nove nagrade svakog ponedeljka.',
         },
         {
-          title: 'BADŽEVI',
-          subtitle: 'OTKLJUČAJ BADŽEVE',
-          description: 'Otključaj badževe za postignuća. Prva sesija. 7-dnevna serija. Top 3 mesto. Monstrum sesija. Svaki badž zarađuje bonus kapi.',
+          title: 'BEDŽEVI',
+          subtitle: 'OTKLJUČAJ BEDŽEVE',
+          description: 'Otključaj bedževe za postignuća. Prva sesija. 7-dnevna serija. Top 3 mesto. Monstrum sesija. Svaki bedž zarađuje bonus kapi.',
         },
       ],
     },
@@ -1883,12 +1916,11 @@ export const translations = {
       title: 'TROŠI SVOJE KAPI.',
       subtitle: 'Prodavnica nagrada tvoje teretane je puna stvarnih nagrada koje možeš da zatražiš sa kapima.\nBez novca. Samo treniraj i zatraži.',
       rewards: {
-        proteinDiscount: 'Popust na proteine',
-        freeShaker: 'Besplatan šejker',
+        proteinDiscount: 'Protein šejk',
+        freeShirt: 'Sportska majica',
         ptSession: 'PT sesija',
         freeWeekPass: 'Besplatna nedeljna članarina',
       },
-      expiryNote: 'Kapi ističu nakon 90 dana — još jedan razlog da nastaviš da treniraš.',
     },
     appScreenshots: {
       title: 'VIDI KAKO RADI',
@@ -1956,7 +1988,7 @@ export const translations = {
       placeholder: 'Unesi svoj email',
       joining: 'Pridruživanje...',
       join: 'Pridruži se',
-      error: 'Nešto je pošlo po zlu. Molimo pokušajte ponovo.',
+      error: 'Nešto je pošlo po zlu. Pokušaj ponovo.',
     },
     forSponsors: {
       badge: 'ZA BRENDOVE I SPONZORE',
@@ -1991,7 +2023,7 @@ export const translations = {
         profiles: [
           {
             title: 'SUPLEMENTI I ISHRANA',
-            description: 'Tvoj tačan klijent. Već troše novac na proteine, vitamine i opremu za trening. Takmičenje za tvoj proizvod stvara probu. Proba se pretvara.',
+            description: 'Tvoj tačan klijent. Već troše novac na proteine, vitamine i opremu za trening. Kad neko proba tvoj proizvod kao nagradu, veća je šansa da ga kupi sledeći put.',
             examples: 'Brendovi proteina, radnje sa suplementima, radnje zdrave hrane',
           },
           {
@@ -2172,9 +2204,9 @@ export const translations = {
       tellGym: 'Reci svojoj teretani da se prijavi →',
     },
     membersFinalCTA: {
-      readyToStart: 'SPREMN SI DA POČNEŠ DA ZARAĐUJEŠ?',
-      beFirst: 'BUDI PRVI U SVOJ TERETANI.',
-      bonus: 'Članovi koji se pridruže u prvoj nedelji počinju sa bonusom od 200 kapi\ni prednost na rang listi za nove članove.',
+      readyToStart: 'SPREMAN SI DA POČNEŠ DA ZARAĐUJEŠ?',
+      beFirst: 'SPREMAN DA SE TAKMIČIŠ?',
+      bonus: 'SweatDrop se pokreće u Beogradu u Q2 2026.\nPridruži se listi čekanja — obavestićemo te čim tvoja teretana bude aktivna.',
       joinWaitlist: 'Pridruži se Listi',
       appStore: 'App Store',
       googlePlay: 'Google Play',
@@ -2211,20 +2243,16 @@ export const translations = {
       delivery: 'Dostavljeno u roku od 5 dana od zatvaranja arene\nFormat: PDF + CSV izvoz',
     },
     leaderboardSection: {
-      badge: 'NEDELJNA RANG LISTA',
-      title: 'TAKMIČI SE SA SVOJOM TERETANOM.',
+      badge: 'RANG LISTA',
+      title: 'TVOJA TERETANA.',
       titleLine2: 'SVAKE NEDELJE.',
-      description: 'Rang lista se resetuje svakog ponedeljka.\nSvi počinju od nule.\nTo znači da svako može da pobedi.',
-      updates: 'Tvoj rang se ažurira svakih 5 minuta.\nKada te neko prestigne, dobićeš obaveštenje.\nPoželeti ćeš da se vratiš.',
-      newcomer: {
-        badge: 'NOVI ČLANOVI — ZAŠTIĆENI STE',
-        description: 'Prvih 30 dana: odvojena rang lista za nove članove.\nIste nagrade. Samo drugi novi članovi.\nPošten start zagarantovan.',
-      },
+      description: 'Nedeljna rang lista se resetuje svakog ponedeljka —\nsvi počinju od nule, svako može da pobedi.\n\nMesečna rang lista nagrađuje konzistentnost —\nko dolazi redovno, pobeđuje na kraju meseca.',
+      updates: 'Tvoj rang se ažurira redovno. Kad te neko prestigne,\ndobićeš obaveštenje. Poželećeš da se vratiš.',
     },
     arenasForMembers: {
       title: 'TAKMIČI SE ZA NAGRADE BRENDOVA.',
       description: 'Sweat Arenas su opciona takmičenja koja sponzorišu lokalni brendovi.\nPrijavi se, treniraj naporno, osvoj njihove nagrade.\n\nSpa vikend. Paket suplemenata. Sportska oprema.\nNove arene se pokreću redovno.',
-      note: 'Arene su opcione — ti biraš u koje se prijavljuješ.\nTvoj redovni rang na rang listi nikada nije utiče.',
+      note: 'Arene su opcione — ti biraš u koje se prijavljuješ.\nTvoj redovni rang na rang listi se nikada ne menja.',
       learnMore: 'Saznaj više o Sweat Arenas',
       visual: {
         sponsoredBy: 'SPONZORIŠE OLIMP',
