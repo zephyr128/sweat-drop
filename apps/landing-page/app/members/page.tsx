@@ -8,7 +8,6 @@ import { LeaderboardSection } from '@/components/sections/members/LeaderboardSec
 import { RewardStore } from '@/components/sections/members/RewardStore';
 import { ArenasForMembers } from '@/components/sections/members/ArenasForMembers';
 import { AppScreenshots } from '@/components/sections/members/AppScreenshots';
-import { FindYourGym } from '@/components/sections/members/FindYourGym';
 import { MembersFinalCTA } from '@/components/sections/members/MembersFinalCTA';
 
 export const metadata: Metadata = {
@@ -33,7 +32,6 @@ export default function MembersPage() {
         <RewardStore />
         <ArenasForMembers />
         <AppScreenshots />
-        <FindYourGym />
         <MembersFinalCTA />
       </main>
       <Footer />

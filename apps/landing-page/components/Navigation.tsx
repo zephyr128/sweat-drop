@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
@@ -8,6 +8,30 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useModal } from '@/lib/modal-context';
 import { useLanguage } from '@/lib/use-language';
 import { LanguageSelector } from './LanguageSelector';
+import type { Language } from '@/lib/i18n';
+
+const MobileLanguageToggle = memo(function MobileLanguageToggle() {
+  const { language, setLanguage } = useLanguage();
+
+  const toggle = useCallback(() => {
+    setLanguage(language === 'en' ? 'sr' : 'en');
+  }, [language, setLanguage]);
+
+  const nextLang: Language = language === 'en' ? 'sr' : 'en';
+
+  return (
+    <button
+      onClick={toggle}
+      className="flex items-center gap-0.5 px-2 py-1.5 rounded-md text-[11px] font-semibold tracking-wide uppercase transition-colors"
+      style={{ fontFamily: 'var(--font-mono)' }}
+      aria-label={`Switch to ${nextLang === 'en' ? 'English' : 'Srpski'}`}
+    >
+      <span className={language === 'en' ? 'text-white' : 'text-white/40'}>EN</span>
+      <span className="text-white/25 mx-0.5">/</span>
+      <span className={language === 'sr' ? 'text-white' : 'text-white/40'}>SR</span>
+    </button>
+  );
+});
 
 export const Navigation = memo(function Navigation() {
   const pathname = usePathname();
@@ -122,15 +146,18 @@ export const Navigation = memo(function Navigation() {
             </button>
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsMobileOpen(!isMobileOpen)}
-            className="md:hidden p-2 text-text-2 hover:text-text transition-colors"
-            aria-label="Toggle menu"
-            aria-expanded={isMobileOpen}
-          >
-            {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          {/* Mobile: Language toggle + burger */}
+          <div className="md:hidden flex items-center gap-2">
+            <MobileLanguageToggle />
+            <button
+              onClick={() => setIsMobileOpen(!isMobileOpen)}
+              className="p-2 text-text-2 hover:text-text transition-colors"
+              aria-label="Toggle menu"
+              aria-expanded={isMobileOpen}
+            >
+              {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -157,7 +184,7 @@ export const Navigation = memo(function Navigation() {
                     {link.label}
                   </Link>
                 ))}
-                <div className="pt-4 border-t border-border space-y-3">
+                <div className="pt-4 border-t border-border">
                   <button
                     onClick={() => {
                       openModal('apply-pilot');
@@ -168,7 +195,6 @@ export const Navigation = memo(function Navigation() {
                   >
                     {t.navigation.applyForPilot}
                   </button>
-                  <LanguageSelector />
                 </div>
               </div>
             </motion.div>
