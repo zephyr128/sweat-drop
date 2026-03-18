@@ -39,20 +39,6 @@ export const LeaderboardSection = memo(function LeaderboardSection() {
               <span className="text-text font-medium">{t.leaderboardSection.updates.split('\n')[2]}</span>
             </p>
 
-            {/* Newcomer callout */}
-            <div className="card p-6 border-accent/30 bg-accent/5">
-              <p className="mono text-xs text-accent mb-2" style={{ fontFamily: 'var(--font-mono)' }}>
-                {t.leaderboardSection.newcomer.badge}
-              </p>
-              <p className="text-text-2 text-sm">
-                {t.leaderboardSection.newcomer.description.split('\n').map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < t.leaderboardSection.newcomer.description.split('\n').length - 1 && <br />}
-                  </span>
-                ))}
-              </p>
-            </div>
           </div>
 
           {/* Right: Leaderboard Mockup */}

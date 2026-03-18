@@ -4,8 +4,8 @@ import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/lib/use-language';
 
-const emojis = ['🥤', '🧴', '💆', '🎟️'];
-const rewardKeys = ['proteinDiscount', 'freeShaker', 'ptSession', 'freeWeekPass'] as const;
+const emojis = ['🥤', '🎽', '💆', '🎟️'];
+const rewardKeys = ['proteinDiscount', 'freeShirt', 'ptSession', 'freeWeekPass'] as const;
 const drops = [200, 500, 1000, 3500];
 
 export const RewardStore = memo(function RewardStore() {
@@ -59,10 +59,6 @@ export const RewardStore = memo(function RewardStore() {
           ))}
         </div>
 
-        {/* Expiry note */}
-        <p className="mono text-[10px] text-orange text-center" style={{ fontFamily: 'var(--font-mono)' }}>
-          {t.rewardStore.expiryNote}
-        </p>
       </div>
     </section>
   );

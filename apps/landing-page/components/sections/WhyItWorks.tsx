@@ -2,12 +2,12 @@
 
 import { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, DollarSign, Megaphone } from 'lucide-react';
+import { Trophy, DollarSign, Megaphone, ShoppingBag } from 'lucide-react';
 import { useLanguage } from '@/lib/use-language';
 import { GlassCard } from '@/components/ui/GlassCard';
 
-const icons = [Trophy, DollarSign, Megaphone];
-const visuals = ['leaderboard', 'challenge', 'gymStandsOut'] as const;
+const icons = [Trophy, DollarSign, ShoppingBag, Megaphone];
+const visuals = ['leaderboard', 'challenge', 'rewardStore', 'gymStandsOut'] as const;
 
 export const WhyItWorks = memo(function WhyItWorks() {
   const { t } = useLanguage();
@@ -106,6 +106,33 @@ export const WhyItWorks = memo(function WhyItWorks() {
                         </div>
                         <div className="text-text-2 text-sm">
                           {t.whyItWorks.visuals.gymStandsOut.description}
+                        </div>
+                      </div>
+                    )}
+                    {feature.visual === 'rewardStore' && (
+                      <div className="space-y-3">
+                        <div className="mono text-xs text-text-3 mb-4" style={{ fontFamily: 'var(--font-mono)' }}>
+                          {t.whyItWorks.visuals.rewardStore.title}
+                        </div>
+                        <div className="space-y-2">
+                          {[
+                            { emoji: '🥤', name: 'Protein Shake', drops: '120' },
+                            { emoji: '🏋️', name: 'PT Session', drops: '500' },
+                            { emoji: '🎫', name: 'Free Week Pass', drops: '800' },
+                          ].map((item) => (
+                            <div key={item.name} className="flex items-center justify-between p-3 bg-bg-card2 rounded-lg border border-border">
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg">{item.emoji}</span>
+                                <span className="text-text text-sm">{item.name}</span>
+                              </div>
+                              <span className="display text-sm text-lime" style={{ fontFamily: 'var(--font-display)' }}>
+                                💧 {item.drops}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-text-3 text-xs mt-2">
+                          {t.whyItWorks.visuals.rewardStore.description}
                         </div>
                       </div>
                     )}

@@ -49,10 +49,18 @@ export const HomeHero = memo(function HomeHero() {
               style={{ fontFamily: 'var(--font-display)' }}
             >
               {t.homeHero.title}
-              <br />
-              {t.homeHero.titleLine2}
-              <br />
-              {t.homeHero.titleLine3}
+              {t.homeHero.titleLine2 && (
+                <>
+                  <br />
+                  {t.homeHero.titleLine2}
+                </>
+              )}
+              {t.homeHero.titleLine3 && (
+                <>
+                  <br />
+                  {t.homeHero.titleLine3}
+                </>
+              )}
             </motion.h1>
 
             {/* Subheadline */}

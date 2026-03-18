@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
+import { useLanguage } from '@/lib/use-language';
 
 interface FormData {
   companyName: string;
@@ -16,6 +17,7 @@ interface FormData {
 }
 
 export const ProposalForm = memo(function ProposalForm() {
+  const { t } = useLanguage();
   const [formData, setFormData] = useState<FormData>({
     companyName: '',
     yourName: '',
@@ -55,7 +57,7 @@ export const ProposalForm = memo(function ProposalForm() {
       }
     } catch (error) {
       console.error('Error submitting proposal:', error);
-      alert('Something went wrong. Please try again.');
+      alert(t.sponsorProposal.errorGeneric);
     } finally {
       setIsSubmitting(false);
     }
@@ -81,12 +83,15 @@ export const ProposalForm = memo(function ProposalForm() {
               </svg>
             </div>
             <h3 className="display text-2xl text-text mb-4" style={{ fontFamily: 'var(--font-display)' }}>
-              Proposal Request Received
+              {t.sponsorProposal.successTitle}
             </h3>
             <p className="text-text-2 mb-6">
-              {"We'll be in touch within 24 hours."}
-              <br />
-              No sales pressure. Just numbers.
+              {t.sponsorProposal.successNote.split('\n').map((line, i) => (
+                <span key={i}>
+                  {line}
+                  {i < t.sponsorProposal.successNote.split('\n').length - 1 && <br />}
+                </span>
+              ))}
             </p>
           </motion.div>
         </div>
@@ -99,12 +104,15 @@ export const ProposalForm = memo(function ProposalForm() {
       <div className="container mx-auto max-w-2xl">
         <div className="text-center mb-12">
           <h2 className="display text-3xl sm:text-4xl text-text mb-4" style={{ fontFamily: 'var(--font-display)' }}>
-            YOUR CUSTOMERS ARE ALREADY AT THE GYM.
+            {t.sponsorProposal.formTitle}
           </h2>
           <p className="text-lg text-text-2">
-            {"Request a proposal and we'll send you projected numbers specific to your target audience and budget."}
-            <br />
-            No commitment. Response within 24 hours.
+            {t.sponsorProposal.formSubtitle.split('\n').map((line, i) => (
+              <span key={i}>
+                {line}
+                {i < t.sponsorProposal.formSubtitle.split('\n').length - 1 && <br />}
+              </span>
+            ))}
           </p>
         </div>
 
@@ -116,7 +124,7 @@ export const ProposalForm = memo(function ProposalForm() {
           className="card p-8 space-y-6"
         >
           <Input
-            label="Company name"
+            label={t.sponsorProposal.fields.company}
             value={formData.companyName}
             onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
             required
@@ -124,7 +132,7 @@ export const ProposalForm = memo(function ProposalForm() {
           />
 
           <Input
-            label="Your name"
+            label={t.sponsorProposal.fields.name}
             value={formData.yourName}
             onChange={(e) => setFormData({ ...formData, yourName: e.target.value })}
             required
@@ -132,7 +140,7 @@ export const ProposalForm = memo(function ProposalForm() {
           />
 
           <Input
-            label="Email"
+            label={t.sponsorProposal.fields.email}
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -141,7 +149,7 @@ export const ProposalForm = memo(function ProposalForm() {
           />
 
           <Input
-            label="Phone"
+            label={t.sponsorProposal.fields.phone}
             type="tel"
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -150,22 +158,22 @@ export const ProposalForm = memo(function ProposalForm() {
           />
 
           <Select
-            label="Interested in"
+            label={t.sponsorProposal.fields.plan}
             value={formData.interestedIn}
             onChange={(e) => setFormData({ ...formData, interestedIn: e.target.value })}
             options={[
-              { value: '', label: 'Select...' },
-              { value: 'local', label: 'Local' },
-              { value: 'regional', label: 'Regional' },
-              { value: 'network', label: 'Network' },
-              { value: 'not-sure', label: 'Not sure' },
+              { value: '', label: t.sponsorProposal.planOptionsShort.select },
+              { value: 'local', label: t.sponsorProposal.planOptionsShort.local },
+              { value: 'regional', label: t.sponsorProposal.planOptionsShort.regional },
+              { value: 'network', label: t.sponsorProposal.planOptionsShort.network },
+              { value: 'not-sure', label: t.sponsorProposal.planOptionsShort.notSure },
             ]}
             required
             disabled={isSubmitting}
           />
 
           <Input
-            label="Ideal start date"
+            label={t.sponsorProposal.fields.startDate}
             type="date"
             value={formData.idealStart}
             onChange={(e) => setFormData({ ...formData, idealStart: e.target.value })}
@@ -180,14 +188,17 @@ export const ProposalForm = memo(function ProposalForm() {
               className="w-full display text-lg bg-orange text-background hover:bg-orange/90"
               style={{ fontFamily: 'var(--font-display)' }}
             >
-              Send Proposal Request
+              {t.sponsorProposal.submit}
             </Button>
           </div>
 
           <p className="text-center text-sm text-text-2">
-            We respond within 24 hours.
-            <br />
-            No sales pressure. Just numbers.
+            {t.sponsorProposal.formFooter.split('\n').map((line, i) => (
+              <span key={i}>
+                {line}
+                {i < t.sponsorProposal.formFooter.split('\n').length - 1 && <br />}
+              </span>
+            ))}
           </p>
         </motion.form>
       </div>
