@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 
+const CONTACT_EMAIL = process.env.CONTACT_EMAIL || 'support@sweat-drop.com';
+
 interface EmailConfig {
   user: string;
   appPassword: string;
@@ -283,7 +285,7 @@ export async function sendRequestDemoEmail(data: RequestDemoEmailData): Promise<
 
   await transport.sendMail({
     from: `"SweatDrop Website" <${user}>`,
-    to: user,
+    to: CONTACT_EMAIL,
     replyTo: data.email,
     subject,
     html,
@@ -297,8 +299,8 @@ export async function sendApplyPilotEmail(data: ApplyPilotEmailData): Promise<vo
 
   await transport.sendMail({
     from: `"SweatDrop Website" <${user}>`,
-    to: user,
-    replyTo: user,
+    to: CONTACT_EMAIL,
+    replyTo: CONTACT_EMAIL,
     subject,
     html,
   });
@@ -671,7 +673,7 @@ export async function sendWaitlistEmail(data: WaitlistEmailData): Promise<void> 
 
   await transport.sendMail({
     from: `"SweatDrop Website" <${user}>`,
-    to: user,
+    to: CONTACT_EMAIL,
     replyTo: data.email,
     subject,
     html,
@@ -685,7 +687,7 @@ export async function sendSponsorProposalEmail(data: SponsorProposalEmailData): 
 
   await transport.sendMail({
     from: `"SweatDrop Website" <${user}>`,
-    to: user,
+    to: CONTACT_EMAIL,
     replyTo: data.email,
     subject,
     html,
@@ -699,7 +701,7 @@ export async function sendContactEmail(data: ContactEmailData): Promise<void> {
 
   await transport.sendMail({
     from: `"SweatDrop Website" <${user}>`,
-    to: user,
+    to: CONTACT_EMAIL,
     replyTo: data.email,
     subject,
     html,

@@ -24,7 +24,7 @@ export function PrivacyContentSr() {
         <p className="text-text-2 leading-relaxed">
           <strong className="text-text">SweatDrop</strong><br />
           Beograd, Srbija<br />
-          Email: <a href="mailto:privacy@sweat-drop.com" className="text-primary hover:underline">privacy@sweat-drop.com</a>
+          Email: <a href="mailto:support@sweat-drop.com" className="text-primary hover:underline">support@sweat-drop.com</a>
         </p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">2. Koje podatke prikupljamo</h2>
@@ -108,7 +108,7 @@ export function PrivacyContentSr() {
           <li><strong className="text-text">Prigovoriš</strong> obradi na osnovu legitimnog interesa</li>
           <li><strong className="text-text">Povučeš pristanak</strong> za zdravstvene podatke u svakom trenutku</li>
         </ul>
-        <p className="text-text-2 leading-relaxed">Za bilo koji zahtev, piši nam na <a href="mailto:privacy@sweat-drop.com" className="text-primary hover:underline">privacy@sweat-drop.com</a>. Odgovaramo u roku od 30 dana.</p>
+        <p className="text-text-2 leading-relaxed">Za bilo koji zahtev, piši nam na <a href="mailto:support@sweat-drop.com" className="text-primary hover:underline">support@sweat-drop.com</a>. Odgovaramo u roku od 30 dana.</p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">8. Bezbednost podataka</h2>
         <p className="text-text-2 leading-relaxed">Svi podaci se prenose enkriptovano (TLS 1.3). Lozinke se nikad ne čuvaju u čitljivom obliku — koristimo bcrypt hashing. Baza podataka se nalazi na Supabase infrastrukturi u EU sa automatskim backup-ovima i enkripcijom u mirovanju.</p>
@@ -120,7 +120,7 @@ export function PrivacyContentSr() {
         <p className="text-text-2 leading-relaxed">O značajnim izmenama obaveštavamo putem email-a ili notifikacije u aplikaciji najmanje 14 dana pre stupanja na snagu. Datum poslednjeg ažuriranja uvek je vidljiv na vrhu ove stranice.</p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">11. Kontakt</h2>
-        <p className="text-text-2 leading-relaxed">Za sva pitanja o privatnosti:<br /><a href="mailto:privacy@sweat-drop.com" className="text-primary hover:underline">privacy@sweat-drop.com</a></p>
+        <p className="text-text-2 leading-relaxed">Za sva pitanja o privatnosti:<br /><a href="mailto:support@sweat-drop.com" className="text-primary hover:underline">support@sweat-drop.com</a></p>
       </section>
     </div>
   );

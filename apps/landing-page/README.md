@@ -142,6 +142,7 @@ The contact forms require Gmail SMTP configuration:
 ```bash
 GMAIL_USER=symfony123@gmail.com
 GMAIL_APP_PASSWORD=your_16_character_app_password
+CONTACT_EMAIL=support@sweat-drop.com
 ```
 
 **Important:** 
@@ -151,6 +152,7 @@ GMAIL_APP_PASSWORD=your_16_character_app_password
 
 ### Optional Environment Variables
 
+- `CONTACT_EMAIL` - Where form submissions are sent (default: `support@sweat-drop.com`)
 - `NEXT_PUBLIC_GA_ID` - Google Analytics ID
 - `NEXT_PUBLIC_SITE_URL` - Site URL for SEO metadata
 

@@ -20,7 +20,7 @@ export function PrivacyContentEn() {
         <p className="text-text-2 leading-relaxed">
           <strong className="text-text">SweatDrop</strong><br />
           Belgrade, Serbia<br />
-          Email: <a href="mailto:privacy@sweat-drop.com" className="text-primary hover:underline">privacy@sweat-drop.com</a>
+          Email: <a href="mailto:support@sweat-drop.com" className="text-primary hover:underline">support@sweat-drop.com</a>
         </p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">2. What data we collect</h2>
@@ -104,7 +104,7 @@ export function PrivacyContentEn() {
           <li><strong className="text-text">Object</strong> to processing based on legitimate interest</li>
           <li><strong className="text-text">Withdraw consent</strong> for health data at any time</li>
         </ul>
-        <p className="text-text-2 leading-relaxed">For any request, email us at <a href="mailto:privacy@sweat-drop.com" className="text-primary hover:underline">privacy@sweat-drop.com</a>. We respond within 30 days.</p>
+        <p className="text-text-2 leading-relaxed">For any request, email us at <a href="mailto:support@sweat-drop.com" className="text-primary hover:underline">support@sweat-drop.com</a>. We respond within 30 days.</p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">8. Data security</h2>
         <p className="text-text-2 leading-relaxed">All data is transmitted encrypted (TLS 1.3). Passwords are never stored in readable form — we use bcrypt hashing. The database is on Supabase infrastructure in the EU with automatic backups and encryption at rest.</p>
@@ -116,7 +116,7 @@ export function PrivacyContentEn() {
         <p className="text-text-2 leading-relaxed">We will notify you of significant changes by email or in-app notification at least 14 days before they take effect. The last updated date is always shown at the top of this page.</p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">11. Contact</h2>
-        <p className="text-text-2 leading-relaxed">For any privacy questions:<br /><a href="mailto:privacy@sweat-drop.com" className="text-primary hover:underline">privacy@sweat-drop.com</a></p>
+        <p className="text-text-2 leading-relaxed">For any privacy questions:<br /><a href="mailto:support@sweat-drop.com" className="text-primary hover:underline">support@sweat-drop.com</a></p>
       </section>
     </div>
   );

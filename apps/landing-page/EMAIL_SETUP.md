@@ -33,7 +33,10 @@ This guide explains how to configure Gmail SMTP for the SweatDrop landing page c
 ```bash
 GMAIL_USER=symfony123@gmail.com
 GMAIL_APP_PASSWORD=your_16_character_app_password_here
+CONTACT_EMAIL=support@sweat-drop.com
 ```
+
+All form submissions (contact, pilot, waitlist, sponsor proposal) are sent to `CONTACT_EMAIL`. Defaults to `support@sweat-drop.com` if not set.
 
 **Important:**
 - Remove any spaces from the app password
