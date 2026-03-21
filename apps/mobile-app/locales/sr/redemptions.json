@@ -13,5 +13,9 @@
   "na": "N/A",
   "showCodeToStaff": "Pokaži kod osoblju teretane da preuzmeš nagradu",
   "unknownReward": "Nepoznata nagrada",
-  "unknownGym": "Nepoznata teretana"
+  "unknownGym": "Nepoznata teretana",
+  "leaderboardPrize": "Nagrada sa leaderboarda",
+  "arenaPrize": "Nagrada iz arene",
+  "leaderboard": "Leaderboard",
+  "arena": "Arena"
 }

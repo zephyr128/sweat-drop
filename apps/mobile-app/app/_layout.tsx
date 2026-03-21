@@ -106,11 +106,11 @@ function StackNavigator() {
       <Stack.Screen name="workout" options={{ headerShown: false }} />
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
       <Stack.Screen name="workout-history" options={{ headerShown: false }} />
-      <Stack.Screen name="profile" options={{ headerShown: false }} />
       <Stack.Screen name="arenas" options={{ headerShown: false }} />
       <Stack.Screen name="arena" options={{ headerShown: false }} />
       <Stack.Screen name="gyms" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
     </Stack>
   );
 }

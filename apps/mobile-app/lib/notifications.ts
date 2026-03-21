@@ -50,7 +50,8 @@ type NotificationTrigger =
   | 'drops_expiry_30d'
   | 'drops_expiry_7d'
   | 'arena_prize'
-  | 'arena_ended';
+  | 'arena_ended'
+  | 'leaderboard_prize';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  NOTIFICATION HANDLER CONFIGURATION
@@ -255,6 +256,9 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
     case 'arena_ended':
       if (data.arena_id) return `/arena/${data.arena_id}`;
       return '/arenas';
+
+    case 'leaderboard_prize':
+      return '/leaderboard';
 
     default:
       return '/home';

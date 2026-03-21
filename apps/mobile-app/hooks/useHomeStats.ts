@@ -40,6 +40,10 @@ const EMPTY_STATS: HomeStats = {
   activeDaysThisWeek: 0,
 };
 
+function toLocalDateStr(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 /* ── Hook ────────────────────────────────────────── */
 export function useHomeStats(gymId: string | null, localDrops: number) {
   const { session } = useSession();
@@ -97,25 +101,22 @@ export function useHomeStats(gymId: string | null, localDrops: number) {
 
       let streak = 0;
       if (sessionDates && sessionDates.length > 0) {
-        // Build a set of unique dates (YYYY-MM-DD)
         const uniqueDates = new Set<string>();
         for (const s of sessionDates) {
           if (s.started_at) {
-            uniqueDates.add(new Date(s.started_at).toISOString().split('T')[0]);
+            uniqueDates.add(toLocalDateStr(new Date(s.started_at)));
           }
         }
 
-        // Walk backwards from today (or yesterday if no session today)
-        const todayStr = todayStart.toISOString().split('T')[0];
-        let checkDate = new Date(todayStart);
+        const todayStr = toLocalDateStr(now);
+        let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        // If today doesn't have a session, start from yesterday
         if (!uniqueDates.has(todayStr)) {
           checkDate.setDate(checkDate.getDate() - 1);
         }
 
         while (true) {
-          const dateStr = checkDate.toISOString().split('T')[0];
+          const dateStr = toLocalDateStr(checkDate);
           if (uniqueDates.has(dateStr)) {
             streak++;
             checkDate.setDate(checkDate.getDate() - 1);

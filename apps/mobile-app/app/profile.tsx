@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,6 +84,7 @@ function formatMemberSince(iso: string, lang: string = 'sr'): string {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
   const { activeGym } = useTheme();
@@ -95,7 +96,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+
 
   const loadProfile = useCallback(async () => {
     if (!session?.user) return;
@@ -153,7 +154,6 @@ export default function ProfileScreen() {
       console.error('[Profile] Stats error:', err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, [session?.user?.id, profile?.streak_days]);
 
@@ -172,11 +172,6 @@ export default function ProfileScreen() {
       loadProfile();
     }, [loadProfile])
   );
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    loadProfile();
-  };
 
   // Highest badge (most recently earned = first in sorted list)
   const highestBadge: UserBadge | null = badges.length > 0 ? badges[0] : null;
@@ -309,22 +304,22 @@ export default function ProfileScreen() {
 
   if (loading && !profile) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.container}>
         <LinearGradient
           colors={['#000000', '#0A0E1A', '#000000']}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-        <View style={styles.loadingContainer}>
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -333,26 +328,23 @@ export default function ProfileScreen() {
       />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
+        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>{t('title')}</Text>
         <TouchableOpacity
-          style={[styles.backButton, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+          style={[styles.closeButton, { borderColor: hexToRgba(branding.primary, 0.15) }]}
           onPress={() => router.back()}
           activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          <Ionicons name="close" size={22} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={branding.primary} />
-        }
       >
         {/* ═══════════════════════════════════════════ */}
         {/* PROFILE HERO                                */}
@@ -788,7 +780,7 @@ export default function ProfileScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -808,15 +800,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    zIndex: 10,
   },
   headerTitle: {
     ...fontStyles.heading,

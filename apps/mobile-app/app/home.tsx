@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, ImageBackground, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, ImageBackground, Image, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -58,7 +58,7 @@ export default function HomeScreen() {
   const { theme, activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
   const { getActiveGymId, homeGymId, previewGymId } = useGymStore();
-  const { updateHomeGym } = useGymData();
+  const { updateHomeGym, loadActiveGym } = useGymData();
   const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   
@@ -86,9 +86,10 @@ export default function HomeScreen() {
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const hasLoadedOnce = useRef(false); // Track if we've ever successfully loaded — prevents full-screen loader on re-focus
+  const hasLoadedOnce = useRef(false);
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId, localDrops);
@@ -230,6 +231,27 @@ export default function HomeScreen() {
     }
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        loadData(true),
+        activeGymId ? loadActiveGym(activeGymId) : Promise.resolve(),
+      ]);
+      refreshLocalDrops();
+      loadCheckinStatus();
+      if (activeGymId) {
+        refreshChallenges?.();
+        refreshStats?.();
+        refreshArenas?.();
+      }
+    } catch (error) {
+      console.error('Pull-to-refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeGymId, loadCheckinStatus]);
+
   const handleQRPress = async () => {
     router.push('/scan');
   };
@@ -297,7 +319,20 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={branding.primary}
+                colors={[branding.primary]}
+                progressBackgroundColor="transparent"
+              />
+            }
+          >
             {/* ─── SECTION 2 — DROPS HERO (dimmed preview) ─── */}
             <Animated.View entering={FadeInDown.delay(0).duration(500)}>
               <View style={es.dropsHero}>
@@ -561,7 +596,20 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={branding.primary}
+            colors={[branding.primary]}
+            progressBackgroundColor="transparent"
+          />
+        }
+      >
         {/* ═══════════════════════════════════════════ */}
         {/* DUAL-PROGRESS HERO SECTION                  */}
         {/* ═══════════════════════════════════════════ */}

@@ -152,11 +152,14 @@ export default function WorkoutHistoryScreen() {
   };
 
   // ── Calendar Logic ──
+  const toLocalDate = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const workoutDates = useMemo(() => {
     const set = new Set<string>();
     for (const s of sessions) {
       if (s.started_at) {
-        set.add(new Date(s.started_at).toISOString().split('T')[0]);
+        set.add(toLocalDate(new Date(s.started_at)));
       }
     }
     return set;
@@ -180,7 +183,7 @@ export default function WorkoutHistoryScreen() {
       days.push({ date: null, dateStr: '', hasWorkout: false, isToday: false });
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = toLocalDate(new Date());
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -229,16 +232,16 @@ export default function WorkoutHistoryScreen() {
     const map = new Map<string, SessionRow[]>();
     for (const s of filteredSessions) {
       const d = new Date(s.started_at);
-      const key = d.toISOString().split('T')[0]; // YYYY-MM-DD
+      const key = toLocalDate(d);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(s);
     }
     for (const [dateStr, daySessions] of map) {
       const d = new Date(dateStr + 'T12:00:00');
-      const isToday = dateStr === new Date().toISOString().split('T')[0];
+      const isToday = dateStr === toLocalDate(new Date());
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const isYesterday = dateStr === yesterday.toISOString().split('T')[0];
+      const isYesterday = dateStr === toLocalDate(yesterday);
       const label = isToday
         ? t('today')
         : isYesterday
@@ -253,25 +256,26 @@ export default function WorkoutHistoryScreen() {
   const streakInfo = useMemo(() => {
     if (sessions.length === 0) return { current: 0, max: 0 };
 
+    const toLocalDateStr = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
     const uniqueDates = new Set<string>();
     for (const s of sessions) {
       if (s.started_at) {
-        uniqueDates.add(new Date(s.started_at).toISOString().split('T')[0]);
+        uniqueDates.add(toLocalDateStr(new Date(s.started_at)));
       }
     }
 
-    const sortedDates = Array.from(uniqueDates).sort().reverse();
-    if (sortedDates.length === 0) return { current: 0, max: 0 };
+    if (uniqueDates.size === 0) return { current: 0, max: 0 };
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+    const now = new Date();
+    const todayStr = toLocalDateStr(now);
+    const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const yesterdayStr = toLocalDateStr(yesterdayDate);
 
-    // Current streak: walk backward from today (or yesterday if no session today)
     let current = 0;
-    let checkDate = new Date();
-    checkDate.setHours(0, 0, 0, 0);
+    let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
     if (!uniqueDates.has(todayStr)) {
       if (!uniqueDates.has(yesterdayStr)) {
         current = 0;
@@ -279,9 +283,10 @@ export default function WorkoutHistoryScreen() {
         checkDate.setDate(checkDate.getDate() - 1);
       }
     }
+
     if (uniqueDates.has(todayStr) || uniqueDates.has(yesterdayStr)) {
       while (true) {
-        const ds = checkDate.toISOString().split('T')[0];
+        const ds = toLocalDateStr(checkDate);
         if (uniqueDates.has(ds)) {
           current++;
           checkDate.setDate(checkDate.getDate() - 1);
@@ -291,7 +296,6 @@ export default function WorkoutHistoryScreen() {
       }
     }
 
-    // Max streak: find longest consecutive run
     let maxStreak = 0;
     let streak = 1;
     const ascending = Array.from(uniqueDates).sort();

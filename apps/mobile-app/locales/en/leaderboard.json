@@ -9,6 +9,10 @@
   "newcomersOnly": "Newcomers only",
   "noRankings": "No rankings yet",
   "noActiveArenas": "No active arenas",
+  "beFirstGym": "Be the first to earn drops at this gym!",
+  "beFirstGlobal": "Be the first to earn drops globally!",
+  "noArenasAvailable": "No arenas available right now. Check back soon!",
+  "loadingArenas": "Loading arenas...",
   "you": "(You)",
   "new": "NEW",
   "drops": "drops",
@@ -20,5 +24,14 @@
   "position": "Position",
   "workouts": "Workouts",
   "participants_one": "{{count}} participant",
-  "participants_other": "{{count}} participants"
+  "participants_other": "{{count}} participants",
+  "prizesResetWeekly": "Prizes reset every week",
+  "prizesResetMonthly": "Prizes reset every month",
+  "pastWinners": "Past Winners",
+  "noPastWinners": "No past winners yet",
+  "youFinished": "You finished #{{rank}} {{period}}!",
+  "prize": "Prize: {{prize}}",
+  "checkRedemptions": "Check redemptions →",
+  "leaderboardPrize": "Leaderboard Prize",
+  "arenaPrize": "Arena Prize"
 }

@@ -66,7 +66,20 @@ export default function RedemptionsScreen() {
     }
   };
 
-  const getRewardEmoji = (type: string) => {
+  const getRedemptionName = (redemption: any) => {
+    if (redemption.source_type === 'leaderboard_prize') {
+      return redemption.description || t('leaderboardPrize');
+    }
+    if (redemption.source_type === 'arena_prize') {
+      return redemption.description || t('arenaPrize');
+    }
+    return redemption.rewards?.name || t('unknownReward');
+  };
+
+  const getRewardEmoji = (redemption: any) => {
+    if (redemption.source_type === 'leaderboard_prize') return '🏆';
+    if (redemption.source_type === 'arena_prize') return '⚔️';
+    const type = redemption.rewards?.reward_type || '';
     switch (type) {
       case 'coffee': return '☕';
       case 'protein': return '🥤';
@@ -140,16 +153,28 @@ export default function RedemptionsScreen() {
                     <View style={styles.redemptionHeader}>
                       <View style={[styles.emojiContainer, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
                         <Text style={styles.redemptionEmoji}>
-                          {getRewardEmoji(redemption.rewards?.reward_type || '')}
+                          {getRewardEmoji(redemption)}
                         </Text>
                       </View>
                       <View style={styles.redemptionInfo}>
-                        <Text style={styles.redemptionName} numberOfLines={1}>
-                          {redemption.rewards?.name || t('unknownReward')}
+                        <Text style={styles.redemptionName} numberOfLines={2}>
+                          {getRedemptionName(redemption)}
                         </Text>
-                        <Text style={styles.redemptionGym} numberOfLines={1}>
-                          {redemption.gyms?.name || t('unknownGym')}
-                        </Text>
+                        <View style={styles.redemptionSubRow}>
+                          <Text style={styles.redemptionGym} numberOfLines={1}>
+                            {redemption.gyms?.name || t('unknownGym')}
+                          </Text>
+                          {redemption.source_type === 'leaderboard_prize' && (
+                            <View style={[styles.sourceBadge, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                              <Text style={[styles.sourceBadgeText, { color: branding.primary }]}>🏆 {t('leaderboard')}</Text>
+                            </View>
+                          )}
+                          {redemption.source_type === 'arena_prize' && (
+                            <View style={[styles.sourceBadge, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                              <Text style={[styles.sourceBadgeText, { color: branding.primary }]}>⚔️ {t('arena')}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                       <View style={[styles.statusBadge, { borderColor: statusColor + '30', backgroundColor: statusColor + '10' }]}>
                         <Ionicons name={statusIcon} size={14} color={statusColor} />
@@ -183,16 +208,18 @@ export default function RedemptionsScreen() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* Drops Spent */}
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>{t('dropsSpent')}</Text>
-                        <View style={styles.dropsContainer}>
-                          <Ionicons name="water" size={14} color={branding.primary} />
-                          <Text style={[styles.dropsAmount, getNumberStyle(14), { color: branding.primary }]}>
-                            {redemption.drops_spent}
-                          </Text>
+                      {/* Drops Spent (hide for prize redemptions) */}
+                      {redemption.drops_spent > 0 && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>{t('dropsSpent')}</Text>
+                          <View style={styles.dropsContainer}>
+                            <Ionicons name="water" size={14} color={branding.primary} />
+                            <Text style={[styles.dropsAmount, getNumberStyle(14), { color: branding.primary }]}>
+                              {redemption.drops_spent}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
+                      )}
 
                       {/* Date */}
                       <View style={styles.detailRow}>
@@ -328,9 +355,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginBottom: 2,
   },
+  redemptionSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
   redemptionGym: {
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  sourceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  sourceBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 10,
     letterSpacing: 0.3,
   },
   statusBadge: {

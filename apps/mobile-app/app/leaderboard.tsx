@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -13,6 +14,7 @@ import { useGymStore } from '@/lib/stores/useGymStore';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 // ── Types (mirrored from backend/types/sweatdrop.ts) ──
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'all_time';
 
@@ -90,6 +92,16 @@ export default function LeaderboardScreen() {
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [showPastWinners, setShowPastWinners] = useState(false);
+  const [winnerBanner, setWinnerBanner] = useState<{
+    rank: number;
+    period: string;
+    periodLabel: string;
+    reward?: string;
+    snapshotId: string;
+  } | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
     if (session?.user) {
@@ -179,8 +191,19 @@ export default function LeaderboardScreen() {
           .limit(3);
 
         setRewards((rewardData as LeaderboardReward[]) || []);
+
+        // Fetch past winner snapshots
+        const { data: snapshotData } = await supabase
+          .from('leaderboard_snapshots')
+          .select('id, period, period_start, period_end, rankings, prizes_distributed')
+          .eq('gym_id', activeGymId)
+          .order('period_end', { ascending: false })
+          .limit(5);
+
+        setSnapshots(snapshotData || []);
       } else {
         setRewards([]);
+        setSnapshots([]);
       }
     } catch (error) {
       console.error('Leaderboard error:', error);
@@ -239,6 +262,62 @@ export default function LeaderboardScreen() {
     return Math.max(0, diff);
   };
 
+  const formatPeriodLabel = (snapshot: any) => {
+    const start = new Date(snapshot.period_start);
+    const end = new Date(snapshot.period_end);
+    if (snapshot.period === 'weekly') {
+      const fmt = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}`;
+      return `${t('weekly')} · ${fmt(start)} - ${fmt(end)}`;
+    }
+    const monthName = start.toLocaleDateString(i18n.language === 'sr' ? 'sr-RS' : 'en-US', { month: 'long' });
+    return `${t('monthly')} · ${monthName}`;
+  };
+
+  const getMedalEmoji = (rank: number) => {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return `#${rank}`;
+  };
+
+  // Winner banner: check if current user was top 3 in any recent snapshot
+  useEffect(() => {
+    if (!session?.user?.id || snapshots.length === 0) {
+      setWinnerBanner(null);
+      return;
+    }
+
+    (async () => {
+      for (const snapshot of snapshots) {
+        const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
+        const userEntry = rankings.find(r => r.user_id === session.user.id && r.rank <= 3);
+        if (userEntry) {
+          const dismissed = await AsyncStorage.getItem(`dismissedWinBanner_${snapshot.id}`);
+          if (dismissed) continue;
+
+          const matchingReward = rewards.find(r => r.rank_position === userEntry.rank);
+          setWinnerBanner({
+            rank: userEntry.rank,
+            period: snapshot.period,
+            periodLabel: formatPeriodLabel(snapshot),
+            reward: matchingReward?.reward_name,
+            snapshotId: snapshot.id,
+          });
+          setBannerDismissed(false);
+          return;
+        }
+      }
+      setWinnerBanner(null);
+    })();
+  }, [snapshots, session?.user?.id, rewards]);
+
+  const dismissWinnerBanner = async () => {
+    if (winnerBanner) {
+      await AsyncStorage.setItem(`dismissedWinBanner_${winnerBanner.snapshotId}`, '1');
+      setBannerDismissed(true);
+    }
+  };
+
   const currentUserEntry = leaderboard.find((entry) => isCurrentUser(entry.user_id));
 
   return (
@@ -258,6 +337,46 @@ export default function LeaderboardScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Winner Banner */}
+        {winnerBanner && !bannerDismissed && activeTab === 'gym' && (
+          <Animated.View entering={FadeInDown.delay(50).duration(400)}>
+            <TouchableOpacity
+              style={[styles.winnerBanner, { borderColor: hexToRgba('#FFD700', 0.3) }]}
+              onPress={() => router.push('/redemptions')}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[hexToRgba('#FFD700', 0.12), hexToRgba('#FFD700', 0.04)]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <View style={styles.winnerBannerContent}>
+                <Text style={styles.winnerMedal}>{getMedalEmoji(winnerBanner.rank)}</Text>
+                <View style={styles.winnerBannerInfo}>
+                  <Text style={styles.winnerBannerTitle}>
+                    {t('youFinished', { rank: winnerBanner.rank, period: winnerBanner.periodLabel })}
+                  </Text>
+                  {winnerBanner.reward && (
+                    <Text style={[styles.winnerBannerPrize, { color: branding.primary }]}>
+                      {t('prize', { prize: winnerBanner.reward })}
+                    </Text>
+                  )}
+                  <Text style={[styles.winnerBannerLink, { color: branding.primary }]}>
+                    {t('checkRedemptions')}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={dismissWinnerBanner}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
         {/* 3-Tab Toggle: My Gym | Global | Arenas */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <View style={[styles.typeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
@@ -644,6 +763,51 @@ export default function LeaderboardScreen() {
                   <Text style={styles.resetNote}>
                     {period === 'weekly' ? t('prizesResetWeekly') : t('prizesResetMonthly')}
                   </Text>
+                </Animated.View>
+              )}
+
+              {/* Past Winners */}
+              {activeTab === 'gym' && snapshots.length > 0 && (
+                <Animated.View entering={FadeInDown.delay(700).duration(400)}>
+                  <TouchableOpacity
+                    style={[styles.pastWinnersToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                    onPress={() => setShowPastWinners(!showPastWinners)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.pastWinnersToggleIcon}>📜</Text>
+                    <Text style={styles.pastWinnersToggleText}>{t('pastWinners')}</Text>
+                    <Ionicons
+                      name={showPastWinners ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={theme.colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+
+                  {showPastWinners && (
+                    <View style={[styles.pastWinnersContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                      <BlurView intensity={50} tint="dark" style={[styles.pastWinnersBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                        {snapshots.map((snapshot, idx) => {
+                          const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
+                          const top3 = rankings.filter(r => r.rank <= 3).sort((a, b) => a.rank - b.rank);
+                          if (top3.length === 0) return null;
+                          return (
+                            <View key={snapshot.id} style={[styles.snapshotBlock, idx > 0 && styles.snapshotBlockBorder]}>
+                              <Text style={styles.snapshotLabel}>{formatPeriodLabel(snapshot)}</Text>
+                              {top3.map((entry) => (
+                                <View key={entry.user_id} style={styles.snapshotEntry}>
+                                  <Text style={styles.snapshotMedal}>{getMedalEmoji(entry.rank)}</Text>
+                                  <Text style={styles.snapshotUsername} numberOfLines={1}>@{entry.username}</Text>
+                                  <Text style={[styles.snapshotDrops, { color: branding.primary }]}>
+                                    {entry.drops.toLocaleString()} {t('drops')}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          );
+                        })}
+                      </BlurView>
+                    </View>
+                  )}
                 </Animated.View>
               )}
             </>
@@ -1077,5 +1241,113 @@ const styles = StyleSheet.create({
   arenaRankText: {
     ...fontStyles.number,
     fontSize: 14,
+  },
+
+  /* Winner Banner */
+  winnerBanner: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginBottom: theme.spacing.md,
+  },
+  winnerBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  winnerMedal: {
+    fontSize: 28,
+  },
+  winnerBannerInfo: {
+    flex: 1,
+  },
+  winnerBannerTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
+  },
+  winnerBannerPrize: {
+    ...fontStyles.bodyMedium,
+    fontSize: theme.typography.fontSize.xs,
+    marginTop: 2,
+  },
+  winnerBannerLink: {
+    ...fontStyles.bodySemiBold,
+    fontSize: theme.typography.fontSize.xs,
+    marginTop: 4,
+  },
+
+  /* Past Winners */
+  pastWinnersToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.xl,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+  },
+  pastWinnersToggleIcon: {
+    fontSize: 16,
+  },
+  pastWinnersToggleText: {
+    ...fontStyles.bodySemiBold,
+    flex: 1,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
+  },
+  pastWinnersContainer: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginTop: theme.spacing.sm,
+  },
+  pastWinnersBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
+  },
+  snapshotBlock: {
+    paddingVertical: theme.spacing.sm,
+  },
+  snapshotBlockBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
+  },
+  snapshotLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
+    marginBottom: theme.spacing.sm,
+  },
+  snapshotEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  snapshotMedal: {
+    fontSize: 16,
+    width: 24,
+    textAlign: 'center',
+  },
+  snapshotUsername: {
+    ...fontStyles.bodyMedium,
+    flex: 1,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text,
+    letterSpacing: 0.3,
+  },
+  snapshotDrops: {
+    ...fontStyles.number,
+    fontSize: 12,
   },
 });

@@ -13,5 +13,9 @@
   "na": "N/A",
   "showCodeToStaff": "Show your code to gym staff to claim",
   "unknownReward": "Unknown reward",
-  "unknownGym": "Unknown gym"
+  "unknownGym": "Unknown gym",
+  "leaderboardPrize": "Leaderboard Prize",
+  "arenaPrize": "Arena Prize",
+  "leaderboard": "Leaderboard",
+  "arena": "Arena"
 }

@@ -15,9 +15,17 @@
   "loadingArenas": "Učitavanje arena...",
   "you": "(Ti)",
   "new": "NOVO",
+  "drops": "drops",
   "prizesResetWeekly": "Nagrade se resetuju svake nedelje",
   "prizesResetMonthly": "Nagrade se resetuju svakog meseca",
   "participants_one": "{{count}} učesnik",
   "participants_few": "{{count}} učesnika",
-  "participants_other": "{{count}} učesnika"
+  "participants_other": "{{count}} učesnika",
+  "pastWinners": "Prethodni pobednici",
+  "noPastWinners": "Još nema pobednika",
+  "youFinished": "Završio si kao #{{rank}} {{period}}!",
+  "prize": "Nagrada: {{prize}}",
+  "checkRedemptions": "Pogledaj nagrade →",
+  "leaderboardPrize": "Nagrada sa leaderboarda",
+  "arenaPrize": "Nagrada iz arene"
 }

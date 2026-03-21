@@ -43,6 +43,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
   const [currentUserEntry, setCurrentUserEntry] = useState<LeaderboardEntry | null>(null);
   const [activePeriod, setActivePeriod] = useState<string>('weekly');
   const [loading, setLoading] = useState(true);
+  const [hasPrizes, setHasPrizes] = useState(false);
 
   const fetchPeriod = useCallback(async (period: string): Promise<LeaderboardEntry[]> => {
     if (!gymId) return [];
@@ -134,6 +135,16 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         if (userIndex >= 3) {
           setCurrentUserEntry(entries[userIndex]);
         }
+      }
+
+      // Check if gym has active prizes
+      if (gymId) {
+        const { count } = await supabase
+          .from('leaderboard_rewards')
+          .select('*', { count: 'exact', head: true })
+          .eq('gym_id', gymId)
+          .eq('is_active', true);
+        setHasPrizes(!!count && count > 0);
       }
     } catch (err) {
       console.error('[LeaderboardPreview] Error:', err);
@@ -286,6 +297,15 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
           )}
         </BlurView>
       </View>
+
+      {/* Prize hint */}
+      {hasPrizes && (
+        <View style={styles.prizeHint}>
+          <Text style={[styles.prizeHintText, { color: branding.primary }]}>
+            🏆 {t('winPrizesThisWeek')}
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -384,5 +404,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.3)',
     letterSpacing: 4,
+  },
+  prizeHint: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  prizeHintText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
 });
