@@ -230,7 +230,8 @@ export async function getMemberDetail(
           id: mp.id,
           username: mp.username || 'Unknown',
           email: mp.email || '',
-          avatar_url: (mp.avatar_url && typeof mp.avatar_url === 'string' && mp.avatar_url.startsWith('http')) ? mp.avatar_url : null,
+          avatar_url:
+            typeof mp.avatar_url === 'string' && mp.avatar_url.trim() ? mp.avatar_url.trim() : null,
           total_drops: mp.total_drops || 0,
           available_drops: mp.available_drops || 0,
           streak_days: mp.streak_days || 0,

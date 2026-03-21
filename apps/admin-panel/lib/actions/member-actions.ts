@@ -103,7 +103,8 @@ export async function getGymMembers(
           id: p.id,
           username: p.username || 'Unknown',
           email: p.email || '',
-          avatar_url: (p.avatar_url && typeof p.avatar_url === 'string' && p.avatar_url.startsWith('http')) ? p.avatar_url : null,
+          avatar_url:
+            typeof p.avatar_url === 'string' && p.avatar_url.trim() ? p.avatar_url.trim() : null,
           total_drops: p.total_drops || 0,
           streak_days: p.streak_days || 0,
           last_visit_date: lastVisit,

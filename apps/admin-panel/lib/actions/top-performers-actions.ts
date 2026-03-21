@@ -58,10 +58,12 @@ export async function getTopPerformers(gymId: string): Promise<TopPerformer[]> {
       .map((membership) => {
         const profile = profiles?.find((p) => p.id === membership.user_id);
         if (!profile) return null;
+        const rawAv = profile.avatar_url;
         return {
           id: profile.id,
           username: profile.username,
-          avatar_url: profile.avatar_url,
+          avatar_url:
+            typeof rawAv === 'string' && rawAv.trim() ? rawAv.trim() : null,
           total_drops: membership.local_drops_balance || 0,
         };
       })

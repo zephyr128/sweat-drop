@@ -440,6 +440,8 @@ export interface ParticipantWithBreakdown {
   user_id: string;
   username: string;
   avatar_url: string | null;
+  /** Gym the user opted into this arena from — use for member profile links */
+  participant_gym_id: string;
   gym_name: string;
   current_score: number;
   rank: number;
@@ -568,10 +570,15 @@ export async function getArenaParticipants(arenaId: string, viewingGymId?: strin
         displayGymName = 'Other Gym';
       }
 
+      const rawAvatar = p.profiles?.avatar_url;
+      const avatarUrl =
+        typeof rawAvatar === 'string' && rawAvatar.trim() ? rawAvatar.trim() : null;
+
       return {
         user_id: p.user_id,
         username: p.profiles?.username || 'Unknown',
-        avatar_url: p.profiles?.avatar_url || null,
+        avatar_url: avatarUrl,
+        participant_gym_id: p.gym_id,
         gym_name: displayGymName,
         current_score: p.current_score,
         rank: idx + 1,

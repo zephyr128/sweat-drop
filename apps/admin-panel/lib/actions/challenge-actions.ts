@@ -22,8 +22,6 @@ const createChallengeSchema = z.object({
   badgeImageUrl: z.string().url().optional().or(z.literal('')),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  // New enhanced fields
-  categoryType: z.enum(['individual', 'group', 'streak']).optional(),
   scoringModel: z.enum(['total_drops', 'distance_km', 'days_visited', 'streak_days']).optional(),
   tiers: z.array(tierSchema).optional(),
   sponsorName: z.string().optional(),
@@ -486,14 +484,19 @@ export async function getChallengeDetailedProgress(challengeId: string, gymId: s
 
     if (progressError) throw progressError;
 
-    const participants = ((progressRecords || []) as any[]).map((p) => ({
+    const participants = ((progressRecords || []) as any[]).map((p) => {
+      const rawAv = p.profiles?.avatar_url;
+      const avatarNorm =
+        typeof rawAv === 'string' && rawAv.trim() ? rawAv.trim() : null;
+      return {
       user_id: p.user_id,
       username: p.profiles?.username || 'Unknown',
-      avatar_url: p.profiles?.avatar_url || null,
+      avatar_url: avatarNorm,
       current_value: p.current_value || 0,
       is_completed: p.is_completed || false,
       completed_at: p.completed_at,
-    }));
+    };
+    });
 
     // Determine target for the challenge
     const target = (challenge as any).challenge_type === 'streak'

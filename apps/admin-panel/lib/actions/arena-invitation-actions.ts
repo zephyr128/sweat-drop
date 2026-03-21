@@ -52,6 +52,8 @@ export interface ArenaResult {
   avatar_url: string | null;
   email: string | null;
   gym_name: string;
+  /** Gym id to open member detail (membership context) */
+  member_gym_id: string | null;
   final_score: number;
   prize: string | null;
   redemption_code: string | null;
@@ -373,13 +375,25 @@ export async function getArenaResults(
         }
       }
 
+      const rawAv = r.avatar_url;
+      const avatarNorm =
+        typeof rawAv === 'string' && rawAv.trim() ? rawAv.trim() : null;
+
+      const memberGymId =
+        displayGymId ||
+        userGymMap.get(r.user_id) ||
+        (typeof (r as { gym_id?: string }).gym_id === 'string'
+          ? (r as { gym_id: string }).gym_id
+          : null);
+
       return {
         rank: r.rank,
         user_id: r.user_id,
         username: r.username || 'Unknown',
-        avatar_url: r.avatar_url || null,
+        avatar_url: avatarNorm,
         email: isSuperadmin ? (userEmailMap.get(r.user_id) || null) : null,
         gym_name: displayGymName,
+        member_gym_id: memberGymId,
         final_score: Number(r.final_score) || 0,
         prize: r.prize || null,
         redemption_code: r.redemption_code || null,

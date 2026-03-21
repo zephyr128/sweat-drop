@@ -389,7 +389,10 @@ export async function getGymCheckins(gymId: string): Promise<{
       id: c.id,
       user_id: c.user_id,
       username: c.profiles?.username || 'Unknown',
-      avatar_url: c.profiles?.avatar_url || null,
+      avatar_url:
+        typeof c.profiles?.avatar_url === 'string' && c.profiles.avatar_url.trim()
+          ? c.profiles.avatar_url.trim()
+          : null,
       checked_in_at: c.checked_in_at,
       drops_earned: c.drops_earned,
       gps_verified: c.gps_verified,
