@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils/date';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface MemberListProps {
   gymId: string;
@@ -247,20 +248,11 @@ export function MemberList({ gymId }: MemberListProps) {
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {member.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={member.avatar_url}
-                            alt={member.username}
-                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-[#808080]">
-                              {member.username.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
+                        <MemberAvatar
+                          avatarUrl={member.avatar_url}
+                          username={member.username}
+                          size="md"
+                        />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-white truncate">{member.username}</p>
                           <p className="text-xs text-[#808080] truncate">{member.email}</p>

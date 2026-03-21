@@ -20,6 +20,7 @@ import type {
   MemberBadge,
   MemberRedemption,
 } from '@/lib/actions/member-detail-actions';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface MemberDetailViewProps {
   gymId: string;
@@ -246,20 +247,11 @@ export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
       {/* Header */}
       <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6 mb-6">
         <div className="flex items-center gap-5">
-          {member.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={member.avatar_url}
-              alt={member.username}
-              className="w-16 h-16 rounded-full object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-[#1A1A1A] flex items-center justify-center flex-shrink-0">
-              <span className="text-xl font-bold text-[#808080]">
-                {member.username.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
+          <MemberAvatar
+            avatarUrl={member.avatar_url}
+            username={member.username}
+            size="xl"
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-2xl font-bold text-white truncate">{member.username}</h1>

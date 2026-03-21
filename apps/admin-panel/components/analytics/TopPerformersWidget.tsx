@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getTopPerformers, TopPerformer } from '@/lib/actions/top-performers-actions';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface TopPerformersWidgetProps {
   gymId: string;
@@ -53,31 +55,26 @@ export function TopPerformersWidget({ gymId }: TopPerformersWidgetProps) {
       <p className="text-xs text-[#808080] mb-3">By Drops</p>
       <div className="space-y-2">
         {performers.map((performer, index) => (
-          <div
+          <Link
             key={performer.id}
+            href={`/dashboard/gym/${gymId}/members/${performer.id}`}
             className="flex items-center gap-2 p-2 bg-[#1A1A1A] rounded-lg border border-[#333] hover:border-[#00E5FF]/30 transition-colors"
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-[#00E5FF] to-[#00B8CC] text-black font-bold text-sm flex-shrink-0">
               {index + 1}
             </div>
-            {performer.avatar_url ? (
-              <img
-                src={performer.avatar_url}
-                alt={performer.username}
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] font-bold text-xs flex-shrink-0">
-                {performer.username.charAt(0).toUpperCase()}
-              </div>
-            )}
+            <MemberAvatar
+              avatarUrl={performer.avatar_url}
+              username={performer.username}
+              size="md"
+            />
             <div className="flex-1 min-w-0">
               <p className="text-white text-sm font-medium truncate">{performer.username}</p>
               <p className="text-xs text-[#808080]">
                 {performer.total_drops.toLocaleString()} drops
               </p>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
