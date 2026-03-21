@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Trophy,
   Medal,
@@ -22,6 +23,7 @@ import {
   getLeaderboardRewards,
   updateLeaderboardRewards,
 } from '@/lib/actions/leaderboard-actions';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface RankingEntry {
   rank: number;
@@ -82,10 +84,14 @@ function formatPeriodRange(start: string, end: string): string {
 function LeaderboardStandings({
   entries,
   loading,
+  gymId,
 }: {
   entries: CurrentLeaderboardEntry[];
   loading: boolean;
+  gymId: string;
 }) {
+  const router = useRouter();
+
   if (loading) {
     return <div className="text-center py-8 text-[#808080]">Loading leaderboard...</div>;
   }
@@ -106,7 +112,16 @@ function LeaderboardStandings({
         return (
           <div
             key={entry.user_id}
-            className={`flex items-center gap-4 p-3 rounded-lg transition-colors ${
+            role="button"
+            tabIndex={0}
+            onClick={() => router.push(`/dashboard/gym/${gymId}/members/${entry.user_id}`)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                router.push(`/dashboard/gym/${gymId}/members/${entry.user_id}`);
+              }
+            }}
+            className={`flex items-center gap-4 p-3 rounded-lg transition-colors cursor-pointer hover:bg-[#1A1A1A]/80 ${
               isTop3 ? 'bg-[#0A0A0A] border border-[#333]' : ''
             }`}
           >
@@ -119,14 +134,11 @@ function LeaderboardStandings({
                 <span className="text-[#808080] font-mono text-sm">#{entry.rank}</span>
               )}
             </div>
-            <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-xs text-white flex-shrink-0">
-              {entry.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={entry.avatar_url} alt={entry.username} className="w-8 h-8 rounded-full object-cover" />
-              ) : (
-                (entry.username || '?')[0].toUpperCase()
-              )}
-            </div>
+            <MemberAvatar
+              avatarUrl={entry.avatar_url}
+              username={entry.username || 'Member'}
+              size="md"
+            />
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium truncate ${isTop3 ? RANK_TEXT_COLORS[index] : 'text-white'}`}>
                 {entry.username || 'Anonymous'}
@@ -476,7 +488,7 @@ export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) 
               <p className="text-sm text-[#808080] mt-1">{gymName} — current week</p>
             </div>
             <div className="p-6">
-              <LeaderboardStandings entries={weeklyBoard} loading={weeklyLoading} />
+              <LeaderboardStandings entries={weeklyBoard} loading={weeklyLoading} gymId={gymId} />
             </div>
           </div>
           <div className="bg-[#1A1A1A] rounded-xl border border-[#1A1A1A] overflow-hidden">
@@ -506,7 +518,7 @@ export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) 
               <p className="text-sm text-[#808080] mt-1">{gymName} — current month</p>
             </div>
             <div className="p-6">
-              <LeaderboardStandings entries={monthlyBoard} loading={monthlyLoading} />
+              <LeaderboardStandings entries={monthlyBoard} loading={monthlyLoading} gymId={gymId} />
             </div>
           </div>
           <div className="bg-[#1A1A1A] rounded-xl border border-[#1A1A1A] overflow-hidden">
@@ -535,7 +547,7 @@ export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) 
             <p className="text-sm text-[#808080] mt-1">{gymName} — all time top members</p>
           </div>
           <div className="p-6">
-            <LeaderboardStandings entries={allTimeBoard} loading={allTimeLoading} />
+            <LeaderboardStandings entries={allTimeBoard} loading={allTimeLoading} gymId={gymId} />
           </div>
         </div>
       )}

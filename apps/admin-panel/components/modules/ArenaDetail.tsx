@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Trophy,
@@ -42,6 +43,7 @@ import {
   type GymScoreEntry,
 } from '@/lib/actions/arena-invitation-actions';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface ArenaDetailProps {
   arena: Arena;
@@ -99,6 +101,7 @@ function isResultFullBreakdown(b: ArenaResult['gym_breakdown']): b is GymScoreEn
 }
 
 export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: ArenaDetailProps) {
+  const router = useRouter();
   const [participants, setParticipants] = useState<ParticipantWithBreakdown[]>([]);
   const [results, setResults] = useState<ArenaResult[]>([]);
   const [invitations, setInvitations] = useState<ArenaInvitation[]>([]);
@@ -387,7 +390,15 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
                     const RankIcon = isTop3 ? RANK_ICONS[idx] : null;
                     const unit = SCORING_UNITS[arena.scoring_model] || '';
                     return (
-                      <tr key={p.user_id} className={`hover:bg-[#1A1A1A]/50 ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}>
+                      <tr
+                        key={p.user_id}
+                        onClick={() =>
+                          router.push(
+                            `/dashboard/gym/${p.participant_gym_id}/members/${p.user_id}`
+                          )
+                        }
+                        className={`hover:bg-[#1A1A1A]/50 cursor-pointer ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}
+                      >
                         <td className="px-4 py-3">
                           {isTop3 && RankIcon ? (
                             <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${RANK_COLORS[idx]} flex items-center justify-center`}>
@@ -399,13 +410,11 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-xs text-white">
-                              {p.avatar_url ? (
-                                <img src={p.avatar_url} alt={p.username} className="w-8 h-8 rounded-full object-cover" />
-                              ) : (
-                                (p.username || '?')[0].toUpperCase()
-                              )}
-                            </div>
+                            <MemberAvatar
+                              avatarUrl={p.avatar_url}
+                              username={p.username}
+                              size="md"
+                            />
                             <span className={`text-sm font-medium ${isTop3 ? RANK_TEXT_COLORS[idx] : 'text-white'}`}>
                               {p.username}
                             </span>
@@ -535,7 +544,16 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
                     const isTop3 = idx < 3;
                     const RankIcon = isTop3 ? RANK_ICONS[idx] : null;
                     return (
-                      <tr key={r.user_id} className={`hover:bg-[#1A1A1A]/50 ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}>
+                      <tr
+                        key={r.user_id}
+                        onClick={() => {
+                          const gid = r.member_gym_id || viewingGymId;
+                          if (gid) {
+                            router.push(`/dashboard/gym/${gid}/members/${r.user_id}`);
+                          }
+                        }}
+                        className={`hover:bg-[#1A1A1A]/50 ${r.member_gym_id || viewingGymId ? 'cursor-pointer' : ''} ${isTop3 ? 'bg-[#0A0A0A]' : ''}`}
+                      >
                         <td className="px-4 py-3">
                           {isTop3 && RankIcon ? (
                             <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${RANK_COLORS[idx]} flex items-center justify-center`}>
@@ -547,13 +565,11 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-xs text-white">
-                              {r.avatar_url ? (
-                                <img src={r.avatar_url} alt={r.username} className="w-8 h-8 rounded-full object-cover" />
-                              ) : (
-                                (r.username || '?')[0].toUpperCase()
-                              )}
-                            </div>
+                            <MemberAvatar
+                              avatarUrl={r.avatar_url}
+                              username={r.username}
+                              size="md"
+                            />
                             <span className={`text-sm font-medium ${isTop3 ? RANK_TEXT_COLORS[idx] : 'text-white'}`}>
                               {r.username}
                             </span>

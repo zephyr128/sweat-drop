@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Line } from 'react-chartjs-2';
 import '@/lib/chart-setup';
 import {
@@ -21,12 +22,14 @@ import {
   Clock,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils/date';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface RetentionDashboardProps {
   gymId: string;
 }
 
 export function RetentionDashboard({ gymId }: RetentionDashboardProps) {
+  const router = useRouter();
   const [kpis, setKpis] = useState<RetentionKPIs | null>(null);
   const [dailyVisitors, setDailyVisitors] = useState<DailyVisitors[]>([]);
   const [atRiskMembers, setAtRiskMembers] = useState<AtRiskMember[]>([]);
@@ -292,23 +295,18 @@ export function RetentionDashboard({ gymId }: RetentionDashboardProps) {
               </thead>
               <tbody className="divide-y divide-[#1A1A1A]">
                 {atRiskMembers.map((member) => (
-                  <tr key={member.id} className="hover:bg-[#111] transition-colors">
+                  <tr
+                    key={member.id}
+                    onClick={() => router.push(`/dashboard/gym/${gymId}/members/${member.id}`)}
+                    className="hover:bg-[#111] transition-colors cursor-pointer"
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {member.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={member.avatar_url}
-                            alt={member.username}
-                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-[#808080]">
-                              {member.username.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
+                        <MemberAvatar
+                          avatarUrl={member.avatar_url}
+                          username={member.username}
+                          size="md"
+                        />
                         <div>
                           <p className="text-sm font-medium text-white">{member.username}</p>
                           <p className="text-xs text-[#808080]">{member.email}</p>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 import { createChallenge, updateChallenge, deleteChallenge, toggleChallengeStatus, getChallengeCompletionStats, getChallengeDetailedProgress, closeChallenge } from '@/lib/actions/challenge-actions';
 import { X, Trash2, Power, Droplet, Upload, Image, BarChart3, Users, CheckCircle2, XCircle, Building2, Plus, Minus, Pencil, Info, CalendarDays, Infinity } from 'lucide-react';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
 
@@ -29,8 +31,6 @@ const challengeSchema = z.object({
   badgeImageUrl: z.string().url().optional().or(z.literal('')), // Optional badge image URL
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  // New fields for enhancement
-  categoryType: z.enum(['individual', 'group', 'streak']).optional(),
   scoringModel: z.enum(['total_drops', 'distance_km', 'days_visited', 'streak_days']).optional(),
   sponsorName: z.string().optional(),
   sponsorLogo: z.string().url().optional().or(z.literal('')),
@@ -86,7 +86,6 @@ interface Challenge {
   sponsor_name?: string | null;
   sponsor_logo?: string | null;
   prize_description?: string | null;
-  category_type?: string | null;
   // Legacy fields (deprecated)
   frequency?: string;
   required_minutes?: number;
@@ -100,6 +99,7 @@ interface ChallengesManagerProps {
 }
 
 export function ChallengesManager({ gymId, initialChallenges }: ChallengesManagerProps) {
+  const router = useRouter();
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
@@ -140,7 +140,6 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
       streakDays: 3,
       milestoneThreshold: 1000,
       badgeImageUrl: '',
-      categoryType: 'individual',
       scoringModel: 'total_drops',
       sponsorName: '',
       sponsorLogo: '',
@@ -249,7 +248,6 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
       badgeImageUrl: challenge.badge_image_url || '',
       startDate: challenge.start_date || undefined,
       endDate: challenge.end_date || undefined,
-      categoryType: (challenge.category_type as ChallengeFormData['categoryType']) || 'individual',
       scoringModel: (challenge.scoring_model as ChallengeFormData['scoringModel']) || 'total_drops',
       sponsorName: challenge.sponsor_name || '',
       sponsorLogo: challenge.sponsor_logo || '',
@@ -273,9 +271,16 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
 
   const onSubmit = async (data: ChallengeFormData) => {
     try {
+      const autoScoringModel: Record<string, string> = {
+        streak: 'streak_days',
+        checkin_streak: 'streak_days',
+        checkin_count: 'days_visited',
+      };
+
       const submitData: any = {
         ...data,
         gymId,
+        scoringModel: autoScoringModel[data.challengeType] || data.scoringModel || 'total_drops',
         tiers: enableTiers ? tiers : undefined,
       };
 
@@ -829,39 +834,25 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                 )}
               </div>
 
-              {/* Category Type */}
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Category
-                </label>
-                <select
-                  {...register('categoryType')}
-                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
-                >
-                  <option value="individual">Individual</option>
-                  <option value="group">Group</option>
-                  <option value="streak">Streak</option>
-                </select>
-                <p className="mt-1 text-xs text-[#808080]">
-                  Individual: personal progress • Group: gym-wide collective • Streak: consecutive days
-                </p>
-              </div>
-
-              {/* Scoring Model */}
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Scoring Model
-                </label>
-                <select
-                  {...register('scoringModel')}
-                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
-                >
-                  <option value="total_drops">Total Drops</option>
-                  <option value="distance_km">Distance (km)</option>
-                  <option value="days_visited">Days Visited</option>
-                  <option value="streak_days">Streak Days</option>
-                </select>
-              </div>
+              {/* Scoring Metric — only shown when challengeType allows multiple metrics */}
+              {(isDropsBasedChallenge || isMilestoneChallenge) && (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    How is progress measured?
+                  </label>
+                  <select
+                    {...register('scoringModel')}
+                    className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="total_drops">💧 Total Drops</option>
+                    <option value="distance_km">🏃 Distance (km)</option>
+                    <option value="days_visited">📅 Days Visited</option>
+                  </select>
+                  <p className="mt-1 text-xs text-[#808080]">
+                    Determines how user progress is tracked and displayed
+                  </p>
+                </div>
+              )}
 
               {/* Tiers Editor */}
               <div className="border-t border-[#1A1A1A] pt-4">
@@ -1211,14 +1202,18 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                               ? Math.min(Math.round((p.current_value / monitorData.target) * 100), 100)
                               : 0;
                             return (
-                              <tr key={p.user_id} className="hover:bg-[#222] transition-colors">
+                              <tr
+                                key={p.user_id}
+                                onClick={() => router.push(`/dashboard/gym/${gymId}/members/${p.user_id}`)}
+                                className="hover:bg-[#222] transition-colors cursor-pointer"
+                              >
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded-full bg-[#333] flex items-center justify-center">
-                                      <span className="text-xs font-bold text-[#808080]">
-                                        {p.username.charAt(0).toUpperCase()}
-                                      </span>
-                                    </div>
+                                    <MemberAvatar
+                                      avatarUrl={p.avatar_url as string | null | undefined}
+                                      username={p.username}
+                                      size="sm"
+                                    />
                                     <span className="text-sm text-white">{p.username}</span>
                                   </div>
                                 </td>

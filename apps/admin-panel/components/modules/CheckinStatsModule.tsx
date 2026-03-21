@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { MapPin, Shield, ShieldAlert, Filter } from 'lucide-react';
 import { getGymCheckinStats, getGymCheckins } from '@/lib/actions/gym-actions';
+import { MemberAvatar } from '@/components/MemberAvatar';
 
 interface Checkin {
   id: string;
@@ -36,6 +38,7 @@ function formatTime(dateStr: string): string {
 }
 
 export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
+  const router = useRouter();
   const [stats, setStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,19 +129,18 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
             </thead>
             <tbody>
               {filteredCheckins.map((c) => (
-                <tr key={c.id} className="border-b border-[#111] hover:bg-[#111] transition-colors">
+                <tr
+                  key={c.id}
+                  onClick={() => router.push(`/dashboard/gym/${gymId}/members/${c.user_id}`)}
+                  className="border-b border-[#111] hover:bg-[#111] transition-colors cursor-pointer"
+                >
                   <td className="py-3 px-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#1A1A1A] overflow-hidden shrink-0">
-                        {c.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={c.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs text-[#555]">
-                            {c.username.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
+                      <MemberAvatar
+                        avatarUrl={c.avatar_url}
+                        username={c.username}
+                        size="sm"
+                      />
                       <span className="text-sm text-white truncate max-w-[120px]">{c.username}</span>
                     </div>
                   </td>
