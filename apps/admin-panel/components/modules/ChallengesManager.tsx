@@ -488,13 +488,15 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
                         <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100] capitalize w-fit">
-                          {challenge.challenge_type || challenge.frequency}
+                          {challenge.challenge_type === 'checkin_streak' ? 'Check-in Streak'
+                            : challenge.challenge_type === 'checkin_count' ? 'Check-in Count'
+                            : (challenge.challenge_type || challenge.frequency)}
                         </span>
                         <span className="text-[10px] text-zinc-600 pl-1">
                           {challenge.challenge_type === 'milestone'
                             ? '∞ Ongoing'
                             : (challenge.challenge_type === 'daily' || challenge.challenge_type === 'weekly')
-                            ? `🔄 Recurring`
+                            ? '🔄 Recurring'
                             : challenge.end_date
                             ? `Until ${challenge.end_date}`
                             : '∞ No deadline'}
@@ -503,25 +505,15 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                     </td>
                     <td className="px-6 py-4">
                       {challenge.challenge_type === 'checkin_streak' && challenge.streak_days ? (
-                        <span className="text-white font-bold">
-                          📍 {challenge.streak_days} day visit streak
-                        </span>
+                        <span className="text-white font-bold">{challenge.streak_days} day visit streak</span>
                       ) : challenge.challenge_type === 'checkin_count' && challenge.target_drops ? (
-                        <span className="text-white font-bold">
-                          🗓️ {challenge.target_drops} check-ins
-                        </span>
+                        <span className="text-white font-bold">{challenge.target_drops} check-ins</span>
                       ) : challenge.challenge_type === 'streak' && challenge.streak_days ? (
-                        <span className="text-white font-bold">
-                          {challenge.streak_days} days streak
-                        </span>
+                        <span className="text-white font-bold">{challenge.streak_days} days streak</span>
                       ) : challenge.challenge_type === 'milestone' && challenge.milestone_threshold ? (
-                        <span className="text-white font-bold">
-                          {challenge.milestone_threshold} drops (all-time)
-                        </span>
+                        <span className="text-white font-bold">{challenge.milestone_threshold} drops (all-time)</span>
                       ) : challenge.target_drops ? (
-                        <span className="text-white font-bold">
-                          {challenge.target_drops} <Droplet className="w-4 h-4 inline" strokeWidth={1.5} />
-                        </span>
+                        <span className="text-white font-bold">{challenge.target_drops} <Droplet className="w-4 h-4 inline" strokeWidth={1.5} /></span>
                       ) : (
                         <span className="text-[#808080] text-sm">No target set</span>
                       )}
@@ -669,8 +661,8 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   <option value="monthly">Monthly (Resets every month)</option>
                   <option value="streak">Streak (Consecutive days)</option>
                   <option value="milestone">Milestone (All-time drops in gym)</option>
-                  <option value="checkin_streak">📍 Check-in Streak (reception)</option>
-                  <option value="checkin_count">🗓️ Check-in Count (reception)</option>
+                  <option value="checkin_streak">Check-in Streak (reception)</option>
+                  <option value="checkin_count">Check-in Count (reception)</option>
                 </select>
                 {errors.challengeType && (
                   <p className="mt-1 text-sm text-[#FF5252]">{errors.challengeType.message}</p>

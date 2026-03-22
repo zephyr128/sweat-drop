@@ -184,7 +184,7 @@ export async function createChallenge(input: z.infer<typeof createChallengeSchem
       start_date: startDate.toISOString().split('T')[0],
       end_date: endDate ? endDate.toISOString().split('T')[0] : null,
       is_active: true,
-      challenge_type: validated.challengeType, // Keep for backward compatibility
+      challenge_type: validated.challengeType,
       criteria: criteria, // New JSONB field
       // Legacy fields (kept for backward compatibility)
       target_drops: validated.challengeType === 'checkin_count'
@@ -498,10 +498,10 @@ export async function getChallengeDetailedProgress(challengeId: string, gymId: s
     };
     });
 
-    // Determine target for the challenge
-    const target = (challenge as any).challenge_type === 'streak'
+    const cType = (challenge as any).challenge_type;
+    const target = (cType === 'streak' || cType === 'checkin_streak')
       ? (challenge as any).streak_days || 0
-      : (challenge as any).challenge_type === 'milestone'
+      : cType === 'milestone'
       ? (challenge as any).milestone_threshold || 0
       : (challenge as any).target_drops || 0;
 

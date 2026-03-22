@@ -136,7 +136,7 @@ export default async function ChallengesPage({ params }: ChallengesPageProps) {
       // Map data to match Challenge interface (ensure end_date is string or undefined)
       challenges = challengesData.map((c: any) => ({
         ...c,
-        end_date: c.end_date || '',
+        end_date: c.end_date ?? null,
         reward_drops: c.reward_drops || c.drops_bounty || 0,
         target_drops: c.target_drops || 0,
       })) as any;
