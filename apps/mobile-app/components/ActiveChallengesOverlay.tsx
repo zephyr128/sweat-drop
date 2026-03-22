@@ -79,15 +79,23 @@ export const ActiveChallengesOverlay: React.FC<ActiveChallengesOverlayProps> = (
             }
           };
 
-          // Get progress label based on challenge type
           const getProgressLabel = () => {
-            if (challenge.challenge_type === 'streak') {
+            const isStreakType = challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak';
+            if (isStreakType) {
               const remaining = Math.max(0, challenge.target_drops - challenge.current_streak_days);
               return {
                 current: challenge.current_streak_days,
                 target: challenge.target_drops,
                 unit: 'days',
                 remaining: remaining > 0 ? `${remaining} days to badge` : null,
+              };
+            } else if (challenge.challenge_type === 'checkin_count') {
+              const remaining = Math.max(0, challenge.target_drops - challenge.current_drops);
+              return {
+                current: challenge.current_drops,
+                target: challenge.target_drops,
+                unit: 'check-ins',
+                remaining: remaining > 0 ? `${remaining} check-ins to badge` : null,
               };
             } else {
               const remaining = Math.max(0, challenge.target_drops - challenge.current_drops);

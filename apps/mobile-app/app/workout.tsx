@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator, AppState, AppStateStatus, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -85,7 +85,7 @@ export default function WorkoutScreen() {
     machineId?: string;
     bleProtocol?: string;
   }>();
-  const { branding } = useTheme();
+  const { branding, activeGym } = useTheme();
   const brandingHook = useBranding();
   const { t } = useTranslation('workout');
   const [session, setSession] = useState<any>(null);
@@ -344,11 +344,13 @@ export default function WorkoutScreen() {
       return;
     }
 
-    // Find active uncompleted challenges with valid targets
+    // Find active uncompleted drops-based challenges (exclude streak/checkin — they don't progress via workouts)
+    const dropsBasedTypes = ['daily', 'weekly', 'monthly', 'milestone'];
     const activeUncompleted = challenges.filter(c =>
       !c.is_completed &&
       c.target_drops > 0 &&
-      c.current_drops < c.target_drops
+      c.current_drops < c.target_drops &&
+      dropsBasedTypes.includes(c.challenge_type || '')
     );
 
     if (activeUncompleted.length === 0) {
@@ -2776,17 +2778,17 @@ export default function WorkoutScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Premium Blurred Background with Animated Gradients (RPM-based zones) */}
-      <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark">
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            useAnimatedStyle(() => ({
-              backgroundColor: backgroundGradientColor.value,
-              opacity: 0.1,
-            })),
-          ]}
+      {/* Gym background image */}
+      {activeGym?.background_url && (
+        <ImageBackground
+          source={{ uri: activeGym.background_url }}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode="cover"
         />
+      )}
+      {/* Blurred dark overlay for contrast */}
+      <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
       </BlurView>
 
       {/* Header with Gym Info */}
@@ -2981,12 +2983,13 @@ export default function WorkoutScreen() {
               {/* dropJumpScale animates ONLY the center number, not the liquid itself */}
               <LiquidGauge
                 ref={liquidGaugeRef}
-                progress={progressShared} // Pass SharedValue directly for real-time updates (with damping)
-                value={liquidGaugeValue} // JS state synced from liquidGaugeDisplayValueShared (drops, not percentage)
+                progress={progressShared}
+                value={liquidGaugeValue}
                 size={280}
                 strokeWidth={4}
-                rpm={smoothedRPMShared} // Pass smoothed RPM for dynamic glow synchronization (damping already applied)
-                dropScale={dropJumpScale} // Scale animation for center number only
+                rpm={smoothedRPMShared}
+                dropScale={dropJumpScale}
+                brandingColor={branding.primary}
               />
             </>
           )}
@@ -3034,7 +3037,7 @@ export default function WorkoutScreen() {
       {machineType === 'treadmill' ? (
         <View style={styles.statsGridTreadmill}>
           <View style={styles.statItemTreadmill}>
-            <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+            <Ionicons name="time-outline" size={20} color={branding.primary} />
             <Text style={[styles.statValue, getNumberStyle(18)]}>
               {formatTime(duration)}
             </Text>
@@ -3094,7 +3097,7 @@ export default function WorkoutScreen() {
       ) : (
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Ionicons name="time-outline" size={24} color={theme.colors.text} />
+            <Ionicons name="time-outline" size={24} color={branding.primary} />
             <Text style={[styles.statValue, getNumberStyle(20)]}>
               {formatTime(duration)}
             </Text>

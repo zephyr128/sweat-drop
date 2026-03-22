@@ -21,6 +21,7 @@ interface LiquidGaugeProps {
   strokeWidth?: number; // Width of the border
   rpm?: SharedValue<number>; // RPM for dynamic glow synchronization
   dropScale?: SharedValue<number>; // Scale animation for center number only (not liquid)
+  brandingColor?: string; // Override primary color for liquid and inner glow
 }
 
 export interface LiquidGaugeRef {
@@ -48,6 +49,7 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
   strokeWidth = 4,
   rpm,
   dropScale,
+  brandingColor,
 }, ref) => {
   const radius = size / 2;
   const center = { x: radius, y: radius };
@@ -78,7 +80,8 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
     { id: 5, x: radius * 0.6 + Math.random() * radius * 0.8, baseY: size * 0.3, size: 5, speed: 0.45, anim: bubble5Anim },
   ], [radius, size]);
 
-  // Performance: Pre-calculate gradient colors and stops in useMemo
+  const primaryColor = brandingColor || theme.colors.primary;
+
   const gradientColors = useMemo(() => ['#00E5FF', '#00D4FF', '#00B8CC', '#0066FF'], []);
   const gradientStops = useMemo(() => [0, 0.3, 0.7, 1], []);
 
@@ -303,8 +306,8 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
             c={vec(center.x, center.y)}
             r={radius + 10}
             colors={[
-              theme.colors.primary + Math.floor(auraGlow.value * 255).toString(16).padStart(2, '0'),
-              theme.colors.primary + Math.floor(auraGlow.value * 180).toString(16).padStart(2, '0'),
+              primaryColor + Math.floor(auraGlow.value * 255).toString(16).padStart(2, '0'),
+              primaryColor + Math.floor(auraGlow.value * 180).toString(16).padStart(2, '0'),
               'transparent',
             ]}
           />
@@ -318,8 +321,8 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
               c={vec(center.x, center.y)}
               r={radius}
               colors={[
-                theme.colors.primary + '25', // Inner glow
-                theme.colors.primary + '10',
+                primaryColor + '25',
+                primaryColor + '10',
                 'transparent',
               ]}
             />
@@ -366,35 +369,35 @@ const LiquidGauge = forwardRef<LiquidGaugeRef, LiquidGaugeProps>(({
             <LinearGradient
               start={vec(bubbles[0].x - bubbles[0].size, bubble1Y.value - bubbles[0].size)}
               end={vec(bubbles[0].x + bubbles[0].size, bubble1Y.value + bubbles[0].size)}
-              colors={[theme.colors.primary + '80', theme.colors.primary + '20']}
+              colors={[primaryColor + '80', primaryColor + '20']}
             />
           </Circle>
           <Circle cx={bubbles[1].x} cy={bubble2Y} r={bubbles[1].size} opacity={0.4}>
             <LinearGradient
               start={vec(bubbles[1].x - bubbles[1].size, bubble2Y.value - bubbles[1].size)}
               end={vec(bubbles[1].x + bubbles[1].size, bubble2Y.value + bubbles[1].size)}
-              colors={[theme.colors.primary + '80', theme.colors.primary + '20']}
+              colors={[primaryColor + '80', primaryColor + '20']}
             />
           </Circle>
           <Circle cx={bubbles[2].x} cy={bubble3Y} r={bubbles[2].size} opacity={0.4}>
             <LinearGradient
               start={vec(bubbles[2].x - bubbles[2].size, bubble3Y.value - bubbles[2].size)}
               end={vec(bubbles[2].x + bubbles[2].size, bubble3Y.value + bubbles[2].size)}
-              colors={[theme.colors.primary + '80', theme.colors.primary + '20']}
+              colors={[primaryColor + '80', primaryColor + '20']}
             />
           </Circle>
           <Circle cx={bubbles[3].x} cy={bubble4Y} r={bubbles[3].size} opacity={0.4}>
             <LinearGradient
               start={vec(bubbles[3].x - bubbles[3].size, bubble4Y.value - bubbles[3].size)}
               end={vec(bubbles[3].x + bubbles[3].size, bubble4Y.value + bubbles[3].size)}
-              colors={[theme.colors.primary + '80', theme.colors.primary + '20']}
+              colors={[primaryColor + '80', primaryColor + '20']}
             />
           </Circle>
           <Circle cx={bubbles[4].x} cy={bubble5Y} r={bubbles[4].size} opacity={0.4}>
             <LinearGradient
               start={vec(bubbles[4].x - bubbles[4].size, bubble5Y.value - bubbles[4].size)}
               end={vec(bubbles[4].x + bubbles[4].size, bubble5Y.value + bubbles[4].size)}
-              colors={[theme.colors.primary + '80', theme.colors.primary + '20']}
+              colors={[primaryColor + '80', primaryColor + '20']}
             />
           </Circle>
         </Group>

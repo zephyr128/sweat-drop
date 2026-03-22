@@ -36,5 +36,14 @@
   "minutesLeft": "{{minutes}}m preostalo",
   "unit_days": "dana",
   "unit_drops": "drops",
-  "unit_checkins": "check-in-ova"
+  "unit_checkins": "check-in-ova",
+  "active": "Aktivni izazovi",
+  "completed": "Završeni izazovi",
+  "completedOn": "Završeno {{date}}",
+  "noActive": "Nema aktivnih izazova",
+  "noCompleted": "Još nisi završio nijedan izazov",
+  "summary": {
+    "challengeCompleted": "Izazov završen!",
+    "bonusDrops": "+{{drops}} bonus kapi"
+  }
 }

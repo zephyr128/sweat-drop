@@ -67,6 +67,7 @@
     "done": "Gotovo!",
     "dropsReward": "{{count}} drops nagrada",
     "days": "dana",
-    "collectAndClose": "Pokupi i zatvori"
+    "collectAndClose": "Pokupi i zatvori",
+    "challengeCompleted": "Izazov završen!"
   }
 }

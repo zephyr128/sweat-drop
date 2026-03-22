@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -12,6 +12,7 @@ import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -155,6 +156,7 @@ export default function ChallengesScreen() {
           current_minutes: current,
           current_streak_days: c.progress.current_streak_days || 0,
           is_completed: c.progress.is_completed || false,
+          updated_at: c.progress.updated_at || null,
         };
       }
     });
@@ -289,8 +291,34 @@ export default function ChallengesScreen() {
             <Text style={styles.emptyText}>{t('noChallenges')}</Text>
             <Text style={styles.emptySubtext}>{t('checkBackSoon')}</Text>
           </View>
-        ) : (
-          challenges.map((challenge: any, index: number) => {
+        ) : (() => {
+          const activeChallenges = challenges.filter((c: any) => {
+            const isCompleted = progress[c.id]?.is_completed || false;
+            if (!isCompleted) return true;
+            // Recurring challenges stay in active even when completed (they reset)
+            return c.challenge_type === 'daily' || c.challenge_type === 'weekly';
+          });
+          const completedChallenges = challenges.filter((c: any) => {
+            const isCompleted = progress[c.id]?.is_completed || false;
+            if (!isCompleted) return false;
+            return c.challenge_type !== 'daily' && c.challenge_type !== 'weekly';
+          });
+
+          const formatCompletedDate = (dateStr: string | null) => {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString(
+              i18n.language === 'sr' ? 'sr-RS' : 'en-US',
+              { month: 'short', day: 'numeric' }
+            );
+          };
+
+          return (
+            <>
+              {/* Active Challenges */}
+              {activeChallenges.length > 0 && (
+                <Text style={styles.sectionLabel}>{t('active')}</Text>
+              )}
+              {activeChallenges.map((challenge: any, index: number) => {
             const userProgress = progress[challenge.id];
 
             let target = 0;
@@ -333,53 +361,51 @@ export default function ChallengesScreen() {
                   <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     {/* Card Header */}
                     <View style={styles.challengeHeader}>
-                      <View style={styles.challengeHeaderLeft}>
-                        <View style={[styles.typeIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                          <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={branding.primary} />
-                        </View>
-                        <View>
-                          <Text style={[styles.challengeType, { color: branding.primary }]}>
-                            {challengeTypeLabel}
-                          </Text>
-                          <Text style={styles.challengeName}>{challenge.name}</Text>
-                        </View>
+                      <View style={[styles.typeIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                        <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={branding.primary} />
                       </View>
-                      {(() => {
-                        const timeInfo = getChallengeTimeDisplay(
-                          challenge.challenge_type,
-                          challenge.end_date,
-                          isCompleted
-                        );
-                        if (!timeInfo) return null;
-                        return (
-                          <View style={[
-                            styles.timeBadge,
-                            timeInfo.style === 'completed' && styles.timeBadgeCompleted,
-                            timeInfo.style === 'permanent' && styles.timeBadgePermanent,
-                            timeInfo.style === 'recurring' && styles.timeBadgeRecurring,
-                          ]}>
-                            <Ionicons
-                              name={
-                                timeInfo.style === 'completed' ? 'checkmark-circle' :
-                                timeInfo.style === 'permanent' ? 'infinite' :
-                                timeInfo.style === 'recurring' ? 'refresh' :
-                                'time-outline'
-                              }
-                              size={12}
-                              color={
-                                timeInfo.style === 'completed' ? '#4ade80' :
-                                theme.colors.textSecondary
-                              }
-                            />
-                            <Text style={[
-                              styles.timeRemaining,
-                              timeInfo.style === 'completed' && { color: '#4ade80' },
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.challengeType, { color: branding.primary }]}>
+                          {challengeTypeLabel}
+                        </Text>
+                        <Text style={styles.challengeName}>{challenge.name}</Text>
+                        {(() => {
+                          const timeInfo = getChallengeTimeDisplay(
+                            challenge.challenge_type,
+                            challenge.end_date,
+                            isCompleted
+                          );
+                          if (!timeInfo) return null;
+                          return (
+                            <View style={[
+                              styles.timeBadge,
+                              timeInfo.style === 'completed' && styles.timeBadgeCompleted,
+                              timeInfo.style === 'permanent' && styles.timeBadgePermanent,
+                              timeInfo.style === 'recurring' && styles.timeBadgeRecurring,
                             ]}>
-                              {timeInfo.text}
-                            </Text>
-                          </View>
-                        );
-                      })()}
+                              <Ionicons
+                                name={
+                                  timeInfo.style === 'completed' ? 'checkmark-circle' :
+                                  timeInfo.style === 'permanent' ? 'infinite' :
+                                  timeInfo.style === 'recurring' ? 'refresh' :
+                                  'time-outline'
+                                }
+                                size={12}
+                                color={
+                                  timeInfo.style === 'completed' ? '#4ade80' :
+                                  theme.colors.textSecondary
+                                }
+                              />
+                              <Text style={[
+                                styles.timeRemaining,
+                                timeInfo.style === 'completed' && { color: '#4ade80' },
+                              ]}>
+                                {timeInfo.text}
+                              </Text>
+                            </View>
+                          );
+                        })()}
+                      </View>
                     </View>
 
                     {challenge.description && (
@@ -443,8 +469,60 @@ export default function ChallengesScreen() {
                 </TouchableOpacity>
               </Animated.View>
             );
-          })
-        )}
+          })}
+
+              {activeChallenges.length === 0 && completedChallenges.length > 0 && (
+                <View style={styles.emptySection}>
+                  <Text style={styles.emptySectionText}>{t('noActive')}</Text>
+                </View>
+              )}
+
+              {/* Completed Challenges */}
+              {completedChallenges.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: theme.spacing.lg }]}>{t('completed')}</Text>
+                  {completedChallenges.map((challenge: any, index: number) => {
+                    const userProgress = progress[challenge.id];
+                    return (
+                      <Animated.View key={challenge.id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
+                        <TouchableOpacity
+                          style={[styles.completedCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}
+                          onPress={() => router.push({
+                            pathname: '/challenge-detail',
+                            params: { challengeId: challenge.id, gymId: challenge.gym_id },
+                          })}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.completedLeft}>
+                            {challenge.badge_image_url ? (
+                              <Image source={{ uri: challenge.badge_image_url }} style={styles.completedBadgeImg} />
+                            ) : (
+                              <View style={[styles.completedBadgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                                <Text style={styles.completedCheck}>✅</Text>
+                              </View>
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.completedName} numberOfLines={1}>{challenge.name}</Text>
+                              <Text style={styles.completedDate}>
+                                {t('completedOn', { date: formatCompletedDate(userProgress?.updated_at || challenge.updated_at) })}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.completedRight}>
+                            <Text style={[styles.completedDrops, { color: branding.primary }]}>
+                              +{challenge.reward_drops || 0}
+                            </Text>
+                            <Text style={styles.completedDropsLabel}>drops</Text>
+                          </View>
+                        </TouchableOpacity>
+                      </Animated.View>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          );
+        })()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -515,15 +593,9 @@ const styles = StyleSheet.create({
   },
   challengeHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: theme.spacing.md,
-  },
-  challengeHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: theme.spacing.sm,
-    flex: 1,
+    marginBottom: theme.spacing.md,
   },
   typeIcon: {
     width: 36,
@@ -546,11 +618,13 @@ const styles = StyleSheet.create({
   timeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 4,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.md,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginTop: 6,
   },
   timeBadgeCompleted: {
     backgroundColor: 'rgba(74, 222, 128, 0.1)',
@@ -640,5 +714,80 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.secondary,
     letterSpacing: 0.3,
+  },
+  /* Section labels */
+  sectionLabel: {
+    ...fontStyles.heading,
+    fontSize: 18,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+    letterSpacing: 0.3,
+  },
+  emptySection: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+  },
+  emptySectionText: {
+    ...fontStyles.body,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  /* Completed challenge card (minimal) */
+  completedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  completedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flex: 1,
+  },
+  completedBadgeImg: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.md,
+  },
+  completedBadgePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  completedCheck: {
+    fontSize: 20,
+  },
+  completedName: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  completedDate: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  completedRight: {
+    alignItems: 'flex-end',
+  },
+  completedDrops: {
+    ...fontStyles.heading,
+    fontSize: 18,
+  },
+  completedDropsLabel: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.5,
   },
 });

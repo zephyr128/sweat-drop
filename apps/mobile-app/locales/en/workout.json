@@ -66,6 +66,7 @@
     "done": "Done!",
     "dropsReward": "{{count}} drops reward",
     "days": "days",
-    "collectAndClose": "Collect & close"
+    "collectAndClose": "Collect & close",
+    "challengeCompleted": "Challenge completed!"
   }
 }

@@ -36,5 +36,14 @@
   "minutesLeft": "{{minutes}}m left",
   "unit_days": "days",
   "unit_drops": "drops",
-  "unit_checkins": "check-ins"
+  "unit_checkins": "check-ins",
+  "active": "Active Challenges",
+  "completed": "Completed Challenges",
+  "completedOn": "Completed {{date}}",
+  "noActive": "No active challenges",
+  "noCompleted": "No completed challenges yet",
+  "summary": {
+    "challengeCompleted": "Challenge completed!",
+    "bonusDrops": "+{{drops}} bonus drops"
+  }
 }

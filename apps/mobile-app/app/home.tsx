@@ -129,8 +129,8 @@ export default function HomeScreen() {
 
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading, refresh: refreshChallenges } = useChallengeProgress(activeGymId, null);
-  const activeChallenges = allChallenges;
-  const displayedChallenges = activeChallenges.slice(0, 5);
+  const activeChallenges = allChallenges.filter(c => !c.is_completed);
+  const displayedChallenges = activeChallenges.slice(0, 3);
   
   // Debug log
   useEffect(() => {

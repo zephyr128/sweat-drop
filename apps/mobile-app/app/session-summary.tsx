@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
-import { useBranding } from '@/lib/contexts/ThemeContext';
+import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   FadeInDown,
@@ -83,10 +83,12 @@ export default function SessionSummaryScreen() {
   const [userRank, setUserRank] = useState<number | null>(null);
   const [gymName, setGymName] = useState<string | null>(null);
   const [challengeProgress, setChallengeProgress] = useState<ChallengeProgressItem[]>([]);
+  const [completedChallenges, setCompletedChallenges] = useState<ChallengeProgressItem[]>([]);
   const [streakDays, setStreakDays] = useState<number>(0);
   const router = useRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
+  const { activeGym } = useTheme();
 
   // Trophy pulse animation for badge earned
   const trophyScale = useSharedValue(1);
@@ -252,10 +254,11 @@ export default function SessionSummaryScreen() {
 
       const items: ChallengeProgressItem[] = challengesData.map((challenge) => {
         const progress = progressData?.find((p) => p.challenge_id === challenge.id);
-        const target = challenge.challenge_type === 'streak'
+        const isStreakType = challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak';
+        const target = isStreakType
           ? (challenge.streak_days || challenge.target_drops || 0)
           : (challenge.target_drops || 0);
-        const current = challenge.challenge_type === 'streak'
+        const current = isStreakType
           ? (progress?.current_streak_days || 0)
           : (progress?.current_drops || 0);
 
@@ -270,9 +273,10 @@ export default function SessionSummaryScreen() {
         };
       });
 
-      // Only show challenges that have progress (non-zero) or were just completed
-      const relevantItems = items.filter((item) => item.current_drops > 0);
-      setChallengeProgress(relevantItems);
+      const justCompleted = items.filter((item) => item.is_completed && item.reward_drops > 0);
+      const inProgress = items.filter((item) => !item.is_completed && item.current_drops > 0);
+      setCompletedChallenges(justCompleted);
+      setChallengeProgress(inProgress);
     } catch (err) {
       console.error('Error in loadChallengeProgress:', err);
     }
@@ -381,12 +385,25 @@ export default function SessionSummaryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient
-        colors={['#000000', '#0A0E1A', '#000000']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
+      {activeGym?.background_url ? (
+        <ImageBackground
+          source={{ uri: activeGym.background_url }}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode="cover"
+        >
+          <LinearGradient
+            colors={['rgba(0,0,0,0.60)', 'rgba(8,8,8,0.75)', 'rgba(0,0,0,0.85)']}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </ImageBackground>
+      ) : (
+        <LinearGradient
+          colors={['#000000', '#0A0E1A', '#000000']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      )}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Celebration Header */}
@@ -507,6 +524,32 @@ export default function SessionSummaryScreen() {
         {gymName && (
           <Animated.View entering={FadeInDown.delay(500).duration(300)}>
             <Text style={styles.gymNameText}>📍 {gymName}</Text>
+          </Animated.View>
+        )}
+
+        {/* ── Challenge Rewards (completed during this session) ── */}
+        {completedChallenges.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(520).duration(400)}>
+            <View style={styles.challengeRewardSection}>
+              {completedChallenges.map((challenge) => (
+                <View key={challenge.challenge_id} style={styles.challengeRewardCard}>
+                  <View style={styles.challengeRewardLeft}>
+                    <Text style={styles.challengeRewardEmoji}>🎯</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.challengeRewardLabel}>
+                        {t('summary.challengeCompleted')}
+                      </Text>
+                      <Text style={styles.challengeRewardName} numberOfLines={1}>
+                        {challenge.challenge_name}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.challengeRewardDropsText, { color: branding.primary }]}>
+                    +{challenge.reward_drops} 💧
+                  </Text>
+                </View>
+              ))}
+            </View>
           </Animated.View>
         )}
 
@@ -849,6 +892,48 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
     letterSpacing: 0.3,
+  },
+  /* Challenge Reward (completed during session) */
+  challengeRewardSection: {
+    marginBottom: theme.spacing.xs,
+  },
+  challengeRewardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(76, 217, 100, 0.06)',
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 217, 100, 0.15)',
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  challengeRewardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  challengeRewardEmoji: {
+    fontSize: 20,
+  },
+  challengeRewardLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    color: theme.colors.secondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  challengeRewardName: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: theme.colors.text,
+    marginTop: 2,
+  },
+  challengeRewardDropsText: {
+    ...fontStyles.heading,
+    fontSize: 18,
+    letterSpacing: -0.5,
   },
   /* ── Quick Stats Row (matches QuickStatsRow pills) ── */
   statsRow: {
