@@ -24,6 +24,7 @@ import {
   QrCode,
   ClipboardList,
   UserCog,
+  FileBarChart,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 
@@ -104,6 +105,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     { href: '/dashboard/super/achievements', label: 'Achievements', icon: Award },
     { href: '/dashboard/arenas', label: 'Arenas', icon: Swords },
     { href: '/dashboard/super/health', label: 'System Health', icon: Activity },
+    { href: '/dashboard/super/reports', label: 'Reports', icon: FileBarChart },
   ];
 
   // Gym Owner navigation (multi-gym access) - organized in groups
@@ -114,6 +116,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
         { href: `${base}/members`, label: 'Members', icon: Users },
         { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
+        { href: `${base}/reports`, label: 'Reports', icon: FileBarChart },
       ],
       management: [
         { href: `${base}/challenges`, label: 'Challenges', icon: Target },
@@ -145,6 +148,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
         { href: `${base}/members`, label: 'Members', icon: Users },
         { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
+        { href: `${base}/reports`, label: 'Reports', icon: FileBarChart },
       ],
       management: [
         { href: `${base}/challenges`, label: 'Challenges', icon: Target },
