@@ -283,15 +283,18 @@ function MachineCard({
 
   // Available
   return (
-    <div className="bg-[#0A0A0A]/50 border border-[#2A2A2A] rounded-xl p-4 opacity-60 hover:opacity-80 hover:border-[#3A3A3A] transition-all">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-white truncate">{m.name}</span>
+    <div className="bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-4 hover:border-[#00E5FF]/30 transition-all">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-[#00E5FF]/50 shrink-0" />
+          <span className="text-sm font-medium text-white truncate">{m.name}</span>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-sm">{typeIcon}</span>
           {menu}
         </div>
       </div>
-      <p className="text-xs text-center text-zinc-500 py-3">Available</p>
+      <p className="text-xs text-center text-zinc-400 py-3">Available</p>
       <div className="flex items-center justify-between mt-1">
         <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-[#808080]">
           {zoneName}
