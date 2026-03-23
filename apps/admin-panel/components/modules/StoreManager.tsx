@@ -271,7 +271,12 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                     <div className="flex items-center gap-1 mt-1">
                       <Calendar className="w-3 h-3 text-[#808080]" />
                       <span className="text-xs text-[#808080]">
-                        {item.available_from || '...'} — {item.available_until || '...'}
+                        {item.available_from
+                          ? new Date(item.available_from).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '...'}{' — '}
+                        {item.available_until
+                          ? new Date(item.available_until).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '...'}
                       </span>
                     </div>
                   )}
