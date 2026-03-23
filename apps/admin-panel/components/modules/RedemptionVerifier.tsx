@@ -250,7 +250,7 @@ export function RedemptionVerifier({ gymId }: RedemptionVerifierProps) {
 
           {/* Details */}
           <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex items-center gap-3">
                 <User className="w-5 h-5 text-[#808080]" />
                 <div>

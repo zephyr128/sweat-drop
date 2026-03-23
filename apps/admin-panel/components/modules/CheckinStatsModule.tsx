@@ -66,7 +66,7 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
       <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-[#1A1A1A] rounded w-48" />
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="h-20 bg-[#1A1A1A] rounded-lg" />
             <div className="h-20 bg-[#1A1A1A] rounded-lg" />
             <div className="h-20 bg-[#1A1A1A] rounded-lg" />
@@ -86,7 +86,7 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
       </h2>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Today', value: stats.today },
           { label: 'This Week', value: stats.week },

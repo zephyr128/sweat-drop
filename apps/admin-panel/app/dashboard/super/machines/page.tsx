@@ -59,7 +59,7 @@ export default async function SuperAdminMachinesPage() {
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">Global Machine Management</h1>
         <p className="text-[#808080]">Manage all machines across all gyms. Create, pair sensors, and assign to gyms.</p>
       </div>

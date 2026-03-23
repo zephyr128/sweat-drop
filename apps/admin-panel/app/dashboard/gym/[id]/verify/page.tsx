@@ -26,7 +26,7 @@ export default async function VerifyPage({
   }
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="min-h-screen md:p-6">
       <div className="max-w-2xl mx-auto">
         {/* Page Header */}
         <div className="mb-8">

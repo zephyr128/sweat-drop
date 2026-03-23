@@ -3,18 +3,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
-import { notFound } from 'next/navigation';
+import { getAdminClient } from '@/lib/utils/supabase-admin';
+import { requireGymAccess } from '@/lib/auth-guard';
 import { RedemptionsManager } from '@/components/modules/RedemptionsManager';
 
 interface RedemptionsPageProps {
   params: Promise<{ id: string }>;
-}
-
-interface GymData {
-  owner_id: string | null;
 }
 
 interface RedemptionData {
@@ -41,112 +36,20 @@ interface RedemptionData {
   } | null;
 }
 
-// Helper function to create admin client inside request scope
-// CRITICAL: This is a Server Component, so process.env is safe here
-// Service role key is NEVER exposed to the browser
-function getAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('[RedemptionsPage] Missing Supabase admin credentials. NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.');
-    return null;
-  }
-  
-  return createAdminClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
 export default async function RedemptionsPage({ params }: RedemptionsPageProps) {
   const { id } = await params;
-  
-  // Initialize Supabase client
+
+  await requireGymAccess(id, ['superadmin', 'gym_owner', 'gym_admin', 'receptionist']);
+
   const supabase = await createClient();
-  
-  // 1. Check authentication first
-  let user;
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      redirect('/login');
-    }
-    
-    user = authUser;
-  } catch (error) {
-    console.error('[RedemptionsPage] Auth check failed:', error);
-    redirect('/login');
-  }
 
-  // 2. Fetch user profile
-  let profile;
-  try {
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profileData) {
-      console.error('[RedemptionsPage] Profile fetch failed:', profileError);
-      notFound();
-    }
-
-    profile = {
-      id: profileData.id,
-      email: profileData.email || user.email || '',
-      username: profileData.username,
-      role: (profileData.role as 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user') || 'user',
-      assigned_gym_id: profileData.assigned_gym_id,
-      owner_id: profileData.owner_id,
-      home_gym_id: profileData.home_gym_id,
-    };
-  } catch (error) {
-    console.error('[RedemptionsPage] Unexpected error fetching profile:', error);
-    notFound();
-  }
-
-  // 3. Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
-  if (profile.role === 'gym_admin' || profile.role === 'gym_owner' || profile.role === 'receptionist') {
-    let gym: GymData | null = null;
-    try {
-      const { data: gymData, error: gymError } = await supabase
-        .from('gyms')
-        .select('owner_id')
-        .eq('id', id)
-        .single();
-      
-      if (gymError || !gymData) {
-        console.error('[RedemptionsPage] Gym fetch failed:', gymError);
-        notFound();
-      }
-      
-      gym = gymData as GymData;
-    } catch (error) {
-      console.error('[RedemptionsPage] Unexpected error fetching gym:', error);
-      notFound();
-    }
-    
-    // Check if user owns this gym OR it's their assigned gym
-    const ownsGym = gym.owner_id === profile.id;
-    const isAssignedGym = profile.assigned_gym_id === id;
-    
-    if (!ownsGym && !isAssignedGym) {
-      notFound();
-    }
-  }
-  
-  // 4. Use service role client to fetch redemptions with profiles (bypasses RLS)
+  // Use service role client to fetch redemptions with profiles (bypasses RLS)
   // This avoids infinite recursion issues with profiles RLS policies
   // Create admin client inside request scope (not at module level)
   const supabaseAdmin = getAdminClient();
   const clientToUse = supabaseAdmin || supabase;
   
-  // 5. Load pending redemptions with error handling
+  // Load pending redemptions with error handling
   let pendingRedemptions: RedemptionData[] = [];
   try {
     const { data: pendingData, error: pendingError } = await clientToUse
@@ -192,7 +95,7 @@ export default async function RedemptionsPage({ params }: RedemptionsPageProps) 
     // Continue with empty array
   }
 
-  // 6. Load confirmed redemptions (last 50) with error handling
+  // Load confirmed redemptions (last 50) with error handling
   let confirmedRedemptions: RedemptionData[] = [];
   try {
     const { data: confirmedData, error: confirmedError } = await clientToUse
@@ -241,7 +144,7 @@ export default async function RedemptionsPage({ params }: RedemptionsPageProps) 
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">Redemptions</h1>
         <p className="text-[#808080]">Manage and validate reward redemptions</p>
       </div>

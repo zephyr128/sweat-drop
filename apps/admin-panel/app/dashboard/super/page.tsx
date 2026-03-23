@@ -230,7 +230,7 @@ export default function SuperAdminControlTower() {
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0 flex items-center justify-between">
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">Control Tower</h1>
           <p className="text-[#808080]">Manage gyms, owners, and licensing</p>

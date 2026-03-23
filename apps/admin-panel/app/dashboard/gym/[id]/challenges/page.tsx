@@ -9,17 +9,12 @@ export function generateStaticParams() {
   return [];
 }
 
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
-import { notFound } from 'next/navigation';
+import { requireGymAccess } from '@/lib/auth-guard';
 import { ChallengesManager } from '@/components/modules/ChallengesManager';
 
 interface ChallengesPageProps {
   params: Promise<{ id: string }>;
-}
-
-interface GymData {
-  owner_id: string | null;
 }
 
 interface ChallengeData {
@@ -44,84 +39,10 @@ interface ChallengeData {
 
 export default async function ChallengesPage({ params }: ChallengesPageProps) {
   const { id } = await params;
-  
-  // Initialize Supabase client
+  await requireGymAccess(id);
   const supabase = await createClient();
-  
-  // 1. Check authentication first
-  let user;
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      redirect('/login');
-    }
-    
-    user = authUser;
-  } catch (error) {
-    console.error('[ChallengesPage] Auth check failed:', error);
-    redirect('/login');
-  }
 
-  // 2. Fetch user profile
-  let profile;
-  try {
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profileData) {
-      console.error('[ChallengesPage] Profile fetch failed:', profileError);
-      notFound();
-    }
-
-    profile = {
-      id: profileData.id,
-      email: profileData.email || user.email || '',
-      username: profileData.username,
-      role: (profileData.role as 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user') || 'user',
-      assigned_gym_id: profileData.assigned_gym_id,
-      owner_id: profileData.owner_id,
-      home_gym_id: profileData.home_gym_id,
-    };
-  } catch (error) {
-    console.error('[ChallengesPage] Unexpected error fetching profile:', error);
-    notFound();
-  }
-
-  // 3. Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
-  if (profile.role === 'gym_admin' || profile.role === 'gym_owner') {
-    let gym: GymData | null = null;
-    try {
-      const { data: gymData, error: gymError } = await supabase
-        .from('gyms')
-        .select('owner_id')
-        .eq('id', id)
-        .single();
-      
-      if (gymError || !gymData) {
-        console.error('[ChallengesPage] Gym fetch failed:', gymError);
-        notFound();
-      }
-      
-      gym = gymData as GymData;
-    } catch (error) {
-      console.error('[ChallengesPage] Unexpected error fetching gym:', error);
-      notFound();
-    }
-    
-    // Check if user owns this gym OR it's their assigned gym
-    const ownsGym = gym.owner_id === profile.id;
-    const isAssignedGym = profile.assigned_gym_id === id;
-    
-    if (!ownsGym && !isAssignedGym) {
-      notFound();
-    }
-  }
-
-  // 4. Fetch challenges with error handling
+  // Fetch challenges with error handling
   let challenges: ChallengeData[] = [];
   try {
     const { data: challengesData, error: challengesError } = await supabase
@@ -148,7 +69,7 @@ export default async function ChallengesPage({ params }: ChallengesPageProps) {
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">Challenges Manager</h1>
         <p className="text-[#808080]">Create and manage daily, weekly, and custom challenges</p>
       </div>

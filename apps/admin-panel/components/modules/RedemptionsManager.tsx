@@ -461,7 +461,7 @@ export function RedemptionsManager({
                   <p className="text-sm text-[#808080] mb-4">
                     {searchResult.profiles?.username || 'Unknown User'} • {searchResult.rewards?.reward_type || 'Unknown'}
                   </p>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-[#808080] mb-1">Redemption Code</p>
                       <code className="text-lg font-mono text-[#00E5FF] bg-[#0A0A0A] px-4 py-2 rounded block text-center">

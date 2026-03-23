@@ -2,8 +2,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
+import { requireGymAccess } from '@/lib/auth-guard';
 import { GymInfoForm } from '@/components/forms/GymInfoForm';
 
 interface SettingsPageProps {
@@ -13,27 +14,9 @@ interface SettingsPageProps {
 export default async function SettingsPage({ params }: SettingsPageProps) {
   const { id } = await params;
 
+  await requireGymAccess(id);
+
   const supabase = await createClient();
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    redirect('/login');
-  }
-
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('id, role, assigned_gym_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!profileData) {
-    notFound();
-  }
-
-  const role = (profileData.role as string) || 'user';
-  if (!['superadmin', 'gym_owner', 'gym_admin'].includes(role)) {
-    redirect(`/dashboard/gym/${id}/dashboard`);
-  }
 
   const { data: gym } = await supabase
     .from('gyms')
@@ -48,7 +31,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   const typedGym = gym as { id: string; name: string; address: string | null; city: string | null; country: string | null };
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="min-h-screen md:p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Settings</h1>
         <p className="text-[#808080] mt-1">

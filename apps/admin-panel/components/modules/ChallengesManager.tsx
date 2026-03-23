@@ -770,7 +770,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
 
                 {showDateRange && (
                   <div className="px-4 pb-4 pt-1 space-y-4 border-t border-[#1A1A1A]">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs text-zinc-500 mb-1">Start Date</label>
                         <input
@@ -953,7 +953,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
                   <label className="text-sm font-medium text-white">Sponsor (Optional)</label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-[#808080] mb-1">Sponsor Name</label>
                     <input
@@ -1119,7 +1119,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
 
             {monitorLoading ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="h-20 bg-[#1A1A1A] rounded-lg animate-pulse" />
                   ))}
@@ -1129,7 +1129,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
             ) : monitorData ? (
               <div className="space-y-6">
                 {/* Stats Cards */}
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-[#1A1A1A] rounded-lg p-4 text-center">
                     <div className="flex items-center justify-center gap-2 mb-1">
                       <Users className="w-4 h-4 text-[#808080]" />

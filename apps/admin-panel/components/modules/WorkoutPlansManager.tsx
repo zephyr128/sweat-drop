@@ -828,7 +828,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
 
                 {/* POS Fields - Only show for paid_one_time */}
                 {formData.access_type === 'paid_one_time' && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-white mb-2">
                         Price *
@@ -911,7 +911,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
 
                           {/* Item Form */}
                           <div className="flex-1 space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
                                 <label className="block text-xs font-medium text-[#808080] mb-1">
                                   Exercise Name *
@@ -940,7 +940,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
                                 <label className="block text-xs font-medium text-[#808080] mb-1">
                                   Target Value *
@@ -1082,7 +1082,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
 
             {/* Template Filters */}
             <div className="mb-6 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Goal</label>
                   <select

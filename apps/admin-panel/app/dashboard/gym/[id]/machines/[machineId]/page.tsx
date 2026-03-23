@@ -9,17 +9,13 @@ export function generateStaticParams() {
   return [];
 }
 
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
+import { requireGymAccess } from '@/lib/auth-guard';
 import { MachineDetailView } from '@/components/modules/MachineDetailView';
 
 interface MachineDetailPageProps {
   params: Promise<{ id: string; machineId: string }>;
-}
-
-interface GymData {
-  owner_id: string | null;
 }
 
 interface MachineData {
@@ -47,84 +43,13 @@ interface MachineData {
 
 export default async function MachineDetailPage({ params }: MachineDetailPageProps) {
   const { id: gymId, machineId } = await params;
-  
+
+  const profile = await requireGymAccess(gymId);
+
   // Initialize Supabase client
   const supabase = await createClient();
-  
-  // 1. Check authentication first
-  let user;
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      redirect('/login');
-    }
-    
-    user = authUser;
-  } catch (error) {
-    console.error('[MachineDetailPage] Auth check failed:', error);
-    redirect('/login');
-  }
 
-  // 2. Fetch user profile
-  let profile;
-  try {
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profileData) {
-      console.error('[MachineDetailPage] Profile fetch failed:', profileError);
-      notFound();
-    }
-
-    profile = {
-      id: profileData.id,
-      email: profileData.email || user.email || '',
-      username: profileData.username,
-      role: (profileData.role as 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user') || 'user',
-      assigned_gym_id: profileData.assigned_gym_id,
-      owner_id: profileData.owner_id,
-      home_gym_id: profileData.home_gym_id,
-    };
-  } catch (error) {
-    console.error('[MachineDetailPage] Unexpected error fetching profile:', error);
-    notFound();
-  }
-
-  // 3. Verify access: user must own the gym (owner_id) or have it assigned (assigned_gym_id)
-  if (profile.role === 'gym_owner' || profile.role === 'gym_admin') {
-    let gym: GymData | null = null;
-    try {
-      const { data: gymData, error: gymError } = await supabase
-        .from('gyms')
-        .select('owner_id')
-        .eq('id', gymId)
-        .single();
-      
-      if (gymError || !gymData) {
-        console.error('[MachineDetailPage] Gym fetch failed:', gymError);
-        notFound();
-      }
-      
-      gym = gymData as GymData;
-    } catch (error) {
-      console.error('[MachineDetailPage] Unexpected error fetching gym:', error);
-      notFound();
-    }
-    
-    // Check if user owns this gym OR it's their assigned gym
-    const ownsGym = gym.owner_id === profile.id;
-    const isAssignedGym = profile.assigned_gym_id === gymId;
-    
-    if (!ownsGym && !isAssignedGym) {
-      notFound();
-    }
-  }
-
-  // 4. Fetch machine details with error handling
+  // Fetch machine details with error handling
   let machine: MachineData;
   try {
     const { data: machineData, error: machineError } = await supabase
@@ -161,14 +86,14 @@ export default async function MachineDetailPage({ params }: MachineDetailPagePro
     notFound();
   }
 
-  // 5. Verify machine belongs to the gym
+  // Verify machine belongs to the gym
   if (machine.gym_id !== gymId) {
     notFound();
   }
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">Machine Details</h1>
         <p className="text-[#808080]">View and print machine sticker</p>
       </div>

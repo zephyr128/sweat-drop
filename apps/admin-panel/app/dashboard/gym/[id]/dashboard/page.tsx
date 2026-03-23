@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
+import { requireGymAccess } from '@/lib/auth-guard';
 import { createClient } from '@/lib/supabase-server';
 import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { StatsCard } from '@/components/StatsCard';
@@ -29,58 +30,10 @@ interface SessionData {
 
 export default async function GymDashboardPage({ params }: DashboardPageProps) {
   const { id } = await params;
-  
+
+  const profile = await requireGymAccess(id);
+
   const supabase = await createClient();
-  
-  let user;
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    if (authError || !authUser) redirect('/login');
-    user = authUser;
-  } catch {
-    redirect('/login');
-  }
-
-  let profile;
-  try {
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profileData) notFound();
-
-    profile = {
-      id: profileData.id,
-      email: profileData.email || user.email || '',
-      username: profileData.username,
-      role: (profileData.role as 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user') || 'user',
-      assigned_gym_id: profileData.assigned_gym_id,
-      owner_id: profileData.owner_id,
-      home_gym_id: profileData.home_gym_id,
-    };
-  } catch {
-    notFound();
-  }
-
-  let gym: GymData;
-  try {
-    const { data: gymData, error: gymError } = await supabase
-      .from('gyms')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (gymError || !gymData) notFound();
-
-    gym = gymData as GymData;
-    if (typeof gym.smartcoach_enabled !== 'boolean') {
-      gym.smartcoach_enabled = false;
-    }
-  } catch {
-    notFound();
-  }
 
   let members = 0;
   let challenges = 0;
@@ -90,62 +43,69 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
   let checkinToday = 0;
   let checkinWeek = 0;
 
+  const supabaseAdmin = getAdminClient();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [
+    membersResult,
+    challengesResult,
+    storeItemsResult,
+    recentSessionsResult,
+    pendingRedemptionsResult,
+    checkinTodayResult,
+    checkinWeekResult,
+    gymResult,
+  ] = await Promise.all([
+    supabase
+      .from('gym_memberships')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id),
+    supabase
+      .from('gym_challenges')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id)
+      .eq('is_active', true),
+    supabase
+      .from('rewards')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id)
+      .eq('is_active', true),
+    supabase
+      .from('sessions')
+      .select('drops_earned')
+      .eq('gym_id', id)
+      .gte('created_at', weekAgo.toISOString())
+      .limit(500),
+    supabase
+      .from('redemptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', id)
+      .eq('status', 'pending'),
+    supabaseAdmin
+      ? supabaseAdmin
+          .from('gym_checkins')
+          .select('id', { count: 'exact', head: true })
+          .eq('gym_id', id)
+          .gte('checked_in_at', todayStart.toISOString())
+      : Promise.resolve({ count: 0 }),
+    supabaseAdmin
+      ? supabaseAdmin
+          .from('gym_checkins')
+          .select('id', { count: 'exact', head: true })
+          .eq('gym_id', id)
+          .gte('checked_in_at', weekAgo.toISOString())
+      : Promise.resolve({ count: 0 }),
+    supabase.from('gyms').select('*').eq('id', id).single(),
+  ]);
+
+  const gymData = (gymResult as any).data;
+  if (!gymData) notFound();
+  const gym = gymData as GymData;
+  if (typeof gym.smartcoach_enabled !== 'boolean') gym.smartcoach_enabled = false;
+
   try {
-    const supabaseAdmin = getAdminClient();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-    const [
-      membersResult,
-      challengesResult,
-      storeItemsResult,
-      recentSessionsResult,
-      pendingRedemptionsResult,
-      checkinTodayResult,
-      checkinWeekResult,
-    ] = await Promise.all([
-      supabase
-        .from('gym_memberships')
-        .select('*', { count: 'exact', head: true })
-        .eq('gym_id', id),
-      supabase
-        .from('gym_challenges')
-        .select('*', { count: 'exact', head: true })
-        .eq('gym_id', id)
-        .eq('is_active', true),
-      supabase
-        .from('rewards')
-        .select('*', { count: 'exact', head: true })
-        .eq('gym_id', id)
-        .eq('is_active', true),
-      supabase
-        .from('sessions')
-        .select('drops_earned')
-        .eq('gym_id', id)
-        .gte('created_at', weekAgo.toISOString())
-        .limit(500),
-      supabase
-        .from('redemptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('gym_id', id)
-        .eq('status', 'pending'),
-      supabaseAdmin
-        ? supabaseAdmin
-            .from('gym_checkins')
-            .select('id', { count: 'exact', head: true })
-            .eq('gym_id', id)
-            .gte('checked_in_at', todayStart.toISOString())
-        : Promise.resolve({ count: 0 }),
-      supabaseAdmin
-        ? supabaseAdmin
-            .from('gym_checkins')
-            .select('id', { count: 'exact', head: true })
-            .eq('gym_id', id)
-            .gte('checked_in_at', weekAgo.toISOString())
-        : Promise.resolve({ count: 0 }),
-    ]);
-
     members = membersResult.count || 0;
     challenges = challengesResult.count || 0;
     storeItems = storeItemsResult.count || 0;
@@ -167,7 +127,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
 
   return (
     <div>
-      <div className="mb-6 pt-16 md:pt-0">
+      <div className="mb-6">
         <h1 className="text-4xl font-bold text-white mb-2">{gym.name}</h1>
         <p className="text-[#808080]">
           {gym.city && `${gym.city}, `}

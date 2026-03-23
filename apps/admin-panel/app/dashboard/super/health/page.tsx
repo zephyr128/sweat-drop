@@ -63,7 +63,7 @@ export default async function SystemHealthPage() {
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">System Health</h1>
         <p className="text-[#808080]">Monitor system status and performance</p>
       </div>

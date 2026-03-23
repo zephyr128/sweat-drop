@@ -693,7 +693,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
             </div>
 
             {/* Revenue Share */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs text-[#808080] mb-1">Revenue Share %</label>
                 <input
@@ -782,7 +782,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Scope */}
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Scope *</label>
@@ -814,7 +814,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Start Date */}
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Start Date *</label>
@@ -845,7 +845,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                   <Building2 className="w-4 h-4 text-[#808080]" />
                   <h3 className="text-sm font-medium text-white">Sponsor Details</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-[#808080] mb-1">Sponsor Name *</label>
                     <input
@@ -953,7 +953,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                   <Lock className="w-4 h-4 text-[#808080]" />
                   <h3 className="text-sm font-medium text-white">Opt-In Requirements</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-[#808080] mb-1">Requirement Type</label>
                     <select
@@ -1004,7 +1004,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                   <h3 className="text-sm font-medium text-white">Card Branding</h3>
                   <span className="text-xs text-[#808080]">(optional)</span>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs text-[#808080] mb-1">Card Color</label>
                     <div className="flex gap-2 items-center">
@@ -1088,7 +1088,7 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                     <h3 className="text-sm font-medium text-white">Participating Gyms</h3>
                     <span className="text-xs text-[#808080]">({formData.gym_ids.length} selected)</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                     {allGyms.map((gym) => (
                       <label
                         key={gym.id}

@@ -54,7 +54,7 @@ export function ChallengeReportTable({ data }: ChallengeReportTableProps) {
     <section>
       <h3 className="text-xs text-zinc-500 tracking-wider font-medium uppercase mb-3">Challenges</h3>
       <div className="border-t border-zinc-800 pt-4 space-y-4">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-4">
             <div className="text-xs text-zinc-500 uppercase mb-1">Completed</div>
             <div className="text-xl font-bold text-white">{totalCompleted}</div>

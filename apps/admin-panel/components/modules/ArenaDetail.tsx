@@ -269,7 +269,7 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
       )}
 
       {/* Stats Row */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-[#1A1A1A] rounded-lg p-4 text-center">
           <p className="text-xs text-[#808080] uppercase mb-1">Participants</p>
           <p className="text-2xl font-bold text-white">{participants.length}</p>

@@ -128,7 +128,7 @@ export default async function SuperAdminMachineDetailPage({ params }: SuperAdmin
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">Machine Details</h1>
         <p className="text-[#808080]">View and print machine sticker</p>
       </div>

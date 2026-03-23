@@ -40,7 +40,7 @@ export default async function GymInvitationsPage({
   }
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="min-h-screen md:p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Arena Invitations</h1>
         <p className="text-[#808080] mt-1">

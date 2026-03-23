@@ -16,42 +16,20 @@ export interface UserProfile {
 export async function getCurrentUser(): Promise<User | null> {
   try {
     const supabase = await createClient();
-    
-    // IMPORTANT: getUser() is the only safe way for Server Components
-    // It automatically verifies JWT and refreshes session if needed
     const { data: { user }, error } = await supabase.auth.getUser();
-    
-    if (error) {
-      // Ako dobiješ AuthSessionMissingError, to je normalno ako korisnik nije ulogovan
-            // Auth error - will fallback to session
-      return null;
-    }
-    
-    if (!user) {
-            // No user found
-      return null;
-    }
-    
-      // User authenticated successfully
+    if (error || !user) return null;
     return user;
-  } catch (error) {
-            // Exception during auth check
+  } catch {
     return null;
   }
 }
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const user = await getCurrentUser();
-  if (!user) {
-    console.warn('[getCurrentProfile] No user found');
-    return null;
-  }
+  if (!user) return null;
 
   try {
     const supabase = await createClient();
-    
-    // Debug: Log user ID to help diagnose
-    console.log('[getCurrentProfile] Fetching profile for user:', user.id, 'email:', user.email);
     
     const { data, error } = await supabase
       .from('profiles')
@@ -60,26 +38,11 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       .single();
 
     if (error) {
-      console.error('[getCurrentProfile] Error fetching profile:', {
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        user_id: user.id,
-      });
+      console.error('[getCurrentProfile] Error:', error.message);
       return null;
     }
 
-    if (!data) {
-      console.warn('[getCurrentProfile] Profile not found for user:', user.id);
-      return null;
-    }
-    
-    console.log('[getCurrentProfile] Profile found:', {
-      id: data.id,
-      username: data.username,
-      role: data.role,
-    });
+    if (!data) return null;
 
     return {
       id: data.id,

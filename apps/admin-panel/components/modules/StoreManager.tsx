@@ -382,7 +382,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
                     Price (Drops) *
@@ -421,7 +421,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                   <Calendar className="w-4 h-4 text-[#808080]" />
                   <label className="text-sm font-medium text-white">Availability Window</label>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-[#808080] mb-1">Available From</label>
                     <input

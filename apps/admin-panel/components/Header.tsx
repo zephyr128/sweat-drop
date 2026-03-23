@@ -60,7 +60,7 @@ export function Header({ username, email, role }: HeaderProps) {
   };
 
   return (
-    <header className="fixed top-0 right-0 left-64 bg-black border-b border-zinc-900 z-40 h-16 flex items-center justify-end px-6">
+    <header className="fixed top-0 right-0 left-0 md:left-64 bg-black border-b border-zinc-900 z-30 h-16 flex items-center justify-end px-6">
       <div className="relative">
         <button
           onClick={() => setIsOpen(!isOpen)}

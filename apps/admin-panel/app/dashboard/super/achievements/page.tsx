@@ -58,7 +58,7 @@ export default async function AchievementsPage() {
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">Global Achievements</h1>
         <p className="text-[#808080]">
           Manage global badges that all SweatDrop users can earn across any gym

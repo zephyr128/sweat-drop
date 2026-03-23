@@ -9,9 +9,9 @@ export function generateStaticParams() {
   return [];
 }
 
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
+import { requireGymAccess } from '@/lib/auth-guard';
 import { WorkoutPlansManager } from '@/components/modules/WorkoutPlansManager';
 import { Dumbbell, Lock } from 'lucide-react';
 
@@ -66,54 +66,13 @@ interface MachineData {
 
 export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps) {
   const { id } = await params;
-  
+
+  await requireGymAccess(id);
+
   // Initialize Supabase client
   const supabase = await createClient();
-  
-  // 1. Check authentication first
-  let user;
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      redirect('/login');
-    }
-    
-    user = authUser;
-  } catch (error) {
-    console.error('[WorkoutPlansPage] Auth check failed:', error);
-    redirect('/login');
-  }
 
-  // 2. Fetch user profile
-  let profile;
-  try {
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profileData) {
-      console.error('[WorkoutPlansPage] Profile fetch failed:', profileError);
-      notFound();
-    }
-
-    profile = {
-      id: profileData.id,
-      email: profileData.email || user.email || '',
-      username: profileData.username,
-      role: (profileData.role as 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user') || 'user',
-      assigned_gym_id: profileData.assigned_gym_id,
-      owner_id: profileData.owner_id,
-      home_gym_id: profileData.home_gym_id,
-    };
-  } catch (error) {
-    console.error('[WorkoutPlansPage] Unexpected error fetching profile:', error);
-    notFound();
-  }
-
-  // 3. Fetch gym data and verify access
+  // Fetch gym data
   let gym: GymData | null = null;
   try {
     const { data: gymData, error: gymError } = await supabase
@@ -137,26 +96,10 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
     notFound();
   }
 
-  // 4. Verify access: superadmin can access all, gym_admin/gym_owner need to own or be assigned
-  if (profile.role !== 'superadmin') {
-    if (profile.role === 'gym_admin' || profile.role === 'gym_owner') {
-      // Check if user owns this gym OR it's their assigned gym
-      const ownsGym = gym.owner_id === profile.id;
-      const isAssignedGym = profile.assigned_gym_id === id;
-      
-      if (!ownsGym && !isAssignedGym) {
-        notFound();
-      }
-    } else {
-      // Other roles don't have access
-      notFound();
-    }
-  }
-
   // Get smartcoach_enabled status
   const smartcoachEnabled = gym.smartcoach_enabled;
 
-  // 5. Fetch workout plans for this gym with error handling (only if smartcoach is enabled)
+  // Fetch workout plans for this gym with error handling (only if smartcoach is enabled)
   let plans: WorkoutPlan[] = [];
   let machines: MachineData[] = [];
   
@@ -181,7 +124,7 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
       // Continue with empty array
     }
 
-    // 6. Fetch machines for plan items (for display) with error handling
+    // Fetch machines for plan items (for display) with error handling
     try {
       const { data: machinesData, error: machinesError } = await supabase
         .from('machines')
@@ -202,7 +145,7 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
 
   return (
     <div>
-      <div className="mb-8 pt-16 md:pt-0">
+      <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">SmartCoach Dashboard</h1>
         <p className="text-[#808080]">Monitor workout plans, active sessions, and revenue</p>
       </div>
