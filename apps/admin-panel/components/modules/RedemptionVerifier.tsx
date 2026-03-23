@@ -30,9 +30,10 @@ interface RedemptionResult {
 
 interface RedemptionVerifierProps {
   gymId: string;
+  onRedemptionConfirmed?: () => void;
 }
 
-export function RedemptionVerifier({ gymId }: RedemptionVerifierProps) {
+export function RedemptionVerifier({ gymId, onRedemptionConfirmed }: RedemptionVerifierProps) {
   const [code, setCode] = useState(['', '', '', '']);
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -127,6 +128,7 @@ export function RedemptionVerifier({ gymId }: RedemptionVerifierProps) {
       if (res.success) {
         toast.success('Redemption confirmed! Reward can be handed over.');
         resetState();
+        onRedemptionConfirmed?.();
       } else {
         toast.error(res.error || 'Failed to confirm');
       }
@@ -146,6 +148,7 @@ export function RedemptionVerifier({ gymId }: RedemptionVerifierProps) {
       if (res.success) {
         toast.success('Redemption rejected. Drops refunded.');
         resetState();
+        onRedemptionConfirmed?.();
       } else {
         toast.error(res.error || 'Failed to reject');
       }

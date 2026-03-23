@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { ShoppingBag, Ticket, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, Ticket } from 'lucide-react';
 import { StoreManager } from './StoreManager';
 import { RedemptionsManager } from './RedemptionsManager';
-import { RedemptionVerifier } from './RedemptionVerifier';
 
 interface StoreItem {
   id: string;
@@ -14,6 +13,7 @@ interface StoreItem {
   stock: number | null;
   image_url: string | null;
   is_active: boolean;
+  redemption_limit?: string | null;
   sponsor_name?: string | null;
   sponsor_logo?: string | null;
   available_from?: string | null;
@@ -55,7 +55,7 @@ interface StorePageTabsProps {
   pendingCount: number;
 }
 
-type Tab = 'rewards' | 'redemptions' | 'verify';
+type Tab = 'rewards' | 'redemptions';
 
 export function StorePageTabs({
   gymId,
@@ -69,7 +69,6 @@ export function StorePageTabs({
   const tabs: { key: Tab; label: string; icon: typeof ShoppingBag; badge?: number }[] = [
     { key: 'rewards', label: 'Rewards', icon: ShoppingBag },
     { key: 'redemptions', label: 'Redemptions', icon: Ticket, badge: pendingCount },
-    { key: 'verify', label: 'Verify', icon: ShieldCheck },
   ];
 
   return (
@@ -112,11 +111,6 @@ export function StorePageTabs({
           initialPendingRedemptions={pendingRedemptions as any}
           initialConfirmedRedemptions={confirmedRedemptions as any}
         />
-      )}
-      {activeTab === 'verify' && (
-        <div className="max-w-2xl mx-auto">
-          <RedemptionVerifier gymId={gymId} />
-        </div>
       )}
     </div>
   );

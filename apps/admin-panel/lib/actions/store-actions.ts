@@ -4,6 +4,8 @@ import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+const REDEMPTION_LIMITS = ['unlimited', 'once', 'once_per_day', 'once_per_week', 'once_per_month'] as const;
+
 const createStoreItemSchema = z.object({
   gymId: z.string().uuid(),
   name: z.string().min(1, 'Name is required'),
@@ -12,6 +14,7 @@ const createStoreItemSchema = z.object({
   stock: z.number().int().min(0).optional(),
   imageUrl: z.string().url().optional(),
   rewardType: z.string().default('physical'),
+  redemptionLimit: z.enum(REDEMPTION_LIMITS).default('unlimited'),
   sponsorName: z.string().optional(),
   sponsorLogo: z.string().url().optional().or(z.literal('')),
   availableFrom: z.string().optional(),
@@ -37,6 +40,7 @@ export async function createStoreItem(input: z.infer<typeof createStoreItemSchem
         image_url: validated.imageUrl || null,
         reward_type: validated.rewardType,
         is_active: true,
+        redemption_limit: validated.redemptionLimit,
         sponsor_name: validated.sponsorName || null,
         sponsor_logo: validated.sponsorLogo || null,
         available_from: validated.availableFrom || null,
@@ -71,6 +75,7 @@ export async function updateStoreItem(
     if (input.priceDrops !== undefined) updateData.price_drops = input.priceDrops;
     if (input.stock !== undefined) updateData.stock = input.stock;
     if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl;
+    if (input.redemptionLimit !== undefined) updateData.redemption_limit = input.redemptionLimit;
     if (input.sponsorName !== undefined) updateData.sponsor_name = input.sponsorName || null;
     if (input.sponsorLogo !== undefined) updateData.sponsor_logo = input.sponsorLogo || null;
     if (input.availableFrom !== undefined) updateData.available_from = input.availableFrom || null;

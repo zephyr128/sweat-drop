@@ -8,14 +8,17 @@ import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import { createStoreItem, deleteStoreItem, updateStoreItem } from '@/lib/actions/store-actions';
 import { uploadFile } from '@/lib/utils/storage';
-import { X, Trash2, Edit2, Droplet, Smartphone, Building2, Calendar } from 'lucide-react';
+import { X, Trash2, Edit2, Droplet, Smartphone, Building2, Calendar, Lock, RefreshCw } from 'lucide-react';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
+
+const REDEMPTION_LIMITS = ['unlimited', 'once', 'once_per_day', 'once_per_week', 'once_per_month'] as const;
 
 const storeItemSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   priceDrops: z.number().int().positive('Price must be greater than 0'),
   stock: z.number().int().min(0).optional(),
+  redemptionLimit: z.enum(REDEMPTION_LIMITS).default('unlimited'),
   imageUrl: z.string().url().optional().or(z.literal('')),
   sponsorName: z.string().optional(),
   sponsorLogo: z.string().url().optional().or(z.literal('')),
@@ -33,6 +36,7 @@ interface StoreItem {
   stock: number | null;
   image_url: string | null;
   is_active: boolean;
+  redemption_limit?: string | null;
   sponsor_name?: string | null;
   sponsor_logo?: string | null;
   available_from?: string | null;
@@ -121,6 +125,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
       description: item.description || '',
       priceDrops: item.price_drops,
       stock: item.stock ?? undefined,
+      redemptionLimit: (item.redemption_limit as typeof REDEMPTION_LIMITS[number]) || 'unlimited',
       imageUrl: item.image_url || '',
       sponsorName: item.sponsor_name || '',
       sponsorLogo: item.sponsor_logo || '',
@@ -159,6 +164,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           ...data,
           gymId,
           rewardType: 'physical',
+          redemptionLimit: data.redemptionLimit || 'unlimited',
           sponsorName: data.sponsorName,
           sponsorLogo: data.sponsorLogo,
           availableFrom: data.availableFrom,
@@ -257,6 +263,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                   {item.stock !== null && (
                     <p className="text-sm text-[#808080]">Stock: {item.stock}</p>
                   )}
+                  <RedemptionLimitBadge limit={item.redemption_limit} />
                   {item.sponsor_name && (
                     <div className="flex items-center gap-1.5 mt-1">
                       {item.sponsor_logo ? (
@@ -415,6 +422,26 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
                 </div>
               </div>
 
+              {/* Redemption Limit */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Redemption Limit
+                </label>
+                <select
+                  {...register('redemptionLimit')}
+                  className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
+                >
+                  <option value="unlimited">No limit</option>
+                  <option value="once">Once (ever)</option>
+                  <option value="once_per_day">Once per day</option>
+                  <option value="once_per_week">Once per week</option>
+                  <option value="once_per_month">Once per month</option>
+                </select>
+                <p className="mt-1 text-xs text-[#808080]">
+                  How often can each member claim this reward?
+                </p>
+              </div>
+
               {/* Availability Dates */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -536,6 +563,30 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RedemptionLimitBadge({ limit }: { limit: string | null | undefined }) {
+  if (!limit || limit === 'unlimited') return null;
+
+  const config: Record<string, { label: string; icon: typeof Lock }> = {
+    once: { label: 'One-time', icon: Lock },
+    once_per_day: { label: 'Daily', icon: RefreshCw },
+    once_per_week: { label: 'Weekly', icon: RefreshCw },
+    once_per_month: { label: 'Monthly', icon: RefreshCw },
+  };
+
+  const entry = config[limit];
+  if (!entry) return null;
+
+  const Icon = entry.icon;
+  const isOnce = limit === 'once';
+
+  return (
+    <div className={`flex items-center gap-1 mt-1 ${isOnce ? 'text-amber-400' : 'text-blue-400'}`}>
+      <Icon className="w-3 h-3" />
+      <span className="text-xs">{entry.label}</span>
     </div>
   );
 }

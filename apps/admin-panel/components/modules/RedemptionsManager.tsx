@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { confirmRedemption, cancelRedemption, validateRedemptionCode } from '@/lib/actions/redemption-actions';
+import { confirmRedemption, cancelRedemption } from '@/lib/actions/redemption-actions';
 import { CheckCircle2, XCircle, Clock, CheckCircle, Droplet, Ticket, Coffee, GlassWater, Shirt, Gift, Trophy, Swords, Filter, ShoppingBag } from 'lucide-react';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
-import { QRValidator } from '@/components/QRValidator';
+import { RedemptionVerifier } from '@/components/modules/RedemptionVerifier';
 import { supabase } from '@/lib/supabase-client';
 import { formatDateTime } from '@/lib/utils/date';
 
@@ -59,10 +59,7 @@ export function RedemptionsManager({
   const router = useRouter();
   const [pendingRedemptions, setPendingRedemptions] = useState<Redemption[]>(initialPendingRedemptions);
   const [confirmedRedemptions, setConfirmedRedemptions] = useState<Redemption[]>(initialConfirmedRedemptions);
-  const [searchCode, setSearchCode] = useState('');
-  const [searchResult, setSearchResult] = useState<Redemption | null>(null);
-  const [_isSearching, setIsSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pending' | 'confirmed' | 'search'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'confirmed'>('pending');
   const [sourceFilter, setSourceFilter] = useState<SourceType | 'all'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [_refreshing, setRefreshing] = useState(false);
@@ -72,28 +69,7 @@ export function RedemptionsManager({
     try {
       const result = await confirmRedemption(redemptionId, gymId);
       if (result.success) {
-        // Refresh data from server to get complete redemption with confirmed_by_profile
         await refreshRedemptions();
-        
-        // Also update search result if it matches
-        if (searchResult?.id === redemptionId) {
-          // Refetch the redemption to get full details
-          const { data } = await supabase
-            .from('redemptions')
-            .select(`
-              *,
-              profiles:user_id (id, username, email),
-              rewards:reward_id (id, name, reward_type, price_drops, image_url),
-              confirmed_by_profile:confirmed_by (id, username)
-            `)
-            .eq('id', redemptionId)
-            .single();
-          
-          if (data) {
-            setSearchResult(data as Redemption);
-          }
-        }
-        
         toast.success('Redemption confirmed successfully');
       } else {
         toast.error(`Failed to confirm: ${result.error}`);
@@ -112,15 +88,7 @@ export function RedemptionsManager({
     try {
       const result = await cancelRedemption(redemptionId, gymId, reason);
       if (result.success) {
-        // Refresh data from server
         await refreshRedemptions();
-        
-        // Clear search result if it matches
-        if (searchResult?.id === redemptionId) {
-          setSearchResult(null);
-          setSearchCode('');
-        }
-        
         toast.success('Redemption cancelled and drops refunded');
       } else {
         toast.error(`Failed to cancel: ${result.error}`);
@@ -129,34 +97,6 @@ export function RedemptionsManager({
       toast.error(`Error: ${error.message}`);
     } finally {
       setProcessingId(null);
-    }
-  };
-
-  const _handleSearch = async () => {
-    if (!searchCode.trim()) {
-      toast.error('Please enter a redemption code');
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const result = await validateRedemptionCode(searchCode.trim(), gymId) as {
-        success: boolean;
-        redemption?: Redemption;
-        error?: string;
-      };
-      if (result.success && result.redemption) {
-        setSearchResult(result.redemption as Redemption);
-        setActiveTab('search');
-        toast.success('Redemption found');
-      } else {
-        setSearchResult(null);
-        toast.error(result.error || 'Redemption not found');
-      }
-    } catch (error: any) {
-      toast.error(`Error: ${error.message}`);
-    } finally {
-      setIsSearching(false);
     }
   };
 
@@ -237,17 +177,14 @@ export function RedemptionsManager({
   };
 
   const handleRedemptionConfirmed = () => {
-    // Refresh data
     refreshRedemptions();
-    setSearchResult(null);
-    setSearchCode('');
   };
 
   return (
     <div>
-      {/* QR Code Validator Section */}
-      <div className="mb-8">
-        <QRValidator gymId={gymId} onRedemptionConfirmed={handleRedemptionConfirmed} />
+      {/* Code Verification */}
+      <div className="mb-8 max-w-lg mx-auto">
+        <RedemptionVerifier gymId={gymId} onRedemptionConfirmed={handleRedemptionConfirmed} />
       </div>
 
       {/* Tabs */}
@@ -278,18 +215,6 @@ export function RedemptionsManager({
             Confirmed ({filterBySource(confirmedRedemptions).length})
           </div>
         </button>
-        {searchResult && (
-          <button
-            onClick={() => setActiveTab('search')}
-            className={`px-6 py-3 font-medium transition-colors border-b-2 ${
-              activeTab === 'search'
-                ? 'text-[#00E5FF] border-[#00E5FF]'
-                : 'text-[#808080] border-transparent hover:text-white'
-            }`}
-          >
-            Search Result
-          </button>
-        )}
       </div>
 
       {/* Source Type Filter */}
@@ -446,72 +371,6 @@ export function RedemptionsManager({
           </div>
         )}
 
-        {activeTab === 'search' && searchResult && (
-          <div className="p-6">
-            <div className="bg-[#1A1A1A] border border-[#00E5FF]/30 rounded-lg p-6">
-              <div className="flex items-start gap-4 mb-6">
-                {(() => {
-                  const IconComponent = getRewardIcon(searchResult.rewards?.reward_type || 'unknown');
-                  return <IconComponent className="w-10 h-10 text-[#00E5FF]" strokeWidth={1.5} />;
-                })()}
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    {searchResult.rewards?.name || 'Unknown Reward'}
-                  </h3>
-                  <p className="text-sm text-[#808080] mb-4">
-                    {searchResult.profiles?.username || 'Unknown User'} • {searchResult.rewards?.reward_type || 'Unknown'}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-[#808080] mb-1">Redemption Code</p>
-                      <code className="text-lg font-mono text-[#00E5FF] bg-[#0A0A0A] px-4 py-2 rounded block text-center">
-                        {searchResult.redemption_code}
-                      </code>
-                    </div>
-                    <div>
-                      <p className="text-xs text-[#808080] mb-1">Drops Spent</p>
-                      <p className="text-2xl font-bold text-[#00E5FF] text-center">
-                        {searchResult.drops_spent} 💧
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-[#1A1A1A]">
-                    <p className="text-xs text-[#808080] mb-1">Status</p>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      searchResult.status === 'pending'
-                        ? 'bg-[#FF9100]/10 text-[#FF9100]'
-                        : searchResult.status === 'confirmed'
-                        ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
-                        : 'bg-[#808080]/10 text-[#808080]'
-                    }`}>
-                      {searchResult.status.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {searchResult.status === 'pending' && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleConfirm(searchResult.id)}
-                    disabled={processingId === searchResult.id}
-                    className="flex-1 px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-5 h-5" />
-                    {processingId === searchResult.id ? 'Confirming...' : 'Confirm Redemption'}
-                  </button>
-                  <button
-                    onClick={() => handleCancel(searchResult.id)}
-                    disabled={processingId === searchResult.id}
-                    className="px-6 py-3 bg-[#1A1A1A] border border-[#FF5252]/30 text-[#FF5252] rounded-lg font-medium hover:bg-[#FF5252]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <XCircle className="w-5 h-5" />
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
