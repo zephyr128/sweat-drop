@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine, registerBLEDevice } from '@/lib/actions/machine-actions';
-import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save, Eye } from 'lucide-react';
+import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save, Eye, BarChart3 } from 'lucide-react';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase-client';
@@ -491,21 +491,30 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   return (
     <div>
       <div className="mb-6 flex justify-between items-center">
-        {canCreateMachines ? (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+        <div className="flex items-center gap-3">
+          {canCreateMachines ? (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-6 py-3 bg-[#00E5FF] text-black rounded-lg font-bold hover:bg-[#00B8CC] transition-colors"
+            >
+              + Add Machine
+            </button>
+          ) : (
+            <div className="px-6 py-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-[#808080]">
+              <p className="text-sm">
+                To add more machines, please contact{' '}
+                <span className="text-[#00E5FF]">SweatDrop Support</span>
+              </p>
+            </div>
+          )}
+          <Link
+            href={`/dashboard/gym/${gymId}/machines/analytics`}
+            className="px-5 py-3 bg-[#1A1A1A] border border-[#2A2A2A] text-[#808080] hover:text-white hover:border-[#00E5FF]/50 rounded-lg font-medium transition-colors inline-flex items-center gap-2 text-sm"
           >
-            + Add Machine
-          </button>
-        ) : (
-          <div className="px-6 py-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-[#808080]">
-            <p className="text-sm">
-              To add more machines, please contact{' '}
-              <span className="text-[#00E5FF]">SweatDrop Support</span>
-            </p>
-          </div>
-        )}
+            <BarChart3 className="w-4 h-4" />
+            Machine Hub
+          </Link>
+        </div>
       </div>
 
       {/* Machines Table */}

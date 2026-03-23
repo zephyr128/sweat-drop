@@ -1,115 +1,101 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bar } from 'react-chartjs-2';
-import { Activity } from 'lucide-react';
-import '@/lib/chart-setup';
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
+import { supabase } from '@/lib/supabase-client';
 
-export function MachineHeatmapWidget({ machineUsage }: any) {
-  const [isClient, setIsClient] = useState(false);
+interface MachineHeatmapWidgetProps {
+  machineUsage: Array<{ machine_type: string; scan_count: number }>;
+  gymId?: string;
+}
+
+export function MachineHeatmapWidget({ machineUsage, gymId }: MachineHeatmapWidgetProps) {
+  const [liveCount, setLiveCount] = useState<{ active: number; total: number } | null>(null);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    if (!gymId) return;
 
-  // 1. Prevent Hydration Mismatch & Layout Thrashing
-  if (!isClient) {
-    return <div className="h-[300px] w-full bg-zinc-900/20 animate-pulse rounded-xl" />;
-  }
+    async function fetchLive() {
+      const { data, error } = await supabase
+        .from('machines')
+        .select('id, is_busy')
+        .eq('gym_id', gymId!);
 
-  // 2. Process data - Dinamički obrađujemo bilo koji tip mašine koji stigne
-  const typeData = (machineUsage || []).reduce((acc: any, machine: any) => {
-    const type = machine.machine_type || 'Unknown';
-    acc[type] = (acc[type] || 0) + Number(machine.scan_count || 0);
-    return acc;
-  }, {});
+      if (!error && data) {
+        setLiveCount({
+          total: data.length,
+          active: data.filter((m: { is_busy: boolean }) => m.is_busy).length,
+        });
+      }
+    }
 
-  const chartData = Object.keys(typeData).map(type => ({
-    name: type.charAt(0).toUpperCase() + type.slice(1),
-    scans: typeData[type]
-  }));
+    fetchLive();
 
-  const hasData = chartData.length > 0 && chartData.some(d => d.scans > 0);
+    const channel = supabase
+      .channel(`widget-machines-${gymId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'machines',
+        filter: `gym_id=eq.${gymId}`,
+      }, () => {
+        fetchLive();
+      })
+      .subscribe();
 
-  // 3. Chart.js data configuration
-  const data = {
-    labels: chartData.map(item => item.name),
-    datasets: [
-      {
-        label: 'Scans',
-        data: chartData.map(item => item.scans),
-        backgroundColor: '#00E5FF',
-        borderRadius: 4,
-      },
-    ],
-  };
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gymId]);
 
-  // 4. Chart.js options (Dark Mode Cyberpunk)
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index' as const,
-      intersect: false, // KLJUČNO: Ne mora da se pogodi tačka mišem
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        enabled: true,
-        backgroundColor: '#0A0A0A',
-        titleColor: '#fff',
-        bodyColor: '#fff',
-        borderColor: '#333',
-        borderWidth: 1,
-        padding: 10,
-        displayColors: false, // Sklanja kockicu boje pored teksta
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-          drawBorder: false,
-        },
-        ticks: {
-          color: '#808080',
-          font: {
-            size: 11,
-            family: 'system-ui, -apple-system, sans-serif',
-          },
-        },
-      },
-      y: {
-        grid: {
-          color: '#1A1A1A',
-          drawBorder: false,
-        },
-        ticks: {
-          color: '#808080',
-          font: {
-            size: 11,
-            family: 'system-ui, -apple-system, sans-serif',
-          },
-          stepSize: 1,
-        },
-        beginAtZero: true,
-      },
-    },
-  };
+  const totalScans = (machineUsage || []).reduce(
+    (sum, m) => sum + Number(m.scan_count || 0),
+    0
+  );
 
-  // 5. Render chart ONLY when browser has calculated layout
   return (
-    <div className="flex flex-col w-full">
-      <h4 className="text-sm font-semibold text-white mb-4">Machine Usage</h4>
-      <div className="w-full h-[300px]">
-        {hasData ? (
-          <Bar data={data} options={options} />
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-sm font-semibold text-white">Machine Status</h4>
+        {liveCount && liveCount.active > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs text-emerald-400">{liveCount.active} active</span>
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center gap-3">
+        {liveCount ? (
+          <>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-white">{liveCount.active}</p>
+              <p className="text-xs text-[#808080]">
+                machine{liveCount.active !== 1 ? 's' : ''} in use now
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-[#808080]">
+                {totalScans.toLocaleString()} total scans &bull; {liveCount.total} machines
+              </p>
+            </div>
+          </>
         ) : (
-          <div className="flex items-center justify-center h-full border border-dashed border-zinc-800 rounded-xl">
-            <p className="text-zinc-500 text-xs">No machine data yet</p>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-white">{totalScans.toLocaleString()}</p>
+            <p className="text-xs text-[#808080]">total scans</p>
           </div>
+        )}
+
+        {gymId && (
+          <Link
+            href={`/dashboard/gym/${gymId}/machines/analytics`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/20 transition-colors text-sm font-medium mt-2"
+          >
+            View Machine Hub
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         )}
       </div>
     </div>

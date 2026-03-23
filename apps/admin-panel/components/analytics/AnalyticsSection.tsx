@@ -148,7 +148,8 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
             <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-6 min-h-[380px]">
               <MachineHeatmapWidget 
-                machineUsage={Array.isArray(displayAnalytics.machine_usage) ? displayAnalytics.machine_usage : []} 
+                machineUsage={Array.isArray(displayAnalytics.machine_usage) ? displayAnalytics.machine_usage : []}
+                gymId={gymId}
               />
             </div>
             <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-6 min-h-[380px]">
