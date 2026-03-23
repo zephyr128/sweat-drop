@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -24,6 +24,51 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+type RedemptionLimit = 'unlimited' | 'once' | 'once_per_day' | 'once_per_week' | 'once_per_month';
+
+interface Redemption {
+  reward_id: string;
+  created_at: string;
+  status: string;
+}
+
+function getPeriodStart(limit: RedemptionLimit, now: Date): Date {
+  if (limit === 'once') return new Date(0);
+  if (limit === 'once_per_day') {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (limit === 'once_per_week') {
+    const d = new Date(now);
+    const day = d.getDay();
+    const diff = day === 0 ? 6 : day - 1; // Monday start
+    d.setDate(d.getDate() - diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (limit === 'once_per_month') {
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  return new Date(0);
+}
+
+type ClaimStatus = null | 'pending' | 'confirmed';
+
+function getClaimStatus(rewardId: string, limit: RedemptionLimit, redemptions: Redemption[]): ClaimStatus {
+  if (limit === 'unlimited') return null;
+  const matching = redemptions.filter(r => r.reward_id === rewardId);
+  if (matching.length === 0) return null;
+
+  const periodStart = limit === 'once' ? new Date(0) : getPeriodStart(limit, new Date());
+  const inPeriod = matching.filter(r => new Date(r.created_at) >= periodStart);
+  if (inPeriod.length === 0) return null;
+
+  if (inPeriod.some(r => r.status === 'confirmed')) return 'confirmed';
+  if (inPeriod.some(r => r.status === 'pending')) return 'pending';
+  return null;
+}
+
 export default function StoreScreen() {
   const router = useRouter();
   const { session } = useSession();
@@ -33,38 +78,12 @@ export default function StoreScreen() {
   const { t } = useTranslation('store');
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const [rewards, setRewards] = useState<any[]>([]);
-  const [profile, setProfile] = useState<any>(null);
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
 
-  useEffect(() => {
-    if (session?.user) {
-      loadProfile();
-      loadRewards();
-      refreshLocalDrops();
-    }
-  }, [session, activeGymId]);
-
-  const loadProfile = async () => {
+  const loadRewards = useCallback(async () => {
     if (!session?.user) return;
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    if (data) {
-      setProfile(data);
-    }
-  };
-
-  const loadRewards = async () => {
-    setLoading(true);
-
-    if (!session?.user) {
-      setLoading(false);
-      return;
-    }
 
     const { data: profileData } = await supabase
       .from('profiles')
@@ -74,107 +93,49 @@ export default function StoreScreen() {
 
     const gymId = profileData?.home_gym_id;
 
-    if (!gymId) {
-      const { data } = await supabase
-        .from('rewards')
-        .select('*')
-        .eq('is_active', true)
-        .order('price_drops');
-
-      if (data) {
-        setRewards(data);
-      }
-      setLoading(false);
-      return;
-    }
-
-    const { data } = await supabase
+    let query = supabase
       .from('rewards')
       .select('*')
-      .eq('gym_id', gymId)
       .eq('is_active', true)
       .order('price_drops');
 
-    if (data) {
-      setRewards(data);
+    if (gymId) {
+      query = query.eq('gym_id', gymId);
     }
-    setLoading(false);
-  };
 
-  const redeemReward = async (reward: any) => {
+    const { data } = await query;
+    if (data) setRewards(data);
+  }, [session?.user]);
+
+  const loadRedemptions = useCallback(async () => {
     if (!session?.user || !activeGymId) return;
 
-    if (localDrops < reward.price_drops) {
-      Alert.alert(
-        t('insufficientDrops'),
-        t('insufficientDropsMsg', { needed: reward.price_drops, available: localDrops })
-      );
-      return;
-    }
+    const { data } = await supabase
+      .from('redemptions')
+      .select('reward_id, created_at, status')
+      .eq('user_id', session.user.id)
+      .eq('gym_id', activeGymId)
+      .in('status', ['pending', 'confirmed']);
 
-    if (reward.stock !== null && reward.stock <= 0) {
-      Alert.alert(t('outOfStock'), t('outOfStockMsg'));
-      return;
-    }
+    if (data) setRedemptions(data);
+  }, [session?.user, activeGymId]);
 
-    Alert.alert(
-      t('redeemReward'),
-      t('redeemConfirm', { name: reward.name, price: reward.price_drops }),
-      [
-        { text: t('common:cancel'), style: 'cancel' },
-        {
-          text: t('redeem'),
-          onPress: async () => {
-            try {
-              const { data, error } = await supabase.rpc('claim_reward', {
-                p_user_id: session.user.id,
-                p_reward_id: reward.id,
-                p_gym_id: activeGymId,
-              });
+  useFocusEffect(
+    useCallback(() => {
+      if (!session?.user) return;
 
-              if (error) {
-                Alert.alert(t('common:error'), error.message);
-                return;
-              }
-
-              if (!data || data.length === 0 || !data[0].success) {
-                Alert.alert(
-                  t('redemptionFailed'),
-                  data?.[0]?.error_message || t('redemptionFailed')
-                );
-                return;
-              }
-
-              const redemption = data[0];
-
-              Alert.alert(
-                t('redeemSuccess'),
-                t('redemptionCode', { code: redemption.redemption_code }),
-                [
-                  {
-                    text: t('viewHistory'),
-                    onPress: () => {
-                      router.push('/redemptions');
-                      loadProfile();
-                      loadRewards();
-                      refreshLocalDrops();
-                    },
-                  },
-                  { text: 'OK', onPress: () => {
-                    loadProfile();
-                    loadRewards();
-                    refreshLocalDrops();
-                  }},
-                ]
-              );
-            } catch (err: any) {
-              Alert.alert(t('common:error'), err.message || t('redemptionFailed'));
-            }
-          },
-        },
-      ]
-    );
-  };
+      if (!hasLoadedRef.current) {
+        setLoading(true);
+        Promise.all([loadRewards(), loadRedemptions(), refreshLocalDrops()])
+          .finally(() => {
+            setLoading(false);
+            hasLoadedRef.current = true;
+          });
+      } else {
+        Promise.all([loadRewards(), loadRedemptions(), refreshLocalDrops()]);
+      }
+    }, [session, activeGymId])
+  );
 
   const getRewardIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
@@ -183,6 +144,26 @@ export default function StoreScreen() {
       case 'discount': return 'pricetag-outline';
       case 'merch': return 'shirt-outline';
       default: return 'gift-outline';
+    }
+  };
+
+  const getLimitLabel = (limit: RedemptionLimit): string | null => {
+    switch (limit) {
+      case 'once': return t('limitOnce');
+      case 'once_per_day': return t('limitDaily');
+      case 'once_per_week': return t('limitWeekly');
+      case 'once_per_month': return t('limitMonthly');
+      default: return null;
+    }
+  };
+
+  const getClaimedLabel = (limit: RedemptionLimit): string => {
+    switch (limit) {
+      case 'once': return t('alreadyClaimed');
+      case 'once_per_day': return t('claimedToday');
+      case 'once_per_week': return t('claimedThisWeek');
+      case 'once_per_month': return t('claimedThisMonth');
+      default: return t('alreadyClaimed');
     }
   };
 
@@ -200,7 +181,6 @@ export default function StoreScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Gradient background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -243,16 +223,22 @@ export default function StoreScreen() {
         ) : (
           rewards.map((reward, index) => {
             const affordable = canAfford(reward.price_drops);
+            const limit: RedemptionLimit = reward.redemption_limit || 'unlimited';
+            const claimStatus = getClaimStatus(reward.id, limit, redemptions);
+            const outOfStock = reward.stock !== null && reward.stock <= 0;
+            const limitLabel = getLimitLabel(limit);
+            const disabled = !affordable || !!claimStatus || outOfStock;
+
             return (
               <Animated.View key={reward.id} entering={FadeInDown.delay(200 + index * 80).duration(400)}>
                 <TouchableOpacity
                   style={[
                     styles.rewardCard,
-                    { borderColor: hexToRgba(branding.primary, affordable ? 0.2 : 0.08) },
-                    !affordable && styles.rewardCardDisabled,
+                    { borderColor: hexToRgba(branding.primary, disabled ? 0.08 : 0.2) },
+                    disabled && styles.rewardCardDisabled,
                   ]}
-                  onPress={() => affordable && redeemReward(reward)}
-                  activeOpacity={affordable ? 0.8 : 1}
+                  onPress={() => router.push({ pathname: '/reward-detail', params: { rewardId: reward.id, gymId: activeGymId || '' } })}
+                  activeOpacity={0.8}
                 >
                   <BlurView intensity={50} tint="dark" style={[styles.rewardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     <View style={styles.rewardContent}>
@@ -267,7 +253,7 @@ export default function StoreScreen() {
                           <Ionicons
                             name={getRewardIcon(reward.reward_type)}
                             size={28}
-                            color={affordable ? branding.primary : theme.colors.textSecondary}
+                            color={disabled ? theme.colors.textSecondary : branding.primary}
                           />
                         </View>
                       )}
@@ -278,24 +264,54 @@ export default function StoreScreen() {
                             {reward.description}
                           </Text>
                         )}
+
+                        {/* Limit + Claimed/Pending badges */}
+                        {(limitLabel || claimStatus) && (
+                          <View style={styles.badgeRow}>
+                            {claimStatus === 'confirmed' ? (
+                              <View style={[styles.limitBadge, { backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}>
+                                <Ionicons name="checkmark-circle" size={13} color="#4ade80" />
+                                <Text style={[styles.limitBadgeText, { color: '#4ade80' }]}>
+                                  {getClaimedLabel(limit)}
+                                </Text>
+                              </View>
+                            ) : claimStatus === 'pending' ? (
+                              <View style={[styles.limitBadge, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
+                                <Ionicons name="time-outline" size={13} color="#fbbf24" />
+                                <Text style={[styles.limitBadgeText, { color: '#fbbf24' }]}>
+                                  {t('pendingPickup')}
+                                </Text>
+                              </View>
+                            ) : limitLabel ? (
+                              <View style={[styles.limitBadge, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                                <Ionicons name="time-outline" size={13} color={branding.primary} />
+                                <Text style={[styles.limitBadgeText, { color: branding.primary }]}>
+                                  {limitLabel}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        )}
+
                         <View style={styles.rewardFooter}>
                           <View style={styles.priceContainer}>
-                            <Ionicons name="water" size={16} color={affordable ? branding.primary : theme.colors.textSecondary} />
+                            <Ionicons name="water" size={16} color={disabled ? theme.colors.textSecondary : branding.primary} />
                             <Text style={[
                               styles.rewardPrice,
                               getNumberStyle(18),
-                              { color: affordable ? branding.primary : theme.colors.textSecondary },
+                              { color: disabled ? theme.colors.textSecondary : branding.primary },
                             ]}>
                               {reward.price_drops}
                             </Text>
                           </View>
                           {reward.stock !== null && (
                             <Text style={styles.rewardStock}>
-                              {reward.stock} left
+                              {reward.stock} {t('left')}
                             </Text>
                           )}
                         </View>
                       </View>
+                      <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.3)" style={{ alignSelf: 'center' }} />
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -343,6 +359,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: theme.spacing.lg,
+    paddingBottom: 40,
   },
   balanceCard: {
     borderRadius: theme.borderRadius.xl,
@@ -391,7 +408,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   rewardCardDisabled: {
-    opacity: 0.5,
+    opacity: 0.55,
   },
   rewardBlur: {
     borderRadius: theme.borderRadius.xl,
@@ -429,8 +446,25 @@ const styles = StyleSheet.create({
     ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
     letterSpacing: 0.3,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    marginBottom: theme.spacing.sm,
+  },
+  limitBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  limitBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
   rewardFooter: {
     flexDirection: 'row',

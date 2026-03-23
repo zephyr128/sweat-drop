@@ -147,11 +147,11 @@ export function useUserProgress(userId?: string) {
       const [challengeProgressResult, gymChallengesResult, gymBadgesResult] = await Promise.all([
         supabase
           .from('challenge_progress')
-          .select('challenge_id, current_value, current_drops, is_completed, tier_achieved')
+          .select('challenge_id, current_value, current_drops, current_streak_days, is_completed, tier_achieved')
           .eq('user_id', targetUserId),
         supabase
           .from('gym_challenges')
-          .select('id, target_drops, scoring_model, tiers'),
+          .select('id, challenge_type, target_drops, streak_days, milestone_threshold, scoring_model, tiers'),
         supabase
           .from('user_badges')
           .select('gym_challenge_id')
@@ -171,13 +171,28 @@ export function useUserProgress(userId?: string) {
           if (!challenge) return null;
 
           const isEarned = earnedGymChallengeIds.has(cp.challenge_id);
-          const target = challenge.target_drops || 1;
-          const current = cp.current_value ?? cp.current_drops ?? 0;
-          // Show 100% when criteria is met, completed, or badge is earned
-          const criteriaMet = current >= target;
+          const cType = challenge.challenge_type || '';
+          const isStreak = cType === 'streak' || cType === 'checkin_streak';
+          const isMilestone = cType === 'milestone';
+
+          let target: number;
+          let current: number;
+
+          if (isStreak) {
+            target = challenge.streak_days || challenge.target_drops || 1;
+            current = cp.current_streak_days ?? 0;
+          } else if (isMilestone) {
+            target = challenge.milestone_threshold || challenge.target_drops || 1;
+            current = cp.current_drops ?? cp.current_value ?? 0;
+          } else {
+            target = challenge.target_drops || 1;
+            current = cp.current_drops ?? cp.current_value ?? 0;
+          }
+
+          const criteriaMet = target > 0 && current >= target;
           const percent = isEarned || cp.is_completed || criteriaMet
             ? 100
-            : Math.min(Math.round((current / target) * 100), 99);
+            : target > 0 ? Math.min(Math.round((current / target) * 100), 99) : 0;
 
           return {
             id: cp.challenge_id,
@@ -187,7 +202,7 @@ export function useUserProgress(userId?: string) {
             progress_data: {
               current,
               target,
-              type: challenge.scoring_model || 'total_drops',
+              type: challenge.scoring_model || (isStreak ? 'streak_days' : 'total_drops'),
             },
             is_completed: isEarned || cp.is_completed || criteriaMet,
             completed_at: null,

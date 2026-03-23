@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Image, Clipboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +22,12 @@ function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(result[3], 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; bgAlpha: number }> = {
+  pending: { color: '#fbbf24', icon: 'time-outline', bgAlpha: 0.1 },
+  confirmed: { color: '#4ade80', icon: 'checkmark-circle', bgAlpha: 0.1 },
+  cancelled: { color: '#f87171', icon: 'close-circle', bgAlpha: 0.08 },
+};
 
 export default function RedemptionsScreen() {
   const { t } = useTranslation('redemptions');
@@ -76,35 +82,25 @@ export default function RedemptionsScreen() {
     return redemption.rewards?.name || t('unknownReward');
   };
 
-  const getRewardEmoji = (redemption: any) => {
-    if (redemption.source_type === 'leaderboard_prize') return '🏆';
-    if (redemption.source_type === 'arena_prize') return '⚔️';
-    const type = redemption.rewards?.reward_type || '';
+  const getRewardIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
-      case 'coffee': return '☕';
-      case 'protein': return '🥤';
-      case 'discount': return '🎫';
-      case 'merch': return '👕';
-      default: return '🎁';
+      case 'coffee': return 'cafe-outline';
+      case 'protein': return 'nutrition-outline';
+      case 'discount': return 'pricetag-outline';
+      case 'merch': return 'shirt-outline';
+      default: return 'gift-outline';
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return theme.colors.warning || '#FF9100';
-      case 'confirmed': return theme.colors.secondary;
-      case 'cancelled': return theme.colors.textSecondary;
-      default: return theme.colors.textSecondary;
-    }
+  const getSourceIcon = (sourceType: string): string | null => {
+    if (sourceType === 'leaderboard_prize') return '🏆';
+    if (sourceType === 'arena_prize') return '⚔️';
+    return null;
   };
 
-  const getStatusIcon = (status: string): keyof typeof Ionicons.glyphMap => {
-    switch (status) {
-      case 'pending': return 'time-outline';
-      case 'confirmed': return 'checkmark-circle';
-      case 'cancelled': return 'close-circle';
-      default: return 'help-circle-outline';
-    }
+  const copyCode = (code: string) => {
+    Clipboard.setString(code);
+    Alert.alert(t('copied'), t('codeCopied'));
   };
 
   if (loading) {
@@ -126,7 +122,6 @@ export default function RedemptionsScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>{t('title')}</Text>
@@ -142,114 +137,89 @@ export default function RedemptionsScreen() {
           </View>
         ) : (
           redemptions.map((redemption, index) => {
-            const statusColor = getStatusColor(redemption.status);
-            const statusIcon = getStatusIcon(redemption.status);
+            const status = STATUS_CONFIG[redemption.status] || STATUS_CONFIG.cancelled;
+            const rewardType = redemption.rewards?.reward_type || '';
+            const imageUrl = redemption.rewards?.image_url;
+            const sourceIcon = getSourceIcon(redemption.source_type);
+            const isPending = redemption.status === 'pending';
 
             return (
-              <Animated.View key={redemption.id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
-                <View style={[styles.redemptionCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <BlurView intensity={50} tint="dark" style={[styles.redemptionBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                    {/* Header Row */}
-                    <View style={styles.redemptionHeader}>
-                      <View style={[styles.emojiContainer, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
-                        <Text style={styles.redemptionEmoji}>
-                          {getRewardEmoji(redemption)}
-                        </Text>
-                      </View>
-                      <View style={styles.redemptionInfo}>
-                        <Text style={styles.redemptionName} numberOfLines={2}>
-                          {getRedemptionName(redemption)}
-                        </Text>
-                        <View style={styles.redemptionSubRow}>
-                          <Text style={styles.redemptionGym} numberOfLines={1}>
-                            {redemption.gyms?.name || t('unknownGym')}
-                          </Text>
-                          {redemption.source_type === 'leaderboard_prize' && (
-                            <View style={[styles.sourceBadge, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                              <Text style={[styles.sourceBadgeText, { color: branding.primary }]}>🏆 {t('leaderboard')}</Text>
-                            </View>
-                          )}
-                          {redemption.source_type === 'arena_prize' && (
-                            <View style={[styles.sourceBadge, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                              <Text style={[styles.sourceBadgeText, { color: branding.primary }]}>⚔️ {t('arena')}</Text>
-                            </View>
+              <Animated.View key={redemption.id} entering={FadeInDown.delay(80 + index * 60).duration(400)}>
+                <View style={[styles.card, { borderColor: hexToRgba(status.color, 0.15) }]}>
+                  <BlurView intensity={50} tint="dark" style={[styles.cardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                    <View style={styles.cardRow}>
+                      {/* Image / Icon */}
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={[styles.itemImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.itemIconBox, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                          {sourceIcon ? (
+                            <Text style={styles.sourceEmoji}>{sourceIcon}</Text>
+                          ) : (
+                            <Ionicons name={getRewardIcon(rewardType)} size={24} color={branding.primary} />
                           )}
                         </View>
+                      )}
+
+                      {/* Info */}
+                      <View style={styles.cardInfo}>
+                        <Text style={styles.itemName} numberOfLines={1}>{getRedemptionName(redemption)}</Text>
+                        <Text style={styles.itemGym} numberOfLines={1}>
+                          {redemption.gyms?.name || t('unknownGym')}
+                        </Text>
+                        <Text style={styles.itemDate}>
+                          {new Date(redemption.created_at).toLocaleDateString(
+                            i18n.language === 'sr' ? 'sr-RS' : 'en-US',
+                            { day: 'numeric', month: 'short', year: 'numeric' }
+                          )}
+                        </Text>
                       </View>
-                      <View style={[styles.statusBadge, { borderColor: statusColor + '30', backgroundColor: statusColor + '10' }]}>
-                        <Ionicons name={statusIcon} size={14} color={statusColor} />
-                        <Text style={[styles.statusText, { color: statusColor }]}>
+
+                      {/* Status Badge */}
+                      <View style={[styles.statusPill, { backgroundColor: status.color + '18' }]}>
+                        <Ionicons name={status.icon} size={14} color={status.color} />
+                        <Text style={[styles.statusLabel, { color: status.color }]}>
                           {t(redemption.status)}
                         </Text>
                       </View>
                     </View>
 
-                    {/* Details */}
-                    <View style={styles.redemptionDetails}>
-                      {/* Code */}
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>{t('code')}</Text>
-                        <TouchableOpacity
-                          style={styles.codeContainer}
-                          onPress={() => {
-                            if (redemption.redemption_code) {
-                              Clipboard.setString(redemption.redemption_code);
-                              Alert.alert(t('copied'), t('codeCopied'));
-                            }
-                          }}
-                          disabled={!redemption.redemption_code}
-                        >
-                          <Text style={[styles.redemptionCode, { color: branding.primary }]}>
-                            {redemption.redemption_code || t('na')}
-                          </Text>
-                          {redemption.status === 'pending' && redemption.redemption_code && (
-                            <Ionicons name="copy-outline" size={14} color={branding.primary} />
-                          )}
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Drops Spent (hide for prize redemptions) */}
-                      {redemption.drops_spent > 0 && (
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>{t('dropsSpent')}</Text>
-                          <View style={styles.dropsContainer}>
-                            <Ionicons name="water" size={14} color={branding.primary} />
-                            <Text style={[styles.dropsAmount, getNumberStyle(14), { color: branding.primary }]}>
-                              {redemption.drops_spent}
+                    {/* Code + Details (only for pending) */}
+                    {isPending && redemption.redemption_code && (
+                      <View style={styles.codeSection}>
+                        <View style={[styles.codeBanner, { backgroundColor: hexToRgba(status.color, 0.06), borderColor: hexToRgba(status.color, 0.15) }]}>
+                          <View style={styles.codeLeft}>
+                            <Text style={styles.codeLabel}>{t('code')}</Text>
+                            <Text style={[styles.codeText, getNumberStyle(20), { color: branding.primary }]}>
+                              {redemption.redemption_code}
                             </Text>
                           </View>
+                          <TouchableOpacity
+                            style={[styles.copyBtn, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}
+                            onPress={() => copyCode(redemption.redemption_code)}
+                          >
+                            <Ionicons name="copy-outline" size={16} color={branding.primary} />
+                          </TouchableOpacity>
                         </View>
-                      )}
-
-                      {/* Date */}
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>{t('date')}</Text>
-                        <Text style={styles.detailValue}>
-                          {new Date(redemption.created_at).toLocaleDateString(
-                            i18n.language === 'sr' ? 'sr-RS' : 'en-US'
-                          )}
-                        </Text>
-                      </View>
-
-                      {/* Confirmed date */}
-                      {redemption.status === 'confirmed' && redemption.confirmed_at && (
-                        <View style={styles.detailRow}>
-                          <Text style={styles.detailLabel}>{t('confirmed')}</Text>
-                          <Text style={styles.detailValue}>
-                            {new Date(redemption.confirmed_at).toLocaleDateString(
-                              i18n.language === 'sr' ? 'sr-RS' : 'en-US'
-                            )}
+                        <View style={styles.hintRow}>
+                          <Ionicons name="information-circle-outline" size={14} color={status.color} />
+                          <Text style={[styles.hintText, { color: status.color }]}>
+                            {t('showCodeToStaff')}
                           </Text>
                         </View>
-                      )}
-                    </View>
+                      </View>
+                    )}
 
-                    {/* Pending note */}
-                    {redemption.status === 'pending' && (
-                      <View style={styles.pendingNote}>
-                        <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning || '#FF9100'} />
-                        <Text style={styles.pendingNoteText}>
-                          {t('showCodeToStaff')}
+                    {/* Drops spent row */}
+                    {redemption.drops_spent > 0 && (
+                      <View style={styles.dropsRow}>
+                        <Ionicons name="water" size={14} color={branding.primary} />
+                        <Text style={[styles.dropsText, getNumberStyle(13), { color: branding.primary }]}>
+                          {redemption.drops_spent} drops
                         </Text>
                       </View>
                     )}
@@ -297,7 +267,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 40,
   },
   emptyState: {
     padding: theme.spacing['3xl'],
@@ -316,138 +286,133 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.3,
   },
-  /* Card */
-  redemptionCard: {
+
+  card: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
-    marginBottom: theme.spacing.md,
+    marginBottom: 12,
     borderWidth: 1,
   },
-  redemptionBlur: {
+  cardBlur: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
     padding: theme.spacing.lg,
   },
-  redemptionHeader: {
+  cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    gap: 12,
   },
-  emojiContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+  itemImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  itemIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  redemptionEmoji: {
-    fontSize: 26,
+  sourceEmoji: {
+    fontSize: 24,
   },
-  redemptionInfo: {
+  cardInfo: {
     flex: 1,
     minWidth: 0,
   },
-  redemptionName: {
-    fontSize: theme.typography.fontSize.lg,
-    ...fontStyles.heading,
+  itemName: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
     color: theme.colors.text,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     marginBottom: 2,
   },
-  redemptionSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  redemptionGym: {
-    fontSize: theme.typography.fontSize.xs,
+  itemGym: {
+    ...fontStyles.body,
+    fontSize: 12,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    marginBottom: 1,
   },
-  sourceBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  itemDate: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
+    letterSpacing: 0.2,
   },
-  sourceBadgeText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 10,
-    letterSpacing: 0.3,
-  },
-  statusBadge: {
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
-  statusText: {
-    fontSize: 10,
+  statusLabel: {
     ...fontStyles.bodySemiBold,
+    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  redemptionDetails: {
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+
+  codeSection: {
+    marginTop: 12,
+    gap: 8,
   },
-  detailRow: {
+  codeBanner: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  codeLeft: {
+    gap: 2,
+  },
+  codeLabel: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.2,
+  },
+  codeText: {
+    ...fontStyles.number,
+    letterSpacing: 4,
+  },
+  copyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  detailLabel: {
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
-  },
-  detailValue: {
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.text,
-    ...fontStyles.bodyMedium,
-    letterSpacing: 0.3,
-  },
-  codeContainer: {
+  hintRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 6,
+    paddingHorizontal: 4,
   },
-  redemptionCode: {
-    fontSize: theme.typography.fontSize.sm,
-    ...fontStyles.heading,
-    fontFamily: 'Courier', // Override heading font with monospace for code
-    letterSpacing: 1,
+  hintText: {
+    ...fontStyles.body,
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
-  dropsContainer: {
+
+  dropsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  dropsAmount: {
-    ...fontStyles.heading,
-  },
-  pendingNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
-    padding: theme.spacing.md,
-    backgroundColor: 'rgba(255, 145, 0, 0.08)',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 145, 0, 0.2)',
-  },
-  pendingNoteText: {
-    flex: 1,
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.warning || '#FF9100',
-    letterSpacing: 0.3,
-    lineHeight: 18,
+  dropsText: {
+    ...fontStyles.number,
   },
 });

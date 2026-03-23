@@ -76,6 +76,7 @@ function StackNavigator() {
       />
       <Stack.Screen name="wallet" options={{ headerShown: false }} />
       <Stack.Screen name="store" options={{ headerShown: false }} />
+      <Stack.Screen name="reward-detail" options={{ headerShown: false }} />
       <Stack.Screen name="challenges" options={{ headerShown: false }} />
       <Stack.Screen name="challenge-detail" options={{ headerShown: false }} />
       <Stack.Screen name="redemptions" options={{ headerShown: false }} />
