@@ -12,6 +12,8 @@ interface HeatmapCell {
 
 interface HeatmapGridProps {
   data: HeatmapCell[];
+  days?: number;
+  embedded?: boolean;
 }
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -32,12 +34,14 @@ function dowToColumn(dow: number): number {
   return dow === 0 ? 6 : dow - 1;
 }
 
-export function HeatmapGrid({ data }: HeatmapGridProps) {
+export function HeatmapGrid({ data, days = 7, embedded = false }: HeatmapGridProps) {
   const [tooltip, setTooltip] = useState<{
     x: number;
     y: number;
     cell: HeatmapCell & { dayLabel: string };
   } | null>(null);
+
+  const weeks = Math.max(1, Math.round(days / 7));
 
   const { grid, maxSessions } = useMemo(() => {
     const g: Record<string, HeatmapCell> = {};
@@ -64,11 +68,24 @@ export function HeatmapGrid({ data }: HeatmapGridProps) {
   // dow values 0-6 where 0=Sun
   const dows = [1, 2, 3, 4, 5, 6, 0]; // Mon=1 .. Sun=0
 
+  const subtitle = days <= 7 ? 'Last 7 days' : `Last ${days} days · aggregated by day of week`;
+
   return (
-    <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6 relative">
-      <h3 className="text-sm font-semibold text-white mb-5 uppercase tracking-wider">
-        Usage Heatmap
-      </h3>
+    <div className={embedded ? 'relative' : 'bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6 relative'}>
+      {!embedded && (
+        <div className="flex items-baseline justify-between mb-5">
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+            Usage Heatmap
+          </h3>
+          <span className="text-[10px] text-[#808080]">{subtitle}</span>
+        </div>
+      )}
+
+      {embedded && (
+        <div className="flex items-center gap-3 mb-3 text-[10px] text-[#808080]">
+          <span>{subtitle}</span>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <div className="inline-block min-w-[400px]">
@@ -156,6 +173,11 @@ export function HeatmapGrid({ data }: HeatmapGridProps) {
             <p className="text-[10px] text-[#808080] whitespace-nowrap mt-0.5">
               {tooltip.cell.sessions} sessions &bull; {tooltip.cell.avg_min} avg min &bull; {tooltip.cell.drops} drops
             </p>
+            {weeks > 1 && (
+              <p className="text-[10px] text-[#00E5FF] whitespace-nowrap mt-0.5">
+                ~{(tooltip.cell.sessions / weeks).toFixed(1)}/week avg
+              </p>
+            )}
           </div>
           <div className="w-2 h-2 bg-[#0A0A0A] border-r border-b border-[#333] rotate-45 mx-auto -mt-[5px]" />
         </div>

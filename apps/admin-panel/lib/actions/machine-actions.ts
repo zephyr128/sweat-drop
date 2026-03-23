@@ -58,7 +58,7 @@ export async function createMachine(input: z.infer<typeof createMachineSchema>) 
         name: validated.name,
         type: validated.type,
         unique_qr_code: qrCode,
-        is_active: true,
+        is_active: false,
       } as any)
       .select('*, qr_uuid')
       .single();
@@ -378,6 +378,30 @@ export async function toggleMaintenance(
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+}
+
+export async function getMachineQRMap(
+  gymId: string
+): Promise<Record<string, { qr_uuid: string | null; unique_qr_code: string }>> {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) return {};
+
+    const { data, error } = await supabaseAdmin
+      .from('machines')
+      .select('id, qr_uuid, unique_qr_code')
+      .eq('gym_id', gymId);
+
+    if (error || !data) return {};
+
+    const map: Record<string, { qr_uuid: string | null; unique_qr_code: string }> = {};
+    for (const row of data as any[]) {
+      map[row.id] = { qr_uuid: row.qr_uuid || null, unique_qr_code: row.unique_qr_code || '' };
+    }
+    return map;
+  } catch {
+    return {};
   }
 }
 

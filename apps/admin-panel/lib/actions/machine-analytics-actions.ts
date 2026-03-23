@@ -68,6 +68,49 @@ export async function getMachineAnalytics(
   return { success: true, data: data as MachineAnalyticsData };
 }
 
+export interface DailyCalendarCell {
+  date: string;
+  sessions: number;
+  drops: number;
+  unique_users: number;
+}
+
+export async function getDailyCalendarData(
+  gymId: string,
+  days: number = 30
+): Promise<{ success: boolean; data?: DailyCalendarCell[]; error?: string }> {
+  const supabase = getAdminClient();
+  if (!supabase) return { success: false, error: 'Admin client not available' };
+
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const { data, error } = await (supabase
+    .from('sessions') as any)
+    .select('started_at, drops_earned, user_id')
+    .eq('gym_id', gymId)
+    .gte('started_at', since.toISOString());
+
+  if (error) return { success: false, error: error.message };
+
+  const rows = (data || []) as Array<{ started_at: string; drops_earned: number | null; user_id: string | null }>;
+  const byDate: Record<string, { sessions: number; drops: number; users: Set<string> }> = {};
+
+  for (const row of rows) {
+    const date = row.started_at.slice(0, 10);
+    if (!byDate[date]) byDate[date] = { sessions: 0, drops: 0, users: new Set() };
+    byDate[date].sessions++;
+    byDate[date].drops += Number(row.drops_earned) || 0;
+    if (row.user_id) byDate[date].users.add(row.user_id);
+  }
+
+  const result: DailyCalendarCell[] = Object.entries(byDate)
+    .map(([date, v]) => ({ date, sessions: v.sessions, drops: v.drops, unique_users: v.users.size }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return { success: true, data: result };
+}
+
 export interface LiveMachineSummary {
   total_machines: number;
   active_now: number;
@@ -97,6 +140,9 @@ export interface LiveMachine {
   name: string;
   type: string;
   zone: string | null;
+  qr_uuid: string | null;
+  unique_qr_code: string | null;
+  sensor_id: string | null;
   is_active: boolean;
   is_busy: boolean;
   is_under_maintenance: boolean;

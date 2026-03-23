@@ -1,14 +1,22 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Wrench } from 'lucide-react';
+import { useMemo, useState, useRef, useEffect } from 'react';
+import { Wrench, MoreVertical, Edit2, QrCode, Power, Trash2, Bluetooth, Eye } from 'lucide-react';
 import type { LiveMachine } from '@/lib/actions/machine-analytics-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
+
+export interface MachineCardAction {
+  type: 'edit' | 'maintenance' | 'qr' | 'toggle_status' | 'delete' | 'ble' | 'view';
+  machineId: string;
+}
 
 interface MachineGridProps {
   machines: LiveMachine[];
   fetchedAt: number;
   tick: number;
+  onAction?: (action: MachineCardAction) => void;
+  canEdit?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 const TYPE_ICONS: Record<string, string> = {
@@ -32,7 +40,7 @@ function isStaleHeartbeat(lastHeartbeat: string | null): boolean {
   return diff > 60_000;
 }
 
-export function MachineGrid({ machines, fetchedAt, tick }: MachineGridProps) {
+export function MachineGrid({ machines, fetchedAt, tick, onAction, canEdit, isSuperAdmin }: MachineGridProps) {
   const sorted = useMemo(() => {
     return [...machines].sort((a, b) => {
       const order = (m: LiveMachine) => {
@@ -55,14 +63,90 @@ export function MachineGrid({ machines, fetchedAt, tick }: MachineGridProps) {
 
   return (
     <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
-      <h3 className="text-sm font-semibold text-white mb-4 uppercase tracking-wider">
-        Gym Floor
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+          Gym Floor
+        </h3>
+        <span className="text-xs text-[#808080]">{sorted.length} machines</span>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {sorted.map((m) => (
-          <MachineCard key={m.id} machine={m} fetchedAt={fetchedAt} tick={tick} />
+          <MachineCard
+            key={m.id}
+            machine={m}
+            fetchedAt={fetchedAt}
+            tick={tick}
+            onAction={onAction}
+            canEdit={canEdit}
+            isSuperAdmin={isSuperAdmin}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ActionMenu({
+  machine,
+  onAction,
+  canEdit,
+  isSuperAdmin,
+}: {
+  machine: LiveMachine;
+  onAction: (action: MachineCardAction) => void;
+  canEdit?: boolean;
+  isSuperAdmin?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const items: Array<{ icon: typeof Edit2; label: string; action: MachineCardAction['type']; color?: string; show: boolean }> = [
+    { icon: Edit2, label: 'Edit', action: 'edit', show: canEdit || false },
+    { icon: Wrench, label: machine.is_under_maintenance ? 'End Maintenance' : 'Maintenance', action: 'maintenance', color: machine.is_under_maintenance ? 'text-amber-400' : undefined, show: canEdit || false },
+    { icon: Eye, label: 'View QR', action: 'qr', show: true },
+    { icon: Bluetooth, label: 'BLE Pair', action: 'ble', show: isSuperAdmin || false },
+    { icon: Power, label: machine.is_active ? 'Deactivate' : 'Activate', action: 'toggle_status', color: machine.is_active ? 'text-[#00E5FF]' : undefined, show: isSuperAdmin || false },
+    { icon: Trash2, label: 'Delete', action: 'delete', color: 'text-red-400', show: isSuperAdmin || false },
+  ];
+
+  const visibleItems = items.filter((i) => i.show);
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="p-1 rounded-md text-[#808080] hover:text-white hover:bg-white/10 transition-colors"
+      >
+        <MoreVertical className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg shadow-xl py-1 min-w-[150px]">
+          {visibleItems.map((item) => (
+            <button
+              key={item.action}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onAction({ type: item.action, machineId: machine.id });
+              }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[#1A1A1A] transition-colors ${item.color || 'text-[#C0C0C0]'}`}
+            >
+              <item.icon className="w-3.5 h-3.5" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -71,13 +155,24 @@ function MachineCard({
   machine: m,
   fetchedAt,
   tick,
+  onAction,
+  canEdit,
+  isSuperAdmin,
 }: {
   machine: LiveMachine;
   fetchedAt: number;
   tick: number;
+  onAction?: (action: MachineCardAction) => void;
+  canEdit?: boolean;
+  isSuperAdmin?: boolean;
 }) {
   const typeIcon = TYPE_ICONS[m.type?.toLowerCase()] || '⚙️';
   const zoneName = m.zone === 'Unassigned' || !m.zone ? 'Cardio Zone' : m.zone;
+  const hasActions = onAction && (canEdit || isSuperAdmin);
+
+  const menu = hasActions ? (
+    <ActionMenu machine={m} onAction={onAction!} canEdit={canEdit} isSuperAdmin={isSuperAdmin} />
+  ) : null;
 
   if (m.is_busy && m.active_session) {
     const elapsed =
@@ -93,7 +188,10 @@ function MachineCard({
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span className="text-sm font-medium text-white truncate">{m.name}</span>
           </div>
-          <span className="text-sm shrink-0">{typeIcon}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-sm">{typeIcon}</span>
+            {menu}
+          </div>
         </div>
 
         {m.current_user && (
@@ -132,6 +230,7 @@ function MachineCard({
           <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-[#808080]">
             {zoneName}
           </span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/10 text-emerald-400">In Use</span>
         </div>
       </div>
     );
@@ -141,33 +240,43 @@ function MachineCard({
     return (
       <div className="bg-[#0A0A0A] border-l-4 border-l-amber-500 rounded-xl p-4 opacity-80">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-medium text-white">{m.name}</span>
+          <span className="text-sm font-medium text-white truncate">{m.name}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-sm">{typeIcon}</span>
+            {menu}
           </div>
-          <span className="text-sm">{typeIcon}</span>
         </div>
         <div className="flex flex-col items-center justify-center py-3 gap-1">
           <Wrench className="w-5 h-5 text-amber-500" />
           <span className="text-xs text-amber-400">Maintenance</span>
         </div>
-        <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-[#808080]">
-          {zoneName}
-        </span>
+        <div className="flex items-center justify-between mt-1">
+          <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-[#808080]">
+            {zoneName}
+          </span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-400">Maintenance</span>
+        </div>
       </div>
     );
   }
 
   if (!m.is_active) {
     return (
-      <div className="bg-[#0A0A0A]/50 border border-[#1A1A1A] rounded-xl p-4 opacity-30">
+      <div className="bg-[#0A0A0A]/50 border border-[#1A1A1A] rounded-xl p-4 opacity-40">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium text-white">{m.name}</span>
-          <span className="text-sm">{typeIcon}</span>
+          <span className="text-sm font-medium text-white truncate">{m.name}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-sm">{typeIcon}</span>
+            {menu}
+          </div>
         </div>
         <p className="text-xs text-center text-zinc-600 py-3">Inactive</p>
-        <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-zinc-700">
-          {zoneName}
-        </span>
+        <div className="flex items-center justify-between mt-1">
+          <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-zinc-700">
+            {zoneName}
+          </span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] bg-red-500/10 text-red-400">Inactive</span>
+        </div>
       </div>
     );
   }
@@ -176,13 +285,19 @@ function MachineCard({
   return (
     <div className="bg-[#0A0A0A]/50 border border-[#2A2A2A] rounded-xl p-4 opacity-60 hover:opacity-80 hover:border-[#3A3A3A] transition-all">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-white">{m.name}</span>
-        <span className="text-sm">{typeIcon}</span>
+        <span className="text-sm font-medium text-white truncate">{m.name}</span>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-sm">{typeIcon}</span>
+          {menu}
+        </div>
       </div>
       <p className="text-xs text-center text-zinc-500 py-3">Available</p>
-      <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-[#808080]">
-        {zoneName}
-      </span>
+      <div className="flex items-center justify-between mt-1">
+        <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#1A1A1A] text-[#808080]">
+          {zoneName}
+        </span>
+        <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#00E5FF]/10 text-[#00E5FF]">Active</span>
+      </div>
     </div>
   );
 }

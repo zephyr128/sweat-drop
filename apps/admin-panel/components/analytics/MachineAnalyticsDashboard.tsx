@@ -5,7 +5,7 @@ import { BarChart3 } from 'lucide-react';
 import { getMachineAnalytics } from '@/lib/actions/machine-analytics-actions';
 import type { MachineAnalyticsData } from '@/lib/actions/machine-analytics-actions';
 import { KPICards } from './KPICards';
-import { HeatmapGrid } from './HeatmapGrid';
+import { HeatmapSection } from './HeatmapSection';
 import { TypeZoneBreakdown } from './TypeZoneBreakdown';
 import { MachineFleetTable } from './MachineFleetTable';
 
@@ -104,7 +104,7 @@ export function MachineAnalyticsDashboard({ gymId }: MachineAnalyticsDashboardPr
             busiestMachine={data.busiest_machine}
           />
 
-          <HeatmapGrid data={data.hourly_heatmap} />
+          <HeatmapSection dowData={data.hourly_heatmap} gymId={gymId} days={days} />
 
           <TypeZoneBreakdown
             typeStats={data.type_stats}
