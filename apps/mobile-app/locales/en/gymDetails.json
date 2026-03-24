@@ -1,0 +1,13 @@
+{
+  "title": "Your gym",
+  "address": "Address",
+  "hours": "Working hours",
+  "defaultHours": "7:00 – 22:00",
+  "openInMaps": "Open in Maps",
+  "mapHint": "Location preview",
+  "mapLoading": "Loading map…",
+  "mapLoadError": "Map preview could not be loaded. Tap below to open in Maps.",
+  "noLocation": "Add an address in gym settings to see a map preview.",
+  "noGym": "No gym selected",
+  "loadError": "Could not load gym details"
+}

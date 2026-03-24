@@ -1,0 +1,13 @@
+{
+  "title": "Tvoja teretana",
+  "address": "Adresa",
+  "hours": "Radno vreme",
+  "defaultHours": "7:00 – 22:00",
+  "openInMaps": "Otvori u mapama",
+  "mapHint": "Pregled lokacije",
+  "mapLoading": "Učitavam mapu…",
+  "mapLoadError": "Pregled mape nije dostupan. Dodirni ispod da otvoriš u mapama.",
+  "noLocation": "Unesi adresu u podešavanjima teretane da bi se prikazala mapa.",
+  "noGym": "Nije izabrana teretana",
+  "loadError": "Ne mogu da učitam podatke o teretani"
+}
