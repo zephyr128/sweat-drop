@@ -3,7 +3,7 @@ export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
 import { requireProfile } from '@/lib/auth-guard';
-import { PlatformReportDashboard } from '@/components/reports/PlatformReportDashboard';
+import PlatformReportDashboard from '@/components/reports/PlatformReportDashboard';
 
 export default async function SuperReportsPage() {
   await requireProfile(['superadmin']);

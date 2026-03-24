@@ -5,7 +5,7 @@ export const fetchCache = 'force-no-store';
 import { requireGymAccess } from '@/lib/auth-guard';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
-import { GymReportDashboard } from '@/components/reports/GymReportDashboard';
+import GymReportDashboard from '@/components/reports/GymReportDashboard';
 
 interface ReportsPageProps {
   params: Promise<{ id: string }>;
