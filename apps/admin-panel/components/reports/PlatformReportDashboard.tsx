@@ -110,3 +110,5 @@ export function PlatformReportDashboard({}: PlatformReportDashboardProps) {
     </div>
   );
 }
+
+export default PlatformReportDashboard;

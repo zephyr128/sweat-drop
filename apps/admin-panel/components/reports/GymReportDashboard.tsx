@@ -212,3 +212,5 @@ export function GymReportDashboard({ gymId, gymName }: GymReportDashboardProps) 
     </div>
   );
 }
+
+export default GymReportDashboard;
