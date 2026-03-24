@@ -92,7 +92,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
-  const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId, localDrops);
+  const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);
 
   // Available arenas
   const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
@@ -584,14 +584,29 @@ export default function HomeScreen() {
 
         <View style={styles.headerRight}>
           {activeGym && (
-            <Animated.View
-              entering={FadeIn.duration(400)}
-              style={styles.gymNameBadge}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/gym-details')}
+              style={styles.gymHeaderChip}
             >
-              <Text style={styles.gymNameText} numberOfLines={1}>
-                {activeGym.name}
-              </Text>
-            </Animated.View>
+              <Animated.View entering={FadeIn.duration(400)} style={styles.gymHeaderChipInner}>
+                <View
+                  style={[
+                    styles.gymLogoRing,
+                    { borderColor: branding.primary, backgroundColor: hexToRgba(branding.primary, 0.08) },
+                  ]}
+                >
+                  {activeGym.logo_url ? (
+                    <Image source={{ uri: activeGym.logo_url }} style={styles.gymLogoThumb} resizeMode="contain" />
+                  ) : (
+                    <Ionicons name="fitness" size={16} color={branding.primary} />
+                  )}
+                </View>
+                <Text style={styles.gymNameText} numberOfLines={1}>
+                  {activeGym.name}
+                </Text>
+              </Animated.View>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -1399,20 +1414,41 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: 'wrap',
   },
-  gymNameBadge: {
+  gymHeaderChip: {
+    maxWidth: 200,
+  },
+  gymHeaderChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    maxWidth: 160,
+    borderRadius: 22,
+    paddingLeft: 5,
+    paddingRight: 12,
+    paddingVertical: 4,
+  },
+  gymLogoRing: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  gymLogoThumb: {
+    width: 28,
+    height: 28,
   },
   gymNameText: {
     ...fontStyles.bodySemiBold,
     fontSize: 13,
     color: appTheme.colors.textSecondary,
     letterSpacing: 0.3,
+    flexShrink: 1,
+    maxWidth: 132,
   },
   /* ─── Hero Section ──────────────────────── */
   heroSection: {
@@ -2045,6 +2081,7 @@ const es = StyleSheet.create({
 
   /* ── Main CTA Card ── */
   ctaCardOuter: {
+    marginHorizontal: 16,
     marginBottom: 16,
     borderRadius: 20,
     borderWidth: 1,

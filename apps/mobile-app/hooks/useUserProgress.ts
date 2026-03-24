@@ -190,7 +190,8 @@ export function useUserProgress(userId?: string) {
           }
 
           const criteriaMet = target > 0 && current >= target;
-          const percent = isEarned || cp.is_completed || criteriaMet
+          const completed = isEarned || criteriaMet;
+          const percent = completed
             ? 100
             : target > 0 ? Math.min(Math.round((current / target) * 100), 99) : 0;
 
@@ -204,7 +205,7 @@ export function useUserProgress(userId?: string) {
               target,
               type: challenge.scoring_model || (isStreak ? 'streak_days' : 'total_drops'),
             },
-            is_completed: isEarned || cp.is_completed || criteriaMet,
+            is_completed: completed,
             completed_at: null,
             created_at: '',
             updated_at: '',

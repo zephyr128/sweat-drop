@@ -301,7 +301,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
                     source={{ uri: badge.badge_image_url }}
                     style={[
                       styles.coinImage,
-                      { width: COIN_SIZE * 0.55, height: COIN_SIZE * 0.55 },
+                      { width: COIN_SIZE * 0.72, height: COIN_SIZE * 0.72 },
                       isLocked && { opacity: 0.3 },
                     ]}
                     contentFit="contain"
@@ -309,7 +309,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
                 ) : (
                   <Ionicons
                     name="trophy"
-                    size={COIN_SIZE * 0.38}
+                    size={COIN_SIZE * 0.48}
                     color={isLocked ? 'rgba(255,255,255,0.15)' : categoryColor}
                   />
                 )}

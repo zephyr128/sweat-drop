@@ -83,5 +83,7 @@
   "weeklyPeriod": "Ova nedelja",
   "monthlyPeriod": "Ovaj mesec",
   "allTimePeriod": "Sve vreme",
-  "winPrizesThisWeek": "Osvoji nagrade ove nedelje — takmič se!"
+  "winPrizesThisWeek": "Osvoji nagrade ove nedelje — takmiči se!",
+  "rewardDropsTo": "drops do",
+  "rewardRedeem": "Preuzmi"
 }

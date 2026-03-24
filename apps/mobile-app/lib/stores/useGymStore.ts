@@ -14,6 +14,11 @@ export interface Gym {
   smartcoach_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
+  /** From gyms.lat / gyms.lng (check-in GPS); used for map preview */
+  lat?: number | string | null;
+  lng?: number | string | null;
+  /** When backend adds a column, optional; otherwise UI uses a default range */
+  working_hours?: string | null;
 }
 
 interface GymState {

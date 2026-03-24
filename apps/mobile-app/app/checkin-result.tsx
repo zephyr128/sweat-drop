@@ -37,6 +37,7 @@ export default function CheckinResultScreen() {
     errorMessage?: string;
     distanceM?: string;
     radiusM?: string;
+    isNewGym?: string;
   }>();
 
   const status = (params.status || 'error') as CheckinStatus;
@@ -47,6 +48,7 @@ export default function CheckinResultScreen() {
   const errorMessage = params.errorMessage || '';
   const distanceM = parseInt(params.distanceM || '0', 10);
   const radiusM = parseInt(params.radiusM || '0', 10);
+  const isNewGym = params.isNewGym === '1';
 
   const [displayDrops, setDisplayDrops] = useState(0);
   const progressWidth = useSharedValue(0);
@@ -60,7 +62,7 @@ export default function CheckinResultScreen() {
     if (status === 'success') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       animateCounter(dropsEarned);
-      startAutoClose(3000);
+      startAutoClose(isNewGym ? 5000 : 3000);
     } else if (status === 'already_checked_in') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       startAutoClose(2500);
@@ -104,17 +106,28 @@ export default function CheckinResultScreen() {
 
   const renderSuccess = () => (
     <>
-      <Animated.View entering={ZoomIn.delay(100).duration(400)} style={styles.iconContainer}>
+      {isNewGym && gymName ? (
+        <Animated.View entering={FadeInDown.delay(0).duration(500)} style={styles.textCenter}>
+          <Text style={styles.welcomeLabel}>{t('welcomeTo')}</Text>
+          <Text style={[styles.welcomeGymName, { color: branding.primary }]} numberOfLines={2} adjustsFontSizeToFit>
+            {gymName}
+          </Text>
+          <View style={[styles.welcomeDivider, { backgroundColor: hexToRgba(branding.primary, 0.3) }]} />
+          <Text style={styles.welcomeHint}>{t('gymSetAsHome')}</Text>
+        </Animated.View>
+      ) : null}
+
+      <Animated.View entering={ZoomIn.delay(isNewGym ? 500 : 100).duration(400)} style={styles.iconContainer}>
         <View style={[styles.iconCircle, { backgroundColor: hexToRgba('#4CAF50', 0.15) }]}>
           <Ionicons name="checkmark-circle" size={80} color="#4CAF50" />
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.textCenter}>
+      <Animated.View entering={FadeInDown.delay(isNewGym ? 700 : 300).duration(400)} style={styles.textCenter}>
         <Text style={styles.mainTitle}>{t('success')}</Text>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(450).duration(400)} style={styles.textCenter}>
+      <Animated.View entering={FadeInDown.delay(isNewGym ? 850 : 450).duration(400)} style={styles.textCenter}>
         <Text style={[styles.dropsText, getNumberStyle(56), { color: branding.primary }]}>
           +{displayDrops}
         </Text>
@@ -122,20 +135,20 @@ export default function CheckinResultScreen() {
       </Animated.View>
 
       {streakDays > 1 && (
-        <Animated.View entering={FadeInDown.delay(600).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(isNewGym ? 1000 : 600).duration(400)}>
           <View style={[styles.streakPill, { backgroundColor: 'rgba(255, 145, 0, 0.12)' }]}>
             <Text style={styles.streakText}>{t('streakDays', { streak: streakDays })}</Text>
           </View>
         </Animated.View>
       )}
 
-      {gymName ? (
+      {!isNewGym && gymName ? (
         <Animated.View entering={FadeInDown.delay(700).duration(400)}>
           <Text style={styles.gymName}>{gymName}</Text>
         </Animated.View>
       ) : null}
 
-      <Animated.View entering={FadeInDown.delay(800).duration(400)} style={styles.progressBarContainer}>
+      <Animated.View entering={FadeInDown.delay(isNewGym ? 1200 : 800).duration(400)} style={styles.progressBarContainer}>
         <View style={styles.progressBarBg}>
           <Animated.View style={[styles.progressBarFill, progressStyle, { backgroundColor: '#4CAF50' }]} />
         </View>
@@ -355,5 +368,32 @@ const styles = StyleSheet.create({
     ...fontStyles.heading,
     fontSize: 16,
     color: theme.colors.text,
+  },
+  welcomeLabel: {
+    ...fontStyles.body,
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  welcomeGymName: {
+    ...fontStyles.heading,
+    fontSize: 28,
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  welcomeDivider: {
+    width: 40,
+    height: 1.5,
+    borderRadius: 1,
+    marginBottom: 10,
+  },
+  welcomeHint: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 8,
   },
 });

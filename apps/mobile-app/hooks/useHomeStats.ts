@@ -44,8 +44,29 @@ function toLocalDateStr(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function getPeriodStart(limit: string, now: Date): Date {
+  if (limit === 'once') return new Date(0);
+  if (limit === 'once_per_day') {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (limit === 'once_per_week') {
+    const d = new Date(now);
+    const day = d.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    d.setDate(d.getDate() - diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (limit === 'once_per_month') {
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  return new Date(0);
+}
+
 /* ── Hook ────────────────────────────────────────── */
-export function useHomeStats(gymId: string | null, localDrops: number) {
+export function useHomeStats(gymId: string | null) {
   const { session } = useSession();
   const [stats, setStats] = useState<HomeStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
@@ -87,7 +108,6 @@ export function useHomeStats(gymId: string | null, localDrops: number) {
         : null;
 
       // ── 3. Streak (consecutive days with a session) ─
-      // Fetch distinct session dates for the last 60 days
       const sixtyDaysAgo = new Date(now);
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
@@ -126,34 +146,65 @@ export function useHomeStats(gymId: string | null, localDrops: number) {
         }
       }
 
-      // ── 4. Closest reward ─────────────────────────
+      // ── 4. Closest reward (excluding already-claimed) ──
       let closestReward: HomeStats['closestReward'] = null;
       if (gymId) {
-        const { data: rewards } = await supabase
-          .from('rewards')
-          .select('id, name, price_drops, image_url, reward_type')
-          .eq('gym_id', gymId)
-          .eq('is_active', true)
-          .order('price_drops', { ascending: true })
-          .limit(10);
+        const [{ data: rewards }, { data: redemptions }, { data: membership }] = await Promise.all([
+          supabase
+            .from('rewards')
+            .select('id, name, price_drops, image_url, reward_type, redemption_limit, stock')
+            .eq('gym_id', gymId)
+            .eq('is_active', true)
+            .order('price_drops', { ascending: true })
+            .limit(20),
+          supabase
+            .from('redemptions')
+            .select('reward_id, created_at, status')
+            .eq('user_id', userId)
+            .eq('gym_id', gymId)
+            .in('status', ['pending', 'confirmed']),
+          supabase
+            .from('gym_memberships')
+            .select('local_drops_balance')
+            .eq('user_id', userId)
+            .eq('gym_id', gymId)
+            .maybeSingle(),
+        ]);
+
+        const freshDrops = membership?.local_drops_balance ?? 0;
 
         if (rewards && rewards.length > 0) {
-          // Find the cheapest reward user can't yet afford
-          const cantAfford = rewards.find((r) => r.price_drops > localDrops);
-          // Or the cheapest they CAN afford (so we can prompt redemption)
-          const canAfford = rewards.find((r) => r.price_drops <= localDrops);
+          const redeemed = redemptions || [];
 
-          const target = cantAfford || canAfford;
-          if (target) {
-            closestReward = {
-              id: target.id,
-              name: target.name,
-              priceDrops: target.price_drops,
-              imageUrl: target.image_url,
-              rewardType: target.reward_type,
-              dropsAway: target.price_drops - localDrops,
-              canAfford: target.price_drops <= localDrops,
-            };
+          const available = rewards.filter((r) => {
+            if (r.stock !== null && r.stock <= 0) return false;
+
+            const limit: string = r.redemption_limit || 'unlimited';
+            if (limit === 'unlimited') return true;
+
+            const matching = redeemed.filter((rd) => rd.reward_id === r.id);
+            if (matching.length === 0) return true;
+            if (limit === 'once') return false;
+
+            const periodStart = getPeriodStart(limit, now);
+            return !matching.some((rd) => new Date(rd.created_at) >= periodStart);
+          });
+
+          if (available.length > 0) {
+            const cantAfford = available.find((r) => r.price_drops > freshDrops);
+            const canAffordItem = available.find((r) => r.price_drops <= freshDrops);
+            const target = cantAfford || canAffordItem;
+            if (target) {
+              closestReward = {
+                id: target.id,
+                name: target.name,
+                priceDrops: target.price_drops,
+                imageUrl: target.image_url,
+                rewardType: target.reward_type,
+                dropsAway: target.price_drops - freshDrops,
+                canAfford: target.price_drops <= freshDrops,
+              };
+            }
           }
         }
       }
@@ -210,7 +261,7 @@ export function useHomeStats(gymId: string | null, localDrops: number) {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, gymId, localDrops]);
+  }, [session?.user?.id, gymId]);
 
   useEffect(() => {
     refresh();

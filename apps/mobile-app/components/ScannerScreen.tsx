@@ -248,6 +248,22 @@ export function ScannerScreen() {
     if (!currentSession?.user || isProcessing) return;
     setIsProcessing(true);
 
+    // Switch home gym if user has none or scanned a different gym
+    const currentHomeGymId = useGymStore.getState().homeGymId;
+    const isNewGym = !currentHomeGymId || currentHomeGymId !== gymId;
+    if (isNewGym) {
+      const reason = !currentHomeGymId ? 'No home gym' : `Different gym (was ${currentHomeGymId})`;
+      console.log(`[CheckIn] ${reason} — switching to:`, gymId);
+      useGymStore.getState().setHomeGymId(gymId);
+      try {
+        await updateHomeGymRef.current(gymId);
+        const { useAuthStore } = require('@/lib/stores/authStore');
+        await useAuthStore.getState().refreshProfile();
+      } catch (err) {
+        console.error('[CheckIn] Error setting home gym:', err);
+      }
+    }
+
     let lat: number | null = null;
     let lng: number | null = null;
 
@@ -299,6 +315,7 @@ export function ScannerScreen() {
           checkinDrops: String(result.checkin_drops || 0),
           distanceM: String(result.distance_m || 0),
           radiusM: String(result.radius_m || 0),
+          isNewGym: isNewGym ? '1' : '0',
         },
       });
     } catch (err: unknown) {

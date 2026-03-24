@@ -83,5 +83,7 @@
   "weeklyPeriod": "This week",
   "monthlyPeriod": "This month",
   "allTimePeriod": "All time",
-  "winPrizesThisWeek": "Win prizes this week — compete now!"
+  "winPrizesThisWeek": "Win prizes this week — compete now!",
+  "rewardDropsTo": "drops to",
+  "rewardRedeem": "Redeem"
 }

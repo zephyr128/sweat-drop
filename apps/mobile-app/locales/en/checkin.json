@@ -14,5 +14,7 @@
   "close": "Close",
   "homeCardTitle": "Check in today?",
   "homeCardDone": "Checked in today",
-  "homeCardDrops": "+{{drops}} drops"
+  "homeCardDrops": "+{{drops}} drops",
+  "welcomeTo": "Welcome to",
+  "gymSetAsHome": "This gym is now your home gym"
 }

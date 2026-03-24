@@ -14,5 +14,7 @@
   "close": "Zatvori",
   "homeCardTitle": "Čekiraš se danas?",
   "homeCardDone": "Čekiran danas",
-  "homeCardDrops": "+{{drops}} drops"
+  "homeCardDrops": "+{{drops}} drops",
+  "welcomeTo": "Dobrodošao u",
+  "gymSetAsHome": "Ova teretana je sada tvoja matična teretana"
 }

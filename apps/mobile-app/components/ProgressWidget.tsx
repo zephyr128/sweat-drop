@@ -173,13 +173,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   badgeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
   },
   badgeIconPlaceholder: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',

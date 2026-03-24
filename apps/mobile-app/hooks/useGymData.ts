@@ -64,7 +64,9 @@ export const useGymData = () => {
       } else if (!dbGymId && currentStoreGymId) {
         // Store has a value but DB doesn't — DB is stale.
         // Persist the store value to DB instead of clearing it.
-        console.log('[useGymData] DB home_gym_id is null but store has:', currentStoreGymId, '— persisting to DB');
+        if (__DEV__) {
+          console.log('[useGymData] DB home_gym_id is null but store has:', currentStoreGymId, '— persisting to DB');
+        }
         try {
           await supabase
             .from('profiles')
@@ -109,7 +111,6 @@ export const useGymData = () => {
       };
 
       // Get owner_branding (global branding per owner)
-      console.log('[useGymData] Gym owner_id:', gymData.owner_id);
       if (gymData.owner_id) {
         const { data: ownerBranding, error: brandingError } = await supabase
           .from('owner_branding')
@@ -117,15 +118,17 @@ export const useGymData = () => {
           .eq('owner_id', gymData.owner_id)
           .single();
 
-        console.log('[useGymData] Owner branding query result:', { ownerBranding, brandingError });
-        
+        // PGRST116 = no row (expected when owner has no branding row yet)
+        if (brandingError && brandingError.code !== 'PGRST116') {
+          console.warn('[useGymData] owner_branding query failed:', brandingError);
+        }
+
         if (ownerBranding) {
           branding = {
             primary_color: ownerBranding.primary_color || branding.primary_color,
             logo_url: ownerBranding.logo_url || branding.logo_url,
             background_url: ownerBranding.background_url || branding.background_url,
           };
-          console.log('[useGymData] Final branding:', branding);
         } else {
           console.warn('[useGymData] No owner_branding found for owner_id:', gymData.owner_id);
         }

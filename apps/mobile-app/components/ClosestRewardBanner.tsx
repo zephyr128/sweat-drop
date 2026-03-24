@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { getNumberStyle, fontStyles } from '@/lib/theme';
+import { useTranslation } from 'react-i18next';
 
 /* ── Types ────────────────────────────────────────── */
 interface ClosestRewardBannerProps {
@@ -45,6 +46,7 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
   brandPrimary,
   onPress,
 }) => {
+  const { t } = useTranslation('home');
   const icon = getRewardIcon(reward.rewardType);
   const canAfford = reward.canAfford;
 
@@ -73,7 +75,7 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
         <View style={styles.textCol}>
           {canAfford ? (
             <Text style={styles.bannerText}>
-              <Text style={[fontStyles.bodySemiBold, { color: '#4CAF50' }]}>Redeem </Text>
+              <Text style={[fontStyles.bodySemiBold, { color: '#4CAF50' }]}>{t('rewardRedeem')} </Text>
               <Text style={[fontStyles.bodySemiBold, { color: '#FFFFFF' }]}>{reward.name}</Text>
             </Text>
           ) : (
@@ -81,7 +83,7 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
               <Text style={[getNumberStyle(13), { color: brandPrimary }]}>
                 {reward.dropsAway}
               </Text>
-              <Text style={{ color: '#B0B0B0' }}> drops to </Text>
+              <Text style={{ color: '#B0B0B0' }}> {t('rewardDropsTo')} </Text>
               <Text style={[fontStyles.bodySemiBold, { color: '#FFFFFF' }]}>{reward.name}</Text>
             </Text>
           )}

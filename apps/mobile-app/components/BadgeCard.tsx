@@ -16,7 +16,8 @@ const BADGE_SIZE = Math.floor(
   (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * (COLUMNS - 1)) / COLUMNS
 );
 const CIRCLE_SIZE = BADGE_SIZE - 12;
-const ICON_SIZE = CIRCLE_SIZE * 0.5;
+/** Badge artwork fills most of the coin (was 0.5 — too small on phones). */
+const ICON_SIZE = CIRCLE_SIZE * 0.72;
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
