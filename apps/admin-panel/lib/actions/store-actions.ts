@@ -6,19 +6,30 @@ import { z } from 'zod';
 
 const REDEMPTION_LIMITS = ['unlimited', 'once', 'once_per_day', 'once_per_week', 'once_per_month'] as const;
 
+/** Empty / whitespace → null for optional TIMESTAMPTZ date fields */
+function availabilityToDb(value: string | undefined | null): string | null {
+  if (value == null) return null;
+  const t = String(value).trim();
+  return t === '' ? null : t;
+}
+
 const createStoreItemSchema = z.object({
   gymId: z.string().uuid(),
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   priceDrops: z.number().int().positive('Price must be greater than 0'),
-  stock: z.number().int().min(0).optional(),
-  imageUrl: z.string().url().optional(),
+  stock: z.preprocess(
+    (val) =>
+      val === '' || val === undefined || (typeof val === 'number' && Number.isNaN(val)) ? undefined : val,
+    z.number().int().min(0).optional()
+  ),
+  imageUrl: z.string().url().optional().or(z.literal('')),
   rewardType: z.string().default('physical'),
   redemptionLimit: z.enum(REDEMPTION_LIMITS).default('unlimited'),
   sponsorName: z.string().optional(),
   sponsorLogo: z.string().url().optional().or(z.literal('')),
-  availableFrom: z.string().optional(),
-  availableUntil: z.string().optional(),
+  availableFrom: z.string().default(''),
+  availableUntil: z.string().default(''),
 });
 
 export async function createStoreItem(input: z.infer<typeof createStoreItemSchema>) {
@@ -43,8 +54,8 @@ export async function createStoreItem(input: z.infer<typeof createStoreItemSchem
         redemption_limit: validated.redemptionLimit,
         sponsor_name: validated.sponsorName || null,
         sponsor_logo: validated.sponsorLogo || null,
-        available_from: validated.availableFrom || null,
-        available_until: validated.availableUntil || null,
+        available_from: availabilityToDb(validated.availableFrom),
+        available_until: availabilityToDb(validated.availableUntil),
       } as any) as any)
       .select()
       .single();
@@ -73,13 +84,21 @@ export async function updateStoreItem(
     if (input.name !== undefined) updateData.name = input.name;
     if (input.description !== undefined) updateData.description = input.description;
     if (input.priceDrops !== undefined) updateData.price_drops = input.priceDrops;
-    if (input.stock !== undefined) updateData.stock = input.stock;
-    if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl;
+    if (input.stock !== undefined) {
+      updateData.stock =
+        typeof input.stock === 'number' && Number.isNaN(input.stock) ? null : input.stock;
+    }
+    if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl || null;
     if (input.redemptionLimit !== undefined) updateData.redemption_limit = input.redemptionLimit;
     if (input.sponsorName !== undefined) updateData.sponsor_name = input.sponsorName || null;
     if (input.sponsorLogo !== undefined) updateData.sponsor_logo = input.sponsorLogo || null;
-    if (input.availableFrom !== undefined) updateData.available_from = input.availableFrom || null;
-    if (input.availableUntil !== undefined) updateData.available_until = input.availableUntil || null;
+    // Always apply when key is present so cleared fields persist as NULL (not skipped when value is undefined)
+    if (Object.prototype.hasOwnProperty.call(input, 'availableFrom')) {
+      updateData.available_from = availabilityToDb(input.availableFrom);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'availableUntil')) {
+      updateData.available_until = availabilityToDb(input.availableUntil);
+    }
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };

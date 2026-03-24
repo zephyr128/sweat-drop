@@ -13,17 +13,29 @@ import { confirmAction } from '@/components/ui/ConfirmDialog';
 
 const REDEMPTION_LIMITS = ['unlimited', 'once', 'once_per_day', 'once_per_week', 'once_per_month'] as const;
 
+/** `<input type="date">` only accepts YYYY-MM-DD; DB returns full ISO strings */
+function toDateInputValue(iso: string | null | undefined): string {
+  if (iso == null || iso === '') return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 const storeItemSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   priceDrops: z.number().int().positive('Price must be greater than 0'),
-  stock: z.number().int().min(0).optional(),
+  stock: z.preprocess(
+    (val) =>
+      val === '' || val === undefined || (typeof val === 'number' && Number.isNaN(val)) ? undefined : val,
+    z.number().int().min(0).optional()
+  ),
   redemptionLimit: z.enum(REDEMPTION_LIMITS).default('unlimited'),
   imageUrl: z.string().url().optional().or(z.literal('')),
   sponsorName: z.string().optional(),
   sponsorLogo: z.string().url().optional().or(z.literal('')),
-  availableFrom: z.string().optional(),
-  availableUntil: z.string().optional(),
+  availableFrom: z.string().default(''),
+  availableUntil: z.string().default(''),
 });
 
 type StoreItemFormData = z.infer<typeof storeItemSchema>;
@@ -68,6 +80,11 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
     formState: { errors, isSubmitting },
   } = useForm<StoreItemFormData>({
     resolver: zodResolver(storeItemSchema),
+    defaultValues: {
+      redemptionLimit: 'unlimited',
+      availableFrom: '',
+      availableUntil: '',
+    },
   });
 
   const imageDropzone = useDropzone({
@@ -129,8 +146,8 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
       imageUrl: item.image_url || '',
       sponsorName: item.sponsor_name || '',
       sponsorLogo: item.sponsor_logo || '',
-      availableFrom: item.available_from || '',
-      availableUntil: item.available_until || '',
+      availableFrom: toDateInputValue(item.available_from),
+      availableUntil: toDateInputValue(item.available_until),
     });
     setIsModalOpen(true);
   };
@@ -167,8 +184,8 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           redemptionLimit: data.redemptionLimit || 'unlimited',
           sponsorName: data.sponsorName,
           sponsorLogo: data.sponsorLogo,
-          availableFrom: data.availableFrom,
-          availableUntil: data.availableUntil,
+          availableFrom: data.availableFrom?.trim() ?? '',
+          availableUntil: data.availableUntil?.trim() ?? '',
         }) as {
           success: boolean;
           data?: StoreItem;
