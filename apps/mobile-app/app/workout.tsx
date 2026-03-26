@@ -22,6 +22,8 @@ import Animated, {
   runOnJS,
   cancelAnimation,
   SharedValue,
+  FadeIn,
+  FadeOut,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
@@ -38,6 +40,16 @@ import { useBranding } from '@/lib/hooks/useBranding';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { ActiveChallengesOverlay } from '@/components/ActiveChallengesOverlay';
 import { useTranslation } from 'react-i18next';
+import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
+import {
+  createInactivityPolicy,
+  createInactivityState,
+  evaluateInactivity,
+  markInactivityFinalized,
+  InactivityFinalizeCoordinator,
+} from '@/lib/workout/inactivity-autofinish';
+import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig } from '@/lib/workout/live-drops-estimator';
+import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 
 // ActiveDrop interface removed - drops are now managed internally by DropEmitter
 
@@ -72,6 +84,40 @@ const AnimatedText = ({ text, style }: { text: SharedValue<string>; style?: any 
   );
 };
 
+function mapSecurityError(message: string): 'cap' | 'rate' | 'fraud' | 'other' {
+  const msg = message.toLowerCase();
+  if (msg.includes('fraud') || msg.includes('abuse') || msg.includes('risk') || msg.includes('blocked')) {
+    return 'fraud';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('throttle') || msg.includes('429')) {
+    return 'rate';
+  }
+  if (
+    msg.includes('cap') ||
+    msg.includes('daily limit') ||
+    msg.includes('weekly limit') ||
+    msg.includes('session limit') ||
+    msg.includes('issuance')
+  ) {
+    return 'cap';
+  }
+  return 'other';
+}
+
+function getBelgradeDateString(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Belgrade',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === 'year')?.value ?? '1970';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '01';
+  const day = parts.find((p) => p.type === 'day')?.value ?? '01';
+  return `${year}-${month}-${day}`;
+}
+
 export default function WorkoutScreen() {
   useKeepAwake();
 
@@ -88,21 +134,33 @@ export default function WorkoutScreen() {
   const { branding, activeGym } = useTheme();
   const brandingHook = useBranding();
   const { t } = useTranslation('workout');
+  const dropLimit = useDropLimitStatus(gymId || null);
+  const isTrackingOnly = dropLimit.limitReached;
   const [session, setSession] = useState<any>(null);
   // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
   const [duration, setDuration] = useState(0);
   const [calories, setCalories] = useState(0);
   // REMOVED: pace useState - now using animatedPaceText SharedValue
-  const [targetDrops, setTargetDrops] = useState(300);
-  const [targetChallengeName, setTargetChallengeName] = useState<string | null>(null);
+  const [targetDrops, setTargetDrops] = useState(120);
+  const [sessionTier, setSessionTier] = useState<SessionTier>('normal');
+  const [dailyRemaining, setDailyRemaining] = useState<number>(300);
+  const [hardCapHitDuringSession, setHardCapHitDuringSession] = useState(false);
+  const tier1ShownRef = useRef(false);
+  const tier2ShownRef = useRef(false);
+  const [tierToast, setTierToast] = useState<string | null>(null);
+  const tierToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [pauseReason, setPauseReason] = useState<'manual' | 'inactivity' | 'connection'>('manual');
   // REMOVED: challengeMessage state - challenge completions are now shown in session summary
   // Challenge progress is automatically updated via award_drops() when workout ends
   const [averageRPM, setAverageRPM] = useState<number>(0); // Average RPM for database sync (low frequency, OK to use state)
   const [showAutoPauseOverlay, setShowAutoPauseOverlay] = useState(false);
   const [showSensorAsleep, setShowSensorAsleep] = useState(false);
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+  const [inactivityCountdownSec, setInactivityCountdownSec] = useState(0);
+  const [showNoActivityCancelOverlay, setShowNoActivityCancelOverlay] = useState(false);
   const [showPlanCompleted, setShowPlanCompleted] = useState(false);
   const [showWorkoutSummary, setShowWorkoutSummary] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -114,7 +172,9 @@ export default function WorkoutScreen() {
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
   const [bleConnected, setBleConnected] = useState(false);
   const [bleStatus, setBleStatus] = useState<string>('');
+  const [isResumingFromPause, setIsResumingFromPause] = useState(false);
   const [signalStatus, setSignalStatus] = useState<'ok' | 'lost'>('ok');
+  const [awaitingActivityProof, setAwaitingActivityProof] = useState(false);
   const router = useRouter();
   const { session: authSession } = useSession();
   const liquidGaugeRef = useRef<LiquidGaugeRef>(null);
@@ -128,14 +188,37 @@ export default function WorkoutScreen() {
   // REMOVED: challengeUpdateIntervalRef, lastChallengeUpdateRef, challengeMessageTimerRef
   // Challenge progress is now automatically updated via award_drops() when workout ends
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const inactivityStateRef = useRef(createInactivityState());
+  const inactivityFinalizeCoordinatorRef = useRef(new InactivityFinalizeCoordinator());
+  const [heartbeatAllowed, setHeartbeatAllowed] = useState(true);
   const bleMonitoringRef = useRef<boolean>(false);
   const lastRPMTimeRef = useRef<number>(Date.now());
   const autoPauseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const activityProofTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const firstActivityDetectedRef = useRef<boolean>(false);
+  const isFinalizingRef = useRef<boolean>(false);
   const lastRPMUpdateRef = useRef<number>(0);
   // BLE Data Optimization: Track last measurement to filter duplicates
   const lastMeasurementRef = useRef<{ crankRevolutions: number; lastCrankEventTime: number } | null>(null);
   // Drop calculation: Track last crank revolutions for drop calculation
   const lastCrankRevolutionsRef = useRef<number>(0);
+  const dropLimitsRef = useRef<DropLimitsConfig>({
+    maxDropsPerSession: 120,
+    maxRewardedSessionsPerDay: 4,
+    maxDropsPerDay: 300,
+    maxDropsPerWeek: 1500,
+    rewardedSessionsCapMode: 'soft',
+  });
+  const dropHistoryRef = useRef<DropHistoryContext>({
+    rewardedSessionsToday: 0,
+    mintedToday: 0,
+    mintedWeek: 0,
+  });
+  const streakContextRef = useRef<StreakContext>({
+    streakDays: 0,
+    lastVisitDate: null,
+  });
+  const machineConfigRef = useRef<MachineDropConfig | null>(null);
   // RPM history for average calculation (long-term, 30 values)
   const rpmHistoryRef = useRef<number[]>([]);
   // RPM smoothing: Track last 4 raw RPM values for moving average (Walking Mode)
@@ -165,7 +248,6 @@ export default function WorkoutScreen() {
   // CRITICAL: Refs for BLE callback to avoid stale closures
   const currentPlanItemRef = useRef<any>(null); // Always has latest currentPlanItem value
   const isSmartCoachModeRef = useRef<boolean>(false); // Always has latest isSmartCoachMode value
-  const targetReachedRef = useRef<boolean>(false); // Prevents duplicate target-reached triggers
   // Explosion animation when BLE connects
   const explosionScale = useSharedValue(1);
   const explosionOpacity = useSharedValue(0);
@@ -248,6 +330,15 @@ export default function WorkoutScreen() {
     (session?.equipment?.name?.toLowerCase().includes('treadmill') ? 'treadmill' :
      session?.equipment?.name?.toLowerCase().includes('bike') ? 'bike' : null);
 
+  const inactivityPolicy = useMemo(() => {
+    const warningPolicy = Number((session?.gym as { session_warning_after_sec?: number } | undefined)?.session_warning_after_sec);
+    const autoFinishPolicy = Number((session?.gym as { session_inactivity_autofinish_sec?: number } | undefined)?.session_inactivity_autofinish_sec);
+    return createInactivityPolicy(
+      Number.isFinite(warningPolicy) ? warningPolicy : undefined,
+      Number.isFinite(autoFinishPolicy) ? autoFinishPolicy : undefined
+    );
+  }, [session?.gym]);
+
   // Ring pulse intensity: speed-based for treadmill, RPM for bike/elliptical
   // Maps treadmill speed (0–15 km/h) → 0–120 to match RPM color breakpoints in CircularProgressRing
   const ringIntensityShared = useDerivedValue(() => {
@@ -297,8 +388,8 @@ export default function WorkoutScreen() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      
-      // Cancel all animations on unmount
+      if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
+
       cancelAnimation(rawRPMShared);
       cancelAnimation(smoothedRPMShared);
       cancelAnimation(earnedDropsShared);
@@ -311,6 +402,10 @@ export default function WorkoutScreen() {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
+      }
+      if (activityProofTimerRef.current) {
+        clearTimeout(activityProofTimerRef.current);
+        activityProofTimerRef.current = null;
       }
     };
   }, []);
@@ -334,82 +429,8 @@ export default function WorkoutScreen() {
     machineType
   );
 
-  // Dynamic target drops from challenges — use nearest uncompleted challenge target
-  useEffect(() => {
-    if (!challenges || challenges.length === 0) {
-      // Fallback: type-based default
-      const fallbackTarget = machineType === 'treadmill' ? 600 : 300;
-      setTargetDrops(fallbackTarget);
-      setTargetChallengeName(null);
-      return;
-    }
-
-    // Find active uncompleted drops-based challenges (exclude streak/checkin — they don't progress via workouts)
-    const dropsBasedTypes = ['daily', 'weekly', 'monthly', 'milestone'];
-    const activeUncompleted = challenges.filter(c =>
-      !c.is_completed &&
-      c.target_drops > 0 &&
-      c.current_drops < c.target_drops &&
-      dropsBasedTypes.includes(c.challenge_type || '')
-    );
-
-    if (activeUncompleted.length === 0) {
-      // All challenges done — ambitious target
-      const maxEarned = Math.max(...challenges.map(c => c.current_drops), 0);
-      setTargetDrops(Math.max(maxEarned + 100, 300));
-      setTargetChallengeName(null);
-      return;
-    }
-
-    // Nearest challenge (least remaining drops)
-    const nearest = activeUncompleted.reduce((prev, curr) => {
-      const prevRemaining = prev.target_drops - prev.current_drops;
-      const currRemaining = curr.target_drops - curr.current_drops;
-      return currRemaining < prevRemaining ? curr : prev;
-    });
-
-    setTargetDrops(nearest.target_drops);
-    setTargetChallengeName(nearest.challenge_name || null);
-  }, [challenges, machineType]);
-
-  // Reset targetReachedRef when targetDrops changes (new target set)
-  useEffect(() => {
-    targetReachedRef.current = false;
-  }, [targetDrops]);
-
-  // Handle target reached — advance to next challenge or set buffer target
-  const handleTargetReached = useCallback(() => {
-    if (targetReachedRef.current) return;
-    targetReachedRef.current = true;
-
-    // Haptic celebration
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Find next challenge target that is larger than current drops
-    const currentDrops = totalDropsShared.value;
-    const activeUncompleted = challenges?.filter(c =>
-      !c.is_completed &&
-      c.target_drops > 0 &&
-      c.target_drops > currentDrops
-    ) ?? [];
-
-    if (activeUncompleted.length > 0) {
-      // Sort by nearest (smallest target that is above current drops)
-      const next = activeUncompleted.sort(
-        (a, b) => a.target_drops - b.target_drops
-      )[0];
-
-      setTargetDrops(next.target_drops);
-      setTargetChallengeName(next.challenge_name || null);
-      // targetReachedRef resets via the useEffect above when targetDrops changes
-    } else {
-      // No more challenges — set +30% buffer target so gauge resets
-      const buffer = Math.ceil(currentDrops * 1.3);
-      setTargetDrops(Math.max(buffer, currentDrops + 100));
-      setTargetChallengeName(null);
-      // targetReachedRef resets via the useEffect above when targetDrops changes
-    }
-  }, [challenges, totalDropsShared]);
+  // LiquidGauge target follows economy cap (max drops/session) configured in admin.
+  // Challenge progress is displayed separately in challenge cards/overlay.
 
   // SmartCoach: Load plan item when planId and machineId are available
   useEffect(() => {
@@ -556,11 +577,14 @@ export default function WorkoutScreen() {
         
         bleService.setStatusCallback((status: string) => {
           if (isAppInBackgroundRef.current) return;
-          setBleStatus(status);
           if (status === 'Signal OK') {
             setSignalStatus('ok');
+            setBleStatus('');
           } else if (status === 'Signal Lost') {
             setSignalStatus('lost');
+            setBleStatus(t('connectionLost'));
+          } else {
+            setBleStatus(status);
           }
         });
         
@@ -922,93 +946,16 @@ export default function WorkoutScreen() {
                 }
               }
               
-              // Step-to-Drop Calibration: For walking mode, emit drop for each step
-              // Even if RPM is 0 (during grace period), if revolutions increased, it's a step
               if (revolutionDelta > 0) {
-                // Walking Mode Detection: Low RPM (< stepDetectionThreshold)
-                // Walking mode suggests patica (shoe sensor) where steps are detected even with 0 RPM between steps
-                const isWalkingMode = (measurement.rpm > 0 && measurement.rpm < stepDetectionThreshold);
-                
-                // NATIVE-DRIVEN: Machine-specific drop logic
                 const currentMachineType = machineType || 'treadmill';
-                
-                let newDrops = 0;
-                if (currentMachineType === 'treadmill' && measurement.protocol === 'ftms') {
-                  // Treadmill FTMS: speed-based drops (~12 drops/min at 8 km/h)
-                  const speedKmh = measurement.speed ?? 0;
-                  if (speedKmh > 0.3) {
-                    treadmillDropAccRef.current += speedKmh * 0.025;
-                    newDrops = Math.floor(treadmillDropAccRef.current);
-                    treadmillDropAccRef.current -= newDrops;
-                  }
-                  lastCrankRevolutionsRef.current = currentRevolutions;
-                } else if (currentMachineType === 'treadmill') {
-                  // Non-FTMS treadmill (CSC sensor): 1 impulse = 1 drop
-                  newDrops = revolutionDelta;
-                } else if (currentMachineType === 'bike') {
-                  // Bike: 5 impulses = 1 drop
-                  newDrops = Math.floor(revolutionDelta / 5);
-                } else {
-                  // Default: 1 drop per 10 revolutions (cycling mode)
-                  newDrops = Math.floor(revolutionDelta / 10);
+
+                // Keep cadence/revolution tracking for pace/calorie logic. Drops are estimated
+                // from server-equivalent tokenomics rules in a separate timer effect.
+                if (currentMachineType === 'bike') {
+                  totalCrankRevolutionsShared.value = totalCrankRevolutionsShared.value + revolutionDelta;
                 }
-                
-                if (newDrops > 0 && isMountedRef.current) {
-                  // NATIVE-DRIVEN: Update SharedValues directly (no setState)
-                  earnedDropsShared.value = earnedDropsShared.value + newDrops;
-                  totalDropsShared.value = totalDropsShared.value + newDrops;
-                  
-                  // PRO-FITNESS: Track total crank revolutions for bike (for kcal and pace calculation)
-                  if (currentMachineType === 'bike') {
-                    totalCrankRevolutionsShared.value = totalCrankRevolutionsShared.value + revolutionDelta;
-                  }
-                  
-                  // UI-only: skip animations, haptics, and drop objects when backgrounded
-                  if (!isAppInBackgroundRef.current) {
-                    const currentProgress = Math.min(totalDropsShared.value / targetDrops, 1);
-                    
-                    const newDropObjects: Array<{ id: string; startX: number; progress: number }> = [];
-                    for (let i = 0; i < newDrops; i++) {
-                      const dropId = `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
-                      const gaugeWidth = 280;
-                      const padding = 40;
-                      const startX = padding + Math.random() * (gaugeWidth - padding * 2);
-                      newDropObjects.push({
-                        id: dropId,
-                        startX,
-                        progress: currentProgress,
-                      });
-                    }
-                    setActiveDrops((prev) => [...prev, ...newDropObjects]);
-                    
-                    try {
-                      liquidGaugeRef.current?.triggerImpact();
-                    } catch (_) { /* ignore if unmounted/deallocated */ }
-                    
-                    dropJumpScale.value = withSequence(
-                      withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
-                      withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
-                    );
-                    
-                    const now = Date.now();
-                    if (!lastHapticTimeRef.current || now - lastHapticTimeRef.current >= 200) {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      lastHapticTimeRef.current = now;
-                    }
-                  }
-                }
-                
-                // Update last crank revolutions based on machine type
-                if (currentMachineType === 'treadmill' && measurement.protocol !== 'ftms') {
-                  lastCrankRevolutionsRef.current = currentRevolutions;
-                } else if (currentMachineType === 'bike') {
-                  const remainingRevolutions = revolutionDelta % 5;
-                  lastCrankRevolutionsRef.current = currentRevolutions - remainingRevolutions;
-                } else {
-                  const remainingRevolutions = revolutionDelta % 10;
-                  lastCrankRevolutionsRef.current = currentRevolutions - remainingRevolutions;
-                }
-                
+
+                lastCrankRevolutionsRef.current = currentRevolutions;
                 lastStepDetectionRef.current = now;
               }
             }
@@ -1090,6 +1037,14 @@ export default function WorkoutScreen() {
             // Update last RPM time (use raw RPM, not smoothed, for accurate detection)
             // This ensures we detect when sensor actually stops
             if (rawRPM > 0) {
+              if (!firstActivityDetectedRef.current) {
+                firstActivityDetectedRef.current = true;
+                setAwaitingActivityProof(false);
+                if (activityProofTimerRef.current) {
+                  clearTimeout(activityProofTimerRef.current);
+                  activityProofTimerRef.current = null;
+                }
+              }
               lastRPMTimeRef.current = Date.now();
               setShowAutoPauseOverlay(false);
               setShowSensorAsleep(false);
@@ -1124,13 +1079,10 @@ export default function WorkoutScreen() {
                 autoPauseTimerRef.current = setTimeout(() => {
                   if (!isMountedRef.current) return;
                   if (!isPaused) {
+                    setPauseReason('inactivity');
                     setIsPaused(true);
                     setShowAutoPauseOverlay(false);
-                    Alert.alert(
-                      t('paused'),
-                      t('noPedalingDetected'),
-                      [{ text: 'OK' }]
-                    );
+                    setBleStatus(t('noPedalingDetected'));
                   }
                 }, 1000);
               }
@@ -1138,8 +1090,12 @@ export default function WorkoutScreen() {
           },
           // onSleep callback - triggered when no data for 10+ seconds
           () => {
-            // Battery Optimization: Only log critical events
-            setShowSensorAsleep(true);
+            // Keep UX consistent: reuse paused overlay with reconnect/resume action.
+            setPauseReason('connection');
+            setIsPaused(true);
+            setBleConnected(false);
+            setShowSensorAsleep(false);
+            setBleStatus(t('connectionLost'));
           },
           // onReconnect callback - verify session ownership
           verifySessionOwnership
@@ -1234,9 +1190,282 @@ export default function WorkoutScreen() {
       };
     }, [session?.machine_id, session?.machine?.sensor_id, sensorId, authSession?.user, reconnectTrigger]);
 
-  // Heartbeat update (every 10 seconds) — keeps machine locked regardless of pause state
+  // Detect silent BLE disconnects and keep UI state consistent.
   useEffect(() => {
-    if (!session?.machine_id || !authSession?.user) {
+    if (!session?.machine_id || !bleConnected || isReconnecting) return;
+
+    const watchdog = setInterval(() => {
+      if (!bleService.getConnected()) {
+        setBleConnected(false);
+        setPauseReason('connection');
+        setIsPaused(true);
+        setBleStatus(t('connectionLost'));
+      }
+    }, 1500);
+
+    return () => clearInterval(watchdog);
+  }, [bleConnected, isReconnecting, session?.machine_id, t]);
+
+  const cancelSessionForNoActivity = useCallback(async () => {
+    if (!session || !authSession?.user || session.id === 'mock-session') return;
+
+    try {
+      await bleService.stopMonitoring();
+      await bleService.disconnect();
+    } catch (disconnectError) {
+      console.warn('[Workout] Failed to fully disconnect BLE during anti-piggyback cancel:', disconnectError);
+    }
+
+    try {
+      await supabase
+        .from('sessions')
+        .update({
+          is_active: false,
+          ended_at: new Date().toISOString(),
+          duration_seconds: duration,
+          updated_at: new Date().toISOString(),
+          raw_metrics: {
+            security: {
+              auto_cancel_reason: 'no_machine_activity',
+            },
+          },
+        })
+        .eq('id', session.id);
+    } catch (sessionUpdateError) {
+      console.error('[Workout] Failed to mark session as auto-cancelled:', sessionUpdateError);
+    }
+
+    if (session.machine_id) {
+      try {
+        await supabase.rpc('unlock_machine', {
+          p_machine_id: session.machine_id,
+          p_user_id: authSession.user.id,
+        });
+      } catch (unlockError) {
+        console.error('[Workout] Failed to unlock machine after anti-piggyback cancel:', unlockError);
+      }
+    }
+
+    setShowNoActivityCancelOverlay(true);
+  }, [authSession?.user, duration, session, t]);
+
+  // Anti-piggyback guard: require live machine activity shortly after session start.
+  useEffect(() => {
+    if (!session?.id || session.id === 'mock-session') return;
+    if (isPaused) return;
+    if (firstActivityDetectedRef.current) return;
+
+    setAwaitingActivityProof(true);
+    if (activityProofTimerRef.current) {
+      clearTimeout(activityProofTimerRef.current);
+    }
+
+    activityProofTimerRef.current = setTimeout(() => {
+      if (firstActivityDetectedRef.current) return;
+      setAwaitingActivityProof(false);
+      void cancelSessionForNoActivity();
+    }, 35000);
+
+    return () => {
+      if (activityProofTimerRef.current) {
+        clearTimeout(activityProofTimerRef.current);
+        activityProofTimerRef.current = null;
+      }
+    };
+  }, [cancelSessionForNoActivity, isPaused, session?.id]);
+
+  useEffect(() => {
+    inactivityStateRef.current = createInactivityState();
+    inactivityFinalizeCoordinatorRef.current = new InactivityFinalizeCoordinator();
+    setShowInactivityWarning(false);
+    setInactivityCountdownSec(inactivityPolicy.autoFinishAfterSec);
+    setHeartbeatAllowed(true);
+  }, [session?.id, inactivityPolicy.autoFinishAfterSec]);
+
+  useEffect(() => {
+    if (!session?.gym_id || !authSession?.user || !session?.id) return;
+
+    const loadLiveEconomyContext = async () => {
+      try {
+        // Prefer SECURITY DEFINER RPC for mobile users (RLS-safe).
+        const { data: rpcLimits } = await supabase.rpc('get_user_drop_limits', {
+          p_gym_id: session.gym_id,
+        });
+
+        const rpcRow = Array.isArray(rpcLimits) ? rpcLimits[0] : rpcLimits;
+        let effectiveLimits = rpcRow as {
+          max_drops_per_session?: number;
+          max_rewarded_sessions_per_day?: number;
+          max_drops_per_day?: number;
+          max_drops_per_week?: number;
+          rewarded_sessions_cap_mode?: string;
+          session_restart_grace_sec?: number;
+          session_soft_tier_1_factor?: number;
+          session_soft_tier_2_factor?: number;
+          session_soft_tier_1_span_ratio?: number;
+        } | null;
+
+        // Compatibility fallback: direct table reads (for environments without RPC migration).
+        if (!effectiveLimits) {
+          const [gymTokenomics, globalTokenomics, gymLimitsFallback, defaultLimitsFallback] = await Promise.all([
+            supabase
+              .from('tokenomics_config')
+              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
+              .eq('gym_id', session.gym_id)
+              .maybeSingle(),
+            supabase
+              .from('tokenomics_config')
+              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
+              .is('gym_id', null)
+              .maybeSingle(),
+            supabase
+              .from('drop_limits')
+              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
+              .eq('gym_id', session.gym_id)
+              .eq('enabled', true)
+              .maybeSingle(),
+            supabase
+              .from('drop_limits')
+              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
+              .is('gym_id', null)
+              .eq('enabled', true)
+              .maybeSingle(),
+          ]);
+          effectiveLimits =
+            gymTokenomics.data ||
+            globalTokenomics.data ||
+            gymLimitsFallback.data ||
+            defaultLimitsFallback.data;
+        }
+
+        if (effectiveLimits) {
+          const maxSessionDrops = Math.max(1, Number(effectiveLimits.max_drops_per_session ?? 120));
+          const maxDayDrops = Math.max(maxSessionDrops, Number(effectiveLimits.max_drops_per_day ?? 300));
+          const maxWeekDrops = Math.max(maxDayDrops, Number(effectiveLimits.max_drops_per_week ?? 1500));
+          const maxRewardedSessions = Math.max(1, Number(effectiveLimits.max_rewarded_sessions_per_day ?? 4));
+          let capMode: RewardedSessionsCapMode = 'soft';
+          const rawMode = effectiveLimits.rewarded_sessions_cap_mode;
+          if (rawMode === 'off' || rawMode === 'soft' || rawMode === 'hard') {
+            capMode = rawMode;
+          }
+          dropLimitsRef.current = {
+            maxDropsPerSession: maxSessionDrops,
+            maxRewardedSessionsPerDay: maxRewardedSessions,
+            maxDropsPerDay: maxDayDrops,
+            maxDropsPerWeek: maxWeekDrops,
+            rewardedSessionsCapMode: capMode,
+            sessionSoftTier1Factor: effectiveLimits.session_soft_tier_1_factor != null
+              ? Number(effectiveLimits.session_soft_tier_1_factor) : undefined,
+            sessionSoftTier2Factor: effectiveLimits.session_soft_tier_2_factor != null
+              ? Number(effectiveLimits.session_soft_tier_2_factor) : undefined,
+            sessionSoftTier1SpanRatio: effectiveLimits.session_soft_tier_1_span_ratio != null
+              ? Number(effectiveLimits.session_soft_tier_1_span_ratio) : undefined,
+          };
+          setTargetDrops(maxSessionDrops);
+          setDailyRemaining(Math.max(0, maxDayDrops - dropHistoryRef.current.mintedToday));
+        }
+      } catch (limitsError) {
+        console.warn('[Workout] Could not load economy limits for live estimator, using defaults.', limitsError);
+      }
+
+      try {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('streak_days,last_visit_date')
+          .eq('id', authSession.user.id)
+          .maybeSingle();
+
+        if (profileRow) {
+          streakContextRef.current = {
+            streakDays: profileRow.streak_days ?? 0,
+            lastVisitDate: profileRow.last_visit_date ?? null,
+          };
+        }
+      } catch (profileError) {
+        console.warn('[Workout] Could not load profile streak for live estimator.', profileError);
+      }
+
+      try {
+        const { data: rewardedSessions } = await supabase
+          .from('sessions')
+          .select('drops_earned,started_at')
+          .eq('user_id', authSession.user.id)
+          .eq('is_active', false)
+          .gt('drops_earned', 0)
+          .neq('id', session.id)
+          .limit(500);
+
+        const now = new Date();
+        const todayStr = getBelgradeDateString(now);
+        const todayDate = new Date(`${todayStr}T00:00:00.000Z`);
+        const dayOfWeek = todayDate.getUTCDay();
+        const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const weekStartDate = new Date(todayDate);
+        weekStartDate.setUTCDate(weekStartDate.getUTCDate() - weekOffset);
+        const weekStartStr = weekStartDate.toISOString().slice(0, 10);
+
+        let rewardedSessionsToday = 0;
+        let mintedToday = 0;
+        let mintedWeek = 0;
+
+        for (const row of rewardedSessions || []) {
+          const dateStr = getBelgradeDateString(new Date(row.started_at));
+          const earned = row.drops_earned ?? 0;
+          if (dateStr === todayStr) {
+            rewardedSessionsToday += 1;
+            mintedToday += earned;
+          }
+          if (dateStr >= weekStartStr) {
+            mintedWeek += earned;
+          }
+        }
+
+        dropHistoryRef.current = {
+          rewardedSessionsToday,
+          mintedToday,
+          mintedWeek,
+        };
+      } catch (historyError) {
+        console.warn('[Workout] Could not load rewarded sessions history for live estimator.', historyError);
+      }
+
+      try {
+        const resolvedType = (machineType || 'generic').toLowerCase();
+        const { data: dmcRow } = await supabase
+          .from('drop_model_config')
+          .select('machine_base_json')
+          .or(`gym_id.eq.${session.gym_id},gym_id.is.null`)
+          .order('gym_id', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (dmcRow?.machine_base_json) {
+          const json = dmcRow.machine_base_json as Record<string, Record<string, number>>;
+          const mcfg = json[resolvedType] ?? json['generic'];
+          if (mcfg) {
+            machineConfigRef.current = {
+              baseRatePerMin: mcfg.baseRatePerMin ?? 1.0,
+              maxMultiplier: mcfg.maxMultiplier ?? 1.8,
+              maxDropsPerMinute: mcfg.maxDropsPerMinute ?? 3.0,
+              sustainedHighEffortRatio: mcfg.sustainedHighEffortRatio ?? 0.55,
+            };
+          }
+        }
+      } catch (configError) {
+        console.warn('[Workout] Could not load drop_model_config for live estimator, using defaults.', configError);
+      }
+    };
+
+    void loadLiveEconomyContext();
+  }, [authSession?.user, session?.gym_id, session?.id]);
+
+  // Heartbeat update (every 10 seconds) — gated by active pedaling evidence.
+  useEffect(() => {
+    if (!session?.machine_id || !authSession?.user || !heartbeatAllowed) {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
       return;
     }
 
@@ -1258,9 +1487,10 @@ export default function WorkoutScreen() {
     return () => {
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
       }
     };
-  }, [session?.machine_id, authSession?.user]);
+  }, [session?.machine_id, authSession?.user, heartbeatAllowed]);
 
   
   // Animation values
@@ -1332,7 +1562,6 @@ export default function WorkoutScreen() {
             .update({
               drops_earned: Math.round(earnedDropsShared.value),
               duration_seconds: duration,
-              average_rpm: averageRPM > 0 ? averageRPM : null,
               updated_at: new Date().toISOString(),
             })
             .eq('id', session.id);
@@ -1646,6 +1875,7 @@ export default function WorkoutScreen() {
                       drops: Math.round(totalDropsShared.value).toString(),
                       duration: duration.toString(),
                       gymId: session.gym_id || '',
+                      sessionTier,
                     },
                   });
                 } catch (routerError) {
@@ -1886,29 +2116,24 @@ export default function WorkoutScreen() {
   );
 
   // ============================================================================
-  // PREMIUM UI: LiquidGauge Progress Calculation with Damping + Target Reached
-  // ============================================================================
-  // Advanced Liquid: Progress follows drops with slight damping to create realistic liquid bubbling effect
-  // LiquidGauge already receives smoothedRPMShared for dynamic glow synchronization
-  // When progress reaches 100%, triggers handleTargetReached to advance to next challenge
+  // Gauge fills relative to daily cap for continuous sense of progress.
+  // Session threshold is shown as a label, not a progress ceiling.
+  const gaugeTarget = useMemo(
+    () => Math.max(targetDrops, dropLimitsRef.current.maxDropsPerDay || 300),
+    [targetDrops],
+  );
+
   useAnimatedReaction(
     () => totalDropsShared.value,
     (drops) => {
       'worklet';
-      // Calculate target progress
-      const targetProgress = Math.min(drops / targetDrops, 1);
-      // Apply slight damping for realistic liquid movement (smooth transition, not instant)
+      const targetProgress = Math.min(drops / gaugeTarget, 1);
       progressShared.value = withTiming(targetProgress, {
-        duration: 300, // Small delay creates realistic liquid bubbling effect
+        duration: 300,
         easing: Easing.out(Easing.quad),
       });
-
-      // When target reached, advance to next challenge
-      if (targetProgress >= 1) {
-        runOnJS(handleTargetReached)();
-      }
     },
-    [totalDropsShared, targetDrops]
+    [totalDropsShared, gaugeTarget]
   );
 
   // PRO-FITNESS: Calculate calories based on machine type
@@ -1970,10 +2195,27 @@ export default function WorkoutScreen() {
     }
   }, [sessionId, equipmentId, gymId, authSession]);
 
+  useEffect(() => {
+    firstActivityDetectedRef.current = false;
+    setAwaitingActivityProof(false);
+    if (activityProofTimerRef.current) {
+      clearTimeout(activityProofTimerRef.current);
+      activityProofTimerRef.current = null;
+    }
+  }, [session?.id]);
+
   // Create new session
   const createSession = async () => {
     if (!authSession?.user || !equipmentId || !gymId) {
       console.error('Missing required data for session:', { user: !!authSession?.user, equipmentId, gymId });
+      return;
+    }
+
+    // Hardening: never create a session without a machine lock path.
+    if (!machineId) {
+      setBleStatus(t('sessionStartRequiresLock'));
+      Alert.alert(t('sessionStartBlockedTitle'), t('sessionStartRequiresLock'));
+      router.replace('/scan');
       return;
     }
 
@@ -1998,20 +2240,50 @@ export default function WorkoutScreen() {
       // Continue with workout - user can still track their session
     }
 
+    const { data: lockResult, error: lockError } = await supabase.rpc('lock_machine', {
+      p_machine_id: machineId,
+      p_user_id: authSession.user.id,
+    });
+
+    if (lockError || !lockResult) {
+      setBleStatus(t('sessionStartMachineBusy'));
+      Alert.alert(t('sessionStartBlockedTitle'), t('sessionStartMachineBusy'));
+      router.replace('/scan');
+      return;
+    }
+
+    const deviceHash = await getDeviceFingerprintHash();
+
     const { data, error } = await supabase
       .from('sessions')
       .insert({
         user_id: authSession.user.id,
         gym_id: gymId,
+        machine_id: machineId,
         equipment_id: equipmentId, // Keep for backward compatibility
         started_at: new Date().toISOString(),
         is_active: true,
+        raw_metrics: {
+          security: {
+            device_hash: deviceHash,
+            lock_required: true,
+            source: 'workout_fallback',
+          },
+        },
       })
       .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
       .single();
 
     if (error) {
       console.error('Error creating session:', error);
+      try {
+        await supabase.rpc('unlock_machine', {
+          p_machine_id: machineId,
+          p_user_id: authSession.user.id,
+        });
+      } catch (unlockError) {
+        console.error('[Workout] Failed to unlock machine after session create failure:', unlockError);
+      }
       // CRITICAL: No blocking Alert.alert() - log error and continue
       console.error('[Workout] Failed to start workout:', error.message);
       // Continue with mock session or show error in UI
@@ -2075,16 +2347,13 @@ export default function WorkoutScreen() {
       }
 
       try {
-        // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.2)
         // CRITICAL: Do NOT save drops_earned during workout sync.
         // award_drops() has an idempotency check (drops_earned > 0 = already processed).
-        // Save only duration, average_rpm, and estimated calories for server-side calculation.
         const estimatedCalories = Math.round(caloriesShared.value);
         await supabase
           .from('sessions')
           .update({
             duration_seconds: duration,
-            average_rpm: averageRPM > 0 ? averageRPM : null,
             calories: estimatedCalories > 0 ? estimatedCalories : null,
             updated_at: new Date().toISOString(),
           })
@@ -2107,6 +2376,53 @@ export default function WorkoutScreen() {
       }
     };
   }, [session?.id, averageRPM, duration, isPaused, authSession]); // Removed earnedDrops - using SharedValue
+
+  const applyLiveDropsEstimate = useCallback((nextDrops: number) => {
+    const current = Math.max(0, Math.round(totalDropsShared.value));
+    const safeNext = Math.max(current, Math.round(nextDrops));
+    if (safeNext === current) return;
+
+    earnedDropsShared.value = safeNext;
+    totalDropsShared.value = safeNext;
+
+    const delta = safeNext - current;
+    if (delta <= 0 || isAppInBackgroundRef.current) {
+      return;
+    }
+
+    const currentProgress = Math.min(totalDropsShared.value / Math.max(gaugeTarget, 1), 1);
+    const visualDrops = Math.min(delta, 6);
+    const newDropObjects: Array<{ id: string; startX: number; progress: number }> = [];
+    for (let i = 0; i < visualDrops; i++) {
+      const dropId = `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
+      const gaugeWidth = 280;
+      const padding = 40;
+      const startX = padding + Math.random() * (gaugeWidth - padding * 2);
+      newDropObjects.push({
+        id: dropId,
+        startX,
+        progress: currentProgress,
+      });
+    }
+    setActiveDrops((prev) => [...prev, ...newDropObjects]);
+
+    try {
+      liquidGaugeRef.current?.triggerImpact();
+    } catch {
+      // ignore if unmounted/deallocated
+    }
+
+    dropJumpScale.value = withSequence(
+      withTiming(1.15, { duration: 150, easing: Easing.out(Easing.ease) }),
+      withTiming(1, { duration: 150, easing: Easing.in(Easing.ease) })
+    );
+
+    const hapticNow = Date.now();
+    if (!lastHapticTimeRef.current || hapticNow - lastHapticTimeRef.current >= 200) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      lastHapticTimeRef.current = hapticNow;
+    }
+  }, [dropJumpScale, earnedDropsShared, gaugeTarget, totalDropsShared]);
 
   // Legacy save interval (kept for backward compatibility, but syncIntervalRef is primary)
   useEffect(() => {
@@ -2157,15 +2473,63 @@ export default function WorkoutScreen() {
 
       if (seconds >= 0) {
         setDuration(seconds);
+        // Use session average RPM for estimation so drops don't vanish during
+        // momentary RPM dips. The averageRPM state tracks a rolling long-term
+        // average that stays stable when the user briefly stops pedaling.
+        const stableRpm = averageRPM > 0 ? averageRPM : Math.round(smoothedRPMShared.value);
+        const stableSpeed = Number(treadmillSpeedShared.value || 0);
 
-        // Pace calculation moved to useAnimatedReaction (uses SharedValues)
+        const result = estimateLiveDropsDetailed({
+          durationSeconds: seconds,
+          calories: Math.round(caloriesShared.value),
+          machineType:
+            machineType === 'treadmill' ||
+            machineType === 'bike' ||
+            machineType === 'elliptical' ||
+            machineType === 'stepper' ||
+            machineType === 'generic'
+              ? machineType
+              : 'generic',
+          avgRpm: stableRpm,
+          avgSpeedKmh: stableSpeed,
+          cadencePerMin: stableRpm,
+          rpmPeak: rpmHistoryRef.current.length > 0 ? Math.max(...rpmHistoryRef.current) : undefined,
+          limits: dropLimitsRef.current,
+          history: dropHistoryRef.current,
+          streak: streakContextRef.current,
+          todayDate: getBelgradeDateString(now),
+          machineConfig: machineConfigRef.current,
+        });
+
+        setSessionTier(result.tier);
+        setDailyRemaining(result.dailyRemaining);
+        if (result.hardCapReached && !hardCapHitDuringSession) {
+          setHardCapHitDuringSession(true);
+        }
+
+        // One-time tier transition toasts
+        if (result.tier === 'tier1' && !tier1ShownRef.current) {
+          tier1ShownRef.current = true;
+          setTierToast(t('thresholdReached'));
+          if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
+          tierToastTimerRef.current = setTimeout(() => setTierToast(null), 4000);
+        } else if (result.tier === 'tier2' && !tier2ShownRef.current) {
+          tier2ShownRef.current = true;
+          setTierToast(t('deepReducedMode'));
+          if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
+          tierToastTimerRef.current = setTimeout(() => setTierToast(null), 4000);
+        }
+
+        if (!isTrackingOnly) {
+          applyLiveDropsEstimate(result.drops);
+        }
       }
     }, 1000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [session, startTime, isPaused, pausedTime, bleConnected, isPlanCompleted]);
+  }, [applyLiveDropsEstimate, bleConnected, isPaused, isPlanCompleted, isTrackingOnly, pausedTime, session, startTime, caloriesShared]);
 
   // Calculate current minutes (memoized to avoid recalculating on every render)
   const currentMinutes = useMemo(() => Math.floor(duration / 60), [duration]);
@@ -2357,15 +2721,196 @@ export default function WorkoutScreen() {
 
   // REMOVED: challenge message timer cleanup - no longer needed
 
-  // REMOVED: Old drop creation logic - drops are now managed imperatively via dropEmitterRef.current?.emit()
-  // Drops are emitted directly in BLE callback when new drops are earned
+  // Live drops are estimated from server-equivalent tokenomics rules each second,
+  // while BLE callback only feeds activity/calorie telemetry.
 
-  // Pause/Resume
-  const togglePause = () => {
+  const finalizeForInactivity = useCallback(async () => {
+    if (!session || !authSession?.user || session.id === 'mock-session') {
+      return;
+    }
+    if (!inactivityFinalizeCoordinatorRef.current.tryStart()) {
+      return;
+    }
+    if (isFinalizingRef.current) {
+      return;
+    }
+
+    isFinalizingRef.current = true;
+    inactivityStateRef.current = markInactivityFinalized(inactivityStateRef.current);
+    setShowInactivityWarning(false);
+    setHeartbeatAllowed(false);
+
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+
+    try {
+      await bleService.stopMonitoring();
+      await bleService.disconnect();
+    } catch (disconnectError) {
+      console.warn('[Workout] Inactivity auto-finish BLE disconnect warning:', disconnectError);
+    }
+
+    let dropsEarned = 0;
+    let multiplier = 1;
+    let badgesEarned: string[] = [];
+    const message = t('inactivityAutoFinishedNotice');
+
+    try {
+      type FinalizeInactiveRpc = (
+        fn: string,
+        args: Record<string, unknown>
+      ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+      const rpc = supabase.rpc.bind(supabase) as unknown as FinalizeInactiveRpc;
+
+      const { data, error } = await rpc('finalize_inactive_session', {
+        p_session_id: session.id,
+        p_reason: 'inactivity_autofinish',
+      });
+
+      if (error) {
+        throw new Error(error.message || 'finalize_inactive_session failed');
+      }
+
+      const result = Array.isArray(data) ? data[0] : data;
+      if (result && typeof result === 'object') {
+        const obj = result as Record<string, unknown>;
+        if (typeof obj.drops_earned === 'number') dropsEarned = obj.drops_earned;
+        if (typeof obj.multiplier === 'number') multiplier = obj.multiplier;
+        if (Array.isArray(obj.badges_earned)) {
+          badgesEarned = obj.badges_earned.filter((v): v is string => typeof v === 'string');
+        }
+      }
+    } catch (rpcError) {
+      console.warn('[Workout] finalize_inactive_session unavailable/failing, using fallback finalize:', rpcError);
+      await supabase
+        .from('sessions')
+        .update({
+          is_active: false,
+          ended_at: new Date().toISOString(),
+          duration_seconds: duration,
+          updated_at: new Date().toISOString(),
+          raw_metrics: {
+            security: {
+              auto_finish_reason: 'inactivity_autofinish',
+            },
+          },
+        })
+        .eq('id', session.id);
+    }
+
+    if (session.machine_id) {
+      try {
+        await supabase.rpc('unlock_machine', {
+          p_machine_id: session.machine_id,
+          p_user_id: authSession.user.id,
+        });
+      } catch (unlockError) {
+        console.error('[Workout] Failed to unlock machine after inactivity auto-finish:', unlockError);
+      }
+    }
+
+    setBleConnected(false);
+    router.replace({
+      pathname: '/session-summary',
+      params: {
+        sessionId: session.id,
+        drops: String(dropsEarned),
+        duration: String(duration),
+        multiplier: String(multiplier),
+        badges: badgesEarned.length > 0 ? JSON.stringify(badgesEarned) : undefined,
+        gymId: session.gym_id || '',
+        securityStatus: 'cap',
+        securityMessage: message,
+        sessionTier,
+      },
+    });
+  }, [authSession?.user, duration, router, session, t]);
+
+  useEffect(() => {
+    if (!session?.machine_id || !bleConnected || isPaused) {
+      setShowInactivityWarning(false);
+      setHeartbeatAllowed(true);
+      return;
+    }
+
+    const tick = () => {
+      const { nextState, snapshot } = evaluateInactivity(
+        inactivityStateRef.current,
+        smoothedRPMShared.value,
+        Date.now(),
+        inactivityPolicy
+      );
+      inactivityStateRef.current = nextState;
+
+      setHeartbeatAllowed(snapshot.heartbeatAllowed);
+      setInactivityCountdownSec(snapshot.countdownSeconds);
+
+      if (snapshot.warningVisible) {
+        setShowInactivityWarning(true);
+      } else {
+        setShowInactivityWarning(false);
+      }
+
+      if (snapshot.shouldAutoFinish) {
+        void finalizeForInactivity();
+      }
+    };
+
+    const interval = setInterval(tick, 1000);
+    tick();
+    return () => clearInterval(interval);
+  }, [
+    bleConnected,
+    finalizeForInactivity,
+    inactivityPolicy,
+    isPaused,
+    session?.machine_id,
+    smoothedRPMShared,
+  ]);
+
+  const pauseWorkout = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    if (isPaused) {
-      // Resume
+    setPauseReason('manual');
+    setPausedTime(new Date());
+    setIsPaused(true);
+    pausedOverlayOpacity.value = withSpring(1, { damping: 15, stiffness: 100, mass: 1 });
+    setShowAutoPauseOverlay(false);
+  };
+
+  const resumeWorkout = async () => {
+    if (!isPaused || isResumingFromPause) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsResumingFromPause(true);
+
+    try {
+      const activeSensorId = sensorId || session?.machine?.sensor_id;
+      let reconnectOk = true;
+
+      // For machine sessions we require an active BLE link before resume.
+      if (session?.machine_id && activeSensorId && (!bleConnected || !bleService.getConnected())) {
+        setBleStatus(t('reconnecting'));
+
+        reconnectOk = await bleService.reconnect();
+        if (!reconnectOk) {
+          try {
+            reconnectOk = await bleService.connectToDevice(activeSensorId);
+          } catch {
+            reconnectOk = false;
+          }
+        }
+
+        setBleConnected(reconnectOk);
+      }
+
+      if (!reconnectOk) {
+        setPauseReason('connection');
+        setBleStatus(t('reconnectionFailed'));
+        return;
+      }
+
       if (pausedTime) {
         const pauseDuration = new Date().getTime() - pausedTime.getTime();
         setStartTime((prev) => {
@@ -2375,18 +2920,16 @@ export default function WorkoutScreen() {
           return prev;
         });
       }
+
       setPausedTime(null);
+      setShowSensorAsleep(false);
+      setPauseReason('manual');
       setIsPaused(false);
       pausedOverlayOpacity.value = withSpring(0, { damping: 15, stiffness: 100, mass: 1 });
-      // Reset lastRPMTime so auto-pause timer doesn't fire immediately
       lastRPMTimeRef.current = Date.now();
-    } else {
-      // Pause
-      setPausedTime(new Date());
-      setIsPaused(true);
-      pausedOverlayOpacity.value = withSpring(1, { damping: 15, stiffness: 100, mass: 1 });
-      // Clear auto-pause overlay on manual pause
-      setShowAutoPauseOverlay(false);
+      setBleStatus('');
+    } finally {
+      setIsResumingFromPause(false);
     }
   };
 
@@ -2409,6 +2952,11 @@ export default function WorkoutScreen() {
 
   // End workout
   const handleFinishWorkout = async () => {
+    if (isFinalizingRef.current) {
+      return;
+    }
+    isFinalizingRef.current = true;
+
     // CRITICAL: Clean up all timers/intervals before finishing
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -2420,6 +2968,11 @@ export default function WorkoutScreen() {
       clearInterval(timeProgressIntervalRef.current);
       timeProgressIntervalRef.current = null;
     }
+    if (activityProofTimerRef.current) {
+      clearTimeout(activityProofTimerRef.current);
+      activityProofTimerRef.current = null;
+    }
+    setAwaitingActivityProof(false);
 
     // Immediately disconnect BLE when workout ends
     try {
@@ -2452,6 +3005,7 @@ export default function WorkoutScreen() {
           drops: Math.round(totalDropsShared.value).toString(),
           duration: duration.toString(),
           gymId: session?.gym_id || '',
+          sessionTier,
         },
       });
       return;
@@ -2472,17 +3026,40 @@ export default function WorkoutScreen() {
     
     const estimatedDrops = Math.round(totalDropsShared.value); // UI estimate only
     const estimatedCalories = Math.round(caloriesShared.value);
-    const finalSmoothedRPM = smoothedRPMShared.value;
-    const finalAverageRPM = finalSmoothedRPM > 0 ? Math.round(finalSmoothedRPM) : (averageRPM > 0 ? averageRPM : null);
+    // Prefer session-long rolling average for backend drop calculation. The
+    // instantaneous smoothedRPMShared may be 0 if user stopped pedaling before
+    // pressing Finish, which would cause the backend to under-reward.
+    const finalAverageRPM = averageRPM > 0 ? averageRPM : (Math.round(smoothedRPMShared.value) > 0 ? Math.round(smoothedRPMShared.value) : null);
     const totalRevolutions = Math.round(totalCrankRevolutionsShared.value);
+    const deviceHash = await getDeviceFingerprintHash();
     
-    // Build raw_metrics JSONB for server-side calculation and analytics
+    // Build raw_metrics JSONB for server-side calculation and analytics.
+    // CRITICAL: Backend reads `avg_rpm` (not `avg_cadence`) for drop calculation.
+    // Preserve existing security block from session creation (scanner sets source/lock flags).
+    const existingRawMetrics = (session.raw_metrics && typeof session.raw_metrics === 'object')
+      ? session.raw_metrics as Record<string, unknown>
+      : {};
+    const existingSecurity = (existingRawMetrics.security && typeof existingRawMetrics.security === 'object')
+      ? existingRawMetrics.security as Record<string, unknown>
+      : {};
+
     const rawMetrics: Record<string, unknown> = {
+      ...existingRawMetrics,
+      avg_rpm: finalAverageRPM,
       avg_cadence: finalAverageRPM,
       calories_source: ftmsProtocolActiveRef.current && ftmsDeviceCaloriesRef.current > 0
         ? 'device' : 'estimated',
       ble_protocol: ftmsProtocolActiveRef.current ? 'ftms' : 'csc',
+      security: {
+        ...existingSecurity,
+        device_hash: deviceHash,
+      },
     };
+
+    // RPM peak for backend spike detection
+    if (rpmHistoryRef.current.length > 0) {
+      rawMetrics.rpm_peak = Math.max(...rpmHistoryRef.current);
+    }
 
     // Distance: prefer FTMS device-reported, fallback to revolution estimate
     if (ftmsProtocolActiveRef.current && ftmsTotalDistanceRef.current > 0) {
@@ -2494,11 +3071,12 @@ export default function WorkoutScreen() {
 
     // FTMS extended metrics (only when FTMS protocol was active)
     if (ftmsProtocolActiveRef.current) {
-      // Speed stats
+      // Speed stats — also write top-level `speed_avg_kmh` for backend drop calc
       if (ftmsSpeedHistoryRef.current.length > 0) {
         const avgSpeed = ftmsSpeedHistoryRef.current.reduce((a, b) => a + b, 0)
           / ftmsSpeedHistoryRef.current.length;
-        rawMetrics.avg_speed_kmh = Math.round(avgSpeed * 10) / 10;
+        rawMetrics.speed_avg_kmh = Math.round(avgSpeed * 10) / 10;
+        rawMetrics.avg_speed_kmh = rawMetrics.speed_avg_kmh;
         rawMetrics.max_speed_kmh = Math.round(ftmsMaxSpeedRef.current * 10) / 10;
       }
 
@@ -2523,6 +3101,9 @@ export default function WorkoutScreen() {
       estimatedCalories,
       averageRPM: finalAverageRPM,
       userId: authSession.user.id,
+      rawMetricsKeys: Object.keys(rawMetrics),
+      avg_rpm_value: rawMetrics.avg_rpm,
+      rpm_peak_value: rawMetrics.rpm_peak,
     });
 
     // Final sync: Save duration, calories, raw_metrics BEFORE calling award_drops()
@@ -2533,20 +3114,40 @@ export default function WorkoutScreen() {
       : estimatedCalories;
 
     try {
-      await supabase
+      const { error: syncError, count: syncCount } = await supabase
         .from('sessions')
         .update({
           duration_seconds: duration,
-          average_rpm: finalAverageRPM,
           calories: finalCalories > 0 ? finalCalories : null,
           raw_metrics: rawMetrics,
           updated_at: new Date().toISOString(),
         })
         .eq('id', session.id);
-      console.log('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current });
+
+      if (syncError) {
+        console.error('[Workout] Final sync DB error:', syncError.message, syncError.code);
+      } else {
+        console.log('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current, rowsAffected: syncCount });
+      }
+
+      // Safety net: if the update silently affected 0 rows (e.g. RLS denied), retry
+      // with a forced read-back to confirm raw_metrics persisted.
+      if (!syncError) {
+        const { data: verify } = await supabase
+          .from('sessions')
+          .select('raw_metrics')
+          .eq('id', session.id)
+          .single();
+        if (verify && !verify.raw_metrics?.avg_rpm && finalAverageRPM) {
+          console.warn('[Workout] raw_metrics.avg_rpm missing after sync — retrying update');
+          await supabase
+            .from('sessions')
+            .update({ raw_metrics: rawMetrics })
+            .eq('id', session.id);
+        }
+      }
     } catch (syncError) {
       console.error('[Workout] Final sync error:', syncError);
-      // Continue — award_drops() has a duration-based fallback
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2561,9 +3162,11 @@ export default function WorkoutScreen() {
     //   6. Evaluate and award badges
     //   7. Return { drops_earned, multiplier, badges_earned }
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    let serverDrops = estimatedDrops; // Fallback to estimate if RPC fails
+    let serverDrops = 0;
     let serverMultiplier = 1.0;
     let serverBadges: string[] = [];
+    let securityStatus: 'cap' | 'rate' | 'fraud' | null = null;
+    let securityMessage: string | null = null;
 
     const { data: awardResult, error } = await supabase.rpc('award_drops', {
       p_session_id: session.id,
@@ -2571,16 +3174,59 @@ export default function WorkoutScreen() {
 
     if (error) {
       console.error('[Workout] award_drops() failed:', error.message);
-      // Fallback: navigate with estimated drops — the abandoned session cron will retry
+      const normalized = mapSecurityError(error.message || '');
+      if (normalized !== 'other') {
+        securityStatus = normalized;
+        if (normalized === 'cap') securityMessage = t('securityCapReached');
+        if (normalized === 'rate') securityMessage = t('securityRateLimited');
+        if (normalized === 'fraud') securityMessage = t('securityFraudBlocked');
+      } else {
+        securityStatus = 'rate';
+        securityMessage = t('securityAwardFailed');
+      }
     } else if (awardResult && awardResult.length > 0) {
       const result = awardResult[0];
       serverDrops = result.drops_earned;
       serverMultiplier = result.multiplier;
       serverBadges = result.badges_earned || [];
+
+      // Backend can return success with 0 drops when anti-abuse/cap/min-duration rules apply.
+      if (serverDrops <= 0 && !securityMessage) {
+        const backendReason = String(
+          (result as any)?.reason_code ??
+          (result as any)?.reason ??
+          (result as any)?.error_message ??
+          ''
+        ).toLowerCase();
+
+        const normalized = mapSecurityError(backendReason);
+        if (normalized === 'cap') {
+          securityStatus = 'cap';
+          securityMessage = t('securityCapReached');
+        } else if (normalized === 'rate') {
+          securityStatus = 'rate';
+          securityMessage = t('securityRateLimited');
+        } else if (normalized === 'fraud') {
+          securityStatus = 'fraud';
+          securityMessage = t('securityFraudBlocked');
+        } else if (
+          backendReason.includes('duration') ||
+          backendReason.includes('short') ||
+          duration < 120
+        ) {
+          securityStatus = 'cap';
+          securityMessage = t('securitySessionTooShort');
+        } else {
+          securityStatus = 'cap';
+          securityMessage = t('securityNoDropsAwarded');
+        }
+      }
+
       console.log('[Workout] award_drops() success:', {
         drops_earned: serverDrops,
         multiplier: serverMultiplier,
         badges_earned: serverBadges,
+        securityMessage,
       });
     }
 
@@ -2609,6 +3255,9 @@ export default function WorkoutScreen() {
         multiplier: serverMultiplier.toString(),
         badges: serverBadges.length > 0 ? JSON.stringify(serverBadges) : undefined,
         gymId: session.gym_id || '',
+        securityStatus: securityStatus || undefined,
+        securityMessage: securityMessage || undefined,
+        sessionTier,
       },
     });
   };
@@ -2648,6 +3297,10 @@ export default function WorkoutScreen() {
     opacity: withSpring(pausedOverlayOpacity.value, springConfig),
   }));
 
+  useEffect(() => {
+    pausedOverlayOpacity.value = withSpring(isPaused ? 1 : 0, springConfig);
+  }, [isPaused, pausedOverlayOpacity]);
+
   const finishButtonStyle = useAnimatedStyle(() => {
     const width = interpolate(finishPressProgress.value, [0, 1], [0, 100]);
     return { width: `${width}%` };
@@ -2676,6 +3329,13 @@ export default function WorkoutScreen() {
       transform: [{ scale: dropJumpScale.value }],
     };
   });
+
+  const pauseOverlayMessage =
+    pauseReason === 'connection'
+      ? t('connectionLost')
+      : pauseReason === 'inactivity'
+        ? t('noPedalingDetected')
+        : t('pausedHint');
 
   // Pulse Rings are now handled in CircularProgressRing.tsx component (GPU-only animations with interpolateColor)
 
@@ -2735,20 +3395,18 @@ export default function WorkoutScreen() {
     () => totalDropsShared.value,
     (drops) => {
       'worklet';
-      const currentProgress = Math.min(drops / targetDrops, 1);
-      const overachieved = drops > targetDrops;
+      const overachieved = drops > gaugeTarget;
       const bonus = drops > 0 && Math.floor(drops) % 100 === 0;
-      
+
       runOnJS(setIsOverachieved)(overachieved);
       runOnJS(setShowBonus)(bonus);
     },
-    [totalDropsShared, targetDrops]
+    [totalDropsShared, gaugeTarget]
   );
-  
-  // Get current progress for CircularProgressRing (needs JS value)
+
   const progress = useDerivedValue(() => {
-    return Math.min(totalDropsShared.value / targetDrops, 1);
-  }, [totalDropsShared, targetDrops]);
+    return Math.min(totalDropsShared.value / gaugeTarget, 1);
+  }, [totalDropsShared, gaugeTarget]);
   
   // CRITICAL: Convert SharedValue to JS value for CircularProgressRing, Progress Bar, and LiquidGauge using useState + useAnimatedReaction
   const [progressJS, setProgressJS] = useState(0);
@@ -3017,12 +3675,11 @@ export default function WorkoutScreen() {
           )}
 
           {/* Premium DropEmitter - Zero-Lag Optimized (no Skia per drop) */}
-          {bleConnected && (
+          {bleConnected && !isTrackingOnly && (
             <DropEmitter
               drops={activeDrops}
               containerSize={280}
               onImpact={(x, y) => {
-                // Impact Sync: Trigger impact effect when drop hits water
                 liquidGaugeRef.current?.triggerImpact();
               }}
               onDropComplete={(dropId) => {
@@ -3030,6 +3687,15 @@ export default function WorkoutScreen() {
               }}
             />
           )}
+
+          {/* Hard cap / tracking-only badge */}
+          {isTrackingOnly && bleConnected && (
+            <View style={styles.trackingOnlyBadge}>
+              <Ionicons name="fitness-outline" size={16} color="#93C5FD" />
+              <Text style={styles.trackingOnlyText}>{t('trackingOnly')}</Text>
+            </View>
+          )}
+          {/* Hard cap badge is now shown as a floating toast */}
         </View>
       </View>
 
@@ -3162,21 +3828,90 @@ export default function WorkoutScreen() {
           />
         </View>
         <View style={styles.targetContainer}>
-          {targetChallengeName && (
-            <Text style={styles.targetChallengeLabel} numberOfLines={1}>🎯 {targetChallengeName}</Text>
-          )}
           <View style={styles.targetRow}>
-            <Text style={styles.targetText}>{t('target')}</Text>
+            <Text style={styles.targetText}>{t('threshold')}</Text>
             <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
-            <Ionicons name="water" size={16} color={theme.colors.primary} />
+            <Ionicons name="water" size={14} color={theme.colors.primary} />
+            {sessionTier !== 'normal' && (
+              <View style={[styles.tierBadge, sessionTier === 'tier2' && styles.tierBadgeTier2]}>
+                <Text style={styles.tierBadgeText}>
+                  {sessionTier === 'tier1' ? t('reducedRate') : t('deepReduced')}
+                </Text>
+              </View>
+            )}
           </View>
+          {!isTrackingOnly && (
+            <View style={styles.dailyRemainingRow}>
+              <Ionicons name="calendar-outline" size={12} color={theme.colors.textSecondary} />
+              <Text style={styles.dailyRemainingText}>
+                {t('dailyRemaining', { count: dailyRemaining })}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
+      {/* NOTE: Tier toast and activity proof are rendered as floating overlays at the end of the component tree */}
+
+      {/* Inactivity warning countdown (blocking) */}
+      {showInactivityWarning && !isPaused && (
+        <Animated.View style={[styles.inactivityOverlay, pausedOverlayStyle]}>
+          <Ionicons name="alert-circle-outline" size={52} color={theme.colors.warning || '#F59E0B'} />
+          <Text style={styles.inactivityTitle}>{t('inactivityWarningTitle')}</Text>
+          <Text style={styles.inactivityText}>
+            {t('inactivityWarningCountdown', { seconds: inactivityCountdownSec })}
+          </Text>
+          <Text style={styles.inactivityHint}>{t('inactivityResumePrompt')}</Text>
+        </Animated.View>
+      )}
+
+      {/* Anti-piggyback cancellation overlay (non-blocking alert replacement) */}
+      {showNoActivityCancelOverlay && (
+        <Animated.View style={[styles.noActivityCancelOverlay, pausedOverlayStyle]}>
+          <Ionicons name="shield-outline" size={52} color="#EF4444" />
+          <Text style={styles.noActivityCancelTitle}>{t('activityNotDetectedTitle')}</Text>
+          <Text style={styles.noActivityCancelText}>{t('activityNotDetectedBody')}</Text>
+          <TouchableOpacity
+            style={styles.noActivityCancelButton}
+            onPress={() => {
+              setShowNoActivityCancelOverlay(false);
+              router.replace('/scan');
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="qr-code-outline" size={18} color={theme.colors.background} />
+            <Text style={styles.noActivityCancelButtonText}>{t('common:ok')}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {/* Paused Overlay */}
       {isPaused && (
-        <Animated.View style={[styles.pausedOverlay, pausedOverlayStyle]} pointerEvents="none">
-          <Text style={styles.pausedText}>{t('paused')}</Text>
+        <Animated.View style={[styles.pausedOverlay, pausedOverlayStyle]}>
+          <Ionicons
+            name={pauseReason === 'connection' ? 'bluetooth-outline' : 'pause-circle-outline'}
+            size={48}
+            color={theme.colors.text}
+          />
+          <Text style={styles.pausedText}>{pauseReason === 'connection' ? t('reconnecting') : t('paused')}</Text>
+          <Text style={styles.pausedSubtext}>{pauseOverlayMessage}</Text>
+          <TouchableOpacity
+            style={[styles.resumeOverlayButton, isResumingFromPause && styles.resumeOverlayButtonDisabled]}
+            onPress={() => {
+              void resumeWorkout();
+            }}
+            disabled={isResumingFromPause}
+            activeOpacity={0.85}
+          >
+            {isResumingFromPause ? (
+              <ActivityIndicator size="small" color={theme.colors.background} />
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color={theme.colors.background} />
+                <Text style={styles.resumeOverlayButtonText}>{t('resume')}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </Animated.View>
       )}
 
@@ -3234,7 +3969,7 @@ export default function WorkoutScreen() {
       )}
 
       {/* BLE Connection Required Overlay */}
-      {!bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
+      {!showNoActivityCancelOverlay && !isPaused && !bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
         <Animated.View style={[styles.bleConnectionOverlay, pausedOverlayStyle]}>
           <ActivityIndicator size="large" color={branding.primary} />
           <Text style={styles.bleConnectionTitle}>{t('connecting')}</Text>
@@ -3249,7 +3984,13 @@ export default function WorkoutScreen() {
         {/* Pause/Resume Button */}
         <TouchableOpacity
           style={[styles.controlButton, styles.pauseButton]}
-          onPress={togglePause}
+          onPress={() => {
+            if (isPaused) {
+              void resumeWorkout();
+            } else {
+              pauseWorkout();
+            }
+          }}
           activeOpacity={0.8}
         >
           <Ionicons
@@ -3271,6 +4012,47 @@ export default function WorkoutScreen() {
           </View>
         </Pressable>
       </View>
+      {/* Floating toast notifications — absolutely positioned, no layout shift */}
+      {tierToast && (
+        <Animated.View
+          entering={FadeIn.duration(250)}
+          exiting={FadeOut.duration(250)}
+          style={styles.floatingToast}
+          pointerEvents="none"
+        >
+          <View style={styles.floatingToastInner}>
+            <Ionicons name="trending-down-outline" size={16} color="#FDE68A" />
+            <Text style={styles.floatingToastText}>{tierToast}</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {awaitingActivityProof && !isPaused && bleConnected && (
+        <Animated.View
+          entering={FadeIn.duration(250)}
+          exiting={FadeOut.duration(250)}
+          style={styles.floatingToast}
+          pointerEvents="none"
+        >
+          <View style={[styles.floatingToastInner, styles.floatingToastWarning]}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={theme.colors.warning || '#F59E0B'} />
+            <Text style={[styles.floatingToastText, styles.floatingToastTextWarning]}>{t('activityProofPending')}</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {hardCapHitDuringSession && !isTrackingOnly && bleConnected && (
+        <Animated.View
+          entering={FadeIn.duration(250)}
+          style={styles.floatingToast}
+          pointerEvents="none"
+        >
+          <View style={[styles.floatingToastInner, styles.floatingToastInfo]}>
+            <Ionicons name="calendar-outline" size={16} color="#93C5FD" />
+            <Text style={[styles.floatingToastText, styles.floatingToastTextInfo]}>{t('hardDayCapReached')}</Text>
+          </View>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -3537,13 +4319,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  targetChallengeLabel: {
-    ...fontStyles.body,
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    maxWidth: 160,
-    textAlign: 'center',
-  },
   targetText: {
     ...fontStyles.body,
     color: theme.colors.textSecondary,
@@ -3552,6 +4327,163 @@ const styles = StyleSheet.create({
   targetNumber: {
     ...fontStyles.number,
     color: theme.colors.text,
+  },
+  tierBadge: {
+    backgroundColor: 'rgba(120, 80, 0, 0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 4,
+  },
+  tierBadgeTier2: {
+    backgroundColor: 'rgba(180, 50, 50, 0.55)',
+  },
+  tierBadgeText: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: '#FDE68A',
+    fontWeight: theme.typography.fontWeight.medium,
+  },
+  dailyRemainingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  dailyRemainingText: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+  },
+  floatingToast: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  floatingToastInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(120, 80, 0, 0.92)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    maxWidth: '85%',
+    ...theme.shadows.md,
+  },
+  floatingToastWarning: {
+    backgroundColor: 'rgba(120, 80, 0, 0.92)',
+  },
+  floatingToastInfo: {
+    backgroundColor: 'rgba(30, 64, 120, 0.92)',
+  },
+  floatingToastText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: '#FDE68A',
+    flexShrink: 1,
+  },
+  floatingToastTextWarning: {
+    color: '#FDE68A',
+  },
+  floatingToastTextInfo: {
+    color: '#93C5FD',
+  },
+  inactivityOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 120,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  inactivityTitle: {
+    ...fontStyles.heading,
+    color: theme.colors.text,
+    fontSize: 24,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  inactivityText: {
+    ...fontStyles.body,
+    color: '#FDE68A',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  inactivityHint: {
+    ...fontStyles.body,
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.md,
+    textAlign: 'center',
+  },
+  trackingOnlyBadge: {
+    position: 'absolute',
+    bottom: 30,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(30, 64, 120, 0.75)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  trackingOnlyText: {
+    ...fontStyles.body,
+    color: '#93C5FD',
+    fontSize: 13,
+    fontWeight: theme.typography.fontWeight.medium,
+  },
+  noActivityCancelOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 130,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  noActivityCancelTitle: {
+    ...fontStyles.heading,
+    color: theme.colors.text,
+    fontSize: 24,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  noActivityCancelText: {
+    ...fontStyles.body,
+    color: '#FECACA',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: theme.spacing.xl,
+  },
+  noActivityCancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.full,
+  },
+  noActivityCancelButtonText: {
+    ...fontStyles.body,
+    color: theme.colors.background,
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   pausedOverlay: {
     position: 'absolute',
@@ -3569,6 +4501,34 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 30,
     letterSpacing: 4,
+  },
+  pausedSubtext: {
+    ...fontStyles.body,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+    textAlign: 'center',
+    paddingHorizontal: theme.spacing.xl,
+  },
+  resumeOverlayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minWidth: 160,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+  },
+  resumeOverlayButtonDisabled: {
+    opacity: 0.6,
+  },
+  resumeOverlayButtonText: {
+    ...fontStyles.body,
+    color: theme.colors.background,
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   autoPauseOverlay: {
     position: 'absolute',

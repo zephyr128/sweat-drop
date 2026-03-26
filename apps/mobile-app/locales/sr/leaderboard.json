@@ -27,5 +27,6 @@
   "prize": "Nagrada: {{prize}}",
   "checkRedemptions": "Pogledaj nagrade →",
   "leaderboardPrize": "Nagrada sa leaderboarda",
-  "arenaPrize": "Nagrada iz arene"
+  "arenaPrize": "Nagrada iz arene",
+  "scoreExplanation": "Leaderboard rangira po zarađenim drops. Trošenje nagrada smanjuje stanje novčanika, ne leaderboard skor."
 }

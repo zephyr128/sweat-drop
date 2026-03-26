@@ -44,6 +44,12 @@ import {
   parseCrossTrainerData,
   estimateStepsPerMinuteFromSpeed,
 } from '@/lib/ble-ftms';
+import {
+  parseSimulatorProfile,
+  startWorkoutSimulator,
+  type WorkoutSimulatorHandle,
+  type WorkoutSimulatorProfile,
+} from '@/lib/workout/workout-simulator';
 
 // Re-export types for backward compatibility
 export type { BLEMeasurement } from '@/lib/ble-protocol';
@@ -118,6 +124,8 @@ export class BLEService {
   private onSleepCallback: (() => void) | null = null;
   private onReconnectCallback: (() => Promise<boolean>) | null = null;
   private onStatusCallback: ((status: string) => void) | null = null; // UI status callback
+  private simulatorProfile: WorkoutSimulatorProfile | null = null;
+  private simulatorHandle: WorkoutSimulatorHandle | null = null;
 
   // ── FTMS Protocol Support ──
   private activeProtocol: BLEProtocolType = 'csc';       // Currently active protocol
@@ -294,6 +302,19 @@ export class BLEService {
    */
   async connectToDevice(sensorId: string): Promise<boolean> {
     try {
+      const simulatorProfile = parseSimulatorProfile(sensorId);
+      if (simulatorProfile) {
+        this.simulatorProfile = simulatorProfile;
+        this.device = `sim:${simulatorProfile}`;
+        this.deviceId = `sim:${simulatorProfile}`;
+        this.isConnected = true;
+        this.activeProtocol = 'csc';
+        this.lastMeasurementTime = Date.now();
+        this.emitStatus(`Simulator connected (${simulatorProfile})`);
+        console.log(`[BLE] Using simulator profile: ${simulatorProfile}`);
+        return true;
+      }
+
       console.log(`[BLE] Connecting to Magene S3+ sensor: ${sensorId}`);
       this.emitStatus('Initializing connection...');
 
@@ -692,6 +713,25 @@ export class BLEService {
     this.lastMeasurementTime = Date.now();
 
     try {
+      if (this.simulatorProfile) {
+        this.simulatorHandle = startWorkoutSimulator({
+          profile: this.simulatorProfile,
+          onMeasurement: (measurement) => {
+            this.lastMeasurementTime = Date.now();
+            this.emitStatus('Signal OK');
+            if (this.measurementCallback) {
+              this.measurementCallback(measurement);
+            }
+          },
+          onDisconnect: () => {
+            this.handleConnectionLoss();
+          },
+          onStatus: (status) => this.emitStatus(status),
+        });
+        this.startHeartbeatMonitoring();
+        return true;
+      }
+
       // Route to protocol-specific monitoring
       if (this.activeProtocol === 'ftms') {
         await this.startFTMSMonitoring();
@@ -1163,6 +1203,27 @@ export class BLEService {
   async reconnect(): Promise<boolean> {
     try {
       this.emitStatus('Reconnecting...');
+
+      if (this.simulatorProfile) {
+        this.isConnected = true;
+        if (this.measurementCallback) {
+          this.simulatorHandle?.stop();
+          this.simulatorHandle = startWorkoutSimulator({
+            profile: this.simulatorProfile,
+            onMeasurement: (measurement) => {
+              this.lastMeasurementTime = Date.now();
+              this.emitStatus('Signal OK');
+              if (this.measurementCallback) {
+                this.measurementCallback(measurement);
+              }
+            },
+            onDisconnect: () => this.handleConnectionLoss(),
+            onStatus: (status) => this.emitStatus(status),
+          });
+        }
+        this.startHeartbeatMonitoring();
+        return true;
+      }
       
       // Disconnect first if connected
       if (this.isConnected) {
@@ -1257,6 +1318,10 @@ export class BLEService {
       if (this.heartbeatInterval) {
         clearInterval(this.heartbeatInterval);
         this.heartbeatInterval = null;
+      }
+      if (this.simulatorHandle) {
+        this.simulatorHandle.stop();
+        this.simulatorHandle = null;
       }
 
       if (Platform.OS === 'ios') {
@@ -1608,6 +1673,8 @@ export class BLEService {
       this.activeProtocol = 'csc'; // Reset to default
       this.syntheticCrankCounter = 0;
       this.ftmsNotificationSubscriptions = [];
+      this.simulatorProfile = null;
+      this.simulatorHandle = null;
       
       console.log('[BLE] Disconnected from device');
     } catch (error) {

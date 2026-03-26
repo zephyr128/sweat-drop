@@ -49,5 +49,12 @@
   "pendingPickup": "Pending pickup",
   "pendingPickupHint": "Show the code at the front desk to pick up your reward",
   "confirmedClaimed": "Claimed",
-  "confirmedHint": "You have already picked up this reward"
+  "confirmedHint": "You have already picked up this reward",
+  "limitOnceReached": "This reward can only be claimed once.",
+  "limitDailyReached": "Daily reward limit reached. Try again tomorrow.",
+  "limitWeeklyReached": "Weekly reward limit reached. Try next week.",
+  "limitMonthlyReached": "Monthly reward limit reached. Try next month.",
+  "fraudBlocked": "Claim blocked by anti-abuse protection.",
+  "rateLimited": "Too many claim attempts. Please wait and try again.",
+  "temporarilyUnavailable": "This reward is temporarily unavailable. Please contact gym staff."
 }

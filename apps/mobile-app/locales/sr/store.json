@@ -40,5 +40,12 @@
   "pendingPickup": "Čeka preuzimanje",
   "pendingPickupHint": "Pokaži kod na recepciji da preuzmeš nagradu",
   "confirmedClaimed": "Preuzeto",
-  "confirmedHint": "Već si preuzeo/la ovu nagradu"
+  "confirmedHint": "Već si preuzeo/la ovu nagradu",
+  "limitOnceReached": "Ovu nagradu možeš da preuzmeš samo jednom.",
+  "limitDailyReached": "Dnevni limit za nagradu je dostignut. Pokušaj sutra.",
+  "limitWeeklyReached": "Nedeljni limit za nagradu je dostignut. Pokušaj sledeće nedelje.",
+  "limitMonthlyReached": "Mesečni limit za nagradu je dostignut. Pokušaj sledećeg meseca.",
+  "fraudBlocked": "Preuzimanje je blokirano anti-abuse zaštitom.",
+  "rateLimited": "Previše pokušaja preuzimanja. Sačekaj pa pokušaj ponovo.",
+  "temporarilyUnavailable": "Ova nagrada je trenutno nedostupna. Obrati se osoblju teretane."
 }

@@ -14,6 +14,7 @@ import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { classifyRewardClaimError } from '@/lib/security/reward-claim-errors';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -172,13 +173,47 @@ export default function RewardDetailScreen() {
       });
 
       if (error) {
-        Alert.alert(t('common:error'), error.message);
+        const kind = classifyRewardClaimError(error.message);
+        if (kind === 'limit_once') {
+          Alert.alert(t('common:error'), t('limitOnceReached'));
+        } else if (kind === 'limit_daily') {
+          Alert.alert(t('common:error'), t('limitDailyReached'));
+        } else if (kind === 'limit_weekly') {
+          Alert.alert(t('common:error'), t('limitWeeklyReached'));
+        } else if (kind === 'limit_monthly') {
+          Alert.alert(t('common:error'), t('limitMonthlyReached'));
+        } else if (kind === 'temporarily_unavailable') {
+          Alert.alert(t('common:error'), t('temporarilyUnavailable'));
+        } else if (kind === 'fraud_blocked') {
+          Alert.alert(t('common:error'), t('fraudBlocked'));
+        } else if (kind === 'rate_limited') {
+          Alert.alert(t('common:error'), t('rateLimited'));
+        } else {
+          Alert.alert(t('common:error'), error.message);
+        }
         setClaiming(false);
         return;
       }
 
       if (!data || data.length === 0 || !data[0].success) {
-        Alert.alert(t('redemptionFailed'), data?.[0]?.error_message || t('redemptionFailed'));
+        const kind = classifyRewardClaimError(data?.[0]?.error_message || '');
+        if (kind === 'limit_once') {
+          Alert.alert(t('redemptionFailed'), t('limitOnceReached'));
+        } else if (kind === 'limit_daily') {
+          Alert.alert(t('redemptionFailed'), t('limitDailyReached'));
+        } else if (kind === 'limit_weekly') {
+          Alert.alert(t('redemptionFailed'), t('limitWeeklyReached'));
+        } else if (kind === 'limit_monthly') {
+          Alert.alert(t('redemptionFailed'), t('limitMonthlyReached'));
+        } else if (kind === 'temporarily_unavailable') {
+          Alert.alert(t('redemptionFailed'), t('temporarilyUnavailable'));
+        } else if (kind === 'fraud_blocked') {
+          Alert.alert(t('redemptionFailed'), t('fraudBlocked'));
+        } else if (kind === 'rate_limited') {
+          Alert.alert(t('redemptionFailed'), t('rateLimited'));
+        } else {
+          Alert.alert(t('redemptionFailed'), data?.[0]?.error_message || t('redemptionFailed'));
+        }
         setClaiming(false);
         return;
       }

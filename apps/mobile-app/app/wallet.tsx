@@ -29,6 +29,17 @@ interface GymDropsData {
   monthlyDrops: number;
 }
 
+interface ExpiryData {
+  expiringIn7d: number;
+  expiringIn30d: number;
+  nextExpiryDate: string | null;
+}
+
+interface LedgerSummary {
+  walletBalance: number;
+  earnedScoreAllTime: number;
+}
+
 export default function WalletScreen() {
   const { session } = useSession();
   const branding = useBranding();
@@ -37,6 +48,8 @@ export default function WalletScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [todayDrops, setTodayDrops] = useState(0);
   const [gymDrops, setGymDrops] = useState<GymDropsData | null>(null);
+  const [expiry, setExpiry] = useState<ExpiryData | null>(null);
+  const [ledger, setLedger] = useState<LedgerSummary | null>(null);
 
   const activeGymId = getActiveGymId();
 
@@ -45,6 +58,8 @@ export default function WalletScreen() {
       loadProfile();
       loadTodayDrops();
       loadGymDrops();
+      loadExpiry();
+      loadLedger();
     }
   }, [session, activeGymId]);
 
@@ -128,6 +143,75 @@ export default function WalletScreen() {
       console.error('Error loading gym drops:', err);
       setGymDrops(null);
     }
+  };
+
+  const loadExpiry = async () => {
+    if (!session?.user || !activeGymId) {
+      setExpiry(null);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc('get_user_expiring_drops', {
+        p_gym_id: activeGymId,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') {
+          // RPC not deployed yet — silently skip
+          setExpiry(null);
+          return;
+        }
+        console.warn('[Wallet] expiry RPC error:', error.message);
+        setExpiry(null);
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        setExpiry({
+          expiringIn7d: Number(row.expiring_in_7d ?? 0),
+          expiringIn30d: Number(row.expiring_in_30d ?? 0),
+          nextExpiryDate: row.next_expiry_date ?? null,
+        });
+      } else {
+        setExpiry({ expiringIn7d: 0, expiringIn30d: 0, nextExpiryDate: null });
+      }
+    } catch {
+      setExpiry(null);
+    }
+  };
+
+  const loadLedger = async () => {
+    if (!session?.user || !activeGymId) {
+      setLedger(null);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc('get_user_drops_ledger_summary', {
+        p_gym_id: activeGymId,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') {
+          setLedger(null);
+          return;
+        }
+        console.warn('[Wallet] ledger RPC error:', error.message);
+        setLedger(null);
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        setLedger({
+          walletBalance: Number(row.wallet_balance ?? 0),
+          earnedScoreAllTime: Number(row.earned_score_all_time ?? 0),
+        });
+      }
+    } catch {
+      setLedger(null);
+    }
+  };
+
+  const formatExpiryDate = (iso: string): string => {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
   /** Returns Monday 00:00 of the current week (ISO week) */
@@ -274,6 +358,85 @@ export default function WalletScreen() {
             </View>
           </Animated.View>
         )}
+
+        {/* Expiry Card */}
+        {expiry && (
+          <Animated.View entering={FadeInDown.delay(450).duration(400)}>
+            <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15), marginTop: theme.spacing.lg }]}>
+              <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <View style={styles.gymSectionHeader}>
+                  <Ionicons name="hourglass-outline" size={20} color="#FDE68A" />
+                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t('expiryTitle')}</Text>
+                </View>
+
+                {expiry.expiringIn7d === 0 && expiry.expiringIn30d === 0 ? (
+                  <View style={styles.expiryEmpty}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.textTertiary} />
+                    <Text style={styles.expiryEmptyText}>{t('noExpirySoon')}</Text>
+                  </View>
+                ) : (
+                  <>
+                    {expiry.expiringIn7d > 0 && (
+                      <View style={[styles.statRow, { borderBottomColor: hexToRgba('#FDE68A', 0.15) }]}>
+                        <View style={styles.statLabelRow}>
+                          <Ionicons name="alert-circle-outline" size={18} color="#FCA5A5" />
+                          <Text style={styles.statLabel}>{t('expiringIn7d')}</Text>
+                        </View>
+                        <View style={styles.statValueContainer}>
+                          <Ionicons name="water" size={18} color="#FCA5A5" />
+                          <Text style={[styles.statValue, getNumberStyle(18), { color: '#FCA5A5' }]}>{expiry.expiringIn7d}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {expiry.expiringIn30d > 0 && (
+                      <View style={[styles.statRow, { borderBottomColor: hexToRgba('#FDE68A', 0.15) }]}>
+                        <View style={styles.statLabelRow}>
+                          <Ionicons name="time-outline" size={18} color="#FDE68A" />
+                          <Text style={styles.statLabel}>{t('expiringIn30d')}</Text>
+                        </View>
+                        <View style={styles.statValueContainer}>
+                          <Ionicons name="water" size={18} color="#FDE68A" />
+                          <Text style={[styles.statValue, getNumberStyle(18), { color: '#FDE68A' }]}>{expiry.expiringIn30d}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {expiry.nextExpiryDate && (
+                      <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
+                        <View style={styles.statLabelRow}>
+                          <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
+                          <Text style={styles.statLabel}>{t('nextExpiryDate')}</Text>
+                        </View>
+                        <Text style={[styles.statValue, { color: theme.colors.textSecondary, fontSize: 14 }]}>
+                          {formatExpiryDate(expiry.nextExpiryDate)}
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Ledger split — earned score vs wallet (if backend provides it) */}
+        {ledger && (
+          <Animated.View entering={FadeInDown.delay(550).duration(400)}>
+            <View style={styles.ledgerRow}>
+              <View style={[styles.ledgerCell, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                <Ionicons name="wallet-outline" size={16} color={branding.primary} />
+                <Text style={styles.ledgerLabel}>{t('walletBalance')}</Text>
+                <Text style={[styles.ledgerValue, getNumberStyle(18), { color: branding.primary }]}>{ledger.walletBalance}</Text>
+              </View>
+              <View style={[styles.ledgerCell, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                <Ionicons name="trophy-outline" size={16} color={branding.primary} />
+                <Text style={styles.ledgerLabel}>{t('earnedScore')}</Text>
+                <Text style={[styles.ledgerValue, getNumberStyle(18), { color: branding.primary }]}>{ledger.earnedScoreAllTime}</Text>
+              </View>
+            </View>
+          </Animated.View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -386,6 +549,41 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   statValue: {
+    ...fontStyles.number,
+  },
+  expiryEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: theme.spacing.md,
+  },
+  expiryEmptyText: {
+    ...fontStyles.body,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textTertiary,
+  },
+  ledgerRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
+  },
+  ledgerCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.borderRadius.xl,
+    borderWidth: 1,
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+  },
+  ledgerLabel: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+  },
+  ledgerValue: {
     ...fontStyles.number,
   },
 });

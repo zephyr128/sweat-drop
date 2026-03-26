@@ -9,6 +9,7 @@ import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { ReportIssueModal } from '@/components/ReportIssueModal';
 import { ScannerScreen } from '@/components/ScannerScreen';
+import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
 
 export default function ScanScreen() {
   // Use new ScannerScreen component for QR scanning
@@ -189,22 +190,28 @@ export function LegacyScanScreen() {
       return;
     }
 
-    // Lock machine if it's a machine (not equipment)
-    if (machine) {
-      const { data: lockResult, error: lockError } = await supabase.rpc('lock_machine', {
-        p_machine_id: machine.id,
-        p_user_id: session.user.id,
-      });
+    if (!machine) {
+      Alert.alert(
+        'Secure Start Required',
+        'This QR path is legacy and cannot start a secure workout. Please use machine QR with lock support.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
-      if (lockError || !lockResult) {
-        console.error('[Scan] Failed to lock machine:', lockError);
-        Alert.alert(
-          'Machine Busy',
-          'Ova sprava je trenutno zauzeta. Molimo sačekajte ili koristite drugu spravu.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
+    const { data: lockResult, error: lockError } = await supabase.rpc('lock_machine', {
+      p_machine_id: machine.id,
+      p_user_id: session.user.id,
+    });
+
+    if (lockError || !lockResult) {
+      console.error('[Scan] Failed to lock machine:', lockError);
+      Alert.alert(
+        'Machine Busy',
+        'Ova sprava je trenutno zauzeta. Molimo sačekajte ili koristite drugu spravu.',
+        [{ text: 'OK' }]
+      );
+      return;
     }
 
     console.log('Creating session:', {
@@ -217,11 +224,20 @@ export function LegacyScanScreen() {
     });
 
     // Start session
+    const deviceHash = await getDeviceFingerprintHash();
+
     const sessionData: any = {
       user_id: session.user.id,
       gym_id: gymId,
       started_at: new Date().toISOString(),
       is_active: true,
+      raw_metrics: {
+        security: {
+          device_hash: deviceHash,
+          lock_required: true,
+          source: 'legacy_scan',
+        },
+      },
     };
 
     // Add machine_id if machine found, otherwise use equipment_id for backward compatibility

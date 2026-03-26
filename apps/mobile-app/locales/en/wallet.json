@@ -23,5 +23,12 @@
   "total": "Total",
   "filterAll": "All",
   "filterEarned": "Earned",
-  "filterSpent": "Spent"
+  "filterSpent": "Spent",
+  "expiryTitle": "Drops expiry",
+  "expiringIn7d": "Expiring in 7 days",
+  "expiringIn30d": "Expiring in 30 days",
+  "nextExpiryDate": "Next expiry",
+  "noExpirySoon": "No drops expiring soon",
+  "walletBalance": "Wallet",
+  "earnedScore": "Earned (all time)"
 }

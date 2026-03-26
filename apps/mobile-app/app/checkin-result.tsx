@@ -22,7 +22,17 @@ function hexToRgba(hex: string, alpha: number): string {
 
 const formatDistance = (m: number) => (m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`);
 
-type CheckinStatus = 'success' | 'already_checked_in' | 'too_far' | 'gym_not_found' | 'gym_suspended' | 'checkin_disabled' | 'error';
+type CheckinStatus =
+  | 'success'
+  | 'already_checked_in'
+  | 'too_far'
+  | 'gym_not_found'
+  | 'gym_suspended'
+  | 'checkin_disabled'
+  | 'cap_reached'
+  | 'rate_limited'
+  | 'fraud_blocked'
+  | 'error';
 
 export default function CheckinResultScreen() {
   const router = useRouter();
@@ -211,6 +221,9 @@ export default function CheckinResultScreen() {
       gym_not_found: t('gymNotFound'),
       gym_suspended: t('gymSuspended'),
       checkin_disabled: t('checkinDisabled'),
+      cap_reached: t('capReached'),
+      rate_limited: t('rateLimited'),
+      fraud_blocked: t('fraudBlocked'),
       error: errorMessage || t('error'),
     };
 

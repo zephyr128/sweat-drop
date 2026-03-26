@@ -35,5 +35,8 @@
   "no": "No",
   "devMode": "Dev mode",
   "scanAgain": "Scan again",
-  "yourGym": "Your gym"
+  "yourGym": "Your gym",
+  "nearLimitBanner": "You've used {{used}} of {{max}} rewarded sessions today. This may be your last.",
+  "limitReachedBanner": "You've earned {{earned}} drops today — daily limit reached. Workout will be tracked without drops.",
+  "softSessionBanner": "You've completed {{count}} sessions today. Keep going — drops are still active!"
 }

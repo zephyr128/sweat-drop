@@ -13,6 +13,7 @@ import Svg, {
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { useSession } from '@/hooks/useSession';
+import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -63,13 +64,16 @@ interface ChallengeProgressItem {
 }
 
 export default function SessionSummaryScreen() {
-  const { sessionId, drops, duration, multiplier, badges, gymId } = useLocalSearchParams<{
+  const { sessionId, drops, duration, multiplier, badges, gymId, securityStatus, securityMessage, sessionTier } = useLocalSearchParams<{
     sessionId: string;
     drops: string;
     duration: string;
     multiplier?: string;
     badges?: string;
     gymId?: string;
+    securityStatus?: string;
+    securityMessage?: string;
+    sessionTier?: string;
   }>();
   // Parse multiplier from award_drops() response (default 1.0)
   const streakMultiplier = multiplier ? parseFloat(multiplier) : 1.0;
@@ -89,6 +93,13 @@ export default function SessionSummaryScreen() {
   const { session: authSession } = useSession();
   const branding = useBranding();
   const { activeGym } = useTheme();
+  const dropLimit = useDropLimitStatus(gymId || null);
+  const dropsNum = parseInt(drops || '0');
+  const isLimitCapped = dropsNum <= 0 && dropLimit.limitReached && !securityStatus;
+  const isSoftWarning = dropsNum > 0 && dropLimit.softSessionWarning && !securityStatus;
+  const wasReducedTier = sessionTier === 'tier1' || sessionTier === 'tier2';
+  const wasDayCapHit = dropsNum <= 0 && dropLimit.dailyRemaining <= 0 && !securityStatus;
+  const wasWeekCapHit = dropsNum <= 0 && dropLimit.weeklyRemaining <= 0 && !securityStatus;
 
   // Trophy pulse animation for badge earned
   const trophyScale = useSharedValue(1);
@@ -412,6 +423,69 @@ export default function SessionSummaryScreen() {
           <Text style={styles.title}>{t('summary.workoutComplete')}</Text>
           <Text style={styles.subtitle}>{t('summary.greatJob')}</Text>
         </Animated.View>
+
+        {securityStatus ? (
+          <Animated.View entering={FadeInDown.delay(260).duration(450)}>
+            <View style={styles.securityCard}>
+              <Ionicons name="shield-outline" size={18} color="#F59E0B" />
+              <Text style={styles.securityCardText}>{securityMessage || t('securityAwardFailed')}</Text>
+            </View>
+          </Animated.View>
+        ) : isLimitCapped ? (
+          <Animated.View entering={FadeInDown.delay(260).duration(450)}>
+            <View style={styles.limitCard}>
+              <Ionicons name="checkmark-circle" size={18} color="#93C5FD" />
+              <Text style={styles.limitCardText}>
+                {t('summary.limitReachedPositive', { earned: dropLimit.mintedToday })}
+              </Text>
+            </View>
+          </Animated.View>
+        ) : isSoftWarning ? (
+          <Animated.View entering={FadeInDown.delay(260).duration(450)}>
+            <View style={styles.softWarningCard}>
+              <Ionicons name="checkmark-circle-outline" size={18} color="#86EFAC" />
+              <Text style={styles.softWarningCardText}>
+                {t('summary.softSessionInfo', {
+                  count: dropLimit.rewardedSessionsToday,
+                  earned: dropLimit.mintedToday,
+                })}
+              </Text>
+            </View>
+          </Animated.View>
+        ) : null}
+
+        {wasReducedTier && !isLimitCapped && !securityStatus && (
+          <Animated.View entering={FadeInDown.delay(320).duration(450)}>
+            <View style={styles.reducedTierCard}>
+              <Ionicons name="trending-down-outline" size={18} color="#FDE68A" />
+              <Text style={styles.reducedTierCardText}>
+                {t('summary.reducedTierApplied')}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+
+        {wasDayCapHit && !isLimitCapped && (
+          <Animated.View entering={FadeInDown.delay(380).duration(450)}>
+            <View style={styles.limitCard}>
+              <Ionicons name="calendar-outline" size={18} color="#93C5FD" />
+              <Text style={styles.limitCardText}>
+                {t('summary.dayCapReached', { earned: dropLimit.mintedToday })}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+
+        {wasWeekCapHit && !wasDayCapHit && !isLimitCapped && (
+          <Animated.View entering={FadeInDown.delay(380).duration(450)}>
+            <View style={styles.limitCard}>
+              <Ionicons name="calendar-outline" size={18} color="#93C5FD" />
+              <Text style={styles.limitCardText}>
+                {t('summary.weekCapReached', { earned: dropLimit.mintedWeek })}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
 
         {/* ── Drops Ring (matches home screen HeroDropsRing) ── */}
         <Animated.View entering={FadeInDown.delay(350).duration(500)} style={[ringScaleStyle, { alignSelf: 'center' }]}>
@@ -836,6 +910,78 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
     letterSpacing: 0.3,
+  },
+  securityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    marginBottom: 8,
+  },
+  securityCardText: {
+    ...fontStyles.body,
+    flex: 1,
+    fontSize: 13,
+    color: '#FDE68A',
+  },
+  limitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30, 64, 120, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.3)',
+    marginBottom: 8,
+  },
+  limitCardText: {
+    ...fontStyles.body,
+    flex: 1,
+    fontSize: 13,
+    color: '#93C5FD',
+  },
+  softWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(20, 83, 45, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(134, 239, 172, 0.3)',
+    marginBottom: 8,
+  },
+  softWarningCardText: {
+    ...fontStyles.body,
+    flex: 1,
+    fontSize: 13,
+    color: '#86EFAC',
+  },
+  reducedTierCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(120, 80, 0, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(253, 232, 138, 0.25)',
+    marginBottom: 8,
+  },
+  reducedTierCardText: {
+    ...fontStyles.body,
+    flex: 1,
+    fontSize: 13,
+    color: '#FDE68A',
   },
   /* ── Drops Ring (matches HeroDropsRing) ── */
   ringWrapper: {

@@ -246,8 +246,7 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
 
     case 'drops_expiry_30d':
     case 'drops_expiry_7d':
-      // Navigate to store to spend drops
-      return '/store';
+      return '/wallet';
 
     case 'arena_prize':
       if (data.arena_id) return `/arena/${data.arena_id}`;

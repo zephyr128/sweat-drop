@@ -31,6 +31,8 @@ import { useGymData } from '@/hooks/useGymData';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { theme, fontStyles } from '@/lib/theme';
+import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
+import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -55,6 +57,34 @@ interface MachineStatus {
   is_under_maintenance: boolean;
 }
 
+interface StartSessionResult {
+  success: boolean;
+  session_id: string | null;
+  action: 'created' | 'resumed' | 'error' | null;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+function getSecurityStatusFromErrorMessage(message: string): 'cap_reached' | 'rate_limited' | 'fraud_blocked' | 'error' {
+  const msg = message.toLowerCase();
+  if (msg.includes('fraud') || msg.includes('abuse') || msg.includes('risk') || msg.includes('blocked')) {
+    return 'fraud_blocked';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('throttle') || msg.includes('429')) {
+    return 'rate_limited';
+  }
+  if (
+    msg.includes('cap') ||
+    msg.includes('daily limit') ||
+    msg.includes('weekly limit') ||
+    msg.includes('session limit') ||
+    msg.includes('issuance')
+  ) {
+    return 'cap_reached';
+  }
+  return 'error';
+}
+
 export function ScannerScreen() {
   const { t } = useTranslation('scanner');
   const [hasPermission, setHasPermission] = useState<boolean>(false);
@@ -71,6 +101,8 @@ export function ScannerScreen() {
   const { session } = useSession();
   const { updateHomeGym } = useGymData();
   const branding = useBranding();
+  const { getActiveGymId } = useGymStore();
+  const dropLimit = useDropLimitStatus(getActiveGymId());
   const device = useCameraDevice('back');
   const hasScannedRef = useRef(false);
 
@@ -305,10 +337,23 @@ export function ScannerScreen() {
       if (error) throw error;
 
       const result = data as Record<string, unknown>;
+      const rawStatus = result.success ? 'success' : String(result.error || 'error');
+      const normalizedStatus =
+        rawStatus === 'success' ||
+        rawStatus === 'already_checked_in' ||
+        rawStatus === 'too_far' ||
+        rawStatus === 'gym_not_found' ||
+        rawStatus === 'gym_suspended' ||
+        rawStatus === 'checkin_disabled' ||
+        rawStatus === 'cap_reached' ||
+        rawStatus === 'rate_limited' ||
+        rawStatus === 'fraud_blocked'
+          ? rawStatus
+          : getSecurityStatusFromErrorMessage(rawStatus);
       router.replace({
         pathname: '/checkin-result',
         params: {
-          status: result.success ? 'success' : String(result.error || 'error'),
+          status: normalizedStatus,
           dropsEarned: String(result.drops_earned || 0),
           gymName: String(result.gym_name || ''),
           streakDays: String(result.streak_days || 0),
@@ -320,9 +365,10 @@ export function ScannerScreen() {
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
+      const status = getSecurityStatusFromErrorMessage(msg);
       router.replace({
         pathname: '/checkin-result',
-        params: { status: 'error', errorMessage: msg },
+        params: { status, errorMessage: msg },
       });
     } finally {
       setIsProcessing(false);
@@ -512,31 +558,6 @@ export function ScannerScreen() {
 
       // Always read session from ref to avoid stale closure
       const currentSession = sessionRef.current;
-      
-      if (currentSession?.user) {
-        const { data: lockResult, error: lockError } = await supabase.rpc('lock_machine', {
-          p_machine_id: machine.machine_id,
-          p_user_id: currentSession.user.id,
-        });
-
-        if (lockError || !lockResult) {
-          Alert.alert(
-            t('lockFailed'),
-            t('lockFailedDesc'),
-            [
-              {
-                text: t('common:ok'),
-                onPress: () => {
-                  hasScannedRef.current = false;
-                  setIsScanning(true);
-                  setIsProcessing(false);
-                },
-              },
-            ]
-          );
-          return;
-        }
-      }
 
       // SmartCoach: Check if plan parameters are passed via route params (from plan-detail screen)
       // Only use plan if explicitly passed - don't automatically check for active plans
@@ -554,24 +575,52 @@ export function ScannerScreen() {
         throw new Error('No active session — cannot create workout');
       }
 
-      const { data: newSession, error: sessionError } = await supabase
+      const deviceHash = await getDeviceFingerprintHash();
+
+      // Atomic server-side start to avoid race/duplicate active sessions per machine.
+      const { data: startResultData, error: startSessionError } = await supabase.rpc('start_session_safely', {
+        p_machine_id: machine.machine_id,
+        p_started_at: new Date().toISOString(),
+        p_device_hash: deviceHash,
+      });
+
+      if (startSessionError) {
+        throw startSessionError;
+      }
+
+      const startResultRaw = Array.isArray(startResultData) ? startResultData[0] : startResultData;
+      const startResult = (startResultRaw ?? null) as StartSessionResult | null;
+
+      if (!startResult?.success || !startResult?.session_id) {
+        const errorCode = startResult?.error_code;
+        if (errorCode === 'machine_busy' || errorCode === 'user_active_session_conflict') {
+          Alert.alert(
+            t('machineBusy'),
+            t('machineBusyDesc'),
+            [
+              {
+                text: t('common:ok'),
+                onPress: () => {
+                  hasScannedRef.current = false;
+                  setIsScanning(true);
+                  setIsProcessing(false);
+                },
+              },
+            ]
+          );
+          return;
+        }
+        throw new Error(startResult?.error_message || t('errorWorkout'));
+      }
+
+      const { data: newSession, error: sessionFetchError } = await supabase
         .from('sessions')
-        .insert({
-          user_id: currentSession.user.id,
-          gym_id: machine.gym_id,
-          machine_id: machine.machine_id,
-          started_at: new Date().toISOString(),
-          is_active: true,
-        })
         .select('*, machine:machine_id(*), gym:gym_id(*)')
+        .eq('id', startResult.session_id)
         .single();
 
-      if (sessionError) {
-        await supabase.rpc('unlock_machine', {
-          p_machine_id: machine.machine_id,
-          p_user_id: currentSession.user.id,
-        });
-        throw sessionError;
+      if (sessionFetchError || !newSession) {
+        throw sessionFetchError || new Error('Failed to load started session');
       }
 
       // Success haptic feedback
@@ -910,6 +959,33 @@ export function ScannerScreen() {
         <View style={[styles.overlaySection, { flex: 1 }]} />
       </View>
 
+      {/* Drop limit awareness banner */}
+      {!dropLimit.loading && (dropLimit.limitReached || dropLimit.nearLimit || dropLimit.softSessionWarning) && !isProcessing && (
+        <View style={[
+          styles.limitBanner,
+          dropLimit.limitReached ? styles.limitBannerReached : dropLimit.softSessionWarning ? styles.limitBannerSoft : undefined,
+        ]}>
+          <Ionicons
+            name={dropLimit.limitReached ? 'information-circle' : dropLimit.softSessionWarning ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+            size={18}
+            color={dropLimit.limitReached ? '#93C5FD' : dropLimit.softSessionWarning ? '#86EFAC' : '#FDE68A'}
+          />
+          <Text style={[
+            styles.limitBannerText,
+            dropLimit.limitReached ? styles.limitBannerTextReached : dropLimit.softSessionWarning ? styles.limitBannerTextSoft : undefined,
+          ]}>
+            {dropLimit.limitReached
+              ? t('limitReachedBanner', { earned: dropLimit.mintedToday })
+              : dropLimit.softSessionWarning
+                ? t('softSessionBanner', { count: dropLimit.rewardedSessionsToday })
+                : t('nearLimitBanner', {
+                    used: dropLimit.rewardedSessionsToday,
+                    max: dropLimit.maxRewardedSessionsPerDay,
+                  })}
+          </Text>
+        </View>
+      )}
+
       {/* Instructions Text */}
       <View style={styles.instructionsContainer}>
         {isProcessing ? (
@@ -1049,6 +1125,37 @@ const styles = StyleSheet.create({
   laserGradient: {
     width: '100%',
     height: '100%',
+  },
+  limitBanner: {
+    position: 'absolute',
+    bottom: 160,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(120, 80, 0, 0.75)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  limitBannerReached: {
+    backgroundColor: 'rgba(30, 64, 120, 0.75)',
+  },
+  limitBannerSoft: {
+    backgroundColor: 'rgba(20, 83, 45, 0.7)',
+  },
+  limitBannerText: {
+    ...fontStyles.body,
+    color: '#FDE68A',
+    fontSize: 13,
+    flex: 1,
+  },
+  limitBannerTextReached: {
+    color: '#93C5FD',
+  },
+  limitBannerTextSoft: {
+    color: '#86EFAC',
   },
   instructionsContainer: {
     position: 'absolute',

@@ -39,5 +39,8 @@
   "yes": "Da",
   "no": "Ne",
   "scanAgain": "Skeniraj ponovo",
-  "yourGym": "Tvoja teretana"
+  "yourGym": "Tvoja teretana",
+  "nearLimitBanner": "Iskoristio si {{used}} od {{max}} nagrađenih sesija danas. Ovo može biti poslednja.",
+  "limitReachedBanner": "Zaradio si {{earned}} drops danas — dnevni limit dostignut. Trening će biti praćen bez drops-a.",
+  "softSessionBanner": "Završio si {{count}} sesija danas. Nastavi — drops su i dalje aktivni!"
 }

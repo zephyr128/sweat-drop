@@ -33,5 +33,6 @@
   "prize": "Prize: {{prize}}",
   "checkRedemptions": "Check redemptions →",
   "leaderboardPrize": "Leaderboard Prize",
-  "arenaPrize": "Arena Prize"
+  "arenaPrize": "Arena Prize",
+  "scoreExplanation": "Leaderboard ranks by earned drops. Spending rewards reduces wallet balance, not leaderboard score."
 }

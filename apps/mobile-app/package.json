@@ -9,6 +9,8 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
+    "test:integration": "tsx --test tests/**/*.test.ts",
+    "test": "pnpm test:integration",
     "postinstall": "node $(node --print \"require.resolve('@shopify/react-native-skia/scripts/install-skia.mjs')\") || true"
   },
   "dependencies": {

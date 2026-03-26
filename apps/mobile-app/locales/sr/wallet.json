@@ -7,5 +7,12 @@
   "thisWeek": "Ova nedelja",
   "thisMonth": "Ovaj mesec",
   "currentGym": "Teretana",
-  "gymBalance": "Lokalni balans"
+  "gymBalance": "Lokalni balans",
+  "expiryTitle": "Isticanje drops",
+  "expiringIn7d": "Ističe za 7 dana",
+  "expiringIn30d": "Ističe za 30 dana",
+  "nextExpiryDate": "Sledeće isticanje",
+  "noExpirySoon": "Nema drops koji uskoro ističu",
+  "walletBalance": "Novčanik",
+  "earnedScore": "Zarađeno (ukupno)"
 }

@@ -455,6 +455,16 @@ export default function LeaderboardScreen() {
           </Animated.View>
         )}
 
+        {/* Score explanation — subtle, non-blocking */}
+        {activeTab !== 'arenas' && !loading && leaderboard.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+            <View style={styles.scoreExplainer}>
+              <Ionicons name="information-circle-outline" size={14} color={theme.colors.textTertiary} />
+              <Text style={styles.scoreExplainerText}>{t('scoreExplanation')}</Text>
+            </View>
+          </Animated.View>
+        )}
+
         {/* Prize badges for gym tab */}
         {activeTab === 'gym' && rewards.length > 0 && (
           <Animated.View entering={FadeInDown.delay(250).duration(400)}>
@@ -913,6 +923,21 @@ const styles = StyleSheet.create({
     ...fontStyles.bodyMedium,
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
+  },
+  /* Score Explainer */
+  scoreExplainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    marginBottom: theme.spacing.md,
+  },
+  scoreExplainerText: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    flex: 1,
+    letterSpacing: 0.2,
   },
   /* Prize Row */
   prizeRow: {
