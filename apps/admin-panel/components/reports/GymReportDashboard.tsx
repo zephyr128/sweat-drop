@@ -18,6 +18,7 @@ import {
   getGymSessionsTrend,
   getGymChallengeReport,
 } from '@/lib/actions/report-actions';
+import { getGymExpiryPressure, type GymExpiryPressure } from '@/lib/actions/member-detail-actions';
 import { getPeriodDates, getCustomPeriodDates, REPORT_PERIODS, type ReportPeriod } from '@/lib/utils/report-periods';
 
 interface GymReportDashboardProps {
@@ -31,6 +32,7 @@ interface ReportData {
   arenas: ArenaReportRow[];
   trend: TrendWeek[];
   challenges: ChallengeReportRow[];
+  expiryPressure: GymExpiryPressure | null;
 }
 
 function LoadingSkeleton() {
@@ -61,6 +63,7 @@ export function GymReportDashboard({ gymId, gymName }: GymReportDashboardProps) 
     arenas: [],
     trend: [],
     challenges: [],
+    expiryPressure: null,
   });
   const [loading, setLoading] = useState(true);
   const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
@@ -76,12 +79,13 @@ export function GymReportDashboard({ gymId, gymName }: GymReportDashboardProps) 
       getGymArenaReport(gymId, start, end),
       getGymSessionsTrend(gymId, 12),
       getGymChallengeReport(gymId, start, end),
+      getGymExpiryPressure(gymId),
     ]);
 
     const errors: Record<string, string> = {};
-    const sections = ['engagement', 'store', 'arenas', 'trend', 'challenges'] as const;
+    const sections = ['engagement', 'store', 'arenas', 'trend', 'challenges', 'expiryPressure'] as const;
 
-    const newData: ReportData = { engagement: null, store: [], arenas: [], trend: [], challenges: [] };
+    const newData: ReportData = { engagement: null, store: [], arenas: [], trend: [], challenges: [], expiryPressure: null };
 
     results.forEach((result, i) => {
       const key = sections[i];
@@ -92,6 +96,7 @@ export function GymReportDashboard({ gymId, gymName }: GymReportDashboardProps) 
         else if (key === 'arenas') newData.arenas = (val || []) as ArenaReportRow[];
         else if (key === 'trend') newData.trend = (val || []) as TrendWeek[];
         else if (key === 'challenges') newData.challenges = (val || []) as ChallengeReportRow[];
+        else if (key === 'expiryPressure') newData.expiryPressure = val as GymExpiryPressure;
       } else {
         const errMsg = result.status === 'fulfilled'
           ? result.value.error || 'Unknown error'
@@ -185,6 +190,8 @@ export function GymReportDashboard({ gymId, gymName }: GymReportDashboardProps) 
               <DropsEconomyKPIs
                 dropsEarned={data.engagement.total_drops_earned}
                 dropsSpent={data.engagement.total_drops_spent}
+                dropsExpiring30d={data.expiryPressure?.dropsExpiring30d}
+                membersAffectedByExpiry={data.expiryPressure?.membersAffected}
               />
               <MembersReportSection
                 registered={data.engagement.total_registered_members}

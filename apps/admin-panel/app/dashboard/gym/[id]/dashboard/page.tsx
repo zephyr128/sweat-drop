@@ -10,6 +10,7 @@ import { StatsCard } from '@/components/StatsCard';
 import { AnalyticsSection } from '@/components/analytics/AnalyticsSection';
 import { NetworkOverviewToggle } from '@/components/dashboards/NetworkOverviewToggle';
 import { SmartCoachToggle } from '@/components/SmartCoachToggle';
+import { EconomyHealthWidget } from '@/components/economy/EconomyHealthWidget';
 
 interface DashboardPageProps {
   params: Promise<{ id: string }>;
@@ -28,6 +29,13 @@ interface SessionData {
   drops_earned: number | null;
 }
 
+interface EconomySnapshotRow {
+  burn_mint_ratio: number;
+  top1_share_pct: number;
+  minted_drops: number;
+  burned_drops: number;
+}
+
 export default async function GymDashboardPage({ params }: DashboardPageProps) {
   const { id } = await params;
 
@@ -42,6 +50,15 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
   let pendingRedemptionsCount = 0;
   let checkinToday = 0;
   let checkinWeek = 0;
+  let unresolvedRiskEvents = 0;
+  let economySummary: {
+    burnMintRatio: number;
+    top1SharePct: number;
+    minted30d: number;
+    burned30d: number;
+    health: 'green' | 'yellow' | 'red';
+    healthLabel: string;
+  } | null = null;
 
   const supabaseAdmin = getAdminClient();
   const todayStart = new Date();
@@ -57,6 +74,8 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
     checkinTodayResult,
     checkinWeekResult,
     gymResult,
+    economyLatestResult,
+    unresolvedRiskResult,
   ] = await Promise.all([
     supabase
       .from('gym_memberships')
@@ -98,6 +117,22 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
           .gte('checked_in_at', weekAgo.toISOString())
       : Promise.resolve({ count: 0 }),
     supabase.from('gyms').select('*').eq('id', id).single(),
+    supabaseAdmin
+      ? supabaseAdmin
+          .from('economy_snapshots_daily')
+          .select('burn_mint_ratio, top1_share_pct, minted_drops, burned_drops')
+          .eq('gym_id', id)
+          .order('snapshot_date', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabaseAdmin
+      ? supabaseAdmin
+          .from('fraud_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('gym_id', id)
+          .is('resolved_at', null)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const gymData = (gymResult as any).data;
@@ -112,11 +147,31 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
     pendingRedemptionsCount = pendingRedemptionsResult.count || 0;
     checkinToday = (checkinTodayResult as { count: number | null }).count || 0;
     checkinWeek = (checkinWeekResult as { count: number | null }).count || 0;
+    unresolvedRiskEvents = (unresolvedRiskResult as { count: number | null }).count || 0;
 
     if (recentSessionsResult.data && Array.isArray(recentSessionsResult.data)) {
       weeklyDropsEarned = recentSessionsResult.data.reduce((sum, s: SessionData) => {
         return sum + (s.drops_earned || 0);
       }, 0);
+    }
+
+    const snap = (economyLatestResult as { data?: EconomySnapshotRow | null })?.data;
+    if (snap) {
+      const ratio = Number(snap.burn_mint_ratio || 0);
+      const top1 = Number(snap.top1_share_pct || 0);
+      const ratioPct = ratio * 100;
+      const ratioBad = ratioPct < 10 || ratioPct > 60;
+      const ratioWarn = (ratioPct >= 10 && ratioPct < 20) || (ratioPct > 45 && ratioPct <= 60);
+      const health = ratioBad || top1 > 35 ? 'red' : ratioWarn || top1 > 20 ? 'yellow' : 'green';
+      const healthLabel = health === 'green' ? 'Healthy zone' : health === 'yellow' ? 'Watch closely' : 'Immediate action';
+      economySummary = {
+        burnMintRatio: ratio,
+        top1SharePct: top1,
+        minted30d: Number(snap.minted_drops || 0),
+        burned30d: Number(snap.burned_drops || 0),
+        health,
+        healthLabel,
+      };
     }
   } catch (error) {
     console.error('[GymDashboardPage] Error fetching stats:', error);
@@ -198,6 +253,18 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
           subtitle={pendingRedemptionsCount > 0 ? 'Awaiting member collection' : 'No pending pickups'}
           href={`${base}/store`}
         />
+        <StatsCard
+          title="Risk Alerts"
+          value={unresolvedRiskEvents}
+          icon="Target"
+          accent={unresolvedRiskEvents > 0 ? 'rose' : 'emerald'}
+          subtitle={unresolvedRiskEvents > 0 ? 'Requires moderation review' : 'No unresolved events'}
+          href={`${base}/risk`}
+        />
+      </div>
+
+      <div className="mb-6">
+        <EconomyHealthWidget gymId={id} summary={economySummary} />
       </div>
 
       <AnalyticsSection gymId={id} pendingRedemptions={pendingRedemptionsCount} />

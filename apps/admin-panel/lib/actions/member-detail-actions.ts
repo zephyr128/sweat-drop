@@ -3,6 +3,20 @@
 import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { getCurrentProfile } from '../auth';
 
+function getWeekStart(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function getMonthStart(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 export interface MemberDetail {
   id: string;
   username: string;
@@ -51,12 +65,27 @@ export interface MemberRedemption {
   drops_spent: number;
 }
 
+export interface MemberExpiryInfo {
+  expiringIn7d: number;
+  expiringIn30d: number;
+  nextExpiryDate: string | null;
+}
+
+export interface MemberLedgerSummary {
+  walletBalance: number;
+  earnedScoreWeekly: number;
+  earnedScoreMonthly: number;
+  earnedScoreAllTime: number;
+}
+
 export interface MemberDetailResult {
   profile: MemberDetail;
   sessions: MemberSession[];
   transactions: MemberTransaction[];
   badges: MemberBadge[];
   redemptions: MemberRedemption[];
+  expiry: MemberExpiryInfo | null;
+  ledger: MemberLedgerSummary | null;
 }
 
 export async function getMemberDetail(
@@ -223,6 +252,103 @@ export async function getMemberDetail(
       }
     }
 
+    // Fetch expiry info from drops_transactions
+    let expiry: MemberExpiryInfo | null = null;
+    try {
+      const now = new Date().toISOString();
+      const in7d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const in30d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const earnTypes = ['session', 'checkin', 'workout'];
+
+      const [exp7dRes, exp30dRes, nextRes] = await Promise.all([
+        (supabase.from('drops_transactions') as any)
+          .select('amount')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .gt('amount', 0)
+          .not('expires_at', 'is', null)
+          .gt('expires_at', now)
+          .lte('expires_at', in7d)
+          .in('transaction_type', earnTypes),
+        (supabase.from('drops_transactions') as any)
+          .select('amount')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .gt('amount', 0)
+          .not('expires_at', 'is', null)
+          .gt('expires_at', now)
+          .lte('expires_at', in30d)
+          .in('transaction_type', earnTypes),
+        (supabase.from('drops_transactions') as any)
+          .select('expires_at')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .gt('amount', 0)
+          .not('expires_at', 'is', null)
+          .gt('expires_at', now)
+          .in('transaction_type', earnTypes)
+          .order('expires_at', { ascending: true })
+          .limit(1),
+      ]);
+
+      const sum7d = (exp7dRes.data as any[] || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      const sum30d = (exp30dRes.data as any[] || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      const nextDate = (nextRes.data as any[])?.[0]?.expires_at ?? null;
+
+      expiry = { expiringIn7d: Math.round(sum7d), expiringIn30d: Math.round(sum30d), nextExpiryDate: nextDate };
+    } catch {
+      // Non-critical
+    }
+
+    // Fetch ledger summary
+    let ledger: MemberLedgerSummary | null = null;
+    try {
+      const weekStart = getWeekStart();
+      const monthStart = getMonthStart();
+
+      const [walletRes, weeklyRes, monthlyRes, allTimeRes] = await Promise.all([
+        (supabase.from('gym_memberships') as any)
+          .select('local_drops_balance')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .single(),
+        (supabase.from('drops_transactions') as any)
+          .select('amount')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .gt('amount', 0)
+          .in('transaction_type', ['session', 'checkin', 'workout', 'challenge'])
+          .gte('created_at', weekStart),
+        (supabase.from('drops_transactions') as any)
+          .select('amount')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .gt('amount', 0)
+          .in('transaction_type', ['session', 'checkin', 'workout', 'challenge'])
+          .gte('created_at', monthStart),
+        (supabase.from('drops_transactions') as any)
+          .select('amount')
+          .eq('user_id', memberId)
+          .eq('gym_id', gymId)
+          .gt('amount', 0)
+          .in('transaction_type', ['session', 'checkin', 'workout', 'challenge']),
+      ]);
+
+      const walletBalance = Number(walletRes.data?.local_drops_balance || 0);
+      const earnedWeekly = (weeklyRes.data as any[] || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      const earnedMonthly = (monthlyRes.data as any[] || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      const earnedAllTime = (allTimeRes.data as any[] || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+
+      ledger = {
+        walletBalance: Math.round(walletBalance),
+        earnedScoreWeekly: Math.round(earnedWeekly),
+        earnedScoreMonthly: Math.round(earnedMonthly),
+        earnedScoreAllTime: Math.round(earnedAllTime),
+      };
+    } catch {
+      // Non-critical
+    }
+
     return {
       success: true,
       data: {
@@ -243,11 +369,64 @@ export async function getMemberDetail(
         transactions,
         badges,
         redemptions,
+        expiry,
+        ledger,
       },
     };
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Failed to fetch member detail';
     console.error('[getMemberDetail] Error:', errMsg);
+    return { success: false, error: errMsg };
+  }
+}
+
+export interface GymExpiryPressure {
+  dropsExpiring30d: number;
+  membersAffected: number;
+}
+
+export async function getGymExpiryPressure(
+  gymId: string
+): Promise<{ success: boolean; data?: GymExpiryPressure; error?: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { success: false, error: 'Not authenticated' };
+    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabase = getAdminClient();
+    if (!supabase) return { success: false, error: 'Admin client not available' };
+
+    const now = new Date().toISOString();
+    const in30d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const earnTypes = ['session', 'checkin', 'workout'];
+
+    const { data: rows, error } = await (supabase.from('drops_transactions') as any)
+      .select('user_id, amount')
+      .eq('gym_id', gymId)
+      .gt('amount', 0)
+      .not('expires_at', 'is', null)
+      .gt('expires_at', now)
+      .lte('expires_at', in30d)
+      .in('transaction_type', earnTypes)
+      .limit(5000);
+
+    if (error) return { success: false, error: error.message };
+
+    const txRows = (rows as { user_id: string; amount: number }[]) || [];
+    const dropsExpiring30d = txRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const uniqueUsers = new Set(txRows.map((r) => r.user_id));
+
+    return {
+      success: true,
+      data: {
+        dropsExpiring30d: Math.round(dropsExpiring30d),
+        membersAffected: uniqueUsers.size,
+      },
+    };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to fetch expiry pressure';
     return { success: false, error: errMsg };
   }
 }

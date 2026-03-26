@@ -25,6 +25,8 @@ import {
   ClipboardList,
   UserCog,
   FileBarChart,
+  ShieldAlert,
+  Coins,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 
@@ -104,6 +106,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     { href: '/dashboard/super/machines', label: 'Global Machines', icon: Cpu },
     { href: '/dashboard/super/achievements', label: 'Achievements', icon: Award },
     { href: '/dashboard/arenas', label: 'Arenas', icon: Swords },
+    { href: '/dashboard/super/risk', label: 'Risk Console', icon: ShieldAlert },
     { href: '/dashboard/super/health', label: 'System Health', icon: Activity },
     { href: '/dashboard/super/reports', label: 'Reports', icon: FileBarChart },
   ];
@@ -123,10 +126,12 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
         { href: `${base}/store`, label: 'Store', icon: ShoppingBag },
         { href: `${base}/machines`, label: 'Machines', icon: Cpu },
+        { href: `${base}/risk`, label: 'Risk & Abuse', icon: ShieldAlert },
         { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
       ],
       operations: [
         { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
+        { href: `${base}/economy`, label: 'Economy', icon: Coins },
         { href: `${base}/team`, label: 'Team', icon: UserCog },
         { href: `${base}/settings`, label: 'Settings', icon: Settings },
       ],
@@ -154,10 +159,12 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         { href: `${base}/challenges`, label: 'Challenges', icon: Target },
         { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
         { href: `${base}/store`, label: 'Store', icon: ShoppingBag },
+        { href: `${base}/risk`, label: 'Risk & Abuse', icon: ShieldAlert },
         { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
       ],
       operations: [
         { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
+        { href: `${base}/economy`, label: 'Economy', icon: Coins },
         { href: `${base}/settings`, label: 'Settings', icon: Settings },
       ],
     };

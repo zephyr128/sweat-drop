@@ -103,7 +103,7 @@ export function CheckinSettingsModule({ gymId, initialData }: CheckinSettingsMod
             className="w-32 px-4 py-3 bg-[#1A1A1A] border border-[#333] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
           />
           <p className="mt-1 text-xs text-[#555]">
-            Set to 0 to disable check-in
+            Set to 0 to disable check-in. This value is synced with Economy settings.
           </p>
         </div>
 

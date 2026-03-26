@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase-server';
 import { requireGymAccess } from '@/lib/auth-guard';
 import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
 import { CheckinStatsModule } from '@/components/modules/CheckinStatsModule';
+import { getEconomyConfig } from '@/lib/actions/economy-actions';
 
 interface CheckinPageProps {
   params: Promise<{ id: string }>;
@@ -36,8 +37,14 @@ export default async function CheckinPage({ params }: CheckinPageProps) {
   }
 
   const gym = gymData as GymData;
+  const economyResult = await getEconomyConfig(id);
 
-  const checkinDrops = typeof gym.checkin_drops === 'number' ? gym.checkin_drops : 20;
+  const checkinDropsFromEconomy = economyResult.success && economyResult.data
+    ? Number(economyResult.data.config.maxCheckinDropsPerDay)
+    : null;
+  const checkinDrops = Number.isFinite(checkinDropsFromEconomy)
+    ? Number(checkinDropsFromEconomy)
+    : typeof gym.checkin_drops === 'number' ? gym.checkin_drops : 20;
   const gymLat = typeof gym.lat === 'number' ? gym.lat : null;
   const gymLng = typeof gym.lng === 'number' ? gym.lng : null;
   const gpsRadiusM = typeof gym.gps_radius_m === 'number' ? gym.gps_radius_m : 200;

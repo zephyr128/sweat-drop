@@ -1,11 +1,13 @@
 'use client';
 
-import { Droplets, ShoppingCart, RefreshCw } from 'lucide-react';
+import { Droplets, ShoppingCart, RefreshCw, Timer } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface DropsEconomyKPIsProps {
   dropsEarned: number;
   dropsSpent: number;
+  dropsExpiring30d?: number;
+  membersAffectedByExpiry?: number;
 }
 
 function KPICard({ label, value, icon: Icon, sub, accent }: {
@@ -29,16 +31,18 @@ function KPICard({ label, value, icon: Icon, sub, accent }: {
   );
 }
 
-export function DropsEconomyKPIs({ dropsEarned, dropsSpent }: DropsEconomyKPIsProps) {
+export function DropsEconomyKPIs({ dropsEarned, dropsSpent, dropsExpiring30d, membersAffectedByExpiry }: DropsEconomyKPIsProps) {
   const circulationPct = dropsEarned > 0
     ? Math.round((dropsSpent / dropsEarned) * 100)
     : 0;
+
+  const showExpiry = dropsExpiring30d != null;
 
   return (
     <section>
       <h3 className="text-xs text-zinc-500 tracking-wider font-medium uppercase mb-3">Drops Economy</h3>
       <div className="border-t border-zinc-800 pt-4">
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-2 ${showExpiry ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
           <KPICard
             label="Drops Earned"
             value={dropsEarned}
@@ -57,6 +61,15 @@ export function DropsEconomyKPIs({ dropsEarned, dropsSpent }: DropsEconomyKPIsPr
             icon={RefreshCw}
             sub="spent / earned ratio"
           />
+          {showExpiry && (
+            <KPICard
+              label="Expiring (30d)"
+              value={dropsExpiring30d!}
+              icon={Timer}
+              accent={dropsExpiring30d! > 0 ? 'text-amber-400' : undefined}
+              sub={membersAffectedByExpiry != null ? `${membersAffectedByExpiry} member${membersAffectedByExpiry !== 1 ? 's' : ''} affected` : undefined}
+            />
+          )}
         </div>
       </div>
     </section>

@@ -15,6 +15,7 @@ import {
   Users,
   Save,
   Loader2,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -474,6 +475,15 @@ export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) 
             {tab.label}
           </button>
         ))}
+      </div>
+
+      {/* Score source hint */}
+      <div className="flex items-start gap-2.5 bg-cyan-500/5 border border-cyan-500/15 rounded-xl px-4 py-3" data-testid="leaderboard-score-hint">
+        <Info className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm text-cyan-200">Rank is based on earned drops score.</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Wallet balance can be lower after redemptions or expiry and does not reduce rank.</p>
+        </div>
       </div>
 
       {/* Weekly tab */}

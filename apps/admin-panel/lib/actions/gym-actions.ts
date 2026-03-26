@@ -259,6 +259,7 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
 
 /**
  * Update gym check-in settings (checkin_drops, GPS coords, radius)
+ * and keep tokenomics check-in cap in sync.
  */
 export async function updateGymCheckinSettings(
   gymId: string,
@@ -297,8 +298,24 @@ export async function updateGymCheckinSettings(
 
     if (error) throw error;
 
+    if (input.checkin_drops !== undefined) {
+      const { error: tokenomicsError } = await (supabaseAdmin as any)
+        .from('tokenomics_config')
+        .upsert(
+          {
+            gym_id: gymId,
+            max_checkin_drops_per_day: input.checkin_drops,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'gym_id' },
+        );
+      if (tokenomicsError) throw tokenomicsError;
+    }
+
     revalidatePath(`/dashboard/gym/${gymId}/settings`);
     revalidatePath(`/dashboard/gym/${gymId}/dashboard`);
+    revalidatePath(`/dashboard/gym/${gymId}/economy`);
+    revalidatePath(`/dashboard/gym/${gymId}/checkin`);
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

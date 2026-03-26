@@ -12,6 +12,9 @@ import {
   Activity,
   Wallet,
   Shield,
+  Trophy,
+  AlertTriangle,
+  Timer,
 } from 'lucide-react';
 import type {
   MemberDetailResult,
@@ -19,6 +22,8 @@ import type {
   MemberTransaction,
   MemberBadge,
   MemberRedemption,
+  MemberExpiryInfo,
+  MemberLedgerSummary,
 } from '@/lib/actions/member-detail-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
 
@@ -231,7 +236,7 @@ function RedemptionsTable({ redemptions }: { redemptions: MemberRedemption[] }) 
 }
 
 export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
-  const { profile: member, sessions, transactions, badges, redemptions } = data;
+  const { profile: member, sessions, transactions, badges, redemptions, expiry, ledger } = data;
 
   return (
     <div className="min-h-screen p-6 md:p-10 max-w-6xl mx-auto">
@@ -266,12 +271,35 @@ export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
         </div>
       </div>
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Droplet} label="Total Drops" value={member.total_drops.toLocaleString()} color="text-[#00E5FF]" />
-        <StatCard icon={Wallet} label="Available" value={member.available_drops.toLocaleString()} color="text-emerald-400" />
+      {/* KPI Stats — Wallet vs Earned */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <StatCard icon={Wallet} label="Wallet Balance" value={(ledger?.walletBalance ?? member.available_drops).toLocaleString()} color="text-emerald-400" />
+        <StatCard icon={Trophy} label="Earned (All Time)" value={(ledger?.earnedScoreAllTime ?? member.total_drops).toLocaleString()} color="text-[#00E5FF]" />
         <StatCard icon={Flame} label="Streak" value={`${member.streak_days} days`} color="text-amber-400" />
         <StatCard icon={Clock} label="Last Visit" value={member.last_visit_date ? formatDate(member.last_visit_date) : 'Never'} color="text-[#808080]" />
+      </div>
+
+      {/* Earned score breakdown + Expiry */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        {ledger && (
+          <>
+            <StatCard icon={Droplet} label="Earned (Week)" value={ledger.earnedScoreWeekly.toLocaleString()} color="text-cyan-300" />
+            <StatCard icon={Droplet} label="Earned (Month)" value={ledger.earnedScoreMonthly.toLocaleString()} color="text-cyan-300" />
+          </>
+        )}
+        {expiry && (
+          <>
+            <StatCard icon={Timer} label="Expiring (7d)" value={expiry.expiringIn7d.toLocaleString()} color={expiry.expiringIn7d > 0 ? 'text-amber-400' : 'text-zinc-500'} />
+            <StatCard icon={AlertTriangle} label="Expiring (30d)" value={expiry.expiringIn30d.toLocaleString()} color={expiry.expiringIn30d > 0 ? 'text-rose-400' : 'text-zinc-500'} />
+            <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="w-4 h-4 text-zinc-500" />
+                <span className="text-xs text-[#808080] uppercase tracking-wider">Next Expiry</span>
+              </div>
+              <p className="text-lg font-bold text-white">{expiry.nextExpiryDate ? formatDate(expiry.nextExpiryDate) : '—'}</p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Activity */}
