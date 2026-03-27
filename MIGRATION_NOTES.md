@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-03-03 (Phase 3: Full System Audit + Sweat Arenas Design)
+**Last Updated:** 2026-03-27 (perform_checkin lenient hotfix + diagnostics)
 
 ---
 
@@ -16,6 +16,233 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-03-27] - perform_checkin: lenient full checkin_drops + RPC diagnostics
+
+**Migration:** `20260327120000_perform_checkin_lenient_full_drops_hotfix.sql`
+
+**Behavior change:**
+
+- **Before:** In lenient `checkin_verification_mode`, if GPS was not verified, drops were capped with `LEAST(v_drops, 1)` (members saw 1 drop when the gym had e.g. 5 configured).
+- **After:** Lenient + unverified GPS awards the full configured `checkin_drops`. **Strict** mode is unchanged: missing GPS, missing gym coordinates, out-of-radius, or failed verification still returns `success: false` with the same `error` codes; no check-in reward is applied.
+
+**RPC `perform_checkin` JSONB payload (additive):**
+
+| Key | Type | Notes |
+|-----|------|--------|
+| `configured_checkin_drops` | int / null | Gym `checkin_drops` when known |
+| `awarded_checkin_drops` | int | Mirrors `drops_earned` on success; `0` on failure |
+| `drops_earned` | int | Unchanged semantics on success |
+| `gps_verified` | bool | Whether coordinates were within radius |
+| `verification_mode` | text / null | `lenient` or `strict` (null if not authenticated / gym missing) |
+| `cap_reason` | text / null | Examples: `gps_unverified_lenient` (informational: full award without GPS proof), `gps_required_strict`, `too_far_strict`, `gps_verification_failed`, `daily_cap_reached` (already checked in today for this gym) |
+
+**Daily limit:** One successful check-in per user per gym per calendar day (Europe/Belgrade) is still enforced via `gym_checkins` + `already_checked_in` / unique violation; no change to that logic.
+
+**Frontend impact:**
+
+- **Mobile:** Optional — use `configured_checkin_drops`, `awarded_checkin_drops`, `cap_reason`, and `verification_mode` on `/checkin-result` (or logs) to explain awards. Existing `drops_earned` remains the primary success value.
+- **Admin:** No schema change; gym `checkin_drops` and `checkin_verification_mode` are unchanged.
+
+**Verify script:** `backend/supabase/VERIFY_PERFORM_CHECKIN_LENIENT_FULL_AWARD.sql`
+
+---
+
+### [2026-03-27] - Happy Hour Visibility + Reminder Backend
+
+**Migration:** `20260327000007_happy_hour_user_visibility_and_reminders.sql`
+
+**Schema Changes:**
+
+Extended `gym_drop_boost_rules`:
+- `is_visible_to_members BOOLEAN NOT NULL DEFAULT true` — controls member-facing visibility
+- `display_label TEXT NULL` — optional marketing name (fallback: `name`)
+
+Extended `profiles`:
+- `happy_hour_reminders_enabled BOOLEAN NOT NULL DEFAULT true`
+- `happy_hour_reminder_offset_min INT NOT NULL DEFAULT 30` — CHECK (0, 10, 30)
+
+New table: `happy_hour_reminder_logs`
+- Dedupe table for push reminder delivery
+- Unique constraint: `(user_id, rule_id, window_start_at, offset_min)`
+- RLS: superadmin full, gym staff read own gym, user read own
+
+**New RPCs:**
+
+| Function | Purpose |
+|---|---|
+| `get_upcoming_happy_hours(p_gym_id, p_limit DEFAULT 3)` | Returns next visible windows (label, multiplier, start/end, minutes_until_start, is_today) |
+| `set_happy_hour_reminder_pref(p_enabled, p_offset_min)` | Auth-scoped user preference update |
+| `get_happy_hour_schedule_preview(p_gym_id, p_days DEFAULT 7)` | Admin preview of all windows (includes hidden), gym-scoped |
+
+**Indexes Added:**
+- `idx_boost_rules_gym_visible` — partial index on active+visible rules
+- `idx_hh_reminder_logs_gym_sent` — `(gym_id, sent_at DESC)`
+- `idx_hh_reminder_logs_dedupe` — `(user_id, rule_id, window_start_at, offset_min)`
+
+**Frontend Impact:**
+- **Mobile App:** Call `get_upcoming_happy_hours` for home card. Call `set_happy_hour_reminder_pref` from settings. Localization keys needed for upcoming/live states.
+- **Admin Panel:** Boost rule form needs `is_visible_to_members` toggle + `display_label` field. Schedule preview panel calls `get_happy_hour_schedule_preview`.
+
+**Rollback:**
+```sql
+DROP FUNCTION IF EXISTS public.get_upcoming_happy_hours(UUID, INT);
+DROP FUNCTION IF EXISTS public.set_happy_hour_reminder_pref(BOOLEAN, INT);
+DROP FUNCTION IF EXISTS public.get_happy_hour_schedule_preview(UUID, INT);
+DROP TABLE IF EXISTS public.happy_hour_reminder_logs;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS happy_hour_reminders_enabled;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS happy_hour_reminder_offset_min;
+ALTER TABLE public.gym_drop_boost_rules DROP COLUMN IF EXISTS is_visible_to_members;
+ALTER TABLE public.gym_drop_boost_rules DROP COLUMN IF EXISTS display_label;
+```
+
+---
+
+### [2026-03-27] - Engagement Campaigns + Happy Hour Boosts + Realtime (Phase C+D+E)
+
+**Migrations:**
+- `20260327000004_member_engagement_campaigns.sql` — campaign tables + at-risk RPC + create/queue RPCs
+- `20260327000005_happy_hour_drop_boost_rules.sql` — boost rules table + resolution RPC + award_drops integration
+- `20260327000006_realtime_publication_coverage.sql` — 5 tables added to `supabase_realtime`
+
+**Workstream C: Engagement Campaigns**
+
+New tables:
+- `engagement_campaigns` — campaign definition (gym, type, title, body, deep_link, audience, status, counts)
+- `engagement_campaign_targets` — resolved recipients per campaign (user_id, push_token)
+- `engagement_campaign_deliveries` — per-delivery status tracking (status, provider_id, error, retry_count)
+
+New RPCs:
+- `get_members_at_risk(p_gym_id, p_days_inactive) → JSONB`
+  - Returns at-risk members with last checkin, days inactive, push token status
+- `create_engagement_campaign(...) → JSONB`
+  - Creates campaign + auto-resolves targets from inactive segment or custom user list
+  - Rate-limited: max 5 campaigns per gym per day
+- `queue_engagement_delivery(p_campaign_id) → JSONB`
+  - Creates delivery records for targets with push tokens, transitions to 'queued'
+
+RLS: Campaigns accessible by gym_owner/gym_admin + superadmin. Users cannot access.
+
+**Workstream D: Happy Hour Boost Rules**
+
+New table `gym_drop_boost_rules`:
+- `gym_id`, `name`, `is_active`, `days_of_week INT[]`, `start_time_local TIME`, `end_time_local TIME`, `timezone`
+- `multiplier NUMERIC(4,2)` — CHECK: 1.0–3.0
+- `machine_types TEXT[]` (optional filter), `priority INT`, `created_by`
+
+New RPCs:
+- `get_active_drop_boost(p_gym_id, p_timestamp, p_machine_type) → JSONB`
+  - Resolves highest-priority matching rule for the local time/day
+  - Returns `{active, multiplier, rule_id, rule_name, start_time, end_time, timezone}`
+- `admin_upsert_drop_boost_rule(...) → JSONB`
+  - Create or update boost rules with validation
+
+**award_drops integration:**
+- After `calculate_session_drops_v2` returns, the boost multiplier is applied to `v_raw_drops`
+- This happens BEFORE session/day/week hard caps — caps still enforce maximum boundaries
+- Boost metadata persisted in `sessions.raw_metrics.drop_calc_v2.happy_hour`
+- Drop transaction description includes boost info when active
+
+**Workstream E: Realtime Publication**
+
+Tables now in `supabase_realtime`:
+- `machines` (already was)
+- `sessions` (already was)
+- `gym_checkins` ← NEW
+- `redemptions` ← NEW
+- `staff_invitations` ← NEW
+- `engagement_campaign_deliveries` ← NEW
+- `gym_member_identities` ← NEW
+
+**Frontend Impact (admin-coder):**
+- Campaign UI: Use `get_members_at_risk` for segment picker, `create_engagement_campaign` + `queue_engagement_delivery` for send flow
+- Happy Hour: Economy/Promotions page to create/edit time windows with `admin_upsert_drop_boost_rule`
+- Realtime: Subscribe to `postgres_changes` on check-ins, redemptions, invites, deliveries
+- Edge function needed: `send-engagement-push` to process queued deliveries via Expo push
+
+**Frontend Impact (mobile-coder):**
+- Call `get_active_drop_boost` to show "Happy Hour x1.5 active" badge
+- Subscribe to wallet/checkin realtime updates for foreground freshness
+
+**Rollback:**
+- Drop tables: `engagement_campaign_deliveries`, `engagement_campaign_targets`, `engagement_campaigns`, `gym_drop_boost_rules`
+- Revert `award_drops` to remove boost integration (redeploy from `20260325000010`)
+- Remove tables from `supabase_realtime` publication
+
+---
+
+### [2026-03-27] - Staff Invite Email Delivery + Member Identity Linking (Phase A+B)
+
+**Migrations:**
+- `20260327000001_staff_invite_email_delivery.sql` — invite delivery tracking columns + RPCs
+- `20260327000002_member_identity_linking.sql` — identity table + RLS + verification RPCs
+- `20260327000003_identity_rpc_ext_id_conflict_guard.sql` — friendly error on duplicate card number
+
+**Workstream A: Staff Invite Email Delivery**
+
+New columns on `staff_invitations`:
+- `email_delivery_status TEXT DEFAULT 'pending'` — CHECK (`pending`, `sent`, `failed`)
+- `email_sent_at TIMESTAMPTZ NULL`
+- `email_failure_reason TEXT NULL`
+- `last_email_provider_id TEXT NULL`
+- `resend_count INT DEFAULT 0` — CHECK (>= 0)
+
+New indexes:
+- `idx_staff_inv_gym_status_created` — `(gym_id, status, created_at DESC)`
+- `idx_staff_inv_email_status` — `(email, status)`
+- `idx_staff_inv_delivery_status` — `(email_delivery_status, created_at DESC)`
+
+New RPCs:
+- `resend_staff_invitation_email(p_invitation_id UUID) → JSONB`
+  - SECURITY DEFINER, gym-scoped
+  - Increments `resend_count`, resets delivery to `pending`
+  - Rate-limits at 5 resends max
+  - Auto-extends expiry if expired
+  - Returns invitation payload for email dispatch
+- `mark_staff_invitation_email_delivery(p_invitation_id, p_provider_id, p_status, p_error_text) → JSONB`
+  - Atomically updates delivery columns
+  - `p_status` must be `sent` or `failed`
+
+**Workstream B: Member Identity Linking**
+
+New table `gym_member_identities`:
+- `id`, `gym_id`, `user_id`, `is_verified`, `full_name_verified`, `external_membership_id`
+- `verified_by`, `verified_at`, `verification_notes`, `created_at`, `updated_at`
+- Unique constraint: `(gym_id, user_id)`
+- Partial unique index: `(gym_id, external_membership_id)` WHERE NOT NULL
+
+RLS policies:
+- `gmi_superadmin_all` — full access for superadmin
+- `gmi_gym_staff_all` — gym owner/admin/receptionist scoped to their gym
+- `gmi_user_own_select` — users can read their own identity row
+
+New RPCs:
+- `get_checkin_identity_candidates(p_gym_id, p_user_id) → JSONB`
+  - Returns merged profile + membership + identity + checkin stats snapshot
+  - SECURITY DEFINER, gym-scoped
+- `upsert_physical_member_identity(p_gym_id, p_user_id, full_name, ext_id, notes) → JSONB`
+  - Creates or updates identity row
+  - Returns friendly error on duplicate `external_membership_id`
+- `verify_member_identity(p_gym_id, p_user_id, full_name, ext_id, notes) → JSONB`
+  - Marks member as verified with `verified_by`, `verified_at` audit fields
+  - Returns `identity_id`, `verified_by`, `verified_at`
+
+**Frontend Impact (admin-coder):**
+- TeamManager: Show `email_delivery_status` badge (pending/sent/failed), resend button calling `resend_staff_invitation_email`, failure reason tooltip
+- CheckinStatsModule: Show identity status chip (Verified/Needs verification), add quick verify drawer using `get_checkin_identity_candidates` + `verify_member_identity`
+- Member profile: Add "Physical identity" block showing verification status, card number, verified-by info
+- Edge function needed: `send-staff-invitation-email` that dispatches email and calls `mark_staff_invitation_email_delivery`
+
+**Frontend Impact (mobile-coder):**
+- Profile screen: Can read `gym_member_identities` for own identity status
+- Show "Gym identity verified" / "Ask front desk to verify" CTA
+
+**Rollback:**
+- Drop table `gym_member_identities`
+- Drop columns from `staff_invitations`: `email_delivery_status`, `email_sent_at`, `email_failure_reason`, `last_email_provider_id`, `resend_count`
+- Drop functions: `resend_staff_invitation_email`, `mark_staff_invitation_email_delivery`, `get_checkin_identity_candidates`, `upsert_physical_member_identity`, `verify_member_identity`
+
+---
 
 ### [2026-03-26] - Dashboard V3 + Activity Log with Workout Events
 
