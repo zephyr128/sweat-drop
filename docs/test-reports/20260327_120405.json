@@ -1,0 +1,154 @@
+{
+  "generatedAt": "2026-03-27T12:04:05.269Z",
+  "releaseGate": "GO",
+  "summary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "skipped": 0
+  },
+  "criticalSuiteStatus": [
+    {
+      "suite": "db",
+      "status": "passed",
+      "owner": "supabase-dba"
+    },
+    {
+      "suite": "e2e",
+      "status": "passed",
+      "owner": "admin-coder"
+    }
+  ],
+  "criticalFailures": [],
+  "flakyTests": [],
+  "blockers": [],
+  "failFast": true,
+  "suites": [
+    {
+      "id": "db",
+      "displayName": "DB/RPC Contract Smoke",
+      "critical": true,
+      "owner": "supabase-dba",
+      "status": "passed",
+      "commands": [
+        {
+          "command": "node scripts/testing/check-db-smoke.cjs",
+          "exitCode": 0,
+          "durationMs": 34,
+          "startedAt": "2026-03-27T12:03:56.358Z",
+          "endedAt": "2026-03-27T12:03:56.392Z",
+          "stdout": "DB smoke checks passed.\n",
+          "stderr": "",
+          "signal": null
+        },
+        {
+          "command": "node --test tests/db/db-contract-smoke.test.cjs",
+          "exitCode": 0,
+          "durationMs": 74,
+          "startedAt": "2026-03-27T12:03:56.392Z",
+          "endedAt": "2026-03-27T12:03:56.466Z",
+          "stdout": "TAP version 13\n# Subtest: critical RPC references exist in migrations\nok 1 - critical RPC references exist in migrations\n  ---\n  duration_ms: 7.895125\n  ...\n# Subtest: fixtures include deterministic identifiers and teardown deletes them\nok 2 - fixtures include deterministic identifiers and teardown deletes them\n  ---\n  duration_ms: 0.170917\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 47.31125\n",
+          "stderr": "",
+          "signal": null
+        }
+      ]
+    },
+    {
+      "id": "mobile",
+      "displayName": "Mobile Integration Smoke (simulator hooks)",
+      "critical": false,
+      "owner": "mobile-coder",
+      "status": "passed",
+      "commands": [
+        {
+          "command": "node scripts/testing/check-mobile-integration.cjs",
+          "exitCode": 0,
+          "durationMs": 25,
+          "startedAt": "2026-03-27T12:03:56.466Z",
+          "endedAt": "2026-03-27T12:03:56.491Z",
+          "stdout": "Mobile integration smoke prerequisites passed.\n",
+          "stderr": "",
+          "signal": null
+        },
+        {
+          "command": "node scripts/testing/run-mobile-integration.cjs",
+          "exitCode": 0,
+          "durationMs": 5514,
+          "startedAt": "2026-03-27T12:03:56.491Z",
+          "endedAt": "2026-03-27T12:04:02.005Z",
+          "stdout": "TAP version 13\n# Subtest: auto-cancel triggers when no activity proof exists\nok 1 - auto-cancel triggers when no activity proof exists\n  ---\n  duration_ms: 0.41525\n  ...\n# Subtest: activity proof allows reward path\nok 2 - activity proof allows reward path\n  ---\n  duration_ms: 0.082666\n  ...\n# Subtest: cancelled state blocks reward finalization\nok 3 - cancelled state blocks reward finalization\n  ---\n  duration_ms: 0.062583\n  ...\n# Subtest: inactivity warning is shown after warning threshold\nok 4 - inactivity warning is shown after warning threshold\n  ---\n  duration_ms: 0.578083\n  ...\n# Subtest: resume before timeout cancels warning and auto-finish\nok 5 - resume before timeout cancels warning and auto-finish\n  ---\n  duration_ms: 0.085875\n  ...\n# Subtest: timeout triggers auto-finish state and heartbeat gating\nok 6 - timeout triggers auto-finish state and heartbeat gating\n  ---\n  duration_ms: 0.070833\n  ...\n# Subtest: no duplicate finalize calls through coordinator\nok 7 - no duplicate finalize calls through coordinator\n  ---\n  duration_ms: 0.058667\n  ...\n# Subtest: next user can start after auto-finish unlock flow\nok 8 - next user can start after auto-finish unlock flow\n  ---\n  duration_ms: 0.107916\n  ...\n# Subtest: normal active workout remains unaffected\nok 9 - normal active workout remains unaffected\n  ---\n  duration_ms: 0.070042\n  ...\n# Subtest: accrues small amount in first 2 minutes\nok 10 - accrues small amount in first 2 minutes\n  ---\n  duration_ms: 0.747125\n  ...\n# Subtest: applies intensity projection and session cap\nok 11 - applies intensity projection and session cap\n  ---\n  duration_ms: 0.114083\n  ...\n# Subtest: caps by day and week remaining budget\nok 12 - caps by day and week remaining budget\n  ---\n  duration_ms: 0.128708\n  ...\n# Subtest: returns zero if rewarded sessions cap reached in hard mode\nok 13 - returns zero if rewarded sessions cap reached in hard mode\n  ---\n  duration_ms: 0.077375\n  ...\n# Subtest: still earns drops when sessions cap exceeded in soft mode (default)\nok 14 - still earns drops when sessions cap exceeded in soft mode (default)\n  ---\n  duration_ms: 0.073334\n  ...\n# Subtest: still earns drops when sessions cap exceeded in off mode\nok 15 - still earns drops when sessions cap exceeded in off mode\n  ---\n  duration_ms: 0.055625\n  ...\n# Subtest: returns -1 for bike idle telemetry (rpm 0) so caller keeps high water mark\nok 16 - returns -1 for bike idle telemetry (rpm 0) so caller keeps high water mark\n  ---\n  duration_ms: 0.136416\n  ...\n# Subtest: drops never decrease even when rpm temporarily drops to 0\nok 17 - drops never decrease even when rpm temporarily drops to 0\n  ---\n  duration_ms: 0.075667\n  ...\n# Subtest: detailed estimator returns tier=normal when below session threshold\nok 18 - detailed estimator returns tier=normal when below session threshold\n  ---\n  duration_ms: 0.401083\n  ...\n# Subtest: threshold crossing switches tier to tier1 (reduced rate)\nok 19 - threshold crossing switches tier to tier1 (reduced rate)\n  ---\n  duration_ms: 0.448083\n  ...\n# Subtest: deep threshold switches tier to tier2\nok 20 - deep threshold switches tier to tier2\n  ---\n  duration_ms: 0.077958\n  ...\n# Subtest: day hard cap stops accrual but workout continues (drops frozen)\nok 21 - day hard cap stops accrual but workout continues (drops frozen)\n  ---\n  duration_ms: 0.050584\n  ...\n# Subtest: week hard cap stops accrual\nok 22 - week hard cap stops accrual\n  ---\n  duration_ms: 0.042625\n  ...\n# Subtest: no \"restart to keep earning\" behavior — drops always continue past threshold\nok 23 - no \"restart to keep earning\" behavior — drops always continue past threshold\n  ---\n  duration_ms: 0.054541\n  ...\n# Subtest: custom tier factors from backend are respected\nok 24 - custom tier factors from backend are respected\n  ---\n  duration_ms: 0.06375\n  ...\n# Subtest: backward compatibility: missing tier fields use safe defaults\nok 25 - backward compatibility: missing tier fields use safe defaults\n  ---\n  duration_ms: 0.043833\n  ...\n# Subtest: machineConfig overrides hardcoded defaults when provided\nok 26 - machineConfig overrides hardcoded defaults when provided\n  ---\n  duration_ms: 0.06225\n  ...\n# Subtest: calories bonus only applies to generic machine type\nok 27 - calories bonus only applies to generic machine type\n  ---\n  duration_ms: 0.071667\n  ...\n# Subtest: spike penalty reduces drops when rpmPeak far exceeds avgRpm\nok 28 - spike penalty reduces drops when rpmPeak far exceeds avgRpm\n  ---\n  duration_ms: 0.0485\n  ...\n# Subtest: estimator is conservative — always at or below backend equivalent\nok 29 - estimator is conservative — always at or below backend equivalent\n  ---\n  duration_ms: 0.039625\n  ...\n# Subtest: dailyRemaining and weeklyRemaining are computed correctly\nok 30 - dailyRemaining and weeklyRemaining are computed correctly\n  ---\n  duration_ms: 0.043375\n  ...\n# Subtest: maps daily/weekly/monthly claim limit errors\nok 31 - maps daily/weekly/monthly claim limit errors\n  ---\n  duration_ms: 0.504958\n  ...\n# Subtest: maps fraud and abuse blocked responses\nok 32 - maps fraud and abuse blocked responses\n  ---\n  duration_ms: 0.067709\n  ...\n# Subtest: maps rate limit responses\nok 33 - maps rate limit responses\n  ---\n  duration_ms: 0.052041\n  ...\n# Subtest: maps strict policy / out-of-band errors to temporarily_unavailable\nok 34 - maps strict policy / out-of-band errors to temporarily_unavailable\n  ---\n  duration_ms: 0.058459\n  ...\n# Subtest: unknown errors remain unknown\nok 35 - unknown errors remain unknown\n  ---\n  duration_ms: 0.110583\n  ...\n# Subtest: start session -> workout -> finalize -> summary path is allowed (simulated)\nok 36 - start session -> workout -> finalize -> summary path is allowed (simulated)\n  ---\n  duration_ms: 2201.073791\n  ...\n# Subtest: no signal after start -> cancel / no reward\nok 37 - no signal after start -> cancel / no reward\n  ---\n  duration_ms: 41.831917\n  ...\n# Subtest: reconnect path does not block finalization\nok 38 - reconnect path does not block finalization\n  ---\n  duration_ms: 1242.289833\n  ...\n# Subtest: suspicious spike profile still goes through guarded finalize path\nok 39 - suspicious spike profile still goes through guarded finalize path\n  ---\n  duration_ms: 1801.337792\n  ...\n# Subtest: parse simulator profile from sensor id\nok 40 - parse simulator profile from sensor id\n  ---\n  duration_ms: 0.470333\n  ...\n# Subtest: simulator emits measurements for normal_30min\nok 41 - simulator emits measurements for normal_30min\n  ---\n  duration_ms: 251.489958\n  ...\n# Subtest: simulator emits measurements for interval_training\nok 42 - simulator emits measurements for interval_training\n  ---\n  duration_ms: 250.534375\n  ...\n# Subtest: simulator emits measurements for suspicious_spike\nok 43 - simulator emits measurements for suspicious_spike\n  ---\n  duration_ms: 251.826333\n  ...\n# Subtest: disconnect_mid_session triggers disconnect callback\nok 44 - disconnect_mid_session triggers disconnect callback\n  ---\n  duration_ms: 11.431416\n  ...\n# Subtest: suspicious_spike profile contains high-rpm spikes\nok 45 - suspicious_spike profile contains high-rpm spikes\n  ---\n  duration_ms: 653.482416\n  ...\n1..45\n# tests 45\n# suites 0\n# pass 45\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5462.662\n",
+          "stderr": "",
+          "signal": null
+        }
+      ]
+    },
+    {
+      "id": "admin",
+      "displayName": "Admin Smoke (actions + UI routes)",
+      "critical": false,
+      "owner": "admin-coder",
+      "status": "passed",
+      "commands": [
+        {
+          "command": "node scripts/testing/check-admin-smoke.cjs",
+          "exitCode": 0,
+          "durationMs": 26,
+          "startedAt": "2026-03-27T12:04:02.005Z",
+          "endedAt": "2026-03-27T12:04:02.031Z",
+          "stdout": "Admin smoke prerequisites passed.\n",
+          "stderr": "",
+          "signal": null
+        },
+        {
+          "command": "pnpm --filter sweatdrop-admin-panel test:smoke",
+          "exitCode": 0,
+          "durationMs": 2274,
+          "startedAt": "2026-03-27T12:04:02.031Z",
+          "endedAt": "2026-03-27T12:04:04.305Z",
+          "stdout": "\n> sweatdrop-admin-panel@1.0.0 test:smoke /Users/np/Projects/sweatdrop/apps/admin-panel\n> vitest run --testNamePattern=smoke\n\n\n RUN  v4.1.1 /Users/np/Projects/sweatdrop/apps/admin-panel\n\n\n Test Files  4 passed | 11 skipped (15)\n      Tests  4 passed | 81 skipped (85)\n   Start at  13:04:02\n   Duration  1.81s (transform 1.61s, setup 1.36s, import 3.99s, tests 226ms, environment 5.91s)\n\n",
+          "stderr": "Both esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored. The following esbuild options were set: `{ jsx: 'automatic' }`\n",
+          "signal": null
+        },
+        {
+          "command": "pnpm --filter sweatdrop-admin-panel test:actions",
+          "exitCode": 0,
+          "durationMs": 870,
+          "startedAt": "2026-03-27T12:04:04.305Z",
+          "endedAt": "2026-03-27T12:04:05.175Z",
+          "stdout": "\n> sweatdrop-admin-panel@1.0.0 test:actions /Users/np/Projects/sweatdrop/apps/admin-panel\n> vitest run lib/actions/__tests__\n\n\n RUN  v4.1.1 /Users/np/Projects/sweatdrop/apps/admin-panel\n\n\n Test Files  6 passed (6)\n      Tests  59 passed (59)\n   Start at  13:04:04\n   Duration  426ms (transform 491ms, setup 519ms, import 692ms, tests 44ms, environment 0ms)\n\n",
+          "stderr": "Both esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored. The following esbuild options were set: `{ jsx: 'automatic' }`\n",
+          "signal": null
+        }
+      ]
+    },
+    {
+      "id": "e2e",
+      "displayName": "E2E Smoke Gate",
+      "critical": true,
+      "owner": "admin-coder",
+      "status": "passed",
+      "commands": [
+        {
+          "command": "node scripts/testing/check-e2e-smoke.cjs",
+          "exitCode": 0,
+          "durationMs": 25,
+          "startedAt": "2026-03-27T12:04:05.175Z",
+          "endedAt": "2026-03-27T12:04:05.200Z",
+          "stdout": "E2E smoke checks passed (1 spec files found).\n",
+          "stderr": "",
+          "signal": null
+        },
+        {
+          "command": "node --test tests/e2e/e2e-smoke-chain.test.cjs",
+          "exitCode": 0,
+          "durationMs": 68,
+          "startedAt": "2026-03-27T12:04:05.200Z",
+          "endedAt": "2026-03-27T12:04:05.268Z",
+          "stdout": "TAP version 13\n# Subtest: critical chain prerequisites exist\nok 1 - critical chain prerequisites exist\n  ---\n  duration_ms: 0.616208\n  ...\n# Subtest: root package scripts expose full orchestration contract\nok 2 - root package scripts expose full orchestration contract\n  ---\n  duration_ms: 0.260208\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 40.739125\n",
+          "stderr": "",
+          "signal": null
+        }
+      ]
+    }
+  ]
+}
