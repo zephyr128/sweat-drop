@@ -234,84 +234,78 @@ export default function StoreScreen() {
                 <TouchableOpacity
                   style={[
                     styles.rewardCard,
-                    { borderColor: hexToRgba(branding.primary, disabled ? 0.08 : 0.2) },
+                    { borderColor: hexToRgba(branding.primary, disabled ? 0.06 : 0.18) },
                     disabled && styles.rewardCardDisabled,
                   ]}
                   onPress={() => router.push({ pathname: '/reward-detail', params: { rewardId: reward.id, gymId: activeGymId || '' } })}
                   activeOpacity={0.8}
                 >
                   <BlurView intensity={50} tint="dark" style={[styles.rewardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                    <View style={styles.rewardContent}>
-                      {reward.image_url ? (
-                        <Image
-                          source={{ uri: reward.image_url }}
-                          style={[styles.rewardImage, { borderColor: hexToRgba(branding.primary, 0.15) }]}
-                          resizeMode="cover"
+                    {/* Large image at top of card */}
+                    {reward.image_url ? (
+                      <Image
+                        source={{ uri: reward.image_url }}
+                        style={[styles.rewardImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={[styles.rewardIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                        <Ionicons
+                          name={getRewardIcon(reward.reward_type)}
+                          size={40}
+                          color={disabled ? theme.colors.textSecondary : branding.primary}
                         />
-                      ) : (
-                        <View style={[styles.rewardIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                          <Ionicons
-                            name={getRewardIcon(reward.reward_type)}
-                            size={28}
-                            color={disabled ? theme.colors.textSecondary : branding.primary}
-                          />
-                        </View>
-                      )}
-                      <View style={styles.rewardInfo}>
-                        <Text style={styles.rewardName}>{reward.name}</Text>
-                        {reward.description && (
-                          <Text style={styles.rewardDescription} numberOfLines={2}>
-                            {reward.description}
-                          </Text>
-                        )}
-
-                        {/* Limit + Claimed/Pending badges */}
-                        {(limitLabel || claimStatus) && (
-                          <View style={styles.badgeRow}>
-                            {claimStatus === 'confirmed' ? (
-                              <View style={[styles.limitBadge, { backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}>
-                                <Ionicons name="checkmark-circle" size={13} color="#4ade80" />
-                                <Text style={[styles.limitBadgeText, { color: '#4ade80' }]}>
-                                  {getClaimedLabel(limit)}
-                                </Text>
-                              </View>
-                            ) : claimStatus === 'pending' ? (
-                              <View style={[styles.limitBadge, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
-                                <Ionicons name="time-outline" size={13} color="#fbbf24" />
-                                <Text style={[styles.limitBadgeText, { color: '#fbbf24' }]}>
-                                  {t('pendingPickup')}
-                                </Text>
-                              </View>
-                            ) : limitLabel ? (
-                              <View style={[styles.limitBadge, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
-                                <Ionicons name="time-outline" size={13} color={branding.primary} />
-                                <Text style={[styles.limitBadgeText, { color: branding.primary }]}>
-                                  {limitLabel}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        )}
-
-                        <View style={styles.rewardFooter}>
-                          <View style={styles.priceContainer}>
-                            <Ionicons name="water" size={16} color={disabled ? theme.colors.textSecondary : branding.primary} />
-                            <Text style={[
-                              styles.rewardPrice,
-                              getNumberStyle(18),
-                              { color: disabled ? theme.colors.textSecondary : branding.primary },
-                            ]}>
-                              {reward.price_drops}
-                            </Text>
-                          </View>
-                          {reward.stock !== null && (
-                            <Text style={styles.rewardStock}>
-                              {reward.stock} {t('left')}
-                            </Text>
-                          )}
-                        </View>
                       </View>
-                      <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.3)" style={{ alignSelf: 'center' }} />
+                    )}
+
+                    <View style={styles.rewardInfo}>
+                      <Text style={styles.rewardName} numberOfLines={1}>{reward.name}</Text>
+                      {reward.description && (
+                        <Text style={styles.rewardDescription} numberOfLines={2}>
+                          {reward.description}
+                        </Text>
+                      )}
+
+                      <View style={styles.rewardFooter}>
+                        <View style={styles.priceContainer}>
+                          <Ionicons name="water" size={16} color={disabled ? theme.colors.textSecondary : branding.primary} />
+                          <Text style={[
+                            styles.rewardPrice,
+                            getNumberStyle(18),
+                            { color: disabled ? theme.colors.textSecondary : branding.primary },
+                          ]}>
+                            {reward.price_drops}
+                          </Text>
+                        </View>
+
+                        {/* Badges inline with price */}
+                        {claimStatus === 'confirmed' ? (
+                          <View style={[styles.limitBadge, { backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}>
+                            <Ionicons name="checkmark-circle" size={12} color="#4ade80" />
+                            <Text style={[styles.limitBadgeText, { color: '#4ade80' }]}>
+                              {getClaimedLabel(limit)}
+                            </Text>
+                          </View>
+                        ) : claimStatus === 'pending' ? (
+                          <View style={[styles.limitBadge, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
+                            <Ionicons name="time-outline" size={12} color="#fbbf24" />
+                            <Text style={[styles.limitBadgeText, { color: '#fbbf24' }]}>
+                              {t('pendingPickup')}
+                            </Text>
+                          </View>
+                        ) : limitLabel ? (
+                          <View style={[styles.limitBadge, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                            <Ionicons name="time-outline" size={12} color={branding.primary} />
+                            <Text style={[styles.limitBadgeText, { color: branding.primary }]}>
+                              {limitLabel}
+                            </Text>
+                          </View>
+                        ) : reward.stock !== null ? (
+                          <Text style={styles.rewardStock}>
+                            {reward.stock} {t('left')}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -402,56 +396,52 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   rewardCard: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
     borderWidth: 1,
   },
   rewardCardDisabled: {
-    opacity: 0.55,
+    opacity: 0.5,
   },
   rewardBlur: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 20,
     overflow: 'hidden',
-    padding: theme.spacing.lg,
-  },
-  rewardContent: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
+    padding: 0,
   },
   rewardIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: theme.borderRadius.lg,
+    width: '100%',
+    height: 160,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   rewardImage: {
-    width: 64,
-    height: 64,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
+    width: '100%',
+    height: 180,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomWidth: 1,
   },
   rewardInfo: {
-    flex: 1,
+    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
   },
   rewardName: {
-    ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.lg,
+    ...fontStyles.heading,
+    fontSize: 18,
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    marginBottom: 4,
     letterSpacing: 0.3,
   },
   rewardDescription: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: 13,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
     letterSpacing: 0.3,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    marginBottom: theme.spacing.sm,
+    lineHeight: 18,
   },
   limitBadge: {
     flexDirection: 'row',

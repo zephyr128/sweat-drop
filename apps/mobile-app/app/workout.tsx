@@ -50,6 +50,7 @@ import {
 } from '@/lib/workout/inactivity-autofinish';
 import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig } from '@/lib/workout/live-drops-estimator';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
+import { log } from '@/lib/logger';
 
 // ActiveDrop interface removed - drops are now managed internally by DropEmitter
 
@@ -183,7 +184,7 @@ export default function WorkoutScreen() {
   const isMountedRef = useRef<boolean>(true); // Track if component is mounted
   const isAppInBackgroundRef = useRef<boolean>(false); // Track app foreground/background state
   const lastHapticTimeRef = useRef<number>(0); // Throttle haptic feedback (max 5/s)
-  const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // saveIntervalRef removed — syncIntervalRef is the single DB sync mechanism
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   // REMOVED: challengeUpdateIntervalRef, lastChallengeUpdateRef, challengeMessageTimerRef
   // Challenge progress is now automatically updated via award_drops() when workout ends
@@ -362,7 +363,7 @@ export default function WorkoutScreen() {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         isAppInBackgroundRef.current = true;
-        console.log('[Workout] App went to background — BLE + drops continue, UI paused');
+        log.debug('[Workout] App went to background — BLE + drops continue, UI paused');
       } else if (nextAppState === 'active') {
         // Re-sync watchdog timestamp so it doesn't immediately zero RPM
         lastPacketTime.value = Date.now();
@@ -374,7 +375,7 @@ export default function WorkoutScreen() {
         } else {
           setSignalStatus('lost');
         }
-        console.log('[Workout] App came to foreground — UI resumed');
+        log.debug('[Workout] App came to foreground — UI resumed');
       }
     });
 
@@ -383,12 +384,11 @@ export default function WorkoutScreen() {
     };
   }, [lastPacketTime]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount — single place to clear ALL outstanding timers/animations
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
 
       cancelAnimation(rawRPMShared);
       cancelAnimation(smoothedRPMShared);
@@ -397,22 +397,23 @@ export default function WorkoutScreen() {
       cancelAnimation(progressShared);
       cancelAnimation(goalPercentageShared);
       cancelAnimation(currentProgressShared);
-      
-      // Cleanup reconnect timer
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      if (activityProofTimerRef.current) {
-        clearTimeout(activityProofTimerRef.current);
-        activityProofTimerRef.current = null;
-      }
+
+      if (tierToastTimerRef.current) { clearTimeout(tierToastTimerRef.current); tierToastTimerRef.current = null; }
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+      if (activityProofTimerRef.current) { clearTimeout(activityProofTimerRef.current); activityProofTimerRef.current = null; }
+      if (autoPauseTimerRef.current) { clearTimeout(autoPauseTimerRef.current); autoPauseTimerRef.current = null; }
+      if (autoZeroTimerRef.current) { clearTimeout(autoZeroTimerRef.current); autoZeroTimerRef.current = null; }
+      if (idleSyncTimerRef.current) { clearTimeout(idleSyncTimerRef.current); idleSyncTimerRef.current = null; }
+      if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+      if (heartbeatIntervalRef.current) { clearInterval(heartbeatIntervalRef.current); heartbeatIntervalRef.current = null; }
+      if (syncIntervalRef.current) { clearInterval(syncIntervalRef.current); syncIntervalRef.current = null; }
+      if (timeProgressIntervalRef.current) { clearInterval(timeProgressIntervalRef.current); timeProgressIntervalRef.current = null; }
     };
   }, []);
 
   // Debug logging
   useEffect(() => {
-    console.log('[Workout] Machine type determined:', {
+    log.debug('[Workout] Machine type determined:', {
       paramMachineType,
       machineType: session?.machine?.type,
       equipmentType: session?.equipment?.equipment_type,
@@ -466,7 +467,7 @@ export default function WorkoutScreen() {
 
         // If SmartCoach is disabled for this gym, don't load plan item
         if (!gymSmartCoachEnabled) {
-          console.log('[SmartCoach] SmartCoach is disabled for this gym, skipping plan load');
+          log.debug('[SmartCoach] SmartCoach is disabled for this gym, skipping plan load');
           setIsSmartCoachMode(false);
           setCurrentPlanItem(null);
           return;
@@ -474,7 +475,7 @@ export default function WorkoutScreen() {
       }
 
       try {
-        console.log('[SmartCoach] Loading plan item for planId:', planId, 'machineId:', activeMachineId, 'index:', currentExerciseIndex);
+        log.debug('[SmartCoach] Loading plan item for planId:', planId, 'machineId:', activeMachineId, 'index:', currentExerciseIndex);
         
         const { data, error } = await supabase.rpc('get_plan_item_for_machine', {
           p_plan_id: planId,
@@ -483,7 +484,7 @@ export default function WorkoutScreen() {
         });
 
         if (error) {
-          console.error('[SmartCoach] Error loading plan item:', error);
+          log.error('[SmartCoach] Error loading plan item:', error);
           setIsSmartCoachMode(false);
           setCurrentPlanItem(null);
           return;
@@ -492,13 +493,13 @@ export default function WorkoutScreen() {
         // CRITICAL GUARD: Only set currentPlanItem if plan is not completed
         // This prevents useEffect from overwriting currentPlanItem with null during completion
         if (isPlanCompleted) {
-          console.log('[SmartCoach] Plan already completed, skipping loadPlanItem');
+          log.debug('[SmartCoach] Plan already completed, skipping loadPlanItem');
           return;
         }
 
         if (data && data.length > 0) {
           const item = data[0];
-          console.log('[SmartCoach] Loaded plan item:', item);
+          log.debug('[SmartCoach] Loaded plan item:', item);
           
           setCurrentPlanItem(item);
           setIsSmartCoachMode(true);
@@ -527,7 +528,7 @@ export default function WorkoutScreen() {
           // CRITICAL: Reset isPlanCompleted flag when loading new exercise (prevents stale state)
           setIsPlanCompleted(false);
         } else {
-          console.log('[SmartCoach] No plan item found for current index - plan may be completed');
+          log.debug('[SmartCoach] No plan item found for current index - plan may be completed');
           // CRITICAL: Only set currentPlanItem to null if plan is not already marked as completed
           // This prevents race condition where handleNextExercise already set isPlanCompleted=true
           if (!isPlanCompleted) {
@@ -536,7 +537,7 @@ export default function WorkoutScreen() {
           }
         }
       } catch (err) {
-        console.error('[SmartCoach] Error in loadPlanItem:', err);
+        log.error('[SmartCoach] Error in loadPlanItem:', err);
         setIsSmartCoachMode(false);
         setCurrentPlanItem(null);
       }
@@ -560,7 +561,7 @@ export default function WorkoutScreen() {
 
     const startBLEMonitoring = async () => {
       try {
-        console.log('[Workout] Connecting to BLE sensor:', activeSensorId);
+        log.debug('[Workout] Connecting to BLE sensor:', activeSensorId);
         
         // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.4c)
         // Set BLE protocol from machine data if available (skip auto-detection)
@@ -595,7 +596,7 @@ export default function WorkoutScreen() {
             throw new Error('Connection returned false');
           }
         } catch (connectError: any) {
-          console.error('[Workout] BLE connection error:', connectError);
+          log.error('[Workout] BLE connection error:', connectError);
           setBleConnected(false);
           
           // Unlock machine if connection fails
@@ -605,14 +606,14 @@ export default function WorkoutScreen() {
                 p_machine_id: session.machine_id,
                 p_user_id: authSession.user.id,
               });
-              console.log('[Workout] Machine unlocked due to connection failure');
+              log.debug('[Workout] Machine unlocked due to connection failure');
             } catch (unlockError) {
-              console.error('[Workout] Error unlocking machine:', unlockError);
+              log.error('[Workout] Error unlocking machine:', unlockError);
             }
           }
           
           // CRITICAL: No blocking Alert.alert() - use UI overlay instead
-          console.error('[Workout] BLE Connection Failed:', connectError?.message);
+          log.error('[Workout] BLE Connection Failed:', connectError?.message);
           setBleStatus(connectError?.message || 'Connection failed. Auto-reconnecting...');
           setIsReconnecting(true);
           
@@ -623,12 +624,12 @@ export default function WorkoutScreen() {
             reconnectAttemptRef.current++;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 4000); // 1s, 2s, 4s max
             
-            console.log(`[Workout] Reconnect attempt ${reconnectAttemptRef.current} after ${delay}ms`);
+            log.debug(`[Workout] Reconnect attempt ${reconnectAttemptRef.current} after ${delay}ms`);
             
             try {
               const reconnected = await bleService.reconnect();
               if (reconnected) {
-                console.log('[Workout] Auto-reconnected successfully');
+                log.debug('[Workout] Auto-reconnected successfully');
                 setIsReconnecting(false);
                 setBleConnected(true);
                 setBleStatus('');
@@ -641,12 +642,12 @@ export default function WorkoutScreen() {
                 reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
               } else {
                 // Max attempts reached - show persistent reconnecting overlay
-                console.log('[Workout] Max reconnect attempts reached, showing persistent overlay');
+                log.debug('[Workout] Max reconnect attempts reached, showing persistent overlay');
                 setIsReconnecting(true);
                 setBleStatus('Connection lost. Please check sensor.');
               }
             } catch (reconnectError) {
-              console.error('[Workout] Reconnect error:', reconnectError);
+              log.error('[Workout] Reconnect error:', reconnectError);
               if (reconnectAttemptRef.current < 3) {
                 reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
               } else {
@@ -680,7 +681,7 @@ export default function WorkoutScreen() {
 
             return machineData?.is_busy === true && machineData?.current_user_id === authSession.user.id;
           } catch (error) {
-            console.error('[Workout] Error verifying session ownership:', error);
+            log.error('[Workout] Error verifying session ownership:', error);
             return false;
           }
         };
@@ -721,7 +722,7 @@ export default function WorkoutScreen() {
             };
             
             if (!isAppInBackgroundRef.current) {
-              console.log('[Workout] BLE Measurement:', measurement, 'RawRPM:', measurement.rpm);
+              log.debug('[Workout] BLE Measurement:', measurement, 'RawRPM:', measurement.rpm);
             }
             // EXC_BAD_ACCESS fix: skip all setState/native calls if unmounted (BLE can fire after cleanup)
             if (!isMountedRef.current) return;
@@ -972,7 +973,7 @@ export default function WorkoutScreen() {
                   });
                   lastRPMUpdateRef.current = now;
                 } catch (error) {
-                  console.error('[Workout] Failed to update RPM:', error);
+                  log.error('[Workout] Failed to update RPM:', error);
                 }
               }
             }
@@ -1028,7 +1029,7 @@ export default function WorkoutScreen() {
                 } catch (error) {
                   // Silently handle errors to prevent crashes
                   if (__DEV__) {
-                    console.error('[SmartCoach] Error calculating percentage:', error);
+                    log.error('[SmartCoach] Error calculating percentage:', error);
                   }
                 }
               }
@@ -1104,7 +1105,7 @@ export default function WorkoutScreen() {
         // Battery Optimization: Only log critical events
         setBleStatus(''); // Clear status when connected
       } catch (error: any) {
-        console.error('[Workout] BLE monitoring error:', error);
+        log.error('[Workout] BLE monitoring error:', error);
         bleMonitoringRef.current = false;
         setBleConnected(false);
         setBleStatus('Connection failed');
@@ -1116,9 +1117,9 @@ export default function WorkoutScreen() {
               p_machine_id: session.machine_id,
               p_user_id: authSession.user.id,
             });
-            console.log('[Workout] Machine unlocked due to monitoring failure');
+            log.debug('[Workout] Machine unlocked due to monitoring failure');
           } catch (unlockError) {
-            console.error('[Workout] Error unlocking machine:', unlockError);
+            log.error('[Workout] Error unlocking machine:', unlockError);
           }
         }
         
@@ -1134,12 +1135,12 @@ export default function WorkoutScreen() {
           reconnectAttemptRef.current++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 4000); // 1s, 2s, 4s max
           
-          console.log(`[Workout] Reconnect attempt ${reconnectAttemptRef.current} after ${delay}ms`);
+          log.debug(`[Workout] Reconnect attempt ${reconnectAttemptRef.current} after ${delay}ms`);
           
           try {
             const reconnected = await bleService.reconnect();
             if (reconnected) {
-              console.log('[Workout] Auto-reconnected successfully');
+              log.debug('[Workout] Auto-reconnected successfully');
               setIsReconnecting(false);
               setBleConnected(true);
               setBleStatus('');
@@ -1152,12 +1153,12 @@ export default function WorkoutScreen() {
               reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
             } else {
               // Max attempts reached - show persistent reconnecting overlay
-              console.log('[Workout] Max reconnect attempts reached, showing persistent overlay');
+              log.debug('[Workout] Max reconnect attempts reached, showing persistent overlay');
               setIsReconnecting(true);
               setBleStatus('Connection lost. Please check sensor.');
             }
           } catch (reconnectError) {
-            console.error('[Workout] Reconnect error:', reconnectError);
+            log.error('[Workout] Reconnect error:', reconnectError);
             if (reconnectAttemptRef.current < 3) {
               reconnectTimerRef.current = setTimeout(attemptReconnect, delay);
             } else {
@@ -1213,7 +1214,7 @@ export default function WorkoutScreen() {
       await bleService.stopMonitoring();
       await bleService.disconnect();
     } catch (disconnectError) {
-      console.warn('[Workout] Failed to fully disconnect BLE during anti-piggyback cancel:', disconnectError);
+      log.warn('[Workout] Failed to fully disconnect BLE during anti-piggyback cancel:', disconnectError);
     }
 
     try {
@@ -1232,7 +1233,7 @@ export default function WorkoutScreen() {
         })
         .eq('id', session.id);
     } catch (sessionUpdateError) {
-      console.error('[Workout] Failed to mark session as auto-cancelled:', sessionUpdateError);
+      log.error('[Workout] Failed to mark session as auto-cancelled:', sessionUpdateError);
     }
 
     if (session.machine_id) {
@@ -1242,7 +1243,7 @@ export default function WorkoutScreen() {
           p_user_id: authSession.user.id,
         });
       } catch (unlockError) {
-        console.error('[Workout] Failed to unlock machine after anti-piggyback cancel:', unlockError);
+        log.error('[Workout] Failed to unlock machine after anti-piggyback cancel:', unlockError);
       }
     }
 
@@ -1365,7 +1366,7 @@ export default function WorkoutScreen() {
           setDailyRemaining(Math.max(0, maxDayDrops - dropHistoryRef.current.mintedToday));
         }
       } catch (limitsError) {
-        console.warn('[Workout] Could not load economy limits for live estimator, using defaults.', limitsError);
+        log.warn('[Workout] Could not load economy limits for live estimator, using defaults.', limitsError);
       }
 
       try {
@@ -1382,7 +1383,7 @@ export default function WorkoutScreen() {
           };
         }
       } catch (profileError) {
-        console.warn('[Workout] Could not load profile streak for live estimator.', profileError);
+        log.warn('[Workout] Could not load profile streak for live estimator.', profileError);
       }
 
       try {
@@ -1426,7 +1427,7 @@ export default function WorkoutScreen() {
           mintedWeek,
         };
       } catch (historyError) {
-        console.warn('[Workout] Could not load rewarded sessions history for live estimator.', historyError);
+        log.warn('[Workout] Could not load rewarded sessions history for live estimator.', historyError);
       }
 
       try {
@@ -1452,14 +1453,14 @@ export default function WorkoutScreen() {
           }
         }
       } catch (configError) {
-        console.warn('[Workout] Could not load drop_model_config for live estimator, using defaults.', configError);
+        log.warn('[Workout] Could not load drop_model_config for live estimator, using defaults.', configError);
       }
     };
 
     void loadLiveEconomyContext();
   }, [authSession?.user, session?.gym_id, session?.id]);
 
-  // Heartbeat update (every 10 seconds) — gated by active pedaling evidence.
+  // Heartbeat update — adaptive cadence: 10s when active, 30s when paused/idle.
   useEffect(() => {
     if (!session?.machine_id || !authSession?.user || !heartbeatAllowed) {
       if (heartbeatIntervalRef.current) {
@@ -1469,6 +1470,8 @@ export default function WorkoutScreen() {
       return;
     }
 
+    const cadenceMs = isPaused ? 30000 : 10000;
+
     const updateHeartbeat = async () => {
       try {
         await supabase.rpc('update_machine_heartbeat', {
@@ -1476,13 +1479,12 @@ export default function WorkoutScreen() {
           p_user_id: authSession.user.id,
         });
       } catch (error) {
-        console.error('[Workout] Heartbeat update error:', error);
+        log.error('[Workout] Heartbeat update error:', error);
       }
     };
 
-    // Update heartbeat immediately, then every 10 seconds
     updateHeartbeat();
-    heartbeatIntervalRef.current = setInterval(updateHeartbeat, 10000);
+    heartbeatIntervalRef.current = setInterval(updateHeartbeat, cadenceMs);
 
     return () => {
       if (heartbeatIntervalRef.current) {
@@ -1490,7 +1492,7 @@ export default function WorkoutScreen() {
         heartbeatIntervalRef.current = null;
       }
     };
-  }, [session?.machine_id, authSession?.user, heartbeatAllowed]);
+  }, [session?.machine_id, authSession?.user, heartbeatAllowed, isPaused]);
 
   
   // Animation values
@@ -1568,7 +1570,7 @@ export default function WorkoutScreen() {
           
           // Battery Optimization: Only log critical events
         } catch (error) {
-          console.error('[Workout] Final sync error:', error);
+          log.error('[Workout] Final sync error:', error);
         }
       }, 15000); // 15 seconds
     } else if (smoothedRPMShared.value > 0) {
@@ -1735,7 +1737,7 @@ export default function WorkoutScreen() {
                   try {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                   } catch (hapticsError) {
-                    if (__DEV__) console.warn('[SmartCoach] Haptics error:', hapticsError);
+                    log.warn('[SmartCoach] Haptics error:', hapticsError);
                   }
                 }
                 
@@ -1746,14 +1748,14 @@ export default function WorkoutScreen() {
                 runOnJS(() => {
                   setTimeout(() => {
                     if (isMountedRef.current && !isPlanCompleted) {
-                      console.log('[SmartCoach] Auto-advancing to next exercise after completion');
+                      log.debug('[SmartCoach] Auto-advancing to next exercise after completion');
                       handleNextExercise();
                     }
                   }, 1500);
                 })();
               }
             } catch (e) {
-              if (__DEV__) console.warn('[SmartCoach] runOnJS completion error:', e);
+              log.warn('[SmartCoach] runOnJS completion error:', e);
             }
           }, 0);
         })();
@@ -1767,7 +1769,7 @@ export default function WorkoutScreen() {
   const handleNextExercise = useCallback(async () => {
     // GUARD: Prevent execution if plan is already completed or component is unmounting
     if (isPlanCompleted || !isMountedRef.current) {
-      console.log('[SmartCoach] handleNextExercise blocked - plan completed or unmounting');
+      log.debug('[SmartCoach] handleNextExercise blocked - plan completed or unmounting');
       return;
     }
     
@@ -1789,7 +1791,7 @@ export default function WorkoutScreen() {
 
       // CRITICAL: If error or no data, plan is complete - clean up all intervals and navigate
       if (error || !data || data.length === 0) {
-        console.log('[SmartCoach] Plan completed! No more exercises found at index:', nextIndex);
+        log.debug('[SmartCoach] Plan completed! No more exercises found at index:', nextIndex);
         
         // CRITICAL: Stop all intervals BEFORE setting completion flags to prevent crashes
         // Clear time-based progress interval
@@ -1798,12 +1800,7 @@ export default function WorkoutScreen() {
           timeProgressIntervalRef.current = null;
         }
         
-        // Clear save/sync intervals
-        if (saveIntervalRef.current) {
-          clearInterval(saveIntervalRef.current);
-          saveIntervalRef.current = null;
-        }
-        
+        // Clear sync interval
         if (syncIntervalRef.current) {
           clearInterval(syncIntervalRef.current);
           syncIntervalRef.current = null;
@@ -1861,10 +1858,10 @@ export default function WorkoutScreen() {
             setCurrentPlanItem(null);
             // Navigate to summary - wrap in try-catch to prevent crashes
             try {
-              console.log('[SmartCoach] Navigating to session summary after plan completion');
+              log.debug('[SmartCoach] Navigating to session summary after plan completion');
               handleFinishWorkout();
             } catch (navError) {
-              console.error('[SmartCoach] Error navigating to summary:', navError);
+              log.error('[SmartCoach] Error navigating to summary:', navError);
               // Fallback: Try direct navigation if handleFinishWorkout fails
               if (isMountedRef.current && session?.id) {
                 try {
@@ -1879,7 +1876,7 @@ export default function WorkoutScreen() {
                     },
                   });
                 } catch (routerError) {
-                  console.error('[SmartCoach] Error with direct navigation:', routerError);
+                  log.error('[SmartCoach] Error with direct navigation:', routerError);
                 }
               }
             }
@@ -1892,7 +1889,7 @@ export default function WorkoutScreen() {
       // Next item exists - proceed with update
       const item = data[0];
       if (!item) {
-        console.error('[SmartCoach] Invalid plan item received');
+        log.error('[SmartCoach] Invalid plan item received');
         return;
       }
       
@@ -1901,7 +1898,7 @@ export default function WorkoutScreen() {
       const currentMachineId = activeMachineId;
       
       if (nextMachineId && nextMachineId !== currentMachineId) {
-        console.log('[SmartCoach] Next exercise requires different machine:', {
+        log.debug('[SmartCoach] Next exercise requires different machine:', {
           currentMachineId,
           nextMachineId,
           exerciseName: item.exercise_name,
@@ -1955,9 +1952,9 @@ export default function WorkoutScreen() {
       if (isMountedRef.current) {
         goalTargetShared.value = targetInSeconds;
       }
-      console.log('[SmartCoach] Moved to next exercise:', item.exercise_name);
+      log.debug('[SmartCoach] Moved to next exercise:', item.exercise_name);
     } catch (err) {
-        console.error('[SmartCoach] Error in handleNextExercise:', err);
+        log.error('[SmartCoach] Error in handleNextExercise:', err);
         Alert.alert(t('common:error'), t('failedNextExercise'));
     }
   }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, isPlanCompleted]);
@@ -2207,7 +2204,7 @@ export default function WorkoutScreen() {
   // Create new session
   const createSession = async () => {
     if (!authSession?.user || !equipmentId || !gymId) {
-      console.error('Missing required data for session:', { user: !!authSession?.user, equipmentId, gymId });
+      log.error('Missing required data for session:', { user: !!authSession?.user, equipmentId, gymId });
       return;
     }
 
@@ -2227,16 +2224,16 @@ export default function WorkoutScreen() {
       .single();
 
     if (gymError || !gym) {
-      console.error('Error fetching gym:', gymError);
+      log.error('Error fetching gym:', gymError);
       // CRITICAL: No blocking Alert.alert() - log error and continue
-      console.error('[Workout] Failed to verify gym status');
+      log.error('[Workout] Failed to verify gym status');
       // Continue with workout - user can still use the app
       return; // Exit early if gym not found
     }
 
     if (gym.status === 'suspended' || gym.is_suspended) {
       // CRITICAL: No blocking Alert.alert() - log warning and continue
-      console.warn('[Workout] Gym is suspended, but continuing with workout');
+      log.warn('[Workout] Gym is suspended, but continuing with workout');
       // Continue with workout - user can still track their session
     }
 
@@ -2275,23 +2272,23 @@ export default function WorkoutScreen() {
       .single();
 
     if (error) {
-      console.error('Error creating session:', error);
+      log.error('Error creating session:', error);
       try {
         await supabase.rpc('unlock_machine', {
           p_machine_id: machineId,
           p_user_id: authSession.user.id,
         });
       } catch (unlockError) {
-        console.error('[Workout] Failed to unlock machine after session create failure:', unlockError);
+        log.error('[Workout] Failed to unlock machine after session create failure:', unlockError);
       }
       // CRITICAL: No blocking Alert.alert() - log error and continue
-      console.error('[Workout] Failed to start workout:', error.message);
+      log.error('[Workout] Failed to start workout:', error.message);
       // Continue with mock session or show error in UI
       setBleStatus(`Failed to start workout: ${error.message}`);
     }
 
     if (data) {
-      console.log('Session created:', { id: data.id, gym_id: data.gym_id, gym_name: data.gym?.name });
+      log.debug('Session created:', { id: data.id, gym_id: data.gym_id, gym_name: data.gym?.name });
       setSession(data);
       setStartTime(new Date(data.started_at));
     }
@@ -2311,7 +2308,7 @@ export default function WorkoutScreen() {
       setSession(data);
       setStartTime(new Date(data.started_at));
       
-      console.log('[Workout] Session loaded:', {
+      log.debug('[Workout] Session loaded:', {
         id: data.id,
         gymId: data.gym_id,
         machine: data.machine,
@@ -2362,7 +2359,7 @@ export default function WorkoutScreen() {
         lastSyncRef.current = now;
         // Battery Optimization: Only log critical sync events
       } catch (error) {
-        console.error('[Workout] Sync error:', error);
+        log.error('[Workout] Sync error:', error);
       }
     };
 
@@ -2423,35 +2420,6 @@ export default function WorkoutScreen() {
       lastHapticTimeRef.current = hapticNow;
     }
   }, [dropJumpScale, earnedDropsShared, gaugeTarget, totalDropsShared]);
-
-  // Legacy save interval (kept for backward compatibility, but syncIntervalRef is primary)
-  useEffect(() => {
-    if (!session?.id || session.id === 'mock-session' || !authSession?.user) return;
-    if (isPaused) return;
-
-    const saveProgress = async () => {
-      // CRITICAL: Do NOT save drops_earned — see award_drops() idempotency check
-      const estimatedCalories = Math.round(caloriesShared.value);
-      await supabase
-        .from('sessions')
-        .update({
-          duration_seconds: duration,
-          calories: estimatedCalories > 0 ? estimatedCalories : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', session.id);
-    };
-
-    // Save immediately, then every 30 seconds (fallback)
-    saveProgress();
-    saveIntervalRef.current = setInterval(saveProgress, 30000);
-
-    return () => {
-      if (saveIntervalRef.current) {
-        clearInterval(saveIntervalRef.current);
-      }
-    };
-  }, [session?.id, duration, isPaused, authSession]); // Removed displayDrops, calories - using SharedValues
 
   // Timer for duration only - REQUIRES BLE connection
   useEffect(() => {
@@ -2560,7 +2528,7 @@ export default function WorkoutScreen() {
     }
     
     if (!currentPlanItemRef.current.target_metric) {
-      console.warn('[SmartCoach] currentPlanItem missing target_metric');
+      log.warn('[SmartCoach] currentPlanItem missing target_metric');
       return;
     }
     
@@ -2572,7 +2540,7 @@ export default function WorkoutScreen() {
     }
     
     if (!currentPlanItemRef.current.target_value) {
-      console.warn('[SmartCoach] currentPlanItem missing target_value');
+      log.warn('[SmartCoach] currentPlanItem missing target_value');
       return;
     }
     
@@ -2660,7 +2628,7 @@ export default function WorkoutScreen() {
           
           // Only log in development to avoid performance issues
           if (__DEV__ && percentage <= 100) {
-            console.log('[SmartCoach] Time progress update:', {
+            log.debug('[SmartCoach] Time progress update:', {
               elapsed: elapsedSeconds,
               target: targetInSeconds,
               targetOriginal: targetValue,
@@ -2672,7 +2640,7 @@ export default function WorkoutScreen() {
       } catch (error) {
         // Silently handle errors to prevent crashes
         if (__DEV__) {
-          console.error('[SmartCoach] Error updating time progress:', error);
+          log.error('[SmartCoach] Error updating time progress:', error);
         }
       }
     }, 1000);
@@ -2749,7 +2717,7 @@ export default function WorkoutScreen() {
       await bleService.stopMonitoring();
       await bleService.disconnect();
     } catch (disconnectError) {
-      console.warn('[Workout] Inactivity auto-finish BLE disconnect warning:', disconnectError);
+      log.warn('[Workout] Inactivity auto-finish BLE disconnect warning:', disconnectError);
     }
 
     let dropsEarned = 0;
@@ -2783,7 +2751,7 @@ export default function WorkoutScreen() {
         }
       }
     } catch (rpcError) {
-      console.warn('[Workout] finalize_inactive_session unavailable/failing, using fallback finalize:', rpcError);
+      log.warn('[Workout] finalize_inactive_session unavailable/failing, using fallback finalize:', rpcError);
       await supabase
         .from('sessions')
         .update({
@@ -2807,7 +2775,7 @@ export default function WorkoutScreen() {
           p_user_id: authSession.user.id,
         });
       } catch (unlockError) {
-        console.error('[Workout] Failed to unlock machine after inactivity auto-finish:', unlockError);
+        log.error('[Workout] Failed to unlock machine after inactivity auto-finish:', unlockError);
       }
     }
 
@@ -2976,13 +2944,13 @@ export default function WorkoutScreen() {
 
     // Immediately disconnect BLE when workout ends
     try {
-      console.log('[Workout] Disconnecting BLE on workout end...');
+      log.debug('[Workout] Disconnecting BLE on workout end...');
       await bleService.stopMonitoring();
       await bleService.disconnect();
       setBleConnected(false);
-      console.log('[Workout] BLE disconnected successfully');
+      log.debug('[Workout] BLE disconnected successfully');
     } catch (error) {
-      console.error('[Workout] Error disconnecting BLE:', error);
+      log.error('[Workout] Error disconnecting BLE:', error);
       // Continue even if disconnect fails
     }
     
@@ -2992,7 +2960,7 @@ export default function WorkoutScreen() {
     // Check if workout is too short (< 1 minute)
     // No blocking alert - just continue with workout
     if (duration < 60) {
-      console.log('[Workout] Workout is less than 1 minute, but continuing anyway');
+      log.debug('[Workout] Workout is less than 1 minute, but continuing anyway');
       // Continue with workout instead of blocking user
     }
 
@@ -3013,9 +2981,9 @@ export default function WorkoutScreen() {
 
     // Verify session has gym_id before ending
     if (!session.gym_id) {
-      console.error('Session missing gym_id:', session);
+      log.error('Session missing gym_id:', session);
       // No blocking alert - log error and continue
-      console.error('[Workout] Cannot save workout: missing gym information');
+      log.error('[Workout] Cannot save workout: missing gym information');
       // Still navigate to summary with available data
     }
 
@@ -3094,7 +3062,7 @@ export default function WorkoutScreen() {
       }
     }
 
-    console.log('[Workout] Ending session (server-side drops):', {
+    log.debug('[Workout] Ending session (server-side drops):', {
       sessionId: session.id,
       gymId: session.gym_id,
       estimatedDrops,
@@ -3125,9 +3093,9 @@ export default function WorkoutScreen() {
         .eq('id', session.id);
 
       if (syncError) {
-        console.error('[Workout] Final sync DB error:', syncError.message, syncError.code);
+        log.error('[Workout] Final sync DB error:', syncError.message, syncError.code);
       } else {
-        console.log('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current, rowsAffected: syncCount });
+        log.debug('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current, rowsAffected: syncCount });
       }
 
       // Safety net: if the update silently affected 0 rows (e.g. RLS denied), retry
@@ -3139,7 +3107,7 @@ export default function WorkoutScreen() {
           .eq('id', session.id)
           .single();
         if (verify && !verify.raw_metrics?.avg_rpm && finalAverageRPM) {
-          console.warn('[Workout] raw_metrics.avg_rpm missing after sync — retrying update');
+          log.warn('[Workout] raw_metrics.avg_rpm missing after sync — retrying update');
           await supabase
             .from('sessions')
             .update({ raw_metrics: rawMetrics })
@@ -3147,7 +3115,7 @@ export default function WorkoutScreen() {
         }
       }
     } catch (syncError) {
-      console.error('[Workout] Final sync error:', syncError);
+      log.error('[Workout] Final sync error:', syncError);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3173,7 +3141,7 @@ export default function WorkoutScreen() {
     });
 
     if (error) {
-      console.error('[Workout] award_drops() failed:', error.message);
+      log.error('[Workout] award_drops() failed:', error.message);
       const normalized = mapSecurityError(error.message || '');
       if (normalized !== 'other') {
         securityStatus = normalized;
@@ -3222,7 +3190,7 @@ export default function WorkoutScreen() {
         }
       }
 
-      console.log('[Workout] award_drops() success:', {
+      log.debug('[Workout] award_drops() success:', {
         drops_earned: serverDrops,
         multiplier: serverMultiplier,
         badges_earned: serverBadges,
@@ -3240,9 +3208,9 @@ export default function WorkoutScreen() {
           p_machine_id: session.machine_id,
           p_user_id: authSession.user.id,
         });
-        console.log('[Workout] Machine unlocked');
+        log.debug('[Workout] Machine unlocked');
       } catch (unlockError) {
-        console.error('[Workout] Failed to unlock machine:', unlockError);
+        log.error('[Workout] Failed to unlock machine:', unlockError);
       }
     }
 

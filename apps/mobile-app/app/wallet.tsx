@@ -88,7 +88,8 @@ export default function WalletScreen() {
       .select('amount')
       .eq('user_id', session.user.id)
       .gte('created_at', today.toISOString())
-      .gt('amount', 0);
+      .gt('amount', 0)
+      .in('transaction_type', ['session', 'challenge', 'bonus', 'arena']);
 
     const todayTotal = todayData?.reduce((sum, tx) => sum + (tx.amount || 0), 0) || 0;
     setTodayDrops(todayTotal);

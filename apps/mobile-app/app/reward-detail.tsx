@@ -297,14 +297,20 @@ export default function RewardDetailScreen() {
         {/* Hero Image / Icon */}
         <Animated.View entering={ZoomIn.delay(100).duration(400)} style={styles.heroContainer}>
           {reward.image_url ? (
-            <Image
-              source={{ uri: reward.image_url }}
-              style={[styles.heroImage, { borderColor: hexToRgba(branding.primary, 0.2) }]}
-              resizeMode="cover"
-            />
+            <View style={styles.heroImageWrapper}>
+              <Image
+                source={{ uri: reward.image_url }}
+                style={[styles.heroImage, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.6)']}
+                style={styles.heroImageGradient}
+              />
+            </View>
           ) : (
-            <View style={[styles.heroIcon, { backgroundColor: hexToRgba(branding.primary, 0.1), borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <Ionicons name={getRewardIcon(reward.reward_type)} size={56} color={branding.primary} />
+            <View style={[styles.heroIcon, { backgroundColor: hexToRgba(branding.primary, 0.08), borderColor: hexToRgba(branding.primary, 0.12) }]}>
+              <Ionicons name={getRewardIcon(reward.reward_type)} size={64} color={branding.primary} />
             </View>
           )}
         </Animated.View>
@@ -561,16 +567,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.xl,
   },
+  heroImageWrapper: {
+    width: '100%',
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
   heroImage: {
-    width: 160,
-    height: 160,
+    width: '100%',
+    height: 260,
     borderRadius: 24,
     borderWidth: 1,
   },
+  heroImageGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 80,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
   heroIcon: {
-    width: 120,
-    height: 120,
-    borderRadius: 28,
+    width: 140,
+    height: 140,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,

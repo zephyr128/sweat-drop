@@ -16,6 +16,7 @@
 import { Platform } from 'react-native';
 import BleManager from 'react-native-ble-manager';
 import { BleManager as BleManagerIOS, Device, Characteristic } from 'react-native-ble-plx';
+import { log } from '@/lib/logger';
 
 import {
   type BLEProtocolType,
@@ -140,9 +141,9 @@ export class BLEService {
     } else {
       // Initialize Android BLE Manager
       BleManager.start({ showAlert: false }).then(() => {
-        console.log('[BLE] Android BLE Manager initialized');
+        log.debug('[BLE] Android BLE Manager initialized');
       }).catch((error) => {
-        console.error('[BLE] Failed to initialize BLE Manager:', error);
+        log.error('[BLE] Failed to initialize BLE Manager:', error);
       });
     }
   }
@@ -158,7 +159,7 @@ export class BLEService {
     if (machineType) {
       this.ftmsMachineType = machineType;
     }
-    console.log(`[BLE] Protocol forced to: ${protocol}${machineType ? ` (${machineType})` : ''}`);
+    log.debug(`[BLE] Protocol forced to: ${protocol}${machineType ? ` (${machineType})` : ''}`);
   }
 
   /** Get the currently active protocol */
@@ -169,7 +170,7 @@ export class BLEService {
   /** Set the FTMS machine type hint (affects which characteristic to subscribe to) */
   setFTMSMachineType(type: FTMSMachineType): void {
     this.ftmsMachineType = type;
-    console.log(`[BLE] FTMS machine type set to: ${type}`);
+    log.debug(`[BLE] FTMS machine type set to: ${type}`);
   }
 
   /**
@@ -189,7 +190,7 @@ export class BLEService {
         // Scan for CSC (0x1816, 0x1818) and FTMS (0x1826) services
         this.bleManagerIOS!.startDeviceScan(ALL_SCAN_SERVICE_UUIDS, null, (error, device) => {
           if (error) {
-            console.error('[BLE] Scan error:', error);
+            log.error('[BLE] Scan error:', error);
             this.bleManagerIOS?.stopDeviceScan();
             if (scanTimeout) clearTimeout(scanTimeout);
             reject(error);
@@ -204,14 +205,14 @@ export class BLEService {
             };
             deviceMap.set(device.id, bleDevice);
             devices.push(bleDevice);
-            console.log(`[BLE] Found CSC device: ${device.name || device.id}`);
+            log.debug(`[BLE] Found CSC device: ${device.name || device.id}`);
           }
         });
 
         // Stop scanning after timeout
         scanTimeout = setTimeout(() => {
           this.bleManagerIOS?.stopDeviceScan();
-          console.log(`[BLE] Scan complete, found ${devices.length} device(s)`);
+          log.debug(`[BLE] Scan complete, found ${devices.length} device(s)`);
           resolve(devices);
         }, timeout);
       });
@@ -224,7 +225,7 @@ export class BLEService {
         // Scan for CSC (0x1816, 0x1818) and FTMS (0x1826) services
         // @ts-expect-error - react-native-ble-manager types are incomplete, scan accepts service UUIDs array
         BleManager.scan(ALL_SCAN_SERVICE_UUIDS, timeout / 1000, false).then(() => {
-          console.log('[BLE] Scan started');
+          log.debug('[BLE] Scan started');
         }).catch((error) => {
           reject(error);
         });
@@ -240,15 +241,15 @@ export class BLEService {
             };
             deviceMap.set(peripheral.id, bleDevice);
             devices.push(bleDevice);
-            console.log(`[BLE] Found CSC device: ${peripheral.name || peripheral.id}`);
+            log.debug(`[BLE] Found CSC device: ${peripheral.name || peripheral.id}`);
           }
         });
 
         // Stop scanning and return results after timeout
         setTimeout(() => {
-          BleManager.stopScan().catch(err => console.error('[BLE] Error stopping scan:', err));
+          BleManager.stopScan().catch(err => log.error('[BLE] Error stopping scan:', err));
           subscription.remove();
-          console.log(`[BLE] Scan complete, found ${devices.length} device(s)`);
+          log.debug(`[BLE] Scan complete, found ${devices.length} device(s)`);
           resolve(devices);
         }, timeout);
       });
@@ -293,7 +294,7 @@ export class BLEService {
     if (this.onStatusCallback) {
       this.onStatusCallback(status);
     }
-    console.log(`[BLE Status] ${status}`);
+    log.debug(`[BLE Status] ${status}`);
   }
 
   /**
@@ -311,28 +312,28 @@ export class BLEService {
         this.activeProtocol = 'csc';
         this.lastMeasurementTime = Date.now();
         this.emitStatus(`Simulator connected (${simulatorProfile})`);
-        console.log(`[BLE] Using simulator profile: ${simulatorProfile}`);
+        log.debug(`[BLE] Using simulator profile: ${simulatorProfile}`);
         return true;
       }
 
-      console.log(`[BLE] Connecting to Magene S3+ sensor: ${sensorId}`);
+      log.debug(`[BLE] Connecting to Magene S3+ sensor: ${sensorId}`);
       this.emitStatus('Initializing connection...');
 
       // Check if sensorId is a base64 string (from Web Bluetooth API)
       const isBase64 = /^[A-Za-z0-9+/=]+$/.test(sensorId) && sensorId.length > 20;
       
       if (isBase64) {
-        console.log('[BLE] Sensor ID appears to be base64, scanning for devices by name...');
+        log.debug('[BLE] Sensor ID appears to be base64, scanning for devices by name...');
         this.emitStatus('Scanning for devices...');
         
         // Try to convert base64 to hex first
         const hexId = this.base64ToHex(sensorId);
         if (hexId) {
-          console.log('[BLE] Converted base64 to hex:', hexId);
+          log.debug('[BLE] Converted base64 to hex:', hexId);
         }
         
         // Scan for devices and match by device name (most reliable)
-        console.log('[BLE] Scanning for CSC devices (5 second timeout)...');
+        log.debug('[BLE] Scanning for CSC devices (5 second timeout)...');
         const devices = await this.scanForDevices(5000);
         
         if (devices.length === 0) {
@@ -345,13 +346,13 @@ export class BLEService {
         // Try to connect to the first available device (strongest signal)
         // Device name is more reliable than ID for matching
         const targetDevice = sortedDevices[0];
-        console.log(`[BLE] Found ${devices.length} CSC device(s):`);
+        log.debug(`[BLE] Found ${devices.length} CSC device(s):`);
         devices.forEach((d, idx) => {
-          console.log(`  [${idx + 1}] Name: ${d.name || 'Unknown'}, ID: ${d.id}, RSSI: ${d.rssi}`);
+          log.debug(`  [${idx + 1}] Name: ${d.name || 'Unknown'}, ID: ${d.id}, RSSI: ${d.rssi}`);
         });
         
         const deviceDisplayName = targetDevice.name || targetDevice.id;
-        console.log(`[BLE] Connecting to device: ${deviceDisplayName} (ID: ${targetDevice.id}, RSSI: ${targetDevice.rssi})`);
+        log.debug(`[BLE] Connecting to device: ${deviceDisplayName} (ID: ${targetDevice.id}, RSSI: ${targetDevice.rssi})`);
         this.emitStatus(`Found device: ${deviceDisplayName}`);
         
         // Use the actual device ID from scan (not the base64 sensor_id)
@@ -363,7 +364,7 @@ export class BLEService {
       this.emitStatus('Connecting to device...');
       return await this.connectToDeviceById(sensorId);
     } catch (error: any) {
-      console.error('[BLE] Connection error:', error);
+      log.error('[BLE] Connection error:', error);
       this.isConnected = false;
       this.device = null;
       this.deviceId = null; // Clear device ID on error
@@ -377,7 +378,7 @@ export class BLEService {
    */
   private async connectToDeviceById(deviceId: string): Promise<boolean> {
     try {
-      console.log(`[BLE] Connecting to device ID: ${deviceId}`);
+      log.debug(`[BLE] Connecting to device ID: ${deviceId}`);
       this.emitStatus('Connecting...');
 
       if (Platform.OS === 'ios') {
@@ -386,18 +387,18 @@ export class BLEService {
         }
 
         // Connect to device
-        console.log('[BLE] iOS: Connecting to device...');
+        log.debug('[BLE] iOS: Connecting to device...');
         this.emitStatus('Establishing connection...');
         const device = await this.bleManagerIOS.connectToDevice(deviceId);
-        console.log('[BLE] iOS: Discovering services and characteristics...');
+        log.debug('[BLE] iOS: Discovering services and characteristics...');
         this.emitStatus('Discovering services...');
         await device.discoverAllServicesAndCharacteristics();
 
         // Get ALL services and log them
         const services = await device.services();
-        console.log(`[BLE] Found ${services.length} service(s):`);
+        log.debug(`[BLE] Found ${services.length} service(s):`);
         services.forEach((service, index) => {
-          console.log(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
+          log.debug(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
         });
 
         // ── PROTOCOL DETECTION ──
@@ -419,7 +420,7 @@ export class BLEService {
 
         // ── Yesoul Protocol ──
         if (useYesoul && yesoulService) {
-          console.log(`[BLE] Yesoul Service found: ${yesoulService.uuid}`);
+          log.debug(`[BLE] Yesoul Service found: ${yesoulService.uuid}`);
           this.emitStatus('Found Yesoul bike');
           this.activeProtocol = 'yesoul';
           this.syntheticCrankCounter = 0;
@@ -428,7 +429,7 @@ export class BLEService {
           const chars = await yesoulService.characteristics();
           const hasNotify = chars.some(c => uuidMatches(c.uuid, YESOUL_NOTIFY_CHAR_UUID));
 
-          console.log(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
+          log.debug(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
 
           if (!hasNotify) {
             throw new Error('Yesoul service found but FFF4 notify characteristic missing.');
@@ -438,13 +439,13 @@ export class BLEService {
           this.deviceId = device.id;
           this.isConnected = true;
           this.emitStatus('Ready (Yesoul bike)');
-          console.log('[BLE] Connected via Yesoul proprietary protocol (iOS)');
+          log.debug('[BLE] Connected via Yesoul proprietary protocol (iOS)');
           return true;
         }
 
         // ── FTMS Protocol ──
         if (useFTMS && ftmsService) {
-          console.log(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
+          log.debug(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
           this.emitStatus('Found FTMS service');
           this.activeProtocol = 'ftms';
           this.syntheticCrankCounter = 0;
@@ -456,7 +457,7 @@ export class BLEService {
           const hasBike = chars.some(c => uuidMatches(c.uuid, FTMS_INDOOR_BIKE_CHAR_UUID));
           const hasCrossTrainer = chars.some(c => uuidMatches(c.uuid, FTMS_CROSS_TRAINER_CHAR_UUID));
 
-          console.log(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
+          log.debug(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
 
           if (!hasTreadmill && !hasBike && !hasCrossTrainer) {
             throw new Error('FTMS service found but no supported data characteristics (Treadmill/Bike/CrossTrainer).');
@@ -471,7 +472,7 @@ export class BLEService {
           this.device = device;
           this.deviceId = device.id;
           this.isConnected = true;
-          console.log(`[BLE] Connected via FTMS (${this.ftmsMachineType}) (iOS)`);
+          log.debug(`[BLE] Connected via FTMS (${this.ftmsMachineType}) (iOS)`);
           return true;
         }
 
@@ -484,7 +485,7 @@ export class BLEService {
         // If not found, check Speed mode (0x1818) — wrong mode for Magene
         if (!cscService && cscSpeedService) {
           const errorMsg = 'Senzor je u SPEED modu (zelena lampica). Molimo vas resetujte bateriju da prebacite u CADENCE mod (crvena lampica).';
-          console.error(`[BLE] ${errorMsg}`);
+          log.error(`[BLE] ${errorMsg}`);
           this.emitStatus('Wrong mode detected');
           throw new Error(errorMsg);
         }
@@ -494,14 +495,14 @@ export class BLEService {
           throw new Error(`No supported BLE service found (CSC 0x1816, FTMS 0x1826, or Yesoul 0xFFF0). Available: ${serviceUuids}`);
         }
 
-        console.log(`[BLE] Found CSC Service: ${cscService.uuid} (normalized: ${normalizeUUID(cscService.uuid)})`);
+        log.debug(`[BLE] Found CSC Service: ${cscService.uuid} (normalized: ${normalizeUUID(cscService.uuid)})`);
         this.emitStatus('Found CSC service');
 
         // Get ALL characteristics and log them
         const characteristics = await cscService.characteristics();
-        console.log(`[BLE] Found ${characteristics.length} characteristic(s) in CSC service:`);
+        log.debug(`[BLE] Found ${characteristics.length} characteristic(s) in CSC service:`);
         characteristics.forEach((char, index) => {
-          console.log(`  [${index + 1}] Characteristic UUID: ${char.uuid} (normalized: ${normalizeUUID(char.uuid)})`);
+          log.debug(`  [${index + 1}] Characteristic UUID: ${char.uuid} (normalized: ${normalizeUUID(char.uuid)})`);
         });
 
         // Get CSC Measurement Characteristic
@@ -514,13 +515,13 @@ export class BLEService {
           throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available: ${charUuids}`);
         }
 
-        console.log(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
+        log.debug(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
         
         const properties = (measurementChar as any).properties || [];
         const canNotify = properties.includes('notify') || properties.includes('indicate');
         
         if (!canNotify) {
-          console.warn('[BLE] Characteristic does not support notifications, but will attempt anyway');
+          log.warn('[BLE] Characteristic does not support notifications, but will attempt anyway');
         }
         
         this.emitStatus('Ready to monitor');
@@ -528,24 +529,24 @@ export class BLEService {
         this.deviceId = device.id;
         this.isConnected = true;
 
-        console.log('[BLE] Connected via CSC (Magene S3+) (iOS)');
+        log.debug('[BLE] Connected via CSC (Magene S3+) (iOS)');
         return true;
       } else {
         // Android connection
-        console.log('[BLE] Android: Connecting to device...');
+        log.debug('[BLE] Android: Connecting to device...');
         this.emitStatus('Establishing connection...');
         await BleManager.connect(deviceId);
-        console.log('[BLE] Android: Retrieving services...');
+        log.debug('[BLE] Android: Retrieving services...');
         this.emitStatus('Discovering services...');
         await BleManager.retrieveServices(deviceId);
 
         // Get ALL services and log them
-        console.log('[BLE] Android: Getting services...');
+        log.debug('[BLE] Android: Getting services...');
         // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
         const services = await BleManager.getServices(deviceId);
-        console.log(`[BLE] Found ${services.length} service(s):`);
+        log.debug(`[BLE] Found ${services.length} service(s):`);
         services.forEach((service: any, index: number) => {
-          console.log(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
+          log.debug(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
         });
 
         // ── PROTOCOL DETECTION ──
@@ -566,7 +567,7 @@ export class BLEService {
 
         // ── Yesoul Protocol ──
         if (useYesoul && yesoulService) {
-          console.log(`[BLE] Yesoul Service found: ${yesoulService.uuid}`);
+          log.debug(`[BLE] Yesoul Service found: ${yesoulService.uuid}`);
           this.emitStatus('Found Yesoul bike');
           this.activeProtocol = 'yesoul';
           this.syntheticCrankCounter = 0;
@@ -576,7 +577,7 @@ export class BLEService {
           const chars = await BleManager.getCharacteristics(deviceId, yesoulService.uuid);
           const hasNotify = chars.some((c: any) => uuidMatches(c.uuid, YESOUL_NOTIFY_CHAR_UUID));
 
-          console.log(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
+          log.debug(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
 
           if (!hasNotify) {
             throw new Error('Yesoul service found but FFF4 notify characteristic missing.');
@@ -586,13 +587,13 @@ export class BLEService {
           this.deviceId = deviceId;
           this.isConnected = true;
           this.emitStatus('Ready (Yesoul bike)');
-          console.log('[BLE] Connected via Yesoul proprietary protocol (Android)');
+          log.debug('[BLE] Connected via Yesoul proprietary protocol (Android)');
           return true;
         }
 
         // ── FTMS Protocol ──
         if (useFTMS && ftmsService) {
-          console.log(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
+          log.debug(`[BLE] FTMS Service found: ${ftmsService.uuid}`);
           this.emitStatus('Found FTMS service');
           this.activeProtocol = 'ftms';
           this.syntheticCrankCounter = 0;
@@ -604,7 +605,7 @@ export class BLEService {
           const hasBike = chars.some((c: any) => uuidMatches(c.uuid, FTMS_INDOOR_BIKE_CHAR_UUID));
           const hasCrossTrainer = chars.some((c: any) => uuidMatches(c.uuid, FTMS_CROSS_TRAINER_CHAR_UUID));
 
-          console.log(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
+          log.debug(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
 
           if (!hasTreadmill && !hasBike && !hasCrossTrainer) {
             throw new Error('FTMS service found but no supported data characteristics.');
@@ -618,7 +619,7 @@ export class BLEService {
           this.deviceId = deviceId;
           this.isConnected = true;
           this.emitStatus(`Ready (FTMS ${this.ftmsMachineType})`);
-          console.log(`[BLE] Connected via FTMS (${this.ftmsMachineType}) (Android)`);
+          log.debug(`[BLE] Connected via FTMS (${this.ftmsMachineType}) (Android)`);
           return true;
         }
 
@@ -629,7 +630,7 @@ export class BLEService {
 
         if (!cscService && cscSpeedService) {
           const errorMsg = 'Senzor je u SPEED modu (zelena lampica). Molimo vas resetujte bateriju da prebacite u CADENCE mod (crvena lampica).';
-          console.error(`[BLE] ${errorMsg}`);
+          log.error(`[BLE] ${errorMsg}`);
           this.emitStatus('Wrong mode detected');
           throw new Error(errorMsg);
         }
@@ -639,16 +640,16 @@ export class BLEService {
           throw new Error(`No supported BLE service found (CSC 0x1816, FTMS 0x1826, or Yesoul 0xFFF0). Available: ${serviceUuids}`);
         }
 
-        console.log(`[BLE] Found CSC Service: ${cscService.uuid}`);
+        log.debug(`[BLE] Found CSC Service: ${cscService.uuid}`);
         this.emitStatus('Found CSC service');
 
         // Get ALL characteristics and log them
-        console.log('[BLE] Android: Getting characteristics...');
+        log.debug('[BLE] Android: Getting characteristics...');
         // @ts-expect-error - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
         const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
-        console.log(`[BLE] Found ${characteristics.length} characteristic(s) in CSC service:`);
+        log.debug(`[BLE] Found ${characteristics.length} characteristic(s) in CSC service:`);
         characteristics.forEach((char: any, index: number) => {
-          console.log(`  [${index + 1}] Characteristic UUID: ${char.uuid}`);
+          log.debug(`  [${index + 1}] Characteristic UUID: ${char.uuid}`);
         });
 
         const measurementChar = characteristics.find((c: any) => {
@@ -660,7 +661,7 @@ export class BLEService {
           throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available: ${charUuids}`);
         }
 
-        console.log(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
+        log.debug(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
         
         const properties = (measurementChar as any).properties || [];
         const canNotify = properties.includes('notify') || properties.includes('indicate');
@@ -673,17 +674,17 @@ export class BLEService {
         if (canNotify) {
           try {
             await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
-            console.log('[BLE] Android: CSC notification started successfully');
+            log.debug('[BLE] Android: CSC notification started successfully');
           } catch (notifError) {
-            console.warn('[BLE] Android: Could not start notification immediately:', notifError);
+            log.warn('[BLE] Android: Could not start notification immediately:', notifError);
           }
         }
 
-        console.log('[BLE] Connected via CSC (Magene S3+) (Android)');
+        log.debug('[BLE] Connected via CSC (Magene S3+) (Android)');
         return true;
       }
     } catch (error: any) {
-      console.error('[BLE] Connection error in connectToDeviceById:', error);
+      log.error('[BLE] Connection error in connectToDeviceById:', error);
       this.isConnected = false;
       this.device = null;
       this.deviceId = null; // Clear device ID on error
@@ -701,7 +702,7 @@ export class BLEService {
     onReconnect?: () => Promise<boolean>
   ): Promise<boolean> {
     if (!this.isConnected || !this.device) {
-      console.error('[BLE] Not connected to device');
+      log.error('[BLE] Not connected to device');
       return false;
     }
 
@@ -746,7 +747,7 @@ export class BLEService {
 
       return true;
     } catch (error) {
-      console.error('[BLE] Failed to start monitoring:', error);
+      log.error('[BLE] Failed to start monitoring:', error);
       return false;
     }
   }
@@ -774,16 +775,16 @@ export class BLEService {
       const canNotify = properties.includes('notify') || properties.includes('indicate');
       
       if (!canNotify) {
-        console.warn('[BLE] iOS: CSC characteristic does not support notifications, attempting anyway');
+        log.warn('[BLE] iOS: CSC characteristic does not support notifications, attempting anyway');
       }
       
-      console.log('[BLE] iOS: Starting CSC monitoring...');
+      log.debug('[BLE] iOS: Starting CSC monitoring...');
       this.notificationSubscription = device.monitorCharacteristicForService(
         cscService.uuid,
         measurementChar.uuid,
         (error, characteristic) => {
           if (error) {
-            console.error('[BLE] CSC measurement error:', error);
+            log.error('[BLE] CSC measurement error:', error);
             this.handleConnectionLoss();
             return;
           }
@@ -797,7 +798,7 @@ export class BLEService {
           }
         );
 
-      console.log('[BLE] CSC monitoring started (iOS)');
+      log.debug('[BLE] CSC monitoring started (iOS)');
     } else {
       const deviceId = this.device as string;
       
@@ -818,7 +819,7 @@ export class BLEService {
       try {
         await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
       } catch (notifError) {
-        console.error('[BLE] Android: Failed to start CSC notification:', notifError);
+        log.error('[BLE] Android: Failed to start CSC notification:', notifError);
         throw notifError;
       }
 
@@ -842,12 +843,12 @@ export class BLEService {
       // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
       BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
         if (data.peripheral === deviceId) {
-          console.log('[BLE] Device disconnected');
+          log.debug('[BLE] Device disconnected');
           this.handleConnectionLoss();
         }
       });
 
-      console.log('[BLE] CSC monitoring started (Android)');
+      log.debug('[BLE] CSC monitoring started (Android)');
     }
   }
 
@@ -871,7 +872,7 @@ export class BLEService {
         break;
     }
 
-    console.log(`[BLE] Starting FTMS monitoring for ${this.ftmsMachineType}, chars: ${charUUIDs.join(', ')}`);
+    log.debug(`[BLE] Starting FTMS monitoring for ${this.ftmsMachineType}, chars: ${charUUIDs.join(', ')}`);
 
     if (Platform.OS === 'ios') {
       const device = this.device as Device;
@@ -886,17 +887,17 @@ export class BLEService {
       for (const targetCharUUID of charUUIDs) {
         const dataChar = characteristics.find(c => uuidMatches(c.uuid, targetCharUUID));
         if (!dataChar) {
-          console.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
+          log.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
           continue;
         }
 
-        console.log(`[BLE] iOS: Subscribing to FTMS characteristic ${dataChar.uuid}`);
+        log.debug(`[BLE] iOS: Subscribing to FTMS characteristic ${dataChar.uuid}`);
         const sub = device.monitorCharacteristicForService(
           ftmsService.uuid,
           dataChar.uuid,
           (error, characteristic) => {
             if (error) {
-              console.error('[BLE] FTMS measurement error:', error);
+              log.error('[BLE] FTMS measurement error:', error);
               this.handleConnectionLoss();
               return;
             }
@@ -917,7 +918,7 @@ export class BLEService {
         this.notificationSubscription = this.ftmsNotificationSubscriptions[0];
       }
 
-      console.log('[BLE] FTMS monitoring started (iOS)');
+      log.debug('[BLE] FTMS monitoring started (iOS)');
     } else {
       const deviceId = this.device as string;
       // @ts-expect-error - react-native-ble-manager types are incomplete, getServices exists at runtime
@@ -933,15 +934,15 @@ export class BLEService {
       for (const targetCharUUID of charUUIDs) {
         const dataChar = characteristics.find((c: any) => uuidMatches(c.uuid, targetCharUUID));
         if (!dataChar) {
-          console.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
+          log.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
           continue;
         }
 
         try {
           await BleManager.startNotification(deviceId, ftmsService.uuid, dataChar.uuid);
-          console.log(`[BLE] Android: FTMS notification started for ${dataChar.uuid}`);
+          log.debug(`[BLE] Android: FTMS notification started for ${dataChar.uuid}`);
         } catch (notifError) {
-          console.error(`[BLE] Android: Failed to start FTMS notification for ${targetCharUUID}:`, notifError);
+          log.error(`[BLE] Android: Failed to start FTMS notification for ${targetCharUUID}:`, notifError);
         }
       }
 
@@ -969,12 +970,12 @@ export class BLEService {
       // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
       BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
         if (data.peripheral === deviceId) {
-          console.log('[BLE] FTMS device disconnected');
+          log.debug('[BLE] FTMS device disconnected');
           this.handleConnectionLoss();
         }
       });
 
-      console.log('[BLE] FTMS monitoring started (Android)');
+      log.debug('[BLE] FTMS monitoring started (Android)');
     }
   }
 
@@ -1023,8 +1024,8 @@ export class BLEService {
     const hex = Array.from(bytes)
       .map(b => b.toString(16).padStart(2, '0').toUpperCase())
       .join(' ');
-    console.log(`[Yesoul RAW] len=${bytes.length} ${hex}`);
-    console.log(`[Yesoul BYTES] [4]=${bytes[4]} [6]=${bytes[6]} [8]=${bytes[8]} [9]=${bytes[9]}`);
+    log.debug(`[Yesoul RAW] len=${bytes.length} ${hex}`);
+    log.debug(`[Yesoul BYTES] [4]=${bytes[4]} [6]=${bytes[6]} [8]=${bytes[8]} [9]=${bytes[9]}`);
 
     this.lastMeasurementTime = Date.now();
     this.emitStatus('Signal OK');
@@ -1032,7 +1033,7 @@ export class BLEService {
 
     const raw = this.parseYesoulPacket(bytes);
     if (!raw) {
-      console.warn('[BLE] Invalid Yesoul packet, skipping');
+      log.warn('[BLE] Invalid Yesoul packet, skipping');
       return;
     }
 
@@ -1041,7 +1042,7 @@ export class BLEService {
       this.syntheticCrankCounter,
     );
 
-    console.log(
+    log.debug(
       `[BLE] Yesoul: RPM=${raw.rpm}` +
       ` resistance=${Math.round(raw.resistanceRaw / 2.4)}` +
       ` power=${raw.powerW}W` +
@@ -1058,7 +1059,7 @@ export class BLEService {
    * Subscribes to FFF4 notify characteristic for metrics data.
    */
   private async startYesoulMonitoring(): Promise<void> {
-    console.log('[BLE] Starting Yesoul monitoring...');
+    log.debug('[BLE] Starting Yesoul monitoring...');
 
     if (Platform.OS === 'ios') {
       const device = this.device as Device;
@@ -1074,13 +1075,13 @@ export class BLEService {
         throw new Error('Yesoul FFF4 notify characteristic not found');
       }
 
-      console.log('[BLE] iOS: Subscribing to Yesoul FFF4...');
+      log.debug('[BLE] iOS: Subscribing to Yesoul FFF4...');
       this.notificationSubscription = device.monitorCharacteristicForService(
         yesoulService.uuid,
         notifyChar.uuid,
         (error, characteristic) => {
           if (error) {
-            console.error('[BLE] Yesoul measurement error:', error);
+            log.error('[BLE] Yesoul measurement error:', error);
             this.handleConnectionLoss();
             return;
           }
@@ -1094,7 +1095,7 @@ export class BLEService {
         }
       );
 
-      console.log('[BLE] Yesoul monitoring started (iOS)');
+      log.debug('[BLE] Yesoul monitoring started (iOS)');
     } else {
       // Android
       const deviceId = this.device as string;
@@ -1129,12 +1130,12 @@ export class BLEService {
       // @ts-expect-error - react-native-ble-manager types are incomplete, addListener exists at runtime
       BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
         if (data.peripheral === deviceId) {
-          console.log('[BLE] Yesoul device disconnected');
+          log.debug('[BLE] Yesoul device disconnected');
           this.handleConnectionLoss();
         }
       });
 
-      console.log('[BLE] Yesoul monitoring started (Android)');
+      log.debug('[BLE] Yesoul monitoring started (Android)');
     }
   }
 
@@ -1176,7 +1177,7 @@ export class BLEService {
       
       // If no data for 10 seconds, trigger sleep callback
       if (timeSinceLastMeasurement > 10000 && this.onSleepCallback) {
-        console.log('[BLE] Sensor appears to be asleep (no data for 10+ seconds)');
+        log.debug('[BLE] Sensor appears to be asleep (no data for 10+ seconds)');
         this.onSleepCallback();
       }
     }, 2000);
@@ -1187,7 +1188,7 @@ export class BLEService {
    * Preserves device ID for reconnect attempts
    */
   private handleConnectionLoss(): void {
-    console.log('[BLE] Connection loss detected, preserving device ID for reconnect');
+    log.debug('[BLE] Connection loss detected, preserving device ID for reconnect');
     this.isConnected = false;
     // Don't clear device or deviceId - keep them for reconnect
     if (this.heartbeatInterval) {
@@ -1236,10 +1237,10 @@ export class BLEService {
       // Try to reconnect using stored device ID (prefer deviceId over device)
       const deviceId = this.deviceId || (this.device ? (typeof this.device === 'string' ? this.device : this.device.id) : null);
       
-      console.log('[BLE] Reconnect - deviceId:', this.deviceId, 'device:', this.device ? (typeof this.device === 'string' ? this.device : this.device.id) : null);
+      log.debug('[BLE] Reconnect - deviceId:', this.deviceId, 'device:', this.device ? (typeof this.device === 'string' ? this.device : this.device.id) : null);
       
       if (deviceId) {
-        console.log('[BLE] Attempting to reconnect to device:', deviceId);
+        log.debug('[BLE] Attempting to reconnect to device:', deviceId);
         
         try {
           const connected = await this.connectToDeviceById(deviceId);
@@ -1248,7 +1249,7 @@ export class BLEService {
             // Verify session ownership
             const stillOwnsSession = await this.onReconnectCallback();
             if (!stillOwnsSession) {
-              console.log('[BLE] User no longer owns session, disconnecting');
+              log.debug('[BLE] User no longer owns session, disconnecting');
               await this.disconnect();
               return false;
             }
@@ -1267,12 +1268,12 @@ export class BLEService {
           
           return connected;
         } catch (error) {
-          console.log('[BLE] Direct reconnect failed, will scan for devices:', error);
+          log.debug('[BLE] Direct reconnect failed, will scan for devices:', error);
         }
       }
       
       // If direct reconnect fails or no device ID, scan for devices
-      console.log('[BLE] Scanning for devices to reconnect...');
+      log.debug('[BLE] Scanning for devices to reconnect...');
       this.emitStatus('Scanning for sensor...');
       const devices = await this.scanForDevices(5000);
       
@@ -1283,7 +1284,7 @@ export class BLEService {
       // Connect to strongest signal
       const sortedDevices = devices.sort((a, b) => (b.rssi || -100) - (a.rssi || -100));
       const targetDevice = sortedDevices[0];
-      console.log(`[BLE] Reconnecting to device: ${targetDevice.name || targetDevice.id}`);
+      log.debug(`[BLE] Reconnecting to device: ${targetDevice.name || targetDevice.id}`);
       
       const connected = await this.connectToDeviceById(targetDevice.id);
       
@@ -1304,7 +1305,7 @@ export class BLEService {
       
       return connected;
     } catch (error) {
-      console.error('[BLE] Reconnect error:', error);
+      log.error('[BLE] Reconnect error:', error);
       this.emitStatus('Reconnect failed');
       return false;
     }
@@ -1381,14 +1382,14 @@ export class BLEService {
               }
             }
           } catch (error) {
-            console.warn('[BLE] Error stopping notification:', error);
+            log.warn('[BLE] Error stopping notification:', error);
           }
           this.notificationSubscription.remove();
           this.notificationSubscription = null;
         }
       }
     } catch (error) {
-      console.error('[BLE] Error stopping monitoring:', error);
+      log.error('[BLE] Error stopping monitoring:', error);
     }
     
     this.measurementCallback = null;
@@ -1561,12 +1562,12 @@ export class BLEService {
     });
 
     // Debug: Temporary log to diagnose stuck RPM issue
-    console.log('[BLE] CSC measurement, RPM:', measurement.rpm, 'Callback:', !!this.measurementCallback);
+    log.debug('[BLE] CSC measurement, RPM:', measurement.rpm, 'Callback:', !!this.measurementCallback);
     
     if (this.measurementCallback) {
       this.measurementCallback(measurement);
     } else {
-      console.warn('[BLE] measurementCallback is null!');
+      log.warn('[BLE] measurementCallback is null!');
     }
   }
 
@@ -1631,7 +1632,7 @@ export class BLEService {
       heartRate = crossTrainerData.heartRate;
       elapsedTime = crossTrainerData.elapsedTime;
     } else {
-      console.warn(`[BLE] Unknown FTMS characteristic: ${charUUID}`);
+      log.warn(`[BLE] Unknown FTMS characteristic: ${charUUID}`);
       return;
     }
 
@@ -1676,9 +1677,9 @@ export class BLEService {
       this.simulatorProfile = null;
       this.simulatorHandle = null;
       
-      console.log('[BLE] Disconnected from device');
+      log.debug('[BLE] Disconnected from device');
     } catch (error) {
-      console.error('[BLE] Disconnect error:', error);
+      log.error('[BLE] Disconnect error:', error);
     }
   }
 

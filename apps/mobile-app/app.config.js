@@ -64,18 +64,17 @@ module.exports = {
       ],
       // expo-apple-authentication does NOT need a config plugin
       // It works automatically when bundleIdentifier is set
-      //
-      // TODO: Re-enable expo-notifications plugin once Organization Apple Developer account is active.
-      // Personal Development teams do NOT support Push Notifications capability.
-      // The notification code in lib/notifications.ts is guarded and will no-op gracefully.
-      //
-      // [
-      //   'expo-notifications',
-      //   {
-      //     color: '#00E5FF',
-      //     defaultChannel: 'default',
-      //   },
-      // ],
+      ...(process.env.EXPO_PUBLIC_PUSH_ENABLED === 'true'
+        ? [
+            [
+              'expo-notifications',
+              {
+                color: '#00E5FF',
+                defaultChannel: 'default',
+              },
+            ],
+          ]
+        : []),
     ],
     scheme: 'sweatdrop',
     extra: {

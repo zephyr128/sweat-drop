@@ -25,16 +25,15 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 
 /**
- * Feature flag: set to `true` once Organization Apple Developer account is active
- * and the expo-notifications plugin is re-enabled in app.config.js.
- *
- * While `false`, all push notification registration / listeners are no-ops.
- * This avoids crashes on Personal Development teams that lack the Push
- * Notifications entitlement.
+ * Feature flag driven by EXPO_PUBLIC_PUSH_ENABLED env var.
+ * Set to "true" (string) in .env / EAS build profile to activate push.
+ * Falls back to `false` — all push registration / listeners become no-ops.
  */
-export const PUSH_NOTIFICATIONS_ENABLED = false;
+export const PUSH_NOTIFICATIONS_ENABLED =
+  (process.env.EXPO_PUBLIC_PUSH_ENABLED ?? '').toLowerCase() === 'true';
 
 /** Push notification event types (mirrors backend/types/sweatdrop.ts NotificationTrigger) */
 type NotificationTrigger =
@@ -90,7 +89,7 @@ export function configureNotificationHandler(): void {
 export async function registerForPushNotifications(): Promise<string | null> {
   // Push notifications only work on physical devices
   if (!Device.isDevice) {
-    console.log('[Notifications] Skipping push registration — not a physical device');
+    log.debug('[Notifications] Skipping push registration — not a physical device');
     return null;
   }
 
@@ -106,7 +105,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     if (finalStatus !== 'granted') {
-      console.log('[Notifications] Permission not granted:', finalStatus);
+      log.debug('[Notifications] Permission not granted:', finalStatus);
       return null;
     }
 
@@ -115,7 +114,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
       ?? Constants.easConfig?.projectId;
 
     if (!projectId) {
-      console.warn('[Notifications] No EAS project ID found — using default token generation');
+      log.warn('[Notifications] No EAS project ID found — using default token generation');
     }
 
     // Get Expo push token
@@ -124,7 +123,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     });
 
     const token = tokenData.data;
-    console.log('[Notifications] Expo push token:', token);
+    log.debug('[Notifications] Expo push token:', token);
 
     // Android-specific: set notification channel
     if (Platform.OS === 'android') {
@@ -139,7 +138,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
     return token;
   } catch (error) {
-    console.error('[Notifications] Failed to register:', error);
+    log.error('[Notifications] Failed to register:', error);
     return null;
   }
 }
@@ -161,7 +160,7 @@ export async function savePushToken(userId: string, token: string): Promise<void
       .single();
 
     if (profile?.expo_push_token === token) {
-      console.log('[Notifications] Token already saved, skipping update');
+      log.debug('[Notifications] Token already saved, skipping update');
       return;
     }
 
@@ -172,12 +171,12 @@ export async function savePushToken(userId: string, token: string): Promise<void
       .eq('id', userId);
 
     if (error) {
-      console.error('[Notifications] Failed to save token:', error.message);
+      log.error('[Notifications] Failed to save token:', error.message);
     } else {
-      console.log('[Notifications] Token saved to profile');
+      log.debug('[Notifications] Token saved to profile');
     }
   } catch (error) {
-    console.error('[Notifications] Error saving token:', error);
+    log.error('[Notifications] Error saving token:', error);
   }
 }
 
@@ -278,7 +277,7 @@ export function addNotificationListeners(
   const receivedSubscription = Notifications.addNotificationReceivedListener(
     (notification) => {
       const data = notification.request.content.data as NotificationData;
-      console.log('[Notifications] Received (foreground):', data?.type);
+      log.debug('[Notifications] Received (foreground):', data?.type);
       // The notification banner is shown automatically via setNotificationHandler
     }
   );
@@ -287,7 +286,7 @@ export function addNotificationListeners(
   const responseSubscription = Notifications.addNotificationResponseReceivedListener(
     (response) => {
       const data = response.notification.request.content.data as NotificationData;
-      console.log('[Notifications] Tapped:', data?.type);
+      log.debug('[Notifications] Tapped:', data?.type);
       const deepLink = getDeepLinkFromNotification(data);
       onNotificationTap(deepLink);
     }
@@ -310,7 +309,7 @@ export async function getInitialNotification(): Promise<NotificationData | null>
   const response = await Notifications.getLastNotificationResponseAsync();
   if (response) {
     const data = response.notification.request.content.data as NotificationData;
-    console.log('[Notifications] App opened from notification:', data?.type);
+    log.debug('[Notifications] App opened from notification:', data?.type);
     return data;
   }
   return null;

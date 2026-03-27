@@ -78,14 +78,15 @@ export function useHomeStats(gymId: string | null) {
     try {
       const now = new Date();
 
-      // ── 1. Today's drops ──────────────────────────
+      // ── 1. Today's drops (earned only — excludes refunds) ──
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const { data: todayTx } = await supabase
         .from('drops_transactions')
         .select('amount')
         .eq('user_id', userId)
         .gte('created_at', todayStart.toISOString())
-        .gt('amount', 0);
+        .gt('amount', 0)
+        .in('transaction_type', ['session', 'challenge', 'bonus', 'arena']);
 
       const todayDrops = todayTx?.reduce((s, t) => s + (t.amount || 0), 0) || 0;
 

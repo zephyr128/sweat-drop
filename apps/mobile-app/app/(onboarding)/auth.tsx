@@ -113,9 +113,17 @@ export default function AuthScreen() {
 
       await checkRoleAndNavigate();
     } catch (error: any) {
-      if (error.code !== 'SIGN_IN_CANCELLED' && error.code !== '12501') {
-        console.error('[Auth] Google sign-in error:', error);
-        Alert.alert(t('common:error'), error.message || t('auth.googleFailed'));
+      const code = error?.code ?? '';
+      if (code === 'SIGN_IN_CANCELLED' || code === '12501') {
+        return;
+      }
+
+      if (__DEV__) console.error('[Auth] Google sign-in error:', { code, message: error?.message });
+
+      if (code === 'NETWORK_ERROR' || code === '7' || error?.message?.toLowerCase().includes('network')) {
+        Alert.alert(t('common:error'), t('auth.googleNetworkError'));
+      } else {
+        Alert.alert(t('common:error'), t('auth.googleFailed'));
       }
     } finally {
       setGoogleLoading(false);
@@ -130,6 +138,12 @@ export default function AuthScreen() {
       setAppleLoading(true);
 
       const AppleAuthentication = await import('expo-apple-authentication');
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert(t('common:error'), t('auth.appleNotAvailable'));
+        return;
+      }
+
       const Crypto = await import('expo-crypto');
 
       const nonce = Math.random().toString(36).substring(2, 10);
@@ -160,9 +174,20 @@ export default function AuthScreen() {
 
       await checkRoleAndNavigate();
     } catch (error: any) {
-      if (error.code !== 'ERR_REQUEST_CANCELED') {
-        console.error('[Auth] Apple sign-in error:', error);
-        Alert.alert(t('common:error'), error.message || t('auth.appleFailed'));
+      const code = error?.code ?? '';
+
+      if (code === 'ERR_REQUEST_CANCELED' || code === 'ERR_CANCELED') {
+        return;
+      }
+
+      if (__DEV__) console.error('[Auth] Apple sign-in error:', { code, message: error?.message });
+
+      if (code === 'ERR_INVALID_RESPONSE' || code === 'ERR_REQUEST_FAILED') {
+        Alert.alert(t('common:error'), t('auth.appleNetworkError'));
+      } else if (error?.message?.toLowerCase().includes('network')) {
+        Alert.alert(t('common:error'), t('auth.appleNetworkError'));
+      } else {
+        Alert.alert(t('common:error'), t('auth.appleFailed'));
       }
     } finally {
       setAppleLoading(false);
@@ -234,7 +259,7 @@ export default function AuthScreen() {
         Alert.alert(t('common:error'), signInError.message);
       }
     } catch (err: any) {
-      console.error('[Auth] Email auth error:', err);
+      if (__DEV__) console.error('[Auth] Email auth error:', err);
       Alert.alert(t('common:error'), err.message || t('auth.somethingWentWrong'));
     } finally {
       setEmailLoading(false);

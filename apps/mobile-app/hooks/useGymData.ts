@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useGymStore, Gym } from '@/lib/stores/useGymStore';
 import { useSession } from './useSession';
+import { log } from '@/lib/logger';
 
 export const useGymData = () => {
   const { session } = useSession();
@@ -65,7 +66,7 @@ export const useGymData = () => {
         // Store has a value but DB doesn't — DB is stale.
         // Persist the store value to DB instead of clearing it.
         if (__DEV__) {
-          console.log('[useGymData] DB home_gym_id is null but store has:', currentStoreGymId, '— persisting to DB');
+          log.debug('[useGymData] DB home_gym_id is null but store has:', currentStoreGymId, '— persisting to DB');
         }
         try {
           await supabase
@@ -73,12 +74,12 @@ export const useGymData = () => {
             .update({ home_gym_id: currentStoreGymId })
             .eq('id', userId);
         } catch (e) {
-          console.warn('[useGymData] Failed to persist store homeGymId to DB:', e);
+          log.warn('[useGymData] Failed to persist store homeGymId to DB:', e);
         }
       }
       // If both are null or both match — no action needed
     } catch (error) {
-      console.error('Error loading user home gym:', error);
+      log.error('Error loading user home gym:', error);
     }
   };
 
@@ -120,7 +121,7 @@ export const useGymData = () => {
 
         // PGRST116 = no row (expected when owner has no branding row yet)
         if (brandingError && brandingError.code !== 'PGRST116') {
-          console.warn('[useGymData] owner_branding query failed:', brandingError);
+          log.warn('[useGymData] owner_branding query failed:', brandingError);
         }
 
         if (ownerBranding) {
@@ -130,10 +131,10 @@ export const useGymData = () => {
             background_url: ownerBranding.background_url || branding.background_url,
           };
         } else {
-          console.warn('[useGymData] No owner_branding found for owner_id:', gymData.owner_id);
+          log.warn('[useGymData] No owner_branding found for owner_id:', gymData.owner_id);
         }
       } else {
-        console.warn('[useGymData] Gym has no owner_id:', gymData.id);
+        log.warn('[useGymData] Gym has no owner_id:', gymData.id);
       }
 
       // Merge gym data with branding
@@ -158,7 +159,7 @@ export const useGymData = () => {
         setGyms([...gyms, gymWithBranding]);
       }
     } catch (error) {
-      console.error('Error loading active gym:', error);
+      log.error('Error loading active gym:', error);
       setActiveGym(null);
     } finally {
       setLoading(false);
@@ -173,7 +174,7 @@ export const useGymData = () => {
       userId = freshSession?.user?.id;
     }
     if (!userId) {
-      console.warn('[useGymData] updateHomeGym: No user ID available');
+      log.warn('[useGymData] updateHomeGym: No user ID available');
       return;
     }
 
@@ -196,7 +197,7 @@ export const useGymData = () => {
         await loadActiveGym(gymId);
       }
     } catch (error) {
-      console.error('Error updating home gym:', error);
+      log.error('Error updating home gym:', error);
       throw error;
     }
   };
