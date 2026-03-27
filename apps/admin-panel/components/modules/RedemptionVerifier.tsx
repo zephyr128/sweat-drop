@@ -30,10 +30,11 @@ interface RedemptionResult {
 
 interface RedemptionVerifierProps {
   gymId: string;
+  compact?: boolean;
   onRedemptionConfirmed?: () => void;
 }
 
-export function RedemptionVerifier({ gymId, onRedemptionConfirmed }: RedemptionVerifierProps) {
+export function RedemptionVerifier({ gymId, compact, onRedemptionConfirmed }: RedemptionVerifierProps) {
   const [code, setCode] = useState(['', '', '', '']);
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -165,6 +166,104 @@ export function RedemptionVerifier({ gymId, onRedemptionConfirmed }: RedemptionV
     setError(null);
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
   };
+
+  if (compact) {
+    return (
+      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-[#00E5FF]/10 flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-[#00E5FF]" />
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-sm font-semibold text-white">Verify Code</p>
+              <p className="text-[10px] text-zinc-500">Enter 4-char code</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-1 justify-center">
+            {code.map((char, i) => (
+              <input
+                key={i}
+                ref={(el) => { inputRefs.current[i] = el; }}
+                type="text"
+                inputMode="text"
+                maxLength={4}
+                value={char}
+                onChange={(e) => handleInputChange(i, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(i, e)}
+                className="w-12 h-14 text-center text-xl font-mono font-bold bg-[#1A1A1A] border-2 border-[#333] rounded-lg text-white uppercase focus:border-[#00E5FF] focus:outline-none focus:ring-1 focus:ring-[#00E5FF]/20 transition-all"
+                disabled={isSearching}
+              />
+            ))}
+            {isSearching && (
+              <div className="w-5 h-5 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin ml-2" />
+            )}
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#FF5252]">{error}</span>
+              <button onClick={resetState} className="text-xs text-[#00E5FF] hover:underline">Reset</button>
+            </div>
+          )}
+        </div>
+
+        {result && (
+          <div className="mt-4 pt-4 border-t border-[#1A1A1A]">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#00E5FF]/10 flex items-center justify-center">
+                  <Gift className="w-5 h-5 text-[#00E5FF]" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">{result.rewards?.name || 'Unknown'}</p>
+                  <p className="text-xs text-zinc-500">
+                    {result.profiles?.username || 'Unknown'} · <span className="text-[#00E5FF]">{result.drops_spent} drops</span>
+                  </p>
+                </div>
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                  result.status === 'pending'
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                    : result.status === 'confirmed'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                }`}>
+                  {result.status}
+                </span>
+              </div>
+
+              {result.status === 'pending' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleConfirm}
+                    disabled={isProcessing}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-[#00E5FF] text-black rounded-lg font-bold text-sm hover:bg-[#00B8CC] transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isProcessing ? 'Processing…' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={handleReject}
+                    disabled={isProcessing}
+                    className="p-2 border border-[#FF5252]/30 text-[#FF5252] rounded-lg hover:bg-[#FF5252]/10 transition-colors disabled:opacity-50"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {result.status !== 'pending' && (
+                <button onClick={resetState} className="text-xs text-[#00E5FF] hover:underline">
+                  Verify another
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-lg mx-auto">

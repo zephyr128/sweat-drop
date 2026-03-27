@@ -47,7 +47,7 @@ const storeItemSchema = z.object({
 
 type StoreItemFormData = z.infer<typeof storeItemSchema>;
 
-interface StoreItem {
+export interface StoreItem {
   id: string;
   name: string;
   description: string | null;
@@ -71,9 +71,19 @@ interface StoreItem {
 interface StoreManagerProps {
   gymId: string;
   initialItems: StoreItem[];
+  /** When true, only render the modal — no grid, no "+ Add" button */
+  modalOnly?: boolean;
+  /** Externally controlled: open the modal (create or edit) */
+  externalOpen?: boolean;
+  /** Externally controlled: the item to edit (null = create new) */
+  externalEditItem?: StoreItem | null;
+  /** Called when modal closes (for external control) */
+  onModalClose?: () => void;
+  /** Called after successful create/update/delete so parent can refresh */
+  onSaved?: () => void;
 }
 
-export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
+export function StoreManager({ gymId, initialItems, modalOnly, externalOpen, externalEditItem, onModalClose, onSaved }: StoreManagerProps) {
   const [items, setItems] = useState<StoreItem[]>(initialItems);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<StoreItem | null>(null);
@@ -148,6 +158,27 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
       if (modeResult.success) setBandMode(modeResult.mode);
     })();
   }, [gymId]);
+
+  useEffect(() => {
+    if (externalOpen) {
+      if (externalEditItem) {
+        openEditModal(externalEditItem);
+      } else {
+        setEditingItem(null);
+        setImagePreview(null);
+        setSponsorLogoPreview(null);
+        reset({
+          rewardType: 'physical',
+          redemptionLimit: 'unlimited',
+          availableFrom: '',
+          availableUntil: '',
+          priceCalcMode: 'manual_drops',
+        });
+        setIsModalOpen(true);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalOpen, externalEditItem]);
 
   const imageDropzone = useDropzone({
     accept: {
@@ -226,6 +257,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
     setSponsorLogoPreview(null);
     setShowPreview(false);
     reset();
+    onModalClose?.();
   };
 
   const onSubmit = async (data: StoreItemFormData) => {
@@ -258,6 +290,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           setItems(items.map((i) => (i.id === editingItem.id ? result.data as StoreItem : i)));
           toast.success('Item updated successfully');
           closeModal();
+          onSaved?.();
         } else {
           toast.error(`Failed to update item: ${result.error}`);
         }
@@ -274,6 +307,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           setItems([result.data as StoreItem, ...items]);
           toast.success('Item created successfully');
           closeModal();
+          onSaved?.();
         } else {
           toast.error(`Failed to create item: ${result.error}`);
         }
@@ -292,6 +326,7 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
       if (result.success) {
         setItems(items.filter((i) => i.id !== itemId));
         toast.success('Item deleted successfully');
+        onSaved?.();
       } else {
         toast.error(`Failed to delete: ${result.error}`);
       }
@@ -304,6 +339,8 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
 
   return (
     <div>
+      {!modalOnly && (
+        <>
       <div className="mb-6 flex justify-end">
         <button
           onClick={() => setIsModalOpen(true)}
@@ -412,6 +449,8 @@ export function StoreManager({ gymId, initialItems }: StoreManagerProps) {
           ))
         )}
       </div>
+        </>
+      )}
 
       {/* Add/Edit Modal */}
       {isModalOpen && (

@@ -3,9 +3,9 @@ import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
+// Layout reads cookies (getCurrentProfile) — auto-dynamic at runtime.
+// force-dynamic kept as build safety net for the dashboard shell.
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
 
 export default async function DashboardLayout({
   children,

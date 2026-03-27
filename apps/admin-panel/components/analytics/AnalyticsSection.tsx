@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getGymAnalytics, GymAnalytics } from '@/lib/actions/analytics-actions';
+import { getTopPerformers } from '@/lib/actions/top-performers-actions';
 import { MachineHeatmapWidget } from './MachineHeatmapWidget';
 import { PopularHoursWidget } from './PopularHoursWidget';
 import { TopPerformersWidget } from './TopPerformersWidget';
@@ -19,6 +20,7 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
   const [analytics, setAnalytics] = useState<GymAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30days');
+  const [performers, setPerformers] = useState<Array<{ id: string; username: string; avatar_url: string | null; earnedDrops: number }>>([]);
   
   // Default empty analytics structure
   const defaultAnalytics: GymAnalytics = {
@@ -93,6 +95,11 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
       fetchAnalytics();
     }
   }, [gymId, timeFilter]);
+
+  useEffect(() => {
+    if (!gymId) return;
+    getTopPerformers(gymId).then(setPerformers).catch(() => setPerformers([]));
+  }, [gymId]);
 
   const getTimeFilterLabel = (filter: TimeFilter) => {
     switch (filter) {
@@ -198,7 +205,7 @@ export function AnalyticsSection({ gymId, pendingRedemptions: _pendingRedemption
         </div>
 
         {/* Top Performers */}
-        <TopPerformersWidget gymId={gymId} compact />
+        <TopPerformersWidget gymId={gymId} performers={performers} />
 
         {/* Quick Actions */}
         <div className="bg-[#0A0A0A] border border-[#333] rounded-xl p-4">

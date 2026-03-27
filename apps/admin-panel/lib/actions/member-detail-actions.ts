@@ -201,8 +201,7 @@ export async function getMemberDetail(
     // Fetch badges via RPC
     let badges: MemberBadge[] = [];
     try {
-      // @ts-ignore - Supabase RPC type inference
-      const { data: badgesRaw } = await supabase.rpc('get_user_badges', { p_user_id: memberId });
+      const { data: badgesRaw } = await (supabase.rpc as any)('get_user_badges', { p_user_id: memberId });
       if (badgesRaw) {
         badges = (badgesRaw as any[]).map(b => ({
           badge_id: b.badge_id,

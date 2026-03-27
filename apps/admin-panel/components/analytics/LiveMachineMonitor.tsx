@@ -156,7 +156,7 @@ export function LiveMachineMonitor({ gymId }: LiveMachineMonitorProps) {
   return (
     <div className="space-y-4">
       <StatusSummaryBar summary={data.summary} isConnected={isConnected} />
-      <MachineGrid machines={data.machines} fetchedAt={fetchedAt} tick={tick} />
+      <MachineGrid machines={data.machines} fetchedAt={fetchedAt} tick={tick} gymId={gymId} />
       <ActiveWorkoutsList machines={data.machines} fetchedAt={fetchedAt} tick={tick} />
     </div>
   );

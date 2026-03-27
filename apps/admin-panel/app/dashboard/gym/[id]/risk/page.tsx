@@ -1,6 +1,5 @@
+// LIVE: Real-time fraud and abuse monitoring
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
 
 import { requireGymAccess } from '@/lib/auth-guard';
 import { RiskAbuseDashboard } from '@/components/risk/RiskAbuseDashboard';
@@ -17,10 +16,10 @@ export default async function GymRiskPage({ params }: RiskPageProps) {
   const risk = await getGymRiskDashboard(id);
 
   return (
-    <div className="min-h-screen md:p-6 space-y-6">
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-white">Risk & Abuse</h1>
-        <p className="text-[#808080] mt-1">
+        <h1 className="text-xl font-bold text-white">Safety & Fair Play</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">
           Monitor suspicious activity and execute moderation operations.
         </p>
       </div>

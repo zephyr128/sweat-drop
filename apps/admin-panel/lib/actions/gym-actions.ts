@@ -422,6 +422,85 @@ export async function getGymCheckins(gymId: string): Promise<{
   }
 }
 
+export async function getGymCheckinsPaginated(
+  gymId: string,
+  opts?: { page?: number; limit?: number; q?: string; gpsFilter?: 'all' | 'verified' | 'unverified' },
+): Promise<{
+  success: boolean;
+  data?: {
+    items: Array<{
+      id: string;
+      user_id: string;
+      username: string;
+      avatar_url: string | null;
+      checked_in_at: string;
+      drops_earned: number;
+      gps_verified: boolean;
+      gps_distance_m: number | null;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  error?: string;
+}> {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) return { success: false, error: 'Admin client not available.' };
+
+    const page = Math.max(1, opts?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts?.limit ?? 25));
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let countQuery = supabaseAdmin
+      .from('gym_checkins')
+      .select('id', { count: 'exact', head: true })
+      .eq('gym_id', gymId);
+
+    let dataQuery = supabaseAdmin
+      .from('gym_checkins')
+      .select(`id, user_id, checked_in_at, drops_earned, gps_verified, gps_distance_m, profiles:user_id (username, avatar_url)`)
+      .eq('gym_id', gymId)
+      .order('checked_in_at', { ascending: false })
+      .range(from, to);
+
+    if (opts?.gpsFilter === 'verified') {
+      countQuery = countQuery.eq('gps_verified', true);
+      dataQuery = dataQuery.eq('gps_verified', true);
+    } else if (opts?.gpsFilter === 'unverified') {
+      countQuery = countQuery.eq('gps_verified', false);
+      dataQuery = dataQuery.eq('gps_verified', false);
+    }
+
+    const [{ count }, { data, error }] = await Promise.all([countQuery, dataQuery]);
+    if (error) throw error;
+
+    const total = count ?? 0;
+    const items = ((data || []) as any[]).map((c) => ({
+      id: c.id,
+      user_id: c.user_id,
+      username: c.profiles?.username || 'Unknown',
+      avatar_url:
+        typeof c.profiles?.avatar_url === 'string' && c.profiles.avatar_url.trim()
+          ? c.profiles.avatar_url.trim()
+          : null,
+      checked_in_at: c.checked_in_at,
+      drops_earned: c.drops_earned,
+      gps_verified: c.gps_verified,
+      gps_distance_m: c.gps_distance_m,
+    }));
+
+    return {
+      success: true,
+      data: { items, total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 /**
  * Update SmartCoach enabled status for a gym (SuperAdmin only)
  */

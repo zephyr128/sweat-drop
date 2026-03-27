@@ -120,8 +120,7 @@ export async function getCurrentLeaderboard(
       return { success: false, error: 'Admin client not available.' };
     }
 
-    // @ts-ignore - Supabase RPC type inference issue
-    const { data, error } = await supabaseAdmin.rpc('get_leaderboard', {
+    const { data, error } = await (supabaseAdmin.rpc as any)('get_leaderboard', {
       p_type: 'gym',
       p_scope_id: gymId,
       p_period: period,
@@ -231,7 +230,6 @@ export async function updateLeaderboardRewards(input: {
     ];
 
     for (const reward of rewards) {
-      // @ts-ignore - Supabase type inference issue with leaderboard_rewards table
       const { error } = await supabaseAdmin
         .from('leaderboard_rewards')
         .upsert(

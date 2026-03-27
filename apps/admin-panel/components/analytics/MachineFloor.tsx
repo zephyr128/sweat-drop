@@ -501,6 +501,7 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
         machines={data.machines}
         fetchedAt={fetchedAt}
         tick={tick}
+        gymId={gymId}
         onAction={handleCardAction}
         canEdit={canEditMachines}
         isSuperAdmin={isSuperAdmin}

@@ -1,6 +1,4 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via getCurrentProfile)
 
 import { notFound, redirect } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/auth';

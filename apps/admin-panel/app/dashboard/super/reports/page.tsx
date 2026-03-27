@@ -1,6 +1,4 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via requireProfile)
 
 import { requireProfile } from '@/lib/auth-guard';
 import PlatformReportDashboard from '@/components/reports/PlatformReportDashboard';

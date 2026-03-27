@@ -1,51 +1,26 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via getCurrentProfile/createClient)
 
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
-import { notFound, redirect } from 'next/navigation';
-import { BrandingModule } from '@/components/modules/BrandingModule';
+import { redirect } from 'next/navigation';
 
 export default async function GlobalBrandingPage() {
   const profile = await getCurrentProfile();
-  
-  if (!profile) {
-    redirect('/login');
+  if (!profile) redirect('/login');
+
+  if (profile.role === 'gym_owner') {
+    const supabase = await createClient();
+    const { data: firstGym } = await supabase
+      .from('gyms')
+      .select('id')
+      .eq('owner_id', profile.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (firstGym?.id) {
+      redirect(`/dashboard/gym/${firstGym.id}/settings?tab=branding`);
+    }
   }
 
-  // Only gym owners can access global branding
-  if (profile.role !== 'gym_owner') {
-    notFound();
-  }
-
-  const supabase = await createClient();
-  
-  // Get owner branding (global branding per owner)
-  const { data: ownerBranding } = await supabase
-    .from('owner_branding')
-    .select('primary_color, logo_url, background_url')
-    .eq('owner_id', profile.id)
-    .single();
-
-  return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">Global Branding Settings</h1>
-        <p className="text-[#808080]">
-          Global branding applies to all your gym locations. Changes here will be reflected across all your gyms.
-        </p>
-      </div>
-
-      <BrandingModule 
-        ownerId={profile.id} 
-        initialData={ownerBranding || {
-          primary_color: null,
-          logo_url: null,
-          background_url: null,
-        }} 
-      />
-    </div>
-  );
+  redirect('/dashboard');
 }

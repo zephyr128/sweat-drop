@@ -7,28 +7,28 @@ import { UserRole } from '@/lib/auth';
 import { GymSwitcher } from './GymSwitcher';
 import type { LucideIcon } from 'lucide-react';
 import {
-  Palette,
   LayoutDashboard,
-  Trophy,
-  ShoppingBag,
-  Cpu,
-  Ticket,
   Users,
-  Building2,
-  Activity,
-  Award,
-  ShieldCheck,
-  Swords,
-  Settings,
-  Target,
-  QrCode,
-  ClipboardList,
   UserCog,
+  ShoppingBag,
+  QrCode,
+  Cpu,
+  ClipboardList,
+  Target,
+  Trophy,
+  Swords,
   FileBarChart,
-  ShieldAlert,
+  Settings,
   Coins,
+  ShieldAlert,
+  Building2,
+  Award,
+  Activity,
+  ShieldCheck,
+  ScrollText,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
+import { getPendingRedemptionCount } from '@/lib/actions/redemption-actions';
 
 interface SidebarProps {
   role: UserRole;
@@ -42,55 +42,44 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
   const [isOpen, setIsOpen] = useState(false);
   const [gymIdFromStorage, setGymIdFromStorage] = useState<string | null>(null);
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
+  const [pendingRedemptionCount, setPendingRedemptionCount] = useState(0);
   
-  // Extract gym ID from URL if present
   const gymIdFromUrl = useMemo(() => {
     const match = pathname?.match(/^\/dashboard\/gym\/([^/]+)/);
     return match ? match[1] : null;
   }, [pathname]);
   
-  // Read gym ID from sessionStorage (set by GymSwitcher)
-  // Also save gym ID to sessionStorage when it's in the URL
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // If gym ID is in URL, save it to sessionStorage
       if (gymIdFromUrl) {
         sessionStorage.setItem('selectedGymId', gymIdFromUrl);
         setGymIdFromStorage(gymIdFromUrl);
       } else {
-        // Otherwise, read from sessionStorage
         const stored = sessionStorage.getItem('selectedGymId');
         setGymIdFromStorage(stored);
       }
     }
-  }, [pathname, gymIdFromUrl]); // Re-read when pathname or gymIdFromUrl changes
+  }, [pathname, gymIdFromUrl]);
   
-  // Use gymId from URL if available, then from sessionStorage, then fall back to prop
   const effectiveGymId = gymIdFromUrl || gymIdFromStorage || currentGymId;
 
-  // Fetch pending invitation count for gym owners/admins
   useEffect(() => {
     if (effectiveGymId && ['gym_owner', 'gym_admin'].includes(role)) {
       getPendingInvitationCount(effectiveGymId).then(setPendingInviteCount);
+      getPendingRedemptionCount(effectiveGymId).then(setPendingRedemptionCount);
+    }
+    if (effectiveGymId && role === 'receptionist') {
+      getPendingRedemptionCount(effectiveGymId).then(setPendingRedemptionCount);
     }
   }, [effectiveGymId, role]);
 
   const isActive = (path: string) => {
     if (!pathname) return false;
-    // Exact match
     if (pathname === path) return true;
-    
-    // For superadmin, only use exact match to prevent parent links from being active
-    // when child routes are active
-    if (role === 'superadmin') {
-      return pathname === path;
-    }
-    
-    // For other roles, allow parent path matching (e.g., /dashboard/gym/123 matches /dashboard/gym/123/dashboard)
-    return pathname.startsWith(path + '/');
+    if (role === 'superadmin') return pathname === path;
+    return pathname.startsWith(path + '/') || pathname.startsWith(path + '?');
   };
 
-  // Icon component helper
   const Icon = ({ icon: IconComponent, isActive: active }: { icon: LucideIcon; isActive: boolean }) => (
     <IconComponent
       className={active ? 'text-[#00E5FF]' : 'text-zinc-500'}
@@ -99,7 +88,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     />
   );
 
-  // SuperAdmin navigation
+  // ── SuperAdmin ──────────────────────────────────────────────────
   const superadminLinks = [
     { href: '/dashboard/super', label: 'Gyms', icon: Building2 },
     { href: '/dashboard/super/owners', label: 'Owners', icon: Users },
@@ -111,98 +100,91 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     { href: '/dashboard/super/reports', label: 'Reports', icon: FileBarChart },
   ];
 
-  // Gym Owner navigation (multi-gym access) - organized in groups
-  const gymOwnerLinks = (gymId?: string | null) => {
-    const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
-    return {
-      core: [
-        { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
-        { href: `${base}/members`, label: 'Members', icon: Users },
-        { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
-        { href: `${base}/reports`, label: 'Reports', icon: FileBarChart },
-      ],
-      management: [
-        { href: `${base}/challenges`, label: 'Challenges', icon: Target },
-        { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
-        { href: `${base}/store`, label: 'Store', icon: ShoppingBag },
-        { href: `${base}/machines`, label: 'Machines', icon: Cpu },
-        { href: `${base}/risk`, label: 'Risk & Abuse', icon: ShieldAlert },
-        { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
-      ],
-      operations: [
-        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
-        { href: `${base}/economy`, label: 'Economy', icon: Coins },
-        { href: `${base}/team`, label: 'Team', icon: UserCog },
-        { href: `${base}/settings`, label: 'Settings', icon: Settings },
-      ],
-    };
-  };
+  // ── Gym Owner / Gym Admin (new IA) ──────────────────────────────
+  type NavLink = { href: string; label: string; icon: LucideIcon; badge?: number; badgeColor?: 'cyan' | 'amber' };
+  type NavGroup = { title: string; items: NavLink[] };
 
-  // Global links for gym owner (appear above gym switcher)
-  const gymOwnerGlobalLinks = () => {
+  const gymNavGroups = (gymId?: string | null): NavGroup[] => {
+    const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [
-      { href: '/dashboard/branding', label: 'Branding', icon: Palette },
+      {
+        title: 'HOME',
+        items: [
+          { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+        ],
+      },
+      {
+        title: 'PEOPLE',
+        items: [
+          { href: `${base}/members`, label: 'Members', icon: Users },
+          ...(role !== 'gym_admin' ? [{ href: `${base}/team`, label: 'Team', icon: UserCog }] : []),
+        ],
+      },
+      {
+        title: 'REWARDS & DESK',
+        items: [
+          { href: `${base}/store`, label: 'Store', icon: ShoppingBag, badge: pendingRedemptionCount, badgeColor: 'amber' },
+          { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
+          { href: `${base}/activity`, label: 'Activity Log', icon: ScrollText },
+        ],
+      },
+      {
+        title: 'FLOOR & PROGRAMS',
+        items: [
+          { href: `${base}/machines`, label: 'Machines', icon: Cpu },
+          { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
+        ],
+      },
+      {
+        title: 'GROWTH',
+        items: [
+          { href: `${base}/challenges`, label: 'Challenges', icon: Target },
+          { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
+          { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
+          { href: `${base}/reports`, label: 'Reports', icon: FileBarChart },
+        ],
+      },
+      {
+        title: 'SETTINGS',
+        items: [
+          { href: `${base}/settings`, label: 'Gym Setup', icon: Settings },
+        ],
+      },
+      {
+        title: 'ADVANCED',
+        items: [
+          { href: `${base}/economy`, label: 'Economy', icon: Coins },
+          { href: `${base}/risk`, label: 'Safety & Fair Play', icon: ShieldAlert },
+        ],
+      },
     ];
   };
 
-  // Gym Admin navigation (single gym access) - organized in groups
-  const gymAdminLinks = (gymId?: string | null) => {
+  // ── Receptionist ────────────────────────────────────────────────
+  const receptionistGroups = (gymId?: string | null): NavGroup[] => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
-    return {
-      core: [
-        { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
-        { href: `${base}/members`, label: 'Members', icon: Users },
-        { href: `${base}/leaderboard-history`, label: 'Leaderboard', icon: Trophy },
-        { href: `${base}/reports`, label: 'Reports', icon: FileBarChart },
-      ],
-      management: [
-        { href: `${base}/challenges`, label: 'Challenges', icon: Target },
-        { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
-        { href: `${base}/store`, label: 'Store', icon: ShoppingBag },
-        { href: `${base}/risk`, label: 'Risk & Abuse', icon: ShieldAlert },
-        { href: `${base}/arenas`, label: 'Arenas', icon: Swords, badge: pendingInviteCount },
-      ],
-      operations: [
-        { href: `${base}/workout-plans`, label: 'Workout Plans', icon: ClipboardList },
-        { href: `${base}/economy`, label: 'Economy', icon: Coins },
-        { href: `${base}/settings`, label: 'Settings', icon: Settings },
-      ],
-    };
+    return [
+      {
+        title: 'DESK',
+        items: [
+          { href: `${base}/desk`, label: 'Desk', icon: ShieldCheck, badge: pendingRedemptionCount, badgeColor: 'amber' },
+          { href: `${base}/dashboard`, label: 'Live Feed', icon: LayoutDashboard },
+        ],
+      },
+    ];
   };
 
-  // Receptionist navigation (redemption terminal only)
-  const receptionistLinks = (gymId?: string | null) => {
-    const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
-    return {
-      operations: [
-        { href: `${base}/verify`, label: 'Verify Code', icon: ShieldCheck },
-        { href: `${base}/redemptions`, label: 'Redemption Terminal', icon: Ticket },
-        { href: `${base}/dashboard`, label: 'Live Feed', icon: LayoutDashboard },
-      ],
-    };
-  };
-
-  type CoreLink = { href: string; label: string; icon: LucideIcon; badge?: number };
-  type CoreLinks = CoreLink[];
-  type LinkGroups = {
-    core?: CoreLinks;
-    management?: CoreLinks;
-    operations?: CoreLinks;
-  };
-
-  const getLinks = (): LinkGroups => {
+  const getNavGroups = (): NavGroup[] => {
     if (role === 'superadmin') {
-      return { core: superadminLinks };
-    } else if (role === 'gym_owner') {
-      return gymOwnerLinks(effectiveGymId);
-    } else if (role === 'gym_admin') {
-      return gymAdminLinks(effectiveGymId);
-    } else {
-      return receptionistLinks(effectiveGymId);
+      return [{ title: '', items: superadminLinks }];
     }
+    if (role === 'receptionist') {
+      return receptionistGroups(effectiveGymId);
+    }
+    return gymNavGroups(effectiveGymId);
   };
 
-  const links = getLinks();
+  const navGroups = getNavGroups();
 
   return (
     <>
@@ -236,32 +218,9 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         <p className="text-xs text-zinc-500 mt-1">Admin Panel</p>
       </div>
 
-      {/* Global links for gym owner (above gym switcher) */}
-      {role === 'gym_owner' && (
-        <nav className="p-4 border-b border-zinc-900 space-y-2">
-          <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">GLOBAL</p>
-          {gymOwnerGlobalLinks().map((link) => {
-            const active = isActive(link.href);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                  active
-                    ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
-                    : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
-                }`}
-              >
-                <Icon icon={link.icon} isActive={active} />
-                <span className="text-sm font-medium">{link.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+      {/* Global section removed — Branding is now inside Gym Setup (Settings tab) */}
 
-      {/* Gym Switcher at the top (only for gym owners) */}
+      {/* Gym Switcher */}
       {role === 'gym_owner' && (
         <div className="p-4 border-b border-zinc-900">
           <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">LOCATION</p>
@@ -271,39 +230,13 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
 
       {/* Navigation Groups */}
       <nav className="p-4 space-y-6">
-        {links.core && (
-          <div>
-            {role !== 'superadmin' && (
-              <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">CORE</p>
+        {navGroups.map((group) => (
+          <div key={group.title || 'root'}>
+            {group.title && (
+              <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">{group.title}</p>
             )}
             <div className="space-y-1">
-              {links.core.map((link) => {
-                const active = isActive(link.href);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setIsOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                      active
-                        ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
-                        : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
-                    }`}
-                  >
-                    <Icon icon={link.icon} isActive={active} />
-                    <span className="text-sm font-medium">{link.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {links.management && (
-          <div>
-            <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">MANAGEMENT</p>
-            <div className="space-y-1">
-              {links.management.map((link) => {
+              {group.items.map((link) => {
                 const active = isActive(link.href);
                 return (
                   <Link
@@ -319,7 +252,11 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
                     <Icon icon={link.icon} isActive={active} />
                     <span className="text-sm font-medium flex-1">{link.label}</span>
                     {link.badge && link.badge > 0 ? (
-                      <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-[#00E5FF] text-black rounded-full min-w-[18px] text-center">
+                      <span className={`ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded-full min-w-[18px] text-center ${
+                        link.badgeColor === 'amber'
+                          ? 'bg-amber-500 text-black'
+                          : 'bg-[#00E5FF] text-black'
+                      }`}>
                         {link.badge}
                       </span>
                     ) : null}
@@ -328,33 +265,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
               })}
             </div>
           </div>
-        )}
-
-        {links.operations && (
-          <div>
-            <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider font-medium">OPERATIONS</p>
-            <div className="space-y-1">
-              {links.operations.map((link) => {
-                const active = isActive(link.href);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setIsOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                      active
-                        ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
-                        : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
-                    }`}
-                  >
-                    <Icon icon={link.icon} isActive={active} />
-                    <span className="text-sm font-medium">{link.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        ))}
       </nav>
     </aside>
     </>

@@ -1,6 +1,4 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via getCurrentProfile)
 
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';

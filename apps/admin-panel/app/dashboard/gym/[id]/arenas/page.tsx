@@ -1,7 +1,4 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via getCurrentProfile/createClient)
 
 import { getCurrentProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
@@ -40,10 +37,10 @@ export default async function GymArenasPage({
   }
 
   return (
-    <div className="min-h-screen md:p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Arenas</h1>
-        <p className="text-[#808080] mt-1">
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-white">Arenas</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">
           Arena competitions and invitations for {(gym as { name: string }).name}.
         </p>
       </div>

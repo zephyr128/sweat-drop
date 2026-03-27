@@ -1,139 +1,66 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via auth check)
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
-import { MachineDetailView } from '@/components/modules/MachineDetailView';
+import { MachineDetailView, type MachineForDetail } from '@/components/modules/MachineDetailView';
 
 interface SuperAdminMachineDetailPageProps {
   params: Promise<{ machineId: string }>;
 }
 
-interface MachineData {
-  id: string;
-  name: string;
-  type: 'treadmill' | 'bike';
-  gym_id: string;
-  qr_uuid?: string | null;
-  unique_qr_code: string;
-  sensor_id?: string | null;
-  is_active: boolean;
-  is_busy?: boolean;
-  is_under_maintenance?: boolean;
-  maintenance_notes?: string;
-  sensor_paired_at?: string | null;
-  created_at: string;
-  updated_at: string;
-  gyms?: {
-    id: string;
-    name: string;
-    city: string | null;
-    country: string | null;
-  } | null;
-}
-
 export default async function SuperAdminMachineDetailPage({ params }: SuperAdminMachineDetailPageProps) {
   const { machineId } = await params;
-  
-  // Initialize Supabase client
+
   const supabase = await createClient();
-  
-  // 1. Check authentication first
-  let user;
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      redirect('/login');
-    }
-    
-    user = authUser;
-  } catch (error) {
-    console.error('[SuperAdminMachineDetailPage] Auth check failed:', error);
-    redirect('/login');
-  }
 
-  // 2. Fetch user profile
-  let profile;
-  try {
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
-      .eq('id', user.id)
-      .single();
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+  if (authError || !authUser) redirect('/login');
 
-    if (profileError || !profileData) {
-      console.error('[SuperAdminMachineDetailPage] Profile fetch failed:', profileError);
-      notFound();
-    }
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, email, username, role')
+    .eq('id', authUser.id)
+    .single();
 
-    profile = {
-      id: profileData.id,
-      email: profileData.email || user.email || '',
-      username: profileData.username,
-      role: (profileData.role as 'superadmin' | 'gym_owner' | 'gym_admin' | 'receptionist' | 'user') || 'user',
-      assigned_gym_id: profileData.assigned_gym_id,
-      owner_id: profileData.owner_id,
-      home_gym_id: profileData.home_gym_id,
-    };
+  if (profileError || !profileData || profileData.role !== 'superadmin') notFound();
 
-    // Verify superadmin access
-    if (profile.role !== 'superadmin') {
-      notFound();
-    }
-  } catch (error) {
-    console.error('[SuperAdminMachineDetailPage] Unexpected error fetching profile:', error);
-    notFound();
-  }
+  const { data: machineData, error: machineError } = await supabase
+    .from('machines')
+    .select('*, gyms:gym_id (id, name, city, country)')
+    .eq('id', machineId)
+    .single();
 
-  // 3. Fetch machine details with error handling
-  let machine: MachineData;
-  try {
-    const { data: machineData, error: machineError } = await supabase
-      .from('machines')
-      .select(`
-        *,
-        gyms:gym_id (
-          id,
-          name,
-          city,
-          country
-        )
-      `)
-      .eq('id', machineId)
-      .single();
+  if (machineError || !machineData) notFound();
 
-    if (machineError || !machineData) {
-      console.error('[SuperAdminMachineDetailPage] Machine fetch failed:', machineError);
-      notFound();
-    }
+  const raw = machineData;
+  const machine: MachineForDetail = {
+    id: raw.id,
+    gym_id: raw.gym_id,
+    name: raw.name,
+    type: raw.type || 'treadmill',
+    unique_qr_code: raw.unique_qr_code || raw.qr_uuid || '',
+    qr_uuid: raw.qr_uuid || undefined,
+    is_active: raw.is_active,
+    is_under_maintenance: raw.is_under_maintenance ?? false,
+    maintenance_notes: raw.maintenance_notes || undefined,
+    sensor_id: raw.sensor_id || null,
+    sensor_paired_at: raw.sensor_paired_at || null,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+    gyms: raw.gyms as MachineForDetail['gyms'],
+  };
 
-    // Transform data to match Machine interface
-    machine = {
-      ...machineData,
-      type: (machineData.type === 'treadmill' || machineData.type === 'bike') 
-        ? machineData.type 
-        : 'treadmill' as 'treadmill' | 'bike',
-      qr_uuid: machineData.qr_uuid ? machineData.qr_uuid : undefined,
-      unique_qr_code: machineData.unique_qr_code || machineData.qr_uuid || '',
-      gyms: machineData.gyms || null,
-    } as MachineData;
-  } catch (error) {
-    console.error('[SuperAdminMachineDetailPage] Unexpected error fetching machine:', error);
-    notFound();
-  }
+  const gymName = (raw.gyms as Record<string, unknown>)?.name as string || '';
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">Machine Details</h1>
-        <p className="text-[#808080]">View and print machine sticker</p>
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-white">{machine.name}</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">Machine settings, QR code & printable sticker</p>
       </div>
 
-      <MachineDetailView machine={machine as any} userRole={profile.role} />
+      <MachineDetailView machine={machine} userRole="superadmin" gymName={gymName} />
     </div>
   );
 }

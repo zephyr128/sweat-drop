@@ -1,13 +1,7 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
+// Prevent static generation for deeply nested dynamic segments
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
-// CRITICAL: Prevent static generation by returning empty array
-export function generateStaticParams() {
-  return [];
-}
+export function generateStaticParams() { return []; }
 
 import { createClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
@@ -144,10 +138,10 @@ export default async function WorkoutPlansPage({ params }: WorkoutPlansPageProps
   }
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">SmartCoach Dashboard</h1>
-        <p className="text-[#808080]">Monitor workout plans, active sessions, and revenue</p>
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-white">Workout Plans</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">Manage workout plans, active sessions, and revenue.</p>
       </div>
 
       {!smartcoachEnabled ? (

@@ -1,17 +1,9 @@
 // apps/admin-panel/app/accept-invitation/[token]/page.tsx
 
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
+// Prevent static generation for dynamic [token] segment
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
-// CRITICAL: Prevent static generation by returning empty array
-// This must be a sync function that returns empty array
-export function generateStaticParams() {
-  // Return empty array to prevent static generation
-  return [];
-}
+export function generateStaticParams() { return []; }
 
 import { redirect } from 'next/navigation';
 // import { cache } from 'react'; // <--- OVO JE BIO UBICA, NE VRAĆAJ GA!

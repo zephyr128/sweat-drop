@@ -147,6 +147,55 @@ export async function getArenas(options?: {
   }
 }
 
+export async function getArenaById(arenaId: string): Promise<{ success: boolean; data?: Arena; error?: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { success: false, error: 'Not authenticated' };
+    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) return { success: false, error: 'Admin client not available.' };
+
+    const { data: arena, error } = await supabaseAdmin
+      .from('sweat_arenas')
+      .select('*')
+      .eq('id', arenaId)
+      .single();
+    if (error) throw error;
+    if (!arena) return { success: false, error: 'Arena not found' };
+
+    const { count: participantCount } = await supabaseAdmin
+      .from('arena_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('arena_id', arenaId);
+
+    const { data: arenaGymData } = await supabaseAdmin
+      .from('arena_gyms')
+      .select('gym_id, gyms:gym_id(name)')
+      .eq('arena_id', arenaId);
+
+    const gyms = (arenaGymData || []).map((ag: Record<string, unknown>) => ({
+      gym_id: ag.gym_id as string,
+      name: ((ag.gyms as { name: string }) || { name: 'Unknown' }).name,
+    }));
+
+    return {
+      success: true,
+      data: {
+        ...(arena as Record<string, unknown>),
+        participant_count: participantCount || 0,
+        gym_count: gyms.length,
+        gyms,
+      } as Arena,
+    };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to fetch arena';
+    return { success: false, error: errMsg };
+  }
+}
+
 export async function createArena(
   input: z.infer<typeof createArenaSchema>
 ): Promise<{ success: boolean; data?: Arena; error?: string }> {
@@ -209,7 +258,6 @@ export async function createArena(
         approved_at: new Date().toISOString(),
       }));
 
-      // @ts-ignore - Supabase type inference issue with arena_gyms table
       const { error: linkError } = await supabaseAdmin
         .from('arena_gyms')
         .insert(gymLinks as any);
@@ -279,7 +327,6 @@ export async function updateArena(
     if (input.card_text_color !== undefined) updateData.card_text_color = input.card_text_color?.trim() || null;
     if (input.card_gradient_end !== undefined) updateData.card_gradient_end = input.card_gradient_end?.trim() || null;
 
-    // @ts-ignore - Supabase type inference issue with sweat_arenas table
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabaseAdmin as any)
       .from('sweat_arenas')
@@ -302,7 +349,6 @@ export async function updateArena(
           approved_at: new Date().toISOString(),
         }));
 
-        // @ts-ignore - Supabase type inference issue with arena_gyms table
         await supabaseAdmin.from('arena_gyms').insert(gymLinks as any);
       }
     }
@@ -378,7 +424,6 @@ export async function toggleArenaStatus(
       }
     }
 
-    // @ts-ignore - Supabase type inference issue with sweat_arenas table
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabaseAdmin as any)
       .from('sweat_arenas')
@@ -409,7 +454,6 @@ export async function finalizeArena(arenaId: string): Promise<{ success: boolean
     // Use authenticated client for RPC calls that check auth.uid()
     const supabase = await createServerClient();
 
-    // @ts-ignore - Supabase RPC type inference issue
     const { data, error } = await supabase.rpc('finalize_arena', {
       p_arena_id: arenaId,
     });

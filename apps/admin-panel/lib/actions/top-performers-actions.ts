@@ -8,67 +8,78 @@ export interface TopPerformer {
   id: string;
   username: string;
   avatar_url: string | null;
-  total_drops: number;
+  earnedDrops: number;
 }
 
 export async function getTopPerformers(gymId: string): Promise<TopPerformer[]> {
   try {
     const supabase = await createClient();
-    // Use service role client to fetch profiles (bypasses RLS)
-    let clientToUse = supabase;
     const adminClient = getAdminClient();
-    if (adminClient) {
-      clientToUse = adminClient;
-    } else {
-      // Fallback to regular client if admin client unavailable
-      logger.warn('Admin client unavailable, using regular client');
-    }
+    const clientToUse = adminClient || supabase;
 
-    // Get top 3 users by local_drops_balance for this gym
-    const { data: memberships, error } = await supabase
+    // Get members who are regular users (not staff/owner)
+    const { data: memberships, error: memError } = await supabase
       .from('gym_memberships')
-      .select('user_id, local_drops_balance')
-      .eq('gym_id', gymId)
-      .order('local_drops_balance', { ascending: false })
-      .limit(3);
+      .select('user_id')
+      .eq('gym_id', gymId);
 
-    if (error) {
-      logger.error('Error fetching gym memberships for top performers', { error, gymId });
-      throw error;
+    if (memError) {
+      logger.error('Error fetching gym memberships for top performers', { error: memError, gymId });
+      throw memError;
     }
 
-    if (!memberships || memberships.length === 0) {
-      return [];
-    }
+    if (!memberships || memberships.length === 0) return [];
 
-    // Get user profiles using service role client (bypasses RLS)
     const userIds = memberships.map((m) => m.user_id);
+
+    // Filter to only regular users (exclude staff roles)
     const { data: profiles, error: profileError } = await clientToUse
       .from('profiles')
-      .select('id, username, avatar_url, total_drops')
-      .in('id', userIds);
+      .select('id, username, avatar_url, role')
+      .in('id', userIds)
+      .eq('role', 'user');
 
     if (profileError) {
       logger.error('Error fetching profiles for top performers', { error: profileError, gymId });
       throw profileError;
     }
 
-    // Combine data and sort by local_drops_balance
-    const combined = memberships
-      .map((membership) => {
-        const profile = profiles?.find((p) => p.id === membership.user_id);
-        if (!profile) return null;
+    if (!profiles || profiles.length === 0) return [];
+
+    const regularUserIds = profiles.map((p) => p.id);
+
+    // Sum earned drops from sessions for these users at this gym
+    const { data: sessions, error: sessionError } = await supabase
+      .from('sessions')
+      .select('user_id, drops_earned')
+      .eq('gym_id', gymId)
+      .in('user_id', regularUserIds)
+      .not('drops_earned', 'is', null);
+
+    if (sessionError) {
+      logger.error('Error fetching sessions for top performers', { error: sessionError, gymId });
+      throw sessionError;
+    }
+
+    // Aggregate drops per user
+    const dropsByUser: Record<string, number> = {};
+    (sessions || []).forEach((s) => {
+      const uid = s.user_id;
+      dropsByUser[uid] = (dropsByUser[uid] || 0) + (Number(s.drops_earned) || 0);
+    });
+
+    const combined = profiles
+      .map((profile) => {
         const rawAv = profile.avatar_url;
         return {
           id: profile.id,
           username: profile.username,
-          avatar_url:
-            typeof rawAv === 'string' && rawAv.trim() ? rawAv.trim() : null,
-          total_drops: membership.local_drops_balance || 0,
+          avatar_url: typeof rawAv === 'string' && rawAv.trim() ? rawAv.trim() : null,
+          earnedDrops: dropsByUser[profile.id] || 0,
         };
       })
-      .filter((p): p is TopPerformer => p !== null)
-      .sort((a, b) => b.total_drops - a.total_drops);
+      .sort((a, b) => b.earnedDrops - a.earnedDrops)
+      .slice(0, 3);
 
     return combined;
   } catch (error) {

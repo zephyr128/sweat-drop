@@ -11,7 +11,7 @@ import {
   type WorkoutPlanMetrics
 } from '@/lib/actions/workout-plan-actions';
 import { WORKOUT_TEMPLATES, filterTemplates, type TemplateGoal, type TemplateStructure, type TemplateEquipment } from '@/lib/utils/workout-templates';
-import { X, Trash2, Power, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles, TrendingUp, TrendingDown, Minus, Users, Target, DollarSign, Trophy, Dumbbell } from 'lucide-react';
+import { X, Trash2, Plus, Edit2, ChevronUp, ChevronDown, Save, Sparkles, TrendingUp, TrendingDown, Minus, Users, Target, DollarSign, Trophy, Dumbbell, Power } from 'lucide-react';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 
 interface WorkoutPlan {
@@ -610,7 +610,7 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
               <thead>
                 <tr className="border-b border-zinc-900">
                   <th className="text-left p-4 text-sm font-medium text-zinc-500">Plan Name</th>
-                  <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                  <th className="text-left p-4 text-sm font-medium text-zinc-500">Active</th>
                   <th className="text-left p-4 text-sm font-medium text-zinc-500">Access Type</th>
                   <th className="text-center p-4 text-sm font-medium text-zinc-500">Exercises</th>
                   <th className="text-center p-4 text-sm font-medium text-zinc-500">Duration</th>
@@ -642,13 +642,17 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          plan.is_active 
-                            ? 'bg-green-500/10 text-green-400' 
-                            : 'bg-zinc-500/10 text-zinc-500'
-                        }`}>
-                          {plan.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(plan.id, plan.is_active); }}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            plan.is_active
+                              ? 'text-[#00E5FF] hover:bg-[#00E5FF]/10'
+                              : 'text-zinc-600 hover:bg-zinc-800'
+                          }`}
+                          title={plan.is_active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                        >
+                          <Power className="w-4 h-4" />
+                        </button>
                       </td>
                       <td className="p-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${accessBadge.className}`}>
@@ -727,17 +731,6 @@ export function WorkoutPlansManager({ gymId, initialPlans, machines }: WorkoutPl
                             title="Edit"
                           >
                             <Edit2 className="w-4 h-4" strokeWidth={1.5} />
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(plan.id, plan.is_active)}
-                            className={`p-2 transition-colors ${
-                              plan.is_active 
-                                ? 'text-zinc-500 hover:text-yellow-400' 
-                                : 'text-zinc-500 hover:text-green-400'
-                            }`}
-                            title={plan.is_active ? 'Deactivate' : 'Activate'}
-                          >
-                            <Power className="w-4 h-4" strokeWidth={1.5} />
                           </button>
                           <button
                             onClick={() => handleDeletePlan(plan.id)}

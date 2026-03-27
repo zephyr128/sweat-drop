@@ -86,7 +86,7 @@ export function MachineFleetTable({ machines }: MachineFleetTableProps) {
   }, [machines]);
 
   const sorted = useMemo(() => {
-    let list = typeFilter
+    const list = typeFilter
       ? machines.filter((m) => m.type === typeFilter)
       : [...machines];
 

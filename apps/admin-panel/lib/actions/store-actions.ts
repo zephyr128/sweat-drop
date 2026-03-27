@@ -310,14 +310,33 @@ export async function deleteStoreItem(itemId: string, gymId: string) {
       .from('rewards')
       .delete()
       .eq('id', itemId)
-      .eq('gym_id', gymId); // Security: ensure it belongs to the gym
+      .eq('gym_id', gymId);
 
     if (error) throw error;
 
     revalidatePath(`/dashboard/gym/${gymId}/store`);
     return { success: true };
   } catch (error: any) {
-    // Error deleting store item
+    return { success: false, error: error.message };
+  }
+}
+
+export async function toggleStoreItemActive(itemId: string, gymId: string, isActive: boolean) {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available.' };
+    }
+    const { error } = await (supabaseAdmin.from('rewards') as any)
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', itemId)
+      .eq('gym_id', gymId);
+
+    if (error) throw error;
+
+    revalidatePath(`/dashboard/gym/${gymId}/store`);
+    return { success: true };
+  } catch (error: any) {
     return { success: false, error: error.message };
   }
 }

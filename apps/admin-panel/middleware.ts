@@ -116,7 +116,7 @@ export async function middleware(req: NextRequest) {
       } else if (profile.role === 'gym_owner') {
         redirectUrl.pathname = '/dashboard/owner';
       } else if (profile.role === 'receptionist' && profile.assigned_gym_id) {
-        redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/redemptions`;
+        redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/desk`;
       } else if (profile.role === 'gym_admin' && profile.assigned_gym_id) {
         redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/dashboard`;
       } else {
@@ -220,7 +220,7 @@ export async function middleware(req: NextRequest) {
         // Block superadmin routes
         if (pathname.startsWith('/dashboard/super')) {
           if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/redemptions`, req.url));
+            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
           }
           return NextResponse.redirect(new URL('/404', req.url));
         }
@@ -228,7 +228,7 @@ export async function middleware(req: NextRequest) {
         // Block owner routes
         if (pathname.startsWith('/dashboard/owner')) {
           if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/redemptions`, req.url));
+            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
           }
           return NextResponse.redirect(new URL('/404', req.url));
         }
@@ -238,11 +238,10 @@ export async function middleware(req: NextRequest) {
           return NextResponse.redirect(new URL('/403', req.url));
         }
         
-        // Can only access redemptions and dashboard (live feed)
-        const allowedPaths = ['/redemptions', '/dashboard'];
+        const allowedPaths = ['/desk', '/redemptions', '/verify', '/dashboard'];
         if (gymIdFromUrl) {
           if (profile.assigned_gym_id !== gymIdFromUrl) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/redemptions`, req.url));
+            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
           }
           // Check if path is allowed
           const pathAfterGym = pathname.replace(`/dashboard/gym/${gymIdFromUrl}`, '');
@@ -251,11 +250,11 @@ export async function middleware(req: NextRequest) {
             if (pathAfterGym.includes('/analytics')) {
               return NextResponse.redirect(new URL('/403', req.url));
             }
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/redemptions`, req.url));
+            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
           }
         } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
           if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/redemptions`, req.url));
+            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
           }
         }
       }

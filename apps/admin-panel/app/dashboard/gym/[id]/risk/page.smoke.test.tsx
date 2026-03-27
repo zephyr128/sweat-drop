@@ -25,7 +25,7 @@ describe('risk page smoke', () => {
   it('smoke: renders risk page', async () => {
     const ui = await Page({ params: Promise.resolve({ id: 'gym-1' }) });
     const html = renderToStaticMarkup(ui);
-    expect(html).toContain('Risk &amp; Abuse');
+    expect(html).toContain('Safety &amp; Fair Play');
   });
 });
 

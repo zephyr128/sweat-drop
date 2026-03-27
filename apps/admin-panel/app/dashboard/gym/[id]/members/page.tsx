@@ -1,6 +1,4 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via requireGymAccess)
 
 import { requireGymAccess } from '@/lib/auth-guard';
 import { MembersPageTabs } from '@/components/modules/MembersPageTabs';
@@ -14,11 +12,11 @@ export default async function MembersPage({
   await requireGymAccess(gymId);
 
   return (
-    <div className="min-h-screen md:p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Members</h1>
-        <p className="text-[#808080] mt-1">
-          View and manage all gym members, track activity, and identify engagement patterns.
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-white">Members</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Activity overview, retention insights, and full member directory.
         </p>
       </div>
 

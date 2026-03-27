@@ -102,6 +102,8 @@ import { View, Text } from 'react'; // Or use <div>, <span>
 - ❌ **NEVER skip reading ARCHITECTURE.md and STATE_OF_THE_APP.md**
 - ❌ **NEVER give vague feedback** ("this is wrong" - explain why)
 - ❌ **NEVER approve code without checking architecture compliance**
+- ❌ **NEVER commit or push sensitive data to git** (secrets, passwords, API keys, tokens, private keys, `.env` credentials, service account JSONs, or any confidential data)
+- ❌ **NEVER include sensitive files in staging/PR review suggestions**; require removal/redaction and secret rotation guidance first
 
 ## Review Checklist
 
@@ -124,6 +126,7 @@ import { View, Text } from 'react'; // Or use <div>, <span>
 - [ ] No SQL injection risks (use parameterized queries)
 - [ ] No sensitive data exposed in client code
 - [ ] Authentication checks are in place
+- [ ] No secrets/sensitive credentials are staged, committed, pushed, or included in diffs
 
 ### Architecture Compliance
 - [ ] Mobile app uses React Native components only

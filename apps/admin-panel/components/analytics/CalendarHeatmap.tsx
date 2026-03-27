@@ -63,7 +63,7 @@ export function CalendarHeatmap({ data, days }: CalendarHeatmapProps) {
 
     const allWeeks: Array<Array<{ date: string; sessions: number; drops: number; unique_users: number; inRange: boolean } | null>> = [];
     const months: Array<{ label: string; col: number }> = [];
-    let current = new Date(start);
+    const current = new Date(start);
     let weekIdx = 0;
     let lastMonth = '';
 

@@ -1,10 +1,6 @@
+// Prevent static generation for dynamic [id] segment
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
-export function generateStaticParams() {
-  return [];
-}
+export function generateStaticParams() { return []; }
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';

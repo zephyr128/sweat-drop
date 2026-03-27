@@ -4,6 +4,29 @@ import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '../auth';
 
+export async function getPendingRedemptionCount(gymId: string): Promise<number> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return 0;
+    const allowed = ['superadmin', 'gym_owner', 'gym_admin', 'receptionist'];
+    if (!allowed.includes(profile.role)) return 0;
+
+    const supabase = getAdminClient();
+    if (!supabase) return 0;
+
+    const { count, error } = await supabase
+      .from('redemptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('gym_id', gymId)
+      .eq('status', 'pending');
+
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function confirmRedemption(redemptionId: string, gymId: string) {
   try {
     const profile = await getCurrentProfile();

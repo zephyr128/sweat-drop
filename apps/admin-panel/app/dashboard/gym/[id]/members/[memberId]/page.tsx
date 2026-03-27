@@ -1,6 +1,4 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Route is auto-dynamic (reads cookies via getCurrentProfile)
 
 import { getCurrentProfile } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
@@ -30,5 +28,9 @@ export default async function MemberDetailPage({
     notFound();
   }
 
-  return <MemberDetailView gymId={gymId} data={result.data} />;
+  return (
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto">
+      <MemberDetailView gymId={gymId} data={result.data} />
+    </div>
+  );
 }

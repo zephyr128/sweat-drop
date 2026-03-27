@@ -1,13 +1,7 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
+// Prevent static generation; route is auto-dynamic via cookies
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
-// CRITICAL: Prevent static generation by returning empty array
-export function generateStaticParams() {
-  return [];
-}
+export function generateStaticParams() { return []; }
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';

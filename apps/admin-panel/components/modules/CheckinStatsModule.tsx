@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { MapPin, Shield, ShieldAlert, Filter } from 'lucide-react';
-import { getGymCheckinStats, getGymCheckins } from '@/lib/actions/gym-actions';
+import { Shield, ShieldAlert, MapPin, Users, Calendar, TrendingUp } from 'lucide-react';
+import { getGymCheckinStats, getGymCheckinsPaginated } from '@/lib/actions/gym-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { DataTable, type ColumnDef, type FilterDef, type DataTableQuery } from '@/components/ui/DataTable';
 
 interface Checkin {
   id: string;
@@ -22,151 +23,194 @@ interface CheckinStatsModuleProps {
 }
 
 function GPSBadge({ verified, distance }: { verified: boolean; distance: number | null }) {
-  if (distance === null) return <span className="text-[#555] text-xs">GPS N/A</span>;
-  if (verified) return <span className="text-emerald-400 text-xs flex items-center gap-1"><Shield className="w-3 h-3" /> {distance}m</span>;
-  return <span className="text-red-400 text-xs flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> {distance}m</span>;
+  if (distance === null) {
+    return <span className="text-zinc-600 text-xs">N/A</span>;
+  }
+  if (verified) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+        <Shield className="w-3 h-3" />
+        {distance}m
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+      <ShieldAlert className="w-3 h-3" />
+      {distance}m
+    </span>
+  );
 }
 
 function formatTime(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleString('en-GB', {
     day: '2-digit',
-    month: '2-digit',
+    month: 'short',
     hour: '2-digit',
     minute: '2-digit',
   });
 }
 
+const GPS_FILTER: FilterDef[] = [
+  {
+    key: 'gps',
+    label: 'GPS',
+    options: [
+      { value: 'all', label: 'All check-ins' },
+      { value: 'verified', label: 'GPS verified' },
+      { value: 'unverified', label: 'GPS unverified' },
+    ],
+  },
+];
+
 export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
   const router = useRouter();
   const [stats, setStats] = useState<{ today: number; week: number; total: number } | null>(null);
-  const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [data, setData] = useState<{ items: Checkin[]; total: number; page: number; limit: number; totalPages: number }>({
+    items: [],
+    total: 0,
+    page: 1,
+    limit: 25,
+    totalPages: 0,
+  });
   const [loading, setLoading] = useState(true);
-  const [showUnverified, setShowUnverified] = useState(false);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [query, setQuery] = useState<{ page: number; limit: number; gpsFilter: 'all' | 'verified' | 'unverified' }>({
+    page: 1,
+    limit: 25,
+    gpsFilter: 'all',
+  });
 
   useEffect(() => {
-    async function load() {
-      const [statsRes, checkinsRes] = await Promise.all([
-        getGymCheckinStats(gymId),
-        getGymCheckins(gymId),
-      ]);
-      if (statsRes.success && statsRes.data) setStats(statsRes.data);
-      if (checkinsRes.success && checkinsRes.data) setCheckins(checkinsRes.data);
-      setLoading(false);
-    }
-    load();
+    getGymCheckinStats(gymId).then((res) => {
+      if (res.success && res.data) setStats(res.data);
+    });
   }, [gymId]);
 
-  const filteredCheckins = showUnverified
-    ? checkins.filter((c) => !c.gps_verified)
-    : checkins;
+  const fetchCheckins = useCallback(async () => {
+    setTableLoading(true);
+    const res = await getGymCheckinsPaginated(gymId, {
+      page: query.page,
+      limit: query.limit,
+      gpsFilter: query.gpsFilter,
+    });
+    if (res.success && res.data) {
+      setData(res.data);
+    }
+    setTableLoading(false);
+    setLoading(false);
+  }, [gymId, query]);
+
+  useEffect(() => {
+    fetchCheckins();
+  }, [fetchCheckins]);
+
+  const handleQueryChange = useCallback((q: DataTableQuery) => {
+    setQuery((prev) => ({
+      page: q.page ?? prev.page,
+      limit: q.limit ?? prev.limit,
+      gpsFilter: (q.filters?.gps as 'all' | 'verified' | 'unverified') ?? prev.gpsFilter,
+    }));
+  }, []);
+
+  const columns: ColumnDef<Checkin>[] = useMemo(() => [
+    {
+      key: 'user',
+      label: 'Member',
+      render: (row) => (
+        <div className="flex items-center gap-2.5">
+          <MemberAvatar avatarUrl={row.avatar_url} username={row.username} size="sm" />
+          <span className="text-sm text-white font-medium truncate max-w-[140px]">
+            {row.username}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'checked_in_at',
+      label: 'Time',
+      sortable: true,
+      render: (row) => (
+        <span className="text-sm text-zinc-400">{formatTime(row.checked_in_at)}</span>
+      ),
+    },
+    {
+      key: 'drops_earned',
+      label: 'Drops',
+      sortable: true,
+      render: (row) =>
+        row.drops_earned > 0 ? (
+          <span className="text-sm text-[#00E5FF] font-semibold">+{row.drops_earned}</span>
+        ) : (
+          <span className="text-sm text-zinc-600">0</span>
+        ),
+    },
+    {
+      key: 'gps',
+      label: 'GPS',
+      render: (row) => <GPSBadge verified={row.gps_verified} distance={row.gps_distance_m} />,
+    },
+  ], []);
 
   if (loading) {
     return (
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-[#1A1A1A] rounded w-48" />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="h-20 bg-[#1A1A1A] rounded-lg" />
-            <div className="h-20 bg-[#1A1A1A] rounded-lg" />
-            <div className="h-20 bg-[#1A1A1A] rounded-lg" />
-          </div>
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-4 animate-pulse">
+              <div className="h-6 bg-zinc-800/50 rounded w-12 mb-1" />
+              <div className="h-3 bg-zinc-800/50 rounded w-16" />
+            </div>
+          ))}
         </div>
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-4 animate-pulse h-48" />
       </div>
     );
   }
 
-  if (!stats || stats.total === 0) return null;
-
   return (
-    <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6 space-y-6">
-      <h2 className="text-xl font-bold text-white flex items-center gap-2">
-        <MapPin className="w-5 h-5 text-[#00E5FF]" />
-        Check-in Overview
-      </h2>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Today', value: stats.today },
-          { label: 'This Week', value: stats.week },
-          { label: 'Total', value: stats.total },
-        ].map((kpi) => (
-          <div key={kpi.label} className="bg-[#111] border border-[#222] rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-white">{kpi.value}</div>
-            <div className="text-xs text-[#808080] mt-1">{kpi.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filter toggle */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-[#808080]">Last {filteredCheckins.length} check-ins</span>
-        <button
-          onClick={() => setShowUnverified(!showUnverified)}
-          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all ${
-            showUnverified
-              ? 'bg-red-500/10 text-red-400 border-red-500/30'
-              : 'bg-[#1A1A1A] text-[#808080] border-[#333] hover:text-white'
-          }`}
-        >
-          <Filter className="w-3 h-3" />
-          {showUnverified ? 'Showing unverified only' : 'Filter unverified GPS'}
-        </button>
-      </div>
-
-      {/* Table */}
-      {filteredCheckins.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#222]">
-                <th className="text-left text-xs text-[#808080] font-medium py-2 px-3">User</th>
-                <th className="text-left text-xs text-[#808080] font-medium py-2 px-3">Time</th>
-                <th className="text-right text-xs text-[#808080] font-medium py-2 px-3">Drops</th>
-                <th className="text-center text-xs text-[#808080] font-medium py-2 px-3">GPS Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCheckins.map((c) => (
-                <tr
-                  key={c.id}
-                  onClick={() => router.push(`/dashboard/gym/${gymId}/members/${c.user_id}`)}
-                  className="border-b border-[#111] hover:bg-[#111] transition-colors cursor-pointer"
-                >
-                  <td className="py-3 px-3">
-                    <div className="flex items-center gap-2">
-                      <MemberAvatar
-                        avatarUrl={c.avatar_url}
-                        username={c.username}
-                        size="sm"
-                      />
-                      <span className="text-sm text-white truncate max-w-[120px]">{c.username}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-3 text-sm text-[#808080]">{formatTime(c.checked_in_at)}</td>
-                  <td className="py-3 px-3 text-sm text-right">
-                    {c.drops_earned > 0 ? (
-                      <span className="text-[#00E5FF] font-medium">+{c.drops_earned}</span>
-                    ) : (
-                      <span className="text-[#555]">0</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="flex justify-center">
-                      <GPSBadge verified={c.gps_verified} distance={c.gps_distance_m} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="space-y-4">
+      {/* Compact KPI strip */}
+      {stats && stats.total > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: Calendar, label: 'Today', value: stats.today, accent: 'text-[#00E5FF]' },
+            { icon: TrendingUp, label: 'This week', value: stats.week, accent: 'text-emerald-400' },
+            { icon: Users, label: 'All time', value: stats.total, accent: 'text-zinc-300' },
+          ].map((kpi) => (
+            <div key={kpi.label} className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#111] flex items-center justify-center shrink-0">
+                <kpi.icon className={`w-4 h-4 ${kpi.accent}`} />
+              </div>
+              <div>
+                <div className={`text-lg font-bold ${kpi.accent}`}>{kpi.value.toLocaleString()}</div>
+                <div className="text-[10px] text-zinc-600 uppercase tracking-wider">{kpi.label}</div>
+              </div>
+            </div>
+          ))}
         </div>
-      ) : (
-        <p className="text-sm text-[#555] text-center py-4">
-          {showUnverified ? 'No unverified check-ins found' : 'No check-ins yet'}
-        </p>
       )}
+
+      {/* Check-in table */}
+      <DataTable
+        data={data.items}
+        columns={columns}
+        total={data.total}
+        page={data.page}
+        limit={data.limit}
+        totalPages={data.totalPages}
+        loading={tableLoading}
+        searchPlaceholder="Search members…"
+        filters={GPS_FILTER}
+        filterValues={{ gps: query.gpsFilter }}
+        emptyIcon={<MapPin className="w-8 h-8" />}
+        emptyTitle="No check-ins yet"
+        emptyDescription="Check-ins will appear here once members start scanning the QR code."
+        onQueryChange={handleQueryChange}
+        onRowClick={(row) => router.push(`/dashboard/gym/${gymId}/members/${row.user_id}`)}
+        rowKey={(row) => row.id}
+      />
     </div>
   );
 }

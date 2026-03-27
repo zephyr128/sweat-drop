@@ -1,7 +1,3 @@
-// CRITICAL: Force dynamic rendering to avoid React.cache issues during build
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
-
 import Link from 'next/link';
 
 export default function ForbiddenPage() {

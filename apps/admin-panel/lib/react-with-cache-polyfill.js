@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 // CRITICAL: Polyfill for React that adds cache() and preload() functions
 // Next.js 14.2.3 expects React.cache() and React.preload() but React 18.2.0 doesn't have them
 // This module exports React with cache and preload polyfills for Next.js build process

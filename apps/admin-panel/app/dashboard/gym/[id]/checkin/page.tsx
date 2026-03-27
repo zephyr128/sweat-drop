@@ -1,22 +1,13 @@
+// LIVE: Real-time check-in activity
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
 
-import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import Link from 'next/link';
 import { requireGymAccess } from '@/lib/auth-guard';
-import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
 import { CheckinStatsModule } from '@/components/modules/CheckinStatsModule';
-import { getEconomyConfig } from '@/lib/actions/economy-actions';
+import { Settings } from 'lucide-react';
 
 interface CheckinPageProps {
   params: Promise<{ id: string }>;
-}
-
-interface GymData {
-  id: string;
-  owner_id: string | null;
-  [key: string]: unknown;
 }
 
 export default async function CheckinPage({ params }: CheckinPageProps) {
@@ -24,57 +15,25 @@ export default async function CheckinPage({ params }: CheckinPageProps) {
 
   await requireGymAccess(id, ['superadmin', 'gym_owner', 'gym_admin', 'receptionist']);
 
-  const supabase = await createClient();
-
-  const { data: gymData, error: gymError } = await supabase
-    .from('gyms')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (gymError || !gymData) {
-    notFound();
-  }
-
-  const gym = gymData as GymData;
-  const economyResult = await getEconomyConfig(id);
-
-  const checkinDropsFromEconomy = economyResult.success && economyResult.data
-    ? Number(economyResult.data.config.maxCheckinDropsPerDay)
-    : null;
-  const checkinDrops = Number.isFinite(checkinDropsFromEconomy)
-    ? Number(checkinDropsFromEconomy)
-    : typeof gym.checkin_drops === 'number' ? gym.checkin_drops : 20;
-  const gymLat = typeof gym.lat === 'number' ? gym.lat : null;
-  const gymLng = typeof gym.lng === 'number' ? gym.lng : null;
-  const gpsRadiusM = typeof gym.gps_radius_m === 'number' ? gym.gps_radius_m : 200;
-  const gymAddress = typeof gym.address === 'string' ? gym.address : null;
-  const gymCity = typeof gym.city === 'string' ? gym.city : null;
-
   return (
-    <div className="min-h-screen md:p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Check-in</h1>
-        <p className="text-[#808080] mt-1">
-          Manage QR check-in, GPS settings, and view check-in activity.
-        </p>
+    <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">Check-in</h1>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            QR check-in activity and member attendance.
+          </p>
+        </div>
+        <Link
+          href={`/dashboard/gym/${id}/settings?tab=location`}
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl text-xs text-zinc-400 hover:text-white hover:border-zinc-700/60 transition-all"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          Check-in Settings
+        </Link>
       </div>
 
-      <div className="space-y-8">
-        <CheckinSettingsModule
-          gymId={id}
-          initialData={{
-            checkin_drops: checkinDrops,
-            lat: gymLat,
-            lng: gymLng,
-            gps_radius_m: gpsRadiusM,
-            address: gymAddress,
-            city: gymCity,
-          }}
-        />
-
-        <CheckinStatsModule gymId={id} />
-      </div>
+      <CheckinStatsModule gymId={id} />
     </div>
   );
 }

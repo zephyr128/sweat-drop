@@ -2,40 +2,65 @@
 
 import { useState } from 'react';
 import { getNetworkOverviewStats } from '@/lib/actions/gym-actions';
-import { StatsCard } from '../StatsCard';
-import { BarChart3, Dumbbell, CheckCircle2, Pause, Users, Droplet } from 'lucide-react';
+import {
+  BarChart3,
+  Building2,
+  CheckCircle2,
+  Pause,
+  Users,
+  Droplet,
+  Dumbbell,
+} from 'lucide-react';
 
 interface NetworkOverviewToggleProps {
   ownerId: string;
   currentGymId: string;
 }
 
+interface NetworkStats {
+  total_gyms: number;
+  active_gyms: number;
+  suspended_gyms: number;
+  total_members: number;
+  total_drops_earned: number;
+  total_machines: number;
+}
+
+interface StatCardProps {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  accentBg: string;
+  accentBorder: string;
+}
+
+function StatCard({ label, value, icon, accentBg, accentBorder }: StatCardProps) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-xl bg-[#0A0A0A] border border-[#1A1A1A] ${accentBorder} border-t-2 p-4 transition-all duration-200 hover:border-zinc-700/60 hover:-translate-y-0.5`}
+    >
+      <div className={`w-8 h-8 rounded-lg ${accentBg} flex items-center justify-center mb-2`}>
+        {icon}
+      </div>
+      <span className="text-2xl font-bold text-white leading-none block">
+        {value.toLocaleString()}
+      </span>
+      <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1 font-medium">{label}</p>
+    </div>
+  );
+}
+
 export function NetworkOverviewToggle({ ownerId, currentGymId: _currentGymId }: NetworkOverviewToggleProps) {
   const [showNetwork, setShowNetwork] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [networkStats, setNetworkStats] = useState<{
-    total_gyms: number;
-    active_gyms: number;
-    suspended_gyms: number;
-    total_members: number;
-    total_drops_earned: number;
-    total_machines: number;
-  } | null>(null);
+  const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
 
   const handleToggle = async () => {
     if (!showNetwork && !networkStats) {
-      // Load network stats
       setLoading(true);
       const result = await getNetworkOverviewStats(ownerId) as {
         success: boolean;
-        data?: {
-          total_gyms: number;
-          active_gyms: number;
-          suspended_gyms: number;
-          total_members: number;
-          total_drops_earned: number;
-          total_machines: number;
-        } | null;
+        data?: NetworkStats | null;
         error?: string;
       };
       if (result.success && result.data) {
@@ -51,9 +76,9 @@ export function NetworkOverviewToggle({ ownerId, currentGymId: _currentGymId }: 
       <div className="mb-6">
         <button
           onClick={handleToggle}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white hover:bg-[#2A2A2A] transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl text-zinc-400 hover:text-white hover:border-zinc-700/60 transition-all text-xs font-medium"
         >
-          <BarChart3 className="w-4 h-4" strokeWidth={1.5} />
+          <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.5} />
           View Network Overview
         </button>
       </div>
@@ -63,66 +88,69 @@ export function NetworkOverviewToggle({ ownerId, currentGymId: _currentGymId }: 
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-white">Network Overview</h2>
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-cyan-400" />
+          Network Overview
+        </h2>
         <button
           onClick={handleToggle}
-          className="px-4 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white hover:bg-[#2A2A2A] transition-colors text-sm font-medium"
+          className="px-3 py-1.5 bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg text-zinc-400 hover:text-white hover:border-zinc-700/60 transition-all text-xs font-medium"
         >
-          View Single Gym
+          Close
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#00E5FF]"></div>
+        <div className="flex items-center justify-center py-8">
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-400" />
         </div>
       ) : networkStats ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <StatsCard
-            title="Total Gyms"
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <StatCard
+            label="Total Gyms"
             value={networkStats.total_gyms}
-            icon="Building2"
-            accent="blue"
-            priority="primary"
+            icon={<Building2 className="w-4 h-4 text-blue-400" />}
+            accentBg="bg-blue-500/10"
+            accentBorder="border-t-blue-500/60"
           />
-          <StatsCard
-            title="Active Gyms"
+          <StatCard
+            label="Active Gyms"
             value={networkStats.active_gyms}
-            icon="CheckCircle2"
-            accent="emerald"
-            priority="secondary"
+            icon={<CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+            accentBg="bg-emerald-500/10"
+            accentBorder="border-t-emerald-500/60"
           />
-          <StatsCard
-            title="Suspended Gyms"
+          <StatCard
+            label="Suspended"
             value={networkStats.suspended_gyms}
-            icon="Pause"
-            accent="amber"
-            priority="secondary"
+            icon={<Pause className="w-4 h-4 text-amber-400" />}
+            accentBg="bg-amber-500/10"
+            accentBorder="border-t-amber-500/60"
           />
-          <StatsCard
-            title="Total Members"
+          <StatCard
+            label="Total Members"
             value={networkStats.total_members}
-            icon="Users"
-            accent="cyan"
-            priority="secondary"
+            icon={<Users className="w-4 h-4 text-cyan-400" />}
+            accentBg="bg-cyan-500/10"
+            accentBorder="border-t-cyan-500/60"
           />
-          <StatsCard
-            title="Total Drops Earned"
+          <StatCard
+            label="Drops Earned"
             value={networkStats.total_drops_earned}
-            icon="Droplet"
-            accent="cyan"
-            priority="secondary"
+            icon={<Droplet className="w-4 h-4 text-blue-400" />}
+            accentBg="bg-blue-500/10"
+            accentBorder="border-t-blue-500/60"
           />
-          <StatsCard
-            title="Total Machines"
+          <StatCard
+            label="Machines"
             value={networkStats.total_machines}
-            icon="Dumbbell"
-            accent="purple"
-            priority="secondary"
+            icon={<Dumbbell className="w-4 h-4 text-purple-400" />}
+            accentBg="bg-purple-500/10"
+            accentBorder="border-t-purple-500/60"
           />
         </div>
       ) : (
-        <div className="text-center py-12 text-[#808080]">
+        <div className="text-center py-8 text-zinc-600 text-xs">
           Failed to load network stats
         </div>
       )}
