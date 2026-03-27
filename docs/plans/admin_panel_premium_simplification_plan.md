@@ -54,6 +54,21 @@ We need a cleaner information architecture and simpler “first day” setup.
 - Gym Setup (General, Appearance/Branding link, Check-in defaults)
 - Advanced (Economy, Risk & Abuse)
 
+## Final Placement Decisions (Locked)
+
+1. **Risk & Abuse**
+- Primary location: `Settings > Advanced > Safety & Fair Play` (owner/admin only).
+- Secondary exposure: small dashboard alert chip only when risk spikes (e.g. suspicious redemptions, abnormal mint).
+- Not a permanent top-level sidebar item to avoid clutter for day-to-day operators.
+
+2. **Economy Stats**
+- Operational quick view on `Dashboard`:
+  - Burn/Mint ratio (30d)
+  - Expiring drops (7d/30d)
+  - Out-of-band active rewards count
+- Full controls and deep analytics in `Settings > Advanced > Economy`.
+- Economy tuning remains hidden behind advanced disclosure in owner default experience.
+
 ## Receptionist
 
 ### DESK (single destination)
