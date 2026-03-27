@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -23,6 +23,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
+import * as Notifications from 'expo-notifications';
+import { log } from '@/lib/logger';
+import {
+  PUSH_NOTIFICATIONS_ENABLED,
+  registerForPushNotifications,
+  savePushToken,
+} from '@/lib/notifications';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.6)
 // Dedicated Profile screen with hero, stats grid, recent badges, quick links.
@@ -82,6 +89,11 @@ function formatMemberSince(iso: string, lang: string = 'sr'): string {
   return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 }
 
+interface IdentityStatus {
+  isVerified: boolean;
+  verifiedAt: string | null;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -96,7 +108,33 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0, longestStreak: 0 });
   const [loading, setLoading] = useState(true);
+  const [identity, setIdentity] = useState<IdentityStatus | null>(null);
+  const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'undetermined' | 'unsupported'>('undetermined');
 
+  const checkPushStatus = useCallback(async () => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      setPushStatus('unsupported');
+      return;
+    }
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      setPushStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined');
+    } catch {
+      setPushStatus('unsupported');
+    }
+  }, []);
+
+  const handleEnablePush = useCallback(async () => {
+    if (pushStatus === 'undetermined') {
+      const token = await registerForPushNotifications();
+      if (token && session?.user?.id) {
+        await savePushToken(session.user.id, token);
+      }
+      await checkPushStatus();
+    } else if (pushStatus === 'denied') {
+      Linking.openSettings();
+    }
+  }, [pushStatus, session?.user?.id, checkPushStatus]);
 
   const loadProfile = useCallback(async () => {
     if (!session?.user) return;
@@ -109,7 +147,7 @@ export default function ProfileScreen() {
         .single();
 
       if (error) {
-        console.error('[Profile] Error loading profile:', error);
+        log.error('[Profile] Error loading profile:', error);
         return;
       }
 
@@ -157,6 +195,29 @@ export default function ProfileScreen() {
     }
   }, [session?.user?.id, profile?.streak_days]);
 
+  const loadIdentity = useCallback(async () => {
+    if (!session?.user || !homeGymId) {
+      setIdentity(null);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('gym_member_identities')
+        .select('is_verified, verified_at')
+        .eq('gym_id', homeGymId)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (data) {
+        setIdentity({ isVerified: data.is_verified, verifiedAt: data.verified_at });
+      } else {
+        setIdentity({ isVerified: false, verifiedAt: null });
+      }
+    } catch {
+      // non-critical
+    }
+  }, [session?.user?.id, homeGymId]);
+
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
@@ -164,13 +225,15 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (profile) {
       loadStats();
+      loadIdentity();
     }
-  }, [profile, loadStats]);
+  }, [profile, loadStats, loadIdentity]);
 
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [loadProfile])
+      checkPushStatus();
+    }, [loadProfile, checkPushStatus])
   );
 
   // Highest badge (most recently earned = first in sorted list)
@@ -509,6 +572,33 @@ export default function ProfileScreen() {
         </Animated.View>
 
         {/* ═══════════════════════════════════════════ */}
+        {/* GYM IDENTITY STATUS                          */}
+        {/* ═══════════════════════════════════════════ */}
+        {hasGym && identity && (
+          <Animated.View entering={FadeInDown.delay(320).duration(400)}>
+            <View style={[styles.identityCard, { borderColor: hexToRgba(identity.isVerified ? '#4CAF50' : branding.primary, 0.15) }]}>
+              <BlurView intensity={40} tint="dark" style={[styles.identityBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                <View style={[styles.identityIcon, { backgroundColor: hexToRgba(identity.isVerified ? '#4CAF50' : branding.primary, 0.12) }]}>
+                  <Ionicons
+                    name={identity.isVerified ? 'shield-checkmark' : 'shield-outline'}
+                    size={20}
+                    color={identity.isVerified ? '#4CAF50' : branding.primary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.identityTitle, { color: identity.isVerified ? '#4CAF50' : theme.colors.text }]}>
+                    {identity.isVerified ? t('identityVerified') : t('identityPending')}
+                  </Text>
+                  {!identity.isVerified && (
+                    <Text style={styles.identityHint}>{t('identityHint')}</Text>
+                  )}
+                </View>
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
         {/* MOJI PODACI — Profile Data Section          */}
         {/* ═══════════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.delay(350).duration(400)}>
@@ -735,6 +825,48 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              <SectionDivider />
+
+              {/* Push Notifications */}
+              {pushStatus !== 'unsupported' && (
+                <>
+                  <TouchableOpacity
+                    style={styles.linkRow}
+                    onPress={pushStatus !== 'granted' ? handleEnablePush : undefined}
+                    activeOpacity={pushStatus !== 'granted' ? 0.7 : 1}
+                    disabled={pushStatus === 'granted'}
+                  >
+                    <View style={[styles.linkIcon, { backgroundColor: hexToRgba(pushStatus === 'granted' ? '#4CAF50' : branding.primary, 0.10) }]}>
+                      <Ionicons
+                        name={pushStatus === 'granted' ? 'notifications' : 'notifications-off-outline'}
+                        size={20}
+                        color={pushStatus === 'granted' ? '#4CAF50' : branding.primary}
+                      />
+                    </View>
+                    <Text style={[styles.linkLabel, { flex: 1 }]}>{t('notifications')}</Text>
+                    {pushStatus === 'granted' ? (
+                      <Text style={[styles.pushStatusText, { color: '#4CAF50' }]}>{t('notificationsOn')}</Text>
+                    ) : (
+                      <Text style={[styles.pushStatusText, { color: branding.primary }]}>{t('notificationsEnable')}</Text>
+                    )}
+                  </TouchableOpacity>
+                  <SectionDivider />
+                </>
+              )}
+
+              {/* Happy Hours link */}
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => router.push('/happy-hours' as any)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.linkIcon, { backgroundColor: 'rgba(255, 215, 0, 0.10)' }]}>
+                  <Ionicons name="flash-outline" size={20} color="#FFD700" />
+                </View>
+                <Text style={styles.linkLabel}>{t('happyHours')}</Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+              </TouchableOpacity>
 
               <SectionDividerThick />
 
@@ -1020,6 +1152,39 @@ const styles = StyleSheet.create({
     height: 30,
   },
 
+  // ── Identity Status ──
+  identityCard: {
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.lg,
+  },
+  identityBlur: {
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.md,
+    gap: 12,
+  },
+  identityIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  identityTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+  },
+  identityHint: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+
   // ── Quick Links ──
   linksCard: {
     borderRadius: theme.borderRadius.md,
@@ -1049,6 +1214,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.text,
+  },
+  pushStatusText: {
+    ...fontStyles.bodyMedium,
+    fontSize: 13,
   },
   linkSubLabel: {
     ...fontStyles.body,

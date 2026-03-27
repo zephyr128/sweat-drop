@@ -85,5 +85,17 @@
   "allTimePeriod": "Sve vreme",
   "winPrizesThisWeek": "Osvoji nagrade ove nedelje — takmiči se!",
   "rewardDropsTo": "drops do",
-  "rewardRedeem": "Preuzmi"
+  "rewardRedeem": "Preuzmi",
+  "happyHourActive": "Happy Hour x{{multiplier}} aktivan!",
+  "happyHourUntil": "Do {{time}}",
+  "happyHour": {
+    "title": "Happy Hour",
+    "live": "UŽIVO",
+    "liveNow": "Sada aktivan",
+    "noUpcoming": "Nema predstojećih Happy Hour-ova ove nedelje",
+    "today": "Danas",
+    "startsInMin": "Za {{count}} min",
+    "startsInHour": "Za {{count}}h",
+    "startsInDay": "Za {{count}}d"
+  }
 }

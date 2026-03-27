@@ -44,5 +44,12 @@
   "allTime": "Ukupno",
   "noGymTitle": "Nemaš povezanu teretanu",
   "noGymSub": "Skeniraj QR kod na spravi da otključaš sve funkcije",
-  "gyms": "Teretane"
+  "gyms": "Teretane",
+  "identityVerified": "Identitet: Verifikovan",
+  "identityPending": "Identitet: Na čekanju",
+  "identityHint": "Zamoli recepciju da verifikuje tvoj profil",
+  "happyHours": "Happy Hour",
+  "notifications": "Obaveštenja",
+  "notificationsOn": "Uključeno",
+  "notificationsEnable": "Uključi"
 }

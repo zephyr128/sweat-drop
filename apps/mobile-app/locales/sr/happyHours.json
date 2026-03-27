@@ -1,0 +1,18 @@
+{
+  "title": "Happy Hour",
+  "whatIsTitle": "Šta je Happy Hour?",
+  "whatIsBody": "Tokom Happy Hour termina, tvoja stopa zarade drops-a je uvećana! Treniraj u ovim terminima da zaradiš više drops-a po minutu.",
+  "liveNow": "Sada aktivan",
+  "today": "Danas",
+  "tomorrow": "Sutra",
+  "scheduleTitle": "Raspored",
+  "noUpcoming": "Nema predstojećih Happy Hour-ova ove nedelje",
+  "startsInMin": "Za {{count}} min",
+  "startsInHour": "Za {{count}}h",
+  "startsInDay": "Za {{count}}d",
+  "remindersTitle": "Podsetnici",
+  "remindersToggle": "Happy Hour podsetnici",
+  "remindWhen": "Podseti me",
+  "minBefore": "{{count}} min pre",
+  "atStart": "Na početku"
+}

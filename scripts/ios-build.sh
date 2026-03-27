@@ -17,6 +17,18 @@ NC='\033[0m' # No Color
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOBILE_APP_DIR="$ROOT_DIR/apps/mobile-app"
 IOS_DIR="$MOBILE_APP_DIR/ios"
+MOBILE_ENV_FILE="$MOBILE_APP_DIR/.env"
+
+echo -e "${BLUE}🔐 Step 0: Loading mobile env vars...${NC}"
+if [ -f "$MOBILE_ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$MOBILE_ENV_FILE"
+  set +a
+  echo -e "${GREEN}✅ Loaded env from apps/mobile-app/.env${NC}"
+else
+  echo -e "${YELLOW}⚠️  apps/mobile-app/.env not found — using current shell env${NC}"
+fi
 
 echo -e "${BLUE}📦 Step 1: Installing dependencies...${NC}"
 cd "$ROOT_DIR"

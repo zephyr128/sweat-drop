@@ -31,6 +31,7 @@ import {
   getInitialNotification,
   getDeepLinkFromNotification,
 } from '@/lib/notifications';
+import { log } from '@/lib/logger';
 
 // Configure notification handler OUTSIDE of component (must run before any notification arrives)
 if (PUSH_NOTIFICATIONS_ENABLED) {
@@ -113,6 +114,7 @@ function StackNavigator() {
       <Stack.Screen name="gyms" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
+      <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -140,7 +142,7 @@ export default function RootLayout() {
   const handleNotificationTap = useCallback(
     (deepLink: string | null) => {
       if (deepLink) {
-        console.log('[App] Navigating from notification tap:', deepLink);
+        log.debug('[App] Navigating from notification tap:', deepLink);
         setTimeout(() => {
           router.push(deepLink as any);
         }, 100);
@@ -160,10 +162,10 @@ export default function RootLayout() {
     if (Platform.OS === 'android') {
       BleManager.start({ showAlert: false })
         .then(() => {
-          console.log('[App] BLE Manager initialized (Android)');
+          log.debug('[App] BLE Manager initialized (Android)');
         })
         .catch((error: any) => {
-          console.error('[App] Failed to initialize BLE Manager:', error);
+          log.error('[App] Failed to initialize BLE Manager:', error);
         });
     }
   }, []);

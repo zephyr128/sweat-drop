@@ -1,0 +1,18 @@
+{
+  "title": "Happy Hour",
+  "whatIsTitle": "What is Happy Hour?",
+  "whatIsBody": "During Happy Hour windows, your drops earning rate is boosted! Train during these times to earn more drops per minute.",
+  "liveNow": "Live now",
+  "today": "Today",
+  "tomorrow": "Tomorrow",
+  "scheduleTitle": "Upcoming schedule",
+  "noUpcoming": "No upcoming Happy Hour this week",
+  "startsInMin": "In {{count}} min",
+  "startsInHour": "In {{count}}h",
+  "startsInDay": "In {{count}}d",
+  "remindersTitle": "Reminders",
+  "remindersToggle": "Happy Hour reminders",
+  "remindWhen": "Remind me",
+  "minBefore": "{{count}} min before",
+  "atStart": "At start"
+}

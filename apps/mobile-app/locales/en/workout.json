@@ -63,6 +63,7 @@
   "securityAwardFailed": "Drops could not be awarded right now due to security validation.",
   "securitySessionTooShort": "Drops were not awarded because workout was too short. Keep the session active longer.",
   "securityNoDropsAwarded": "Drops were not awarded for this workout due to safety or limit rules.",
+  "happyHourBadge": "Happy Hour x{{multiplier}}",
   "trackingOnly": "Tracking only — daily limit reached",
   "exerciseCompleted": "Exercise completed!",
   "nextExercise": "Next exercise",

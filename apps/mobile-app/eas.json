@@ -1,0 +1,28 @@
+{
+  "cli": {
+    "version": ">= 10.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_PUSH_ENABLED": "true",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_PUSH_ENABLED": "true",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_PUSH_ENABLED": "true",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3"
+      }
+    }
+  }
+}

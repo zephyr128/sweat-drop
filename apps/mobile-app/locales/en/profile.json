@@ -43,5 +43,12 @@
   "allTime": "All time",
   "noGymTitle": "No gym connected",
   "noGymSub": "Scan QR code on a machine to unlock all features",
-  "gyms": "Gyms"
+  "gyms": "Gyms",
+  "identityVerified": "Gym identity: Verified",
+  "identityPending": "Gym identity: Pending",
+  "identityHint": "Ask front desk to verify your membership profile",
+  "happyHours": "Happy Hour",
+  "notifications": "Notifications",
+  "notificationsOn": "Enabled",
+  "notificationsEnable": "Enable"
 }

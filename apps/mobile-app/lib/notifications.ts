@@ -50,7 +50,12 @@ type NotificationTrigger =
   | 'drops_expiry_7d'
   | 'arena_prize'
   | 'arena_ended'
-  | 'leaderboard_prize';
+  | 'leaderboard_prize'
+  | 'reminder'
+  | 'comeback_offer'
+  | 'happy_hour'
+  | 'happy_hour_reminder'
+  | 'campaign';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  NOTIFICATION HANDLER CONFIGURATION
@@ -110,16 +115,22 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     // Get the project ID for Expo push token
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId
-      ?? Constants.easConfig?.projectId;
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId ??
+      process.env.EXPO_PUBLIC_EAS_PROJECT_ID ??
+      process.env.EAS_PROJECT_ID;
 
     if (!projectId) {
-      log.warn('[Notifications] No EAS project ID found — using default token generation');
+      log.warn(
+        '[Notifications] No EAS project ID found. Set EXPO_PUBLIC_EAS_PROJECT_ID in apps/mobile-app/.env and EAS build env.',
+      );
+      return null;
     }
 
     // Get Expo push token
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: projectId ?? undefined,
+      projectId,
     });
 
     const token = tokenData.data;
@@ -197,6 +208,11 @@ interface NotificationData {
   period?: string;
   arena_id?: string;
   arena_name?: string;
+  /** Deep-link target for campaign push (e.g. '/store', '/challenges') */
+  deep_link?: string;
+  /** Campaign-specific fields */
+  campaign_id?: string;
+  discount_code?: string;
 }
 
 /**
@@ -207,40 +223,35 @@ interface NotificationData {
  * @returns Route path for expo-router navigation, or null for no navigation
  */
 export function getDeepLinkFromNotification(data: NotificationData): string | null {
-  if (!data?.type) return null;
+  if (!data?.type) {
+    return data?.deep_link ? sanitizeDeepLink(data.deep_link) : null;
+  }
 
   switch (data.type) {
     case 'session_ended':
-      // Navigate to session summary
       if (data.session_id) {
         return `/session-summary?sessionId=${data.session_id}&drops=${data.drops_earned || '0'}&duration=0&multiplier=${data.multiplier || '1'}`;
       }
       return '/home';
 
     case 'badge_earned':
-      // Navigate to trophy room
       return '/trophy-room';
 
     case 'rank_overtaken':
-      // Navigate to leaderboard
       return '/leaderboard';
 
     case 'reward_claimed':
-      // Navigate to redemptions
       return '/redemptions';
 
     case 'streak_reminder':
     case 'streak_at_risk':
-      // Navigate to home (start a workout)
       return '/home';
 
     case 'weekly_results':
-      // Navigate to leaderboard
       return '/leaderboard';
 
     case 'reengagement_7d':
     case 'reengagement_14d':
-      // Navigate to home
       return '/home';
 
     case 'drops_expiry_30d':
@@ -258,9 +269,40 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
     case 'leaderboard_prize':
       return '/leaderboard';
 
+    case 'reminder':
+      return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/home';
+
+    case 'comeback_offer':
+      return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/store';
+
+    case 'happy_hour':
+    case 'happy_hour_reminder':
+      return '/home';
+
+    case 'campaign':
+      return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/home';
+
     default:
       return '/home';
   }
+}
+
+const ALLOWED_DEEP_LINK_PREFIXES = [
+  '/home', '/store', '/challenges', '/wallet', '/leaderboard',
+  '/trophy-room', '/arenas', '/redemptions', '/profile',
+  '/workout-history', '/gym-details', '/challenge-detail',
+  '/reward-detail', '/arena', '/session-summary', '/gyms', '/happy-hours',
+];
+
+function sanitizeDeepLink(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('/')) return '/home';
+  const pathOnly = trimmed.split('?')[0];
+  if (ALLOWED_DEEP_LINK_PREFIXES.some((p) => pathOnly === p || pathOnly.startsWith(p + '/'))) {
+    return trimmed;
+  }
+  log.warn('[Notifications] Blocked unknown deep link target:', trimmed);
+  return '/home';
 }
 
 /**

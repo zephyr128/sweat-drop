@@ -28,6 +28,9 @@ import { ClosestRewardBanner } from '@/components/ClosestRewardBanner';
 import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
 import { useHomeStats } from '@/hooks/useHomeStats';
 import { useAvailableArenas } from '@/hooks/useAvailableArenas';
+import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
+import { UpcomingHappyHoursCard } from '@/components/UpcomingHappyHoursCard';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 12;
@@ -96,6 +99,22 @@ export default function HomeScreen() {
 
   // Available arenas
   const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
+
+  // Happy Hour — upcoming windows card
+  const upcomingHH = useUpcomingHappyHours(activeGymId);
+
+  // Realtime: refresh stats when drops_transactions change
+  useRealtimeRefresh({
+    table: 'drops_transactions',
+    filterColumn: 'user_id',
+    filterValue: session?.user?.id ?? null,
+    onEvent: useCallback(() => {
+      refreshStats?.();
+      refreshLocalDrops();
+    }, [refreshStats, refreshLocalDrops]),
+    pollIntervalMs: 30_000,
+    enabled: !!session?.user,
+  });
 
   // Check-in status
   const [checkinStatus, setCheckinStatus] = useState<{
@@ -653,6 +672,16 @@ export default function HomeScreen() {
           brandPrimary={branding.primary}
           onStreakPress={() => router.push('/workout-history')}
         />
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* UPCOMING HAPPY HOURS                           */}
+        {/* ═══════════════════════════════════════════ */}
+        {activeGymId && (
+          <UpcomingHappyHoursCard
+            windows={upcomingHH.windows}
+            liveWindow={upcomingHH.liveWindow}
+          />
+        )}
 
         {/* ═══════════════════════════════════════════ */}
         {/* CHECK-IN CARD                                */}

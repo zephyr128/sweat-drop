@@ -85,5 +85,17 @@
   "allTimePeriod": "All time",
   "winPrizesThisWeek": "Win prizes this week — compete now!",
   "rewardDropsTo": "drops to",
-  "rewardRedeem": "Redeem"
+  "rewardRedeem": "Redeem",
+  "happyHourActive": "Happy Hour x{{multiplier}} active!",
+  "happyHourUntil": "Until {{time}}",
+  "happyHour": {
+    "title": "Happy Hour",
+    "live": "LIVE",
+    "liveNow": "Live now",
+    "noUpcoming": "No upcoming Happy Hour this week",
+    "today": "Today",
+    "startsInMin": "In {{count}} min",
+    "startsInHour": "In {{count}}h",
+    "startsInDay": "In {{count}}d"
+  }
 }

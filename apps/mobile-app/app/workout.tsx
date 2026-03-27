@@ -50,6 +50,7 @@ import {
 } from '@/lib/workout/inactivity-autofinish';
 import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig } from '@/lib/workout/live-drops-estimator';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
+import { useHappyHour } from '@/hooks/useHappyHour';
 import { log } from '@/lib/logger';
 
 // ActiveDrop interface removed - drops are now managed internally by DropEmitter
@@ -137,6 +138,7 @@ export default function WorkoutScreen() {
   const { t } = useTranslation('workout');
   const dropLimit = useDropLimitStatus(gymId || null);
   const isTrackingOnly = dropLimit.limitReached;
+  const happyHour = useHappyHour(gymId || null);
   const [session, setSession] = useState<any>(null);
   // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
   const [duration, setDuration] = useState(0);
@@ -3816,6 +3818,14 @@ export default function WorkoutScreen() {
               </Text>
             </View>
           )}
+          {happyHour.active && (
+            <View style={styles.happyHourWorkoutBadge}>
+              <Text style={styles.happyHourWorkoutEmoji}>⚡</Text>
+              <Text style={styles.happyHourWorkoutText}>
+                {t('happyHourBadge', { multiplier: happyHour.multiplier })}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -4322,6 +4332,25 @@ const styles = StyleSheet.create({
     ...fontStyles.body,
     fontSize: 11,
     color: theme.colors.textSecondary,
+  },
+  happyHourWorkoutBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    backgroundColor: 'rgba(255, 215, 0, 0.10)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  happyHourWorkoutEmoji: {
+    fontSize: 12,
+  },
+  happyHourWorkoutText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    color: '#FFD700',
   },
   floatingToast: {
     position: 'absolute',

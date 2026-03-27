@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -12,6 +12,7 @@ import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -53,15 +54,38 @@ export default function WalletScreen() {
 
   const activeGymId = getActiveGymId();
 
+  const refreshAll = useCallback(() => {
+    loadProfile();
+    loadTodayDrops();
+    loadGymDrops();
+    loadExpiry();
+    loadLedger();
+  }, []);
+
   useEffect(() => {
     if (session?.user) {
-      loadProfile();
-      loadTodayDrops();
-      loadGymDrops();
-      loadExpiry();
-      loadLedger();
+      refreshAll();
     }
   }, [session, activeGymId]);
+
+  useRealtimeRefresh({
+    table: 'drops_transactions',
+    filterColumn: 'user_id',
+    filterValue: session?.user?.id ?? null,
+    onEvent: refreshAll,
+    pollIntervalMs: 30_000,
+    enabled: !!session?.user,
+  });
+
+  useRealtimeRefresh({
+    table: 'redemptions',
+    filterColumn: 'user_id',
+    filterValue: session?.user?.id ?? null,
+    events: ['INSERT', 'UPDATE'],
+    onEvent: refreshAll,
+    pollIntervalMs: 60_000,
+    enabled: !!session?.user,
+  });
 
   const loadProfile = async () => {
     if (!session?.user) return;

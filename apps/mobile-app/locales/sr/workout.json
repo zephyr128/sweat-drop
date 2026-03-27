@@ -63,6 +63,7 @@
   "securityAwardFailed": "Drops trenutno ne mogu da se dodele zbog bezbednosne validacije.",
   "securitySessionTooShort": "Drops nisu dodeljeni jer je trening prekratko trajao. Produži sesiju sledeći put.",
   "securityNoDropsAwarded": "Drops nisu dodeljeni za ovaj trening zbog bezbednosnih ili limit pravila.",
+  "happyHourBadge": "Happy Hour x{{multiplier}}",
   "trackingOnly": "Samo praćenje — dnevni limit dostignut",
   "exerciseCompleted": "Vežba završena!",
   "nextExercise": "Sledeća vežba",

@@ -2,6 +2,7 @@ module.exports = {
   expo: {
     name: 'SweatDrop',
     slug: 'sweatdrop',
+    owner: 'zephyr23',
     version: '1.0.0',
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
@@ -80,6 +81,12 @@ module.exports = {
     extra: {
       router: {
         origin: false,
+      },
+      eas: {
+        projectId:
+          process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+          process.env.EAS_PROJECT_ID ||
+          '970c6ba3-aae9-4b7a-b014-74915fff4df3',
       },
     },
     experiments: {

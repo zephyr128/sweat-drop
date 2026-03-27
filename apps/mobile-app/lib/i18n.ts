@@ -24,6 +24,7 @@ import srGyms from '@/locales/sr/gyms.json';
 import srCheckin from '@/locales/sr/checkin.json';
 import srMemberProfile from '@/locales/sr/memberProfile.json';
 import srGymDetails from '@/locales/sr/gymDetails.json';
+import srHappyHours from '@/locales/sr/happyHours.json';
 
 // ── English translations ──
 import enCommon from '@/locales/en/common.json';
@@ -47,6 +48,7 @@ import enGyms from '@/locales/en/gyms.json';
 import enCheckin from '@/locales/en/checkin.json';
 import enMemberProfile from '@/locales/en/memberProfile.json';
 import enGymDetails from '@/locales/en/gymDetails.json';
+import enHappyHours from '@/locales/en/happyHours.json';
 
 const resources = {
   sr: {
@@ -71,6 +73,7 @@ const resources = {
     checkin: srCheckin,
     memberProfile: srMemberProfile,
     gymDetails: srGymDetails,
+    happyHours: srHappyHours,
   },
   en: {
     common: enCommon,
@@ -94,6 +97,7 @@ const resources = {
     checkin: enCheckin,
     memberProfile: enMemberProfile,
     gymDetails: enGymDetails,
+    happyHours: enHappyHours,
   },
 };
 
@@ -128,6 +132,7 @@ i18n.use(initReactI18next).init({
     'checkin',
     'memberProfile',
     'gymDetails',
+    'happyHours',
   ],
   interpolation: {
     escapeValue: false, // React already escapes
