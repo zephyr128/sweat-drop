@@ -7,11 +7,19 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import {
   UserCog, Shield, ShieldCheck, Mail, UserPlus, X,
-  Trash2, Clock, CheckCircle2, XCircle,
+  Trash2, Clock, CheckCircle2, XCircle, ChevronDown,
+  RefreshCw, Copy, AlertCircle, Send,
 } from 'lucide-react';
 import { DataTable, type ColumnDef, type DataTableQuery } from '@/components/ui/DataTable';
 import { listStaff, type StaffRow } from '@/lib/actions/list-actions';
-import { createStaffInvitation, cancelInvitation, getStaffInvitations, type StaffInvitation } from '@/lib/actions/staff-actions';
+import {
+  createStaffInvitation,
+  cancelInvitation,
+  resendStaffInvitationEmail,
+  getInviteAcceptUrl,
+  getStaffInvitations,
+  type StaffInvitation,
+} from '@/lib/actions/staff-actions';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
@@ -20,12 +28,6 @@ interface TeamListProps {
   gymId: string;
   isGymOwner: boolean;
 }
-
-const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  gym_owner: { label: 'Owner', color: 'text-[#00E5FF]' },
-  gym_admin: { label: 'Admin', color: 'text-amber-400' },
-  receptionist: { label: 'Receptionist', color: 'text-zinc-400' },
-};
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   gym_owner: { label: 'Owner', cls: 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/20' },
@@ -40,6 +42,12 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof C
   cancelled: { label: 'Cancelled', cls: 'bg-zinc-800 text-zinc-500 border-zinc-700/50', icon: XCircle },
 };
 
+const DELIVERY_CONFIG: Record<string, { label: string; cls: string }> = {
+  pending: { label: 'Pending', cls: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  sent: { label: 'Sent', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  failed: { label: 'Failed', cls: 'bg-red-500/10 text-red-400 border-red-500/20' },
+};
+
 const invitationSchema = z.object({
   email: z.string().email('Invalid email address'),
   role: z.enum(['gym_admin', 'receptionist']),
@@ -48,6 +56,13 @@ type InvitationFormData = z.infer<typeof invitationSchema>;
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(d: string | null | undefined) {
+  if (!d) return null;
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return null;
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 const COLUMNS: ColumnDef<StaffRow>[] = [
@@ -103,6 +118,8 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
   const [invitations, setInvitations] = useState<StaffInvitation[]>([]);
   const [invLoading, setInvLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [expandedInvId, setExpandedInvId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const {
@@ -174,8 +191,46 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
     }
   };
 
+  const handleResend = async (inv: StaffInvitation) => {
+    setResendingId(inv.id);
+    const result = await resendStaffInvitationEmail(inv.id, gymId);
+    setResendingId(null);
+    if (result.success) {
+      setInvitations((prev) =>
+        prev.map((i) =>
+          i.id === inv.id
+            ? { ...i, email_delivery_status: 'pending' as const, resend_count: (i.resend_count ?? 0) + 1, email_failure_reason: null }
+            : i,
+        ),
+      );
+      toast.success('Invitation email queued for resend');
+    } else {
+      toast.error(result.error || 'Resend failed');
+    }
+  };
+
+  const handleCopyLink = async (inv: StaffInvitation) => {
+    if (!inv.token) {
+      toast.error('No invite token available');
+      return;
+    }
+    try {
+      const url = await getInviteAcceptUrl(inv.token);
+      await navigator.clipboard.writeText(url);
+      toast.success('Invite link copied to clipboard');
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  };
+
+  const canResend = (inv: StaffInvitation) =>
+    (inv.status === 'pending' || inv.status === 'expired') &&
+    (inv.email_delivery_status === 'pending' || inv.email_delivery_status === 'failed') &&
+    (inv.resend_count ?? 0) < 5;
+
   const pendingInvitations = invitations.filter((inv) => inv.status === 'pending');
   const otherInvitations = invitations.filter((inv) => inv.status !== 'pending');
+  const sortedInvitations = [...pendingInvitations, ...otherInvitations];
 
   return (
     <div className="space-y-6">
@@ -218,8 +273,8 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
         cardRows
       />
 
-      {/* Pending Invitations */}
-      {(pendingInvitations.length > 0 || otherInvitations.length > 0 || invLoading) && (
+      {/* Invitations */}
+      {(sortedInvitations.length > 0 || invLoading) && (
         <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-[#1A1A1A] flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -244,53 +299,108 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
               No invitations sent yet.
             </div>
           ) : (
-            <div>
-              {[...pendingInvitations, ...otherInvitations].map((inv, idx) => {
+            <div className="divide-y divide-[#1A1A1A]/60">
+              {sortedInvitations.map((inv) => {
                 const status = STATUS_CONFIG[inv.status] || STATUS_CONFIG.pending;
                 const StatusIcon = status.icon;
                 const roleBadge = ROLE_BADGE[inv.role] || ROLE_BADGE.receptionist;
+                const delivery = DELIVERY_CONFIG[inv.email_delivery_status ?? 'pending'] || DELIVERY_CONFIG.pending;
+                const isExpanded = expandedInvId === inv.id;
+
                 return (
-                  <div
-                    key={inv.id}
-                    className={`flex items-center gap-4 px-4 py-3 ${
-                      idx > 0 ? 'border-t border-zinc-800/60' : ''
-                    } ${inv.status === 'pending' ? 'bg-zinc-900/30' : ''}`}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-zinc-800/60 border border-zinc-700/50 flex items-center justify-center shrink-0">
-                      <Mail className="w-4 h-4 text-zinc-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white font-medium truncate">{inv.email}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${roleBadge.cls}`}>
-                          {roleBadge.label}
+                  <div key={inv.id}>
+                    {/* Row */}
+                    <div
+                      className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-zinc-900/30 transition-colors ${
+                        inv.status === 'pending' ? 'bg-zinc-900/20' : ''
+                      }`}
+                      onClick={() => setExpandedInvId(isExpanded ? null : inv.id)}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-zinc-800/60 border border-zinc-700/50 flex items-center justify-center shrink-0">
+                        <Mail className="w-4 h-4 text-zinc-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium truncate">{inv.email}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${roleBadge.cls}`}>
+                            {roleBadge.label}
+                          </span>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${delivery.cls}`}>
+                            {inv.email_delivery_status === 'sent' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                            {inv.email_delivery_status === 'failed' && <AlertCircle className="w-2.5 h-2.5" />}
+                            {(inv.email_delivery_status ?? 'pending') === 'pending' && <Clock className="w-2.5 h-2.5" />}
+                            Email: {delivery.label}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${status.cls}`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {status.label}
                         </span>
-                        <span className="text-[10px] text-zinc-600">
-                          Sent {formatDate(inv.created_at)}
-                        </span>
+                        <ChevronDown className={`w-3.5 h-3.5 text-zinc-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${status.cls}`}>
-                        <StatusIcon className="w-3 h-3" />
-                        {status.label}
-                      </span>
-                      {inv.status === 'pending' && (
-                        <span className="text-[10px] text-zinc-600">
-                          Expires {formatDate(inv.expires_at)}
-                        </span>
-                      )}
-                      {inv.status === 'pending' && (
-                        <button
-                          onClick={() => handleCancelInvitation(inv.id)}
-                          disabled={cancellingId === inv.id}
-                          className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                          title="Cancel invitation"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+
+                    {/* Expanded panel */}
+                    {isExpanded && (
+                      <div className="px-5 pb-4 pt-2 bg-[#080808] border-t border-[#1A1A1A]/40">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-2">
+                          <TimelineField label="Created" value={formatDateTime(inv.created_at)} />
+                          <TimelineField label="Email sent" value={formatDateTime(inv.email_sent_at)} />
+                          <TimelineField label="Accepted" value={formatDateTime(inv.accepted_at)} />
+                          <TimelineField label="Expires" value={formatDateTime(inv.expires_at)} />
+                        </div>
+
+                        {inv.email_failure_reason && (
+                          <div className="flex items-start gap-2 px-3 py-2 bg-red-500/5 border border-red-500/10 rounded-lg mb-3">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+                            <p className="text-xs text-red-400">{inv.email_failure_reason}</p>
+                          </div>
+                        )}
+
+                        {(inv.resend_count ?? 0) > 0 && (
+                          <p className="text-[10px] text-zinc-600 mb-3">
+                            Resent {inv.resend_count} time{(inv.resend_count ?? 0) > 1 ? 's' : ''}
+                            {(inv.resend_count ?? 0) >= 5 && ' (limit reached)'}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          {canResend(inv) && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleResend(inv); }}
+                              disabled={resendingId === inv.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#00E5FF] bg-[#00E5FF]/10 border border-[#00E5FF]/20 rounded-lg hover:bg-[#00E5FF]/20 transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${resendingId === inv.id ? 'animate-spin' : ''}`} />
+                              Resend Email
+                            </button>
+                          )}
+
+                          {inv.token && (inv.status === 'pending' || inv.status === 'expired') && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleCopyLink(inv); }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-400 bg-zinc-800/50 border border-zinc-700/30 rounded-lg hover:bg-zinc-800 transition-colors"
+                            >
+                              <Copy className="w-3 h-3" />
+                              Copy Link
+                            </button>
+                          )}
+
+                          {inv.status === 'pending' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleCancelInvitation(inv.id); }}
+                              disabled={cancellingId === inv.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 bg-red-500/5 border border-red-500/10 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -340,7 +450,7 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
                   {isGymOwner && (
                     <option value="gym_admin">Gym Admin — Full access to this gym</option>
                   )}
-                  <option value="receptionist">Receptionist — Redemptions only</option>
+                  <option value="receptionist">Receptionist — Desk only</option>
                 </select>
                 {errors.role && (
                   <p className="mt-1 text-xs text-red-400">{errors.role.message}</p>
@@ -348,7 +458,7 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
                 <p className="mt-1.5 text-[10px] text-zinc-600">
                   {isGymOwner
                     ? 'Admins can manage everything except ownership. Receptionists handle the desk only.'
-                    : 'Receptionists can only access the redemptions desk.'}
+                    : 'Receptionists can only access the desk terminal.'}
                 </p>
               </div>
 
@@ -356,8 +466,9 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2.5 bg-[#00E5FF] text-black rounded-lg text-sm font-medium hover:bg-[#00E5FF]/90 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 bg-[#00E5FF] text-black rounded-lg text-sm font-medium hover:bg-[#00E5FF]/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  <Send className="w-3.5 h-3.5" />
                   {isSubmitting ? 'Sending…' : 'Send Invitation'}
                 </button>
                 <button
@@ -372,6 +483,17 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TimelineField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <p className="text-[10px] text-zinc-600 uppercase tracking-wider">{label}</p>
+      <p className={`text-xs mt-0.5 ${value ? 'text-zinc-300' : 'text-zinc-700'}`}>
+        {value ?? '—'}
+      </p>
     </div>
   );
 }

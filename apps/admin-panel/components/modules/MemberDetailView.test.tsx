@@ -38,6 +38,7 @@ const baseData: MemberDetailResult = {
     earnedScoreMonthly: 540,
     earnedScoreAllTime: 2000,
   },
+  identity: null,
 };
 
 describe('MemberDetailView', () => {

@@ -22,6 +22,8 @@ export default async function DeskPage({
     redirect(`/dashboard/gym/${gymId}/dashboard`);
   }
 
+  const isReceptionist = profile.role === 'receptionist';
+
   return (
     <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
       <div>
@@ -30,6 +32,15 @@ export default async function DeskPage({
           Verify redemptions, manage the queue, and monitor live activity.
         </p>
       </div>
+
+      {isReceptionist && (
+        <div className="flex items-center gap-2 px-3.5 py-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] shrink-0" />
+          <p className="text-[11px] text-zinc-400">
+            Reception mode — verification and queue operations.
+          </p>
+        </div>
+      )}
 
       <DeskTabs gymId={gymId} />
     </div>

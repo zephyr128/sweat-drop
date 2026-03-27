@@ -5,6 +5,18 @@ vi.mock('@/lib/auth-guard', () => ({
   requireGymAccess: vi.fn(async () => ({ id: 'u1', role: 'gym_owner' })),
 }));
 
+vi.mock('@/lib/supabase-server', () => ({
+  createClient: vi.fn(async () => ({
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn(async () => ({ data: { checkin_drops: 5 }, error: null })),
+        })),
+      })),
+    })),
+  })),
+}));
+
 vi.mock('@/lib/actions/economy-actions', async () => {
   const actual = await vi.importActual('@/lib/actions/economy-actions');
   return {

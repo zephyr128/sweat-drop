@@ -215,47 +215,54 @@ export async function middleware(req: NextRequest) {
           }
         }
       }
-      // RECEPTIONIST LOGIC
+      // RECEPTIONIST LOGIC — desk operator, strict path whitelist
       else if (profile.role === 'receptionist') {
-        // Block superadmin routes
-        if (pathname.startsWith('/dashboard/super')) {
-          if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
-          }
-          return NextResponse.redirect(new URL('/404', req.url));
+        const deskUrl = profile.assigned_gym_id
+          ? `/dashboard/gym/${profile.assigned_gym_id}/desk`
+          : '/404';
+
+        // Block superadmin / owner routes
+        if (pathname.startsWith('/dashboard/super') || pathname.startsWith('/dashboard/owner')) {
+          return NextResponse.redirect(new URL(deskUrl, req.url));
         }
-        
-        // Block owner routes
-        if (pathname.startsWith('/dashboard/owner')) {
-          if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
-          }
-          return NextResponse.redirect(new URL('/404', req.url));
-        }
-        
-        // 403 FORBIDDEN for analytics and other restricted routes
-        if (pathname.includes('/analytics') || pathname.includes('/dashboard/analytics')) {
-          return NextResponse.redirect(new URL('/403', req.url));
-        }
-        
-        const allowedPaths = ['/desk', '/redemptions', '/verify', '/dashboard'];
+
+        // Receptionist allowed sub-paths (after /dashboard/gym/[id])
+        // /members is read-only detail opened from checkin row context
+        const RECEPTIONIST_ALLOWED = ['/desk', '/checkin', '/activity', '/members'];
+
         if (gymIdFromUrl) {
+          // Must only access assigned gym
           if (profile.assigned_gym_id !== gymIdFromUrl) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
+            return NextResponse.redirect(new URL(deskUrl, req.url));
           }
-          // Check if path is allowed
+
+          // Check if gym is suspended
+          const { data: gym } = await supabase
+            .from('gyms')
+            .select('id, status, is_suspended')
+            .eq('id', gymIdFromUrl)
+            .single();
+
+          if (gym && (gym.status === 'suspended' || gym.is_suspended)) {
+            await supabase.auth.signOut();
+            const redirectUrl = req.nextUrl.clone();
+            redirectUrl.pathname = '/login';
+            redirectUrl.searchParams.set('error', 'gym_suspended');
+            return NextResponse.redirect(redirectUrl);
+          }
+
           const pathAfterGym = pathname.replace(`/dashboard/gym/${gymIdFromUrl}`, '');
-          if (!allowedPaths.some(p => pathAfterGym === p || pathAfterGym.startsWith(p + '/'))) {
-            // Block access to restricted routes (like analytics)
-            if (pathAfterGym.includes('/analytics')) {
-              return NextResponse.redirect(new URL('/403', req.url));
-            }
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
+          const isAllowed = RECEPTIONIST_ALLOWED.some(
+            (p) => pathAfterGym === p || pathAfterGym.startsWith(p + '/') || pathAfterGym.startsWith(p + '?'),
+          );
+          if (!isAllowed) {
+            return NextResponse.redirect(new URL(deskUrl, req.url));
           }
         } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
-          if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/desk`, req.url));
-          }
+          return NextResponse.redirect(new URL(deskUrl, req.url));
+        } else {
+          // Any other /dashboard/* path not under a gym
+          return NextResponse.redirect(new URL(deskUrl, req.url));
         }
       }
     }

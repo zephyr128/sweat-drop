@@ -5,6 +5,7 @@ import { MachineOpsPanel } from '@/components/dashboards/MachineOpsPanel';
 import { DeskActivityPanel } from '@/components/dashboards/DeskActivityPanel';
 import { ChallengeSnapshotCard } from '@/components/dashboards/ChallengeSnapshotCard';
 import { TopPerformersWidget } from '@/components/analytics/TopPerformersWidget';
+import { HappyHourTeaser } from '@/components/economy/HappyHourTeaser';
 import type { DashboardOverview } from '@/lib/actions/dashboard-actions';
 
 interface DashboardShellProps {
@@ -18,6 +19,9 @@ export function DashboardShell({ overview, basePath, gymId }: DashboardShellProp
     <div className="space-y-5">
       {/* ── Top: KPI Row ── */}
       <DashboardKPIGrid kpis={overview.kpis} basePath={basePath} />
+
+      {/* ── Happy Hour teaser — links to Economy page ── */}
+      <HappyHourTeaser gymId={gymId} />
 
       {/* ── Middle: Machine Ops + Activity Feed ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

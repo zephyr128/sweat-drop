@@ -1,8 +1,15 @@
 'use server';
 
 import { getAdminClient } from '@/lib/utils/supabase-admin';
+import { getCurrentProfile } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+
+async function rejectReceptionist() {
+  const profile = await getCurrentProfile();
+  if (profile?.role === 'receptionist') return true;
+  return false;
+}
 
 const tierSchema = z.object({
   label: z.string().min(1),
@@ -69,6 +76,7 @@ const createChallengeSchema = z.object({
 
 export async function createChallenge(input: z.infer<typeof createChallengeSchema>) {
   try {
+    if (await rejectReceptionist()) return { success: false, error: 'Unauthorized' };
     const validated = createChallengeSchema.parse(input);
 
     const now = new Date();
@@ -240,6 +248,7 @@ export async function updateChallenge(
   input: z.infer<typeof createChallengeSchema>
 ) {
   try {
+    if (await rejectReceptionist()) return { success: false, error: 'Unauthorized' };
     const validated = createChallengeSchema.parse(input);
 
     const now = new Date();
@@ -404,6 +413,7 @@ export async function updateChallenge(
 
 export async function deleteChallenge(challengeId: string, gymId: string) {
   try {
+    if (await rejectReceptionist()) return { success: false, error: 'Unauthorized' };
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
@@ -426,6 +436,7 @@ export async function deleteChallenge(challengeId: string, gymId: string) {
 
 export async function toggleChallengeStatus(challengeId: string, gymId: string, isActive: boolean) {
   try {
+    if (await rejectReceptionist()) return { success: false, error: 'Unauthorized' };
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
@@ -546,6 +557,7 @@ export async function getChallengeDetailedProgress(challengeId: string, gymId: s
 // Close challenge early (deactivate and set end_date to now)
 export async function closeChallenge(challengeId: string, gymId: string) {
   try {
+    if (await rejectReceptionist()) return { success: false, error: 'Unauthorized' };
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available' };

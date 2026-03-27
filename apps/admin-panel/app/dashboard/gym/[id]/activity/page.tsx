@@ -11,7 +11,7 @@ interface ActivityPageProps {
 
 export default async function ActivityLogPage({ params }: ActivityPageProps) {
   const { id } = await params;
-  await requireGymAccess(id);
+  await requireGymAccess(id, ['superadmin', 'gym_owner', 'gym_admin', 'receptionist']);
 
   return (
     <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">

@@ -1,10 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield, ShieldAlert, MapPin, Users, Calendar, TrendingUp } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  MapPin,
+  Users,
+  Calendar,
+  TrendingUp,
+  Clock,
+  Wifi,
+  WifiOff,
+  Info,
+} from 'lucide-react';
 import { getGymCheckinStats, getGymCheckinsPaginated } from '@/lib/actions/gym-actions';
+import { supabase } from '@/lib/supabase-client';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { MemberIdentityVerifyDrawer } from '@/components/modules/MemberIdentityVerifyDrawer';
+import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import { DataTable, type ColumnDef, type FilterDef, type DataTableQuery } from '@/components/ui/DataTable';
 
 interface Checkin {
@@ -16,29 +32,82 @@ interface Checkin {
   drops_earned: number;
   gps_verified: boolean;
   gps_distance_m: number | null;
+  identity_verified: boolean;
 }
 
 interface CheckinStatsModuleProps {
   gymId: string;
+  checkinVerificationMode?: 'lenient' | 'strict';
+  configuredCheckinDrops?: number;
+  readOnly?: boolean;
 }
 
 function GPSBadge({ verified, distance }: { verified: boolean; distance: number | null }) {
-  if (distance === null) {
-    return <span className="text-zinc-600 text-xs">N/A</span>;
-  }
   if (verified) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-        <Shield className="w-3 h-3" />
-        {distance}m
+      <span className="inline-flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">
+          <Shield className="w-3 h-3" />
+          GPS OK
+        </span>
+        {distance !== null ? (
+          <span className="text-[11px] text-emerald-400/80 tabular-nums">{distance} m</span>
+        ) : (
+          <span className="text-[10px] text-zinc-600">inside radius</span>
+        )}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
-      <ShieldAlert className="w-3 h-3" />
-      {distance}m
+    <span className="inline-flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-400/90">
+        <ShieldAlert className="w-3 h-3" />
+        Not verified
+      </span>
+      {distance !== null ? (
+        <span className="text-[11px] text-zinc-500 tabular-nums" title="Reported distance to gym pin">
+          {distance} m
+        </span>
+      ) : (
+        <span className="text-[10px] text-zinc-600">no fix / not shared</span>
+      )}
     </span>
+  );
+}
+
+function IdentityBadge({
+  verified,
+  onClick,
+  disabled = false,
+}: {
+  verified: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  disabled?: boolean;
+}) {
+  if (verified) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+        <ShieldCheck className="w-2.5 h-2.5" />
+        Verified
+      </span>
+    );
+  }
+  if (disabled) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-500 bg-zinc-500/10 px-2 py-0.5 rounded-full border border-zinc-500/20">
+        <Clock className="w-2.5 h-2.5" />
+        Needs verification
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 hover:bg-amber-500/20 transition-colors cursor-pointer"
+    >
+      <Clock className="w-2.5 h-2.5" />
+      Verify
+    </button>
   );
 }
 
@@ -64,7 +133,12 @@ const GPS_FILTER: FilterDef[] = [
   },
 ];
 
-export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
+export function CheckinStatsModule({
+  gymId,
+  checkinVerificationMode = 'lenient',
+  configuredCheckinDrops,
+  readOnly = false,
+}: CheckinStatsModuleProps) {
   const router = useRouter();
   const [stats, setStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [data, setData] = useState<{ items: Checkin[]; total: number; page: number; limit: number; totalPages: number }>({
@@ -81,6 +155,9 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
     limit: 25,
     gpsFilter: 'all',
   });
+
+  // Verify drawer state
+  const [verifyTarget, setVerifyTarget] = useState<{ userId: string; username: string; avatarUrl: string | null } | null>(null);
 
   useEffect(() => {
     getGymCheckinStats(gymId).then((res) => {
@@ -106,11 +183,83 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
     fetchCheckins();
   }, [fetchCheckins]);
 
+  // Realtime subscription for instant check-in alerts
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const realtimeRef = useRef(false);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`checkins:${gymId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'gym_checkins',
+          filter: `gym_id=eq.${gymId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const userId = row.user_id as string;
+
+          // Fetch full data to get username + identity status
+          fetchCheckins();
+          getGymCheckinStats(gymId).then((res) => {
+            if (res.success && res.data) setStats(res.data);
+          });
+
+          // Show toast for the new check-in
+          // Username isn't in the realtime payload, so we resolve from existing data or show generic
+          const existing = data.items.find((i) => i.user_id === userId);
+          const name = existing?.username || 'A member';
+          toast(`New check-in: ${name}`, {
+            icon: <MapPin className="w-4 h-4 text-[#00E5FF]" />,
+            duration: 4000,
+          });
+        },
+      )
+      .subscribe((status) => {
+        const connected = status === 'SUBSCRIBED';
+        setRealtimeConnected(connected);
+        realtimeRef.current = connected;
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gymId]);
+
+  // Fallback polling every 30s when realtime is disconnected
+  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  useEffect(() => {
+    if (realtimeConnected) {
+      clearInterval(pollRef.current);
+      return;
+    }
+    pollRef.current = setInterval(() => {
+      fetchCheckins();
+      getGymCheckinStats(gymId).then((res) => {
+        if (res.success && res.data) setStats(res.data);
+      });
+    }, 30_000);
+    return () => clearInterval(pollRef.current);
+  }, [fetchCheckins, gymId, realtimeConnected]);
+
   const handleQueryChange = useCallback((q: DataTableQuery) => {
     setQuery((prev) => ({
       page: q.page ?? prev.page,
       limit: q.limit ?? prev.limit,
       gpsFilter: (q.filters?.gps as 'all' | 'verified' | 'unverified') ?? prev.gpsFilter,
+    }));
+  }, []);
+
+  const handleVerified = useCallback((userId: string) => {
+    setData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.user_id === userId ? { ...item, identity_verified: true } : item,
+      ),
     }));
   }, []);
 
@@ -137,21 +286,40 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
     },
     {
       key: 'drops_earned',
-      label: 'Drops',
+      label: 'Awarded',
       sortable: true,
-      render: (row) =>
-        row.drops_earned > 0 ? (
-          <span className="text-sm text-[#00E5FF] font-semibold">+{row.drops_earned}</span>
-        ) : (
-          <span className="text-sm text-zinc-600">0</span>
-        ),
+      render: (row) => (
+        <div className="flex flex-col gap-0.5">
+          {row.drops_earned > 0 ? (
+            <span className="text-sm text-[#00E5FF] font-semibold tabular-nums">+{row.drops_earned}</span>
+          ) : (
+            <span className="text-sm text-zinc-600 tabular-nums">0</span>
+          )}
+          <span className="text-[9px] text-zinc-600 leading-tight">drops minted</span>
+        </div>
+      ),
     },
     {
       key: 'gps',
-      label: 'GPS',
+      label: 'Location',
       render: (row) => <GPSBadge verified={row.gps_verified} distance={row.gps_distance_m} />,
     },
-  ], []);
+    {
+      key: 'identity',
+      label: 'Identity',
+      render: (row) => (
+        <IdentityBadge
+          verified={row.identity_verified}
+          disabled={readOnly}
+          onClick={(e) => {
+            if (readOnly) return;
+            e.stopPropagation();
+            setVerifyTarget({ userId: row.user_id, username: row.username, avatarUrl: row.avatar_url });
+          }}
+        />
+      ),
+    },
+  ], [readOnly]);
 
   if (loading) {
     return (
@@ -171,6 +339,50 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-3 rounded-xl border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
+        <Info className="w-4 h-4 text-[#00E5FF] shrink-0 mt-0.5" />
+        <div className="text-[11px] text-zinc-500 leading-relaxed space-y-2">
+          <p>
+            <span className="text-zinc-400">Awarded</span> is drops credited for that check-in.{' '}
+            <span className="text-zinc-400">Location</span> shows whether the member was inside your GPS radius when
+            they scanned; lenient mode can still award full drops when this reads “Not verified”.
+          </p>
+          {readOnly && (
+            <p className="text-zinc-600">
+              Reception mode: identity status is visible here, but verification edits are disabled.
+            </p>
+          )}
+          {typeof configuredCheckinDrops === 'number' && configuredCheckinDrops >= 0 && (
+            <p className="text-zinc-600">
+              Configured check-in amount:{' '}
+              <span className="text-zinc-400 tabular-nums">{configuredCheckinDrops}</span> drops (see Check-in Settings).
+            </p>
+          )}
+          {checkinVerificationMode === 'strict' && (
+            <p className="text-amber-400/85">
+              Strict GPS is on: failed attempts (no location, outside radius, or verification errors) do not create a row
+              here — only successful check-ins appear.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Live indicator with connection status */}
+      <div className="flex items-center justify-end gap-2">
+        {realtimeConnected ? (
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-emerald-400">
+            <Wifi className="w-3 h-3" />
+            Realtime
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-zinc-500">
+            <WifiOff className="w-3 h-3" />
+            Polling
+          </span>
+        )}
+        <LiveIndicator label="Live" />
+      </div>
+
       {/* Compact KPI strip */}
       {stats && stats.total > 0 && (
         <div className="grid grid-cols-3 gap-3">
@@ -211,6 +423,18 @@ export function CheckinStatsModule({ gymId }: CheckinStatsModuleProps) {
         onRowClick={(row) => router.push(`/dashboard/gym/${gymId}/members/${row.user_id}`)}
         rowKey={(row) => row.id}
       />
+
+      {/* Verify drawer/modal */}
+      {verifyTarget && (
+        <MemberIdentityVerifyDrawer
+          gymId={gymId}
+          userId={verifyTarget.userId}
+          username={verifyTarget.username}
+          avatarUrl={verifyTarget.avatarUrl}
+          onClose={() => setVerifyTarget(null)}
+          onVerified={handleVerified}
+        />
+      )}
     </div>
   );
 }

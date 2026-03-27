@@ -1,8 +1,19 @@
 'use server';
 
 import { getAdminClient } from '@/lib/utils/supabase-admin';
+import { getCurrentProfile } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+
+const MANAGEMENT_ROLES = ['superadmin', 'gym_owner', 'gym_admin'] as const;
+
+async function requireManagementRole() {
+  const profile = await getCurrentProfile();
+  if (!profile || !(MANAGEMENT_ROLES as readonly string[]).includes(profile.role)) {
+    return null;
+  }
+  return profile;
+}
 
 const REDEMPTION_LIMITS = ['unlimited', 'once', 'once_per_day', 'once_per_week', 'once_per_month'] as const;
 const STORE_REWARD_TYPES = ['physical', 'coffee', 'protein_snack', 'day_pass', 'pt_intro', 'merch_small', 'merch_premium', 'membership'] as const;
@@ -137,6 +148,9 @@ function computeDiscountFields(basePriceRsd: number, discountPercent: number, dr
 
 export async function createStoreItem(input: z.infer<typeof createStoreItemSchema>) {
   try {
+    if (!(await requireManagementRole())) {
+      return { success: false, error: 'Unauthorized — receptionist cannot create store items.' };
+    }
     const validated = createStoreItemSchema.parse(input);
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
@@ -211,6 +225,9 @@ export async function updateStoreItem(
   input: Partial<z.infer<typeof createStoreItemSchema>>
 ) {
   try {
+    if (!(await requireManagementRole())) {
+      return { success: false, error: 'Unauthorized — receptionist cannot edit store items.' };
+    }
     const updateData: any = {};
     
     if (input.name !== undefined) updateData.name = input.name;
@@ -302,6 +319,9 @@ export async function updateStoreItem(
 
 export async function deleteStoreItem(itemId: string, gymId: string) {
   try {
+    if (!(await requireManagementRole())) {
+      return { success: false, error: 'Unauthorized — receptionist cannot delete store items.' };
+    }
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
@@ -323,6 +343,9 @@ export async function deleteStoreItem(itemId: string, gymId: string) {
 
 export async function toggleStoreItemActive(itemId: string, gymId: string, isActive: boolean) {
   try {
+    if (!(await requireManagementRole())) {
+      return { success: false, error: 'Unauthorized — receptionist cannot toggle store items.' };
+    }
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available.' };

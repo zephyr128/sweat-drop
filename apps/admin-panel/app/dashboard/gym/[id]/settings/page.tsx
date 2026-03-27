@@ -18,6 +18,7 @@ interface GymRow {
   country: string | null;
   owner_id: string | null;
   checkin_drops: number | null;
+  checkin_verification_mode?: string | null;
   lat: number | null;
   lng: number | null;
   gps_radius_m: number | null;
@@ -89,6 +90,9 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
           gps_radius_m: typeof gym.gps_radius_m === 'number' ? gym.gps_radius_m : 200,
           address: gym.address,
           city: gym.city,
+          checkin_verification_mode: gym.checkin_verification_mode === 'strict' ? 'strict' : 'lenient',
+          economyMaxCheckinDropsPerDay: checkinDropsFromEconomy,
+          gymRowCheckinDrops: typeof gym.checkin_drops === 'number' ? gym.checkin_drops : null,
         }}
         brandingData={brandingData}
       />

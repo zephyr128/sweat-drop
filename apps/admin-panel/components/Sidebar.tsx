@@ -26,6 +26,7 @@ import {
   Activity,
   ShieldCheck,
   ScrollText,
+  Megaphone,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 import { getPendingRedemptionCount } from '@/lib/actions/redemption-actions';
@@ -117,6 +118,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         title: 'PEOPLE',
         items: [
           { href: `${base}/members`, label: 'Members', icon: Users },
+          { href: `${base}/members/engagement`, label: 'Engagement', icon: Megaphone },
           ...(role !== 'gym_admin' ? [{ href: `${base}/team`, label: 'Team', icon: UserCog }] : []),
         ],
       },
@@ -160,7 +162,9 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     ];
   };
 
-  // ── Receptionist ────────────────────────────────────────────────
+  // ── Receptionist — locked desk-operator scope ──────────────────
+  // Desk already covers verify + redemptions queue + live activity.
+  // No Store link needed — avoids redundant nav.
   const receptionistGroups = (gymId?: string | null): NavGroup[] => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [
@@ -168,7 +172,8 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
         title: 'DESK',
         items: [
           { href: `${base}/desk`, label: 'Desk', icon: ShieldCheck, badge: pendingRedemptionCount, badgeColor: 'amber' },
-          { href: `${base}/dashboard`, label: 'Live Feed', icon: LayoutDashboard },
+          { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
+          { href: `${base}/activity`, label: 'Activity Log', icon: ScrollText },
         ],
       },
     ];

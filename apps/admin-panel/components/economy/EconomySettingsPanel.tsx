@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Save, Shield, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Save, Shield, ShieldAlert, Link2 } from 'lucide-react';
 import {
   updateEconomyConfig,
   type BandEnforcementMode,
@@ -11,6 +12,7 @@ import {
   type EconomySummary,
 } from '@/lib/actions/economy-actions';
 import { DropCalculatorPreview } from './DropCalculatorPreview';
+import { HappyHourRulesManager } from './HappyHourRulesManager';
 import { InfoTip } from '@/components/ui/InfoTip';
 
 interface EconomySettingsPanelProps {
@@ -20,6 +22,8 @@ interface EconomySettingsPanelProps {
   defaults: EconomyConfig;
   draftExists: boolean;
   guardrails: EconomyRewardGuardrail[];
+  /** gyms.checkin_drops after last publish (for cross-screen alignment) */
+  gymPublishedCheckinDrops?: number | null;
 }
 
 const LIMITS = {
@@ -35,7 +39,8 @@ const TOOLTIPS: Record<string, string> = {
   maxDropsPerDay: 'Total drops a member can earn across all workouts in one day.',
   maxDropsPerWeek: 'Total drops a member can earn across the entire week. Limits excessive farming.',
   maxRewardedSessionsPerDay: 'How many workouts per day actually earn drops. Extra sessions beyond this are free but earn nothing.',
-  maxCheckinDropsPerDay: 'Bonus drops a member gets just for checking in at the gym (scanning QR at reception). Set to 0 to disable.',
+  maxCheckinDropsPerDay:
+    'Same value as Gym Setup → Location & check-in → Drops per check-in. Publishing Economy copies it to the gym record used by the QR flow. Set to 0 to disable check-in rewards.',
   dropsEarned: 'Total drops earned by all members in the last 30 days.',
   dropsSpent: 'Total drops spent on rewards in the last 30 days.',
 };
@@ -104,7 +109,13 @@ function fmtRsd(drops: number, rate: number): string {
   return rsd < 1 ? `${rsd.toFixed(2)} RSD` : `${Math.round(rsd).toLocaleString()} RSD`;
 }
 
-export function EconomySettingsPanel({ gymId, config, summary, guardrails }: EconomySettingsPanelProps) {
+export function EconomySettingsPanel({
+  gymId,
+  config,
+  summary,
+  guardrails,
+  gymPublishedCheckinDrops,
+}: EconomySettingsPanelProps) {
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState<EconomyConfig>(config);
   const dropsPerRsd = form.dropsPerRsd;
@@ -168,6 +179,11 @@ export function EconomySettingsPanel({ gymId, config, summary, guardrails }: Eco
         </div>
       </section>
 
+      {/* ── Happy Hour ── */}
+      <section id="happy-hour">
+        <HappyHourRulesManager gymId={gymId} />
+      </section>
+
       {/* ── Earning Limits ── */}
       <section>
         <SectionTitle title="Earning Limits" subtitle="Control how many drops members can earn per workout, per day and per week." />
@@ -177,6 +193,33 @@ export function EconomySettingsPanel({ gymId, config, summary, guardrails }: Eco
           <SliderField label="Per week" tooltip={TOOLTIPS.maxDropsPerWeek} value={form.maxDropsPerWeek} onChange={(v) => setNum('maxDropsPerWeek', v)} min={LIMITS.maxDropsPerWeek.min} max={LIMITS.maxDropsPerWeek.max} rec={LIMITS.maxDropsPerWeek.rec} rsdHint={fmtRsd(form.maxDropsPerWeek, dropsPerRsd)} />
           <SliderField label="Rewarded sessions / day" tooltip={TOOLTIPS.maxRewardedSessionsPerDay} value={form.maxRewardedSessionsPerDay} onChange={(v) => setNum('maxRewardedSessionsPerDay', v)} min={LIMITS.maxRewardedSessionsPerDay.min} max={LIMITS.maxRewardedSessionsPerDay.max} rec={LIMITS.maxRewardedSessionsPerDay.rec} />
           <SliderField label="Check-in bonus / day" tooltip={TOOLTIPS.maxCheckinDropsPerDay} value={form.maxCheckinDropsPerDay} onChange={(v) => setNum('maxCheckinDropsPerDay', v)} min={LIMITS.maxCheckinDropsPerDay.min} max={LIMITS.maxCheckinDropsPerDay.max} rec={LIMITS.maxCheckinDropsPerDay.rec} rsdHint={fmtRsd(form.maxCheckinDropsPerDay, dropsPerRsd)} />
+        </div>
+        <div className="mt-4 rounded-xl border border-[#1A1A1A] bg-[#111] px-4 py-3 flex flex-col sm:flex-row gap-3 sm:items-start sm:justify-between">
+          <div className="flex gap-2 min-w-0">
+            <Link2 className="w-4 h-4 text-[#00E5FF] shrink-0 mt-0.5" />
+            <div className="text-xs text-zinc-500 leading-relaxed space-y-1">
+              <p>
+                <span className="text-zinc-300 font-medium">Check-in bonus</span> is linked to{' '}
+                <Link
+                  href={`/dashboard/gym/${gymId}/settings?tab=location`}
+                  className="text-[#00E5FF] hover:underline"
+                >
+                  Gym Setup → Location & Check-in
+                </Link>
+                . Saving Economy (publish) writes the same number to the gym&apos;s drops-per-scan setting; saving from
+                Gym Setup updates tokenomics to match.
+              </p>
+              {gymPublishedCheckinDrops != null && Number.isFinite(gymPublishedCheckinDrops) ? (
+                <p className="text-[11px] text-zinc-600">
+                  Gym record (published):{' '}
+                  <span className="text-zinc-400 tabular-nums">{Math.round(gymPublishedCheckinDrops)}</span> drops
+                  {Math.round(form.maxCheckinDropsPerDay) !== Math.round(gymPublishedCheckinDrops) ? (
+                    <span className="text-amber-400/90"> — differs from the value above until you save Economy.</span>
+                  ) : null}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
       </section>
 

@@ -12,6 +12,7 @@ import {
   type ActivityKind,
 } from '@/lib/actions/activity-log-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { LiveIndicator } from '@/components/ui/LiveIndicator';
 
 interface ActivityLogProps {
   gymId: string;
@@ -148,6 +149,13 @@ export function ActivityLog({ gymId }: ActivityLogProps) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Realtime polling: refresh data every 30 seconds
+  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  useEffect(() => {
+    pollRef.current = setInterval(() => { fetchData(); }, 30_000);
+    return () => clearInterval(pollRef.current);
+  }, [fetchData]);
+
   function handleTabChange(newTab: ActivityFilterKind) {
     setTab(newTab);
     setPage(1);
@@ -184,9 +192,12 @@ export function ActivityLog({ gymId }: ActivityLogProps) {
           />
         </div>
 
-        <p className="text-[10px] text-zinc-600 ml-auto">
-          {total.toLocaleString()} item{total !== 1 ? 's' : ''}
-        </p>
+        <div className="flex items-center gap-3 ml-auto">
+          <LiveIndicator />
+          <p className="text-[10px] text-zinc-600">
+            {total.toLocaleString()} item{total !== 1 ? 's' : ''}
+          </p>
+        </div>
       </div>
 
       {/* Table */}

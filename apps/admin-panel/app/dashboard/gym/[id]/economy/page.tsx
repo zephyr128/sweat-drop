@@ -1,6 +1,7 @@
 // Route is auto-dynamic (reads cookies via requireGymAccess)
 
 import { requireGymAccess } from '@/lib/auth-guard';
+import { createClient } from '@/lib/supabase-server';
 import { EconomySettingsPanel } from '@/components/economy/EconomySettingsPanel';
 import { getEconomyConfig } from '@/lib/actions/economy-actions';
 
@@ -12,7 +13,16 @@ export default async function GymEconomyPage({ params }: EconomyPageProps) {
   const { id } = await params;
   await requireGymAccess(id, ['superadmin', 'gym_owner', 'gym_admin']);
 
-  const result = await getEconomyConfig(id);
+  const supabase = await createClient();
+  const [result, gymRes] = await Promise.all([
+    getEconomyConfig(id),
+    supabase.from('gyms').select('checkin_drops').eq('id', id).single(),
+  ]);
+
+  const gymPublishedCheckinDrops =
+    gymRes.data && typeof (gymRes.data as { checkin_drops?: unknown }).checkin_drops === 'number'
+      ? (gymRes.data as { checkin_drops: number }).checkin_drops
+      : null;
 
   return (
     <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
@@ -35,6 +45,7 @@ export default async function GymEconomyPage({ params }: EconomyPageProps) {
           defaults={result.data.defaults}
           draftExists={result.data.draftExists}
           guardrails={result.data.guardrails}
+          gymPublishedCheckinDrops={gymPublishedCheckinDrops}
         />
       )}
     </div>

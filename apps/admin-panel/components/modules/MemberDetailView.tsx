@@ -12,9 +12,13 @@ import {
   Activity,
   Wallet,
   Shield,
+  ShieldCheck,
   Trophy,
   AlertTriangle,
   Timer,
+  User,
+  CreditCard,
+  FileText,
 } from 'lucide-react';
 import type {
   MemberDetailResult,
@@ -24,6 +28,7 @@ import type {
   MemberRedemption,
   MemberExpiryInfo,
   MemberLedgerSummary,
+  MemberIdentityInfo,
 } from '@/lib/actions/member-detail-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
 
@@ -235,8 +240,84 @@ function RedemptionsTable({ redemptions }: { redemptions: MemberRedemption[] }) 
   );
 }
 
+function IdentityVerificationBlock({ identity }: { identity: MemberIdentityInfo | null }) {
+  const verified = identity?.isVerified === true;
+
+  return (
+    <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6 mb-6">
+      <div className="flex items-center gap-2 mb-4">
+        <ShieldCheck className="w-5 h-5 text-[#00E5FF]" />
+        <h2 className="text-lg font-bold text-white">Identity Verification</h2>
+        {verified ? (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            Verified
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            Needs verification
+          </span>
+        )}
+      </div>
+
+      {!identity ? (
+        <p className="text-sm text-zinc-500">No identity record yet. Verify this member from the check-in desk.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <User className="w-3 h-3" />
+              Verified Full Name
+            </div>
+            <p className="text-sm text-white font-medium">{identity.fullNameVerified || '—'}</p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <CreditCard className="w-3 h-3" />
+              Membership ID
+            </div>
+            <p className="text-sm text-white font-medium font-mono">{identity.externalMembershipId || '—'}</p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <Shield className="w-3 h-3" />
+              Verified By
+            </div>
+            <p className="text-sm text-white">{identity.verifiedByName || '—'}</p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <Clock className="w-3 h-3" />
+              Verified At
+            </div>
+            <p className="text-sm text-white">
+              {identity.verifiedAt
+                ? new Date(identity.verifiedAt).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                  })
+                : '—'}
+            </p>
+          </div>
+
+          {identity.notes && (
+            <div className="sm:col-span-2 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <FileText className="w-3 h-3" />
+                Notes
+              </div>
+              <p className="text-sm text-zinc-300">{identity.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
-  const { profile: member, sessions, transactions, badges, redemptions, expiry, ledger } = data;
+  const { profile: member, sessions, transactions, badges, redemptions, expiry, ledger, identity } = data;
 
   return (
     <div className="min-h-screen p-6 md:p-10 max-w-6xl mx-auto">
@@ -270,6 +351,9 @@ export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Identity Verification */}
+      <IdentityVerificationBlock identity={identity} />
 
       {/* KPI Stats — Wallet vs Earned */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">

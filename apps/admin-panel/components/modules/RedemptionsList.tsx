@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useTransition } from 'react';
+import { useState, useCallback, useEffect, useTransition, useRef } from 'react';
 import {
   Ticket, Clock, CheckCircle2, XCircle, Droplet, User,
   Gift, Loader2, X,
@@ -10,6 +10,7 @@ import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '
 import { listRedemptions, type RedemptionRow } from '@/lib/actions/list-actions';
 import { confirmRedemption, cancelRedemption } from '@/lib/actions/redemption-actions';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
+import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 
 interface RedemptionsListProps {
@@ -132,8 +133,8 @@ function RedemptionDetailModal({
       } else {
         toast.error(res.error || 'Failed to confirm');
       }
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Unexpected error');
     } finally {
       setProcessing(false);
     }
@@ -156,8 +157,8 @@ function RedemptionDetailModal({
       } else {
         toast.error(res.error || 'Failed to cancel');
       }
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Unexpected error');
     } finally {
       setProcessing(false);
     }
@@ -293,7 +294,7 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
         sortBy: q.sortBy,
         sortDir: q.sortDir,
         filters: {
-          status: (q.filters?.status as any) || 'all',
+          status: (q.filters?.status as 'all' | 'pending' | 'confirmed' | 'cancelled') || 'all',
         },
       });
       if (result.success) setData(result.data);
@@ -301,6 +302,13 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
   }, [gymId]);
 
   useEffect(() => { fetchData(query); }, [query, fetchData]);
+
+  // Realtime polling: refresh data every 30 seconds
+  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  useEffect(() => {
+    pollRef.current = setInterval(() => { fetchData(query); }, 30_000);
+    return () => clearInterval(pollRef.current);
+  }, [fetchData, query]);
 
   const handleQueryChange = useCallback((update: DataTableQuery) => {
     setQuery((prev) => {
@@ -318,6 +326,9 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
 
   return (
     <>
+      <div className="flex items-center justify-end mb-2">
+        <LiveIndicator label="Live — auto-refreshing" />
+      </div>
       <DataTable<RedemptionRow>
         data={data.items}
         columns={COLUMNS}

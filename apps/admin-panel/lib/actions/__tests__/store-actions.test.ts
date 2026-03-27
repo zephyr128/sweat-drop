@@ -8,7 +8,12 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/auth', () => ({
+  getCurrentProfile: vi.fn(),
+}));
+
 import { getAdminClient } from '@/lib/utils/supabase-admin';
+import { getCurrentProfile } from '@/lib/auth';
 import { createStoreItem, updateStoreItem } from '@/lib/actions/store-actions';
 
 function createSupabaseMock(dropsPerRsd = 2.0) {
@@ -68,6 +73,12 @@ function createSupabaseMock(dropsPerRsd = 2.0) {
 describe('store-actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getCurrentProfile).mockResolvedValue({
+      id: 'owner-1',
+      role: 'gym_owner',
+      assigned_gym_id: null,
+      owner_id: null,
+    } as any);
   });
 
   it('creates reward in discount mode and computes price_drops', async () => {

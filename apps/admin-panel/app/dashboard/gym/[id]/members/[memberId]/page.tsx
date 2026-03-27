@@ -17,7 +17,7 @@ export default async function MemberDetailPage({
     redirect('/login');
   }
 
-  const allowedRoles = ['superadmin', 'gym_owner', 'gym_admin'];
+  const allowedRoles = ['superadmin', 'gym_owner', 'gym_admin', 'receptionist'];
   if (!allowedRoles.includes(profile.role)) {
     redirect(`/dashboard/gym/${gymId}/dashboard`);
   }

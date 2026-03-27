@@ -5,6 +5,12 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentProfile } from '../auth';
 
+async function rejectReceptionist() {
+  const profile = await getCurrentProfile();
+  if (profile?.role === 'receptionist') return true;
+  return false;
+}
+
 const createMachineSchema = z.object({
   gymId: z.string().uuid(),
   name: z.string().min(1, 'Name is required'),

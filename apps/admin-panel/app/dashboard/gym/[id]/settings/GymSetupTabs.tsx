@@ -24,6 +24,9 @@ interface GymSetupTabsProps {
     gps_radius_m: number;
     address: string | null;
     city: string | null;
+    checkin_verification_mode: 'lenient' | 'strict';
+    economyMaxCheckinDropsPerDay: number | null;
+    gymRowCheckinDrops: number | null;
   };
   brandingData: {
     primary_color: string | null;

@@ -99,28 +99,53 @@ export async function createOwner(input: CreateOwnerInput) {
 }
 
 /**
- * Send owner invitation email
+ * Send owner invitation email.
+ * Uses Resend API when RESEND_API_KEY is set, otherwise logs URL.
  */
-async function sendOwnerInvitationEmail(invitation: any, _gymName?: string) {
+async function sendOwnerInvitationEmail(invitation: Record<string, unknown>, _gymName?: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
+    const fromAddress = process.env.RESEND_FROM_EMAIL || 'SweatDrop <noreply@sweatdrop.com>';
 
-    // TODO: Integrate with email service (Resend, SendGrid, etc.)
-    // For now, log the invitation URL for manual sharing
-    // This will appear in Vercel server logs
-    console.log('Owner Invitation Created', {
-      email: invitation.email,
-      acceptUrl,
-      note: 'Email service not configured. Share this URL manually with the owner.',
-    });
+    if (RESEND_API_KEY) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: invitation.email,
+          subject: 'You\'ve been invited to SweatDrop as a Gym Owner',
+          html: [
+            '<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0A0A;color:#ffffff;border-radius:12px">',
+            '<h2 style="margin:0 0 16px;color:#00E5FF">Gym Owner Invitation</h2>',
+            '<p style="color:#d4d4d8">You\'ve been invited to manage a gym on <strong style="color:#fff">SweatDrop</strong>.</p>',
+            `<a href="${acceptUrl}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#00E5FF;color:#000;font-weight:bold;text-decoration:none;border-radius:8px">Accept Invitation</a>`,
+            `<p style="font-size:12px;color:#71717a;margin-top:24px">Or copy this link:<br/><a href="${acceptUrl}" style="color:#00E5FF;word-break:break-all">${acceptUrl}</a></p>`,
+            '</div>',
+          ].join(''),
+        }),
+      });
 
-    // Option 1: Use Supabase Edge Function (if configured)
-    // Option 2: Use Resend API (recommended for production)
-    // See staff-actions.ts for example implementation
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        console.error('Resend API error (owner-actions)', response.status, body);
+      } else {
+        console.log('Owner invitation email sent via Resend', { email: invitation.email });
+      }
+    } else {
+      console.log('Owner Invitation Created (no email provider)', {
+        email: invitation.email,
+        acceptUrl,
+        note: 'Set RESEND_API_KEY to enable email delivery.',
+      });
+    }
   } catch (error) {
     console.error('Error sending owner invitation email:', error);
-    // Don't throw - email failure shouldn't block invitation creation
   }
 }
 

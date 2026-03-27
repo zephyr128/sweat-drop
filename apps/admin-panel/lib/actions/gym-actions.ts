@@ -261,6 +261,8 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
  * Update gym check-in settings (checkin_drops, GPS coords, radius)
  * and keep tokenomics check-in cap in sync.
  */
+export type CheckinVerificationMode = 'lenient' | 'strict';
+
 export async function updateGymCheckinSettings(
   gymId: string,
   input: {
@@ -268,6 +270,7 @@ export async function updateGymCheckinSettings(
     lat?: number | null;
     lng?: number | null;
     gps_radius_m?: number;
+    checkin_verification_mode?: CheckinVerificationMode;
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -290,6 +293,9 @@ export async function updateGymCheckinSettings(
     if (input.lat !== undefined) updateData.lat = input.lat;
     if (input.lng !== undefined) updateData.lng = input.lng;
     if (input.gps_radius_m !== undefined) updateData.gps_radius_m = input.gps_radius_m;
+    if (input.checkin_verification_mode !== undefined) {
+      updateData.checkin_verification_mode = input.checkin_verification_mode;
+    }
 
     const { error } = await (supabaseAdmin as any)
       .from('gyms')
@@ -437,6 +443,7 @@ export async function getGymCheckinsPaginated(
       drops_earned: number;
       gps_verified: boolean;
       gps_distance_m: number | null;
+      identity_verified: boolean;
     }>;
     total: number;
     page: number;
@@ -477,6 +484,22 @@ export async function getGymCheckinsPaginated(
     const [{ count }, { data, error }] = await Promise.all([countQuery, dataQuery]);
     if (error) throw error;
 
+    // Batch-fetch identity status for all user_ids in the page
+    const userIds = [...new Set(((data || []) as any[]).map((c) => c.user_id))];
+    let identityMap: Record<string, boolean> = {};
+    if (userIds.length > 0) {
+      const { data: identities } = await supabaseAdmin
+        .from('gym_member_identities')
+        .select('user_id, is_verified')
+        .eq('gym_id', gymId)
+        .in('user_id', userIds);
+      if (identities) {
+        for (const row of identities as any[]) {
+          identityMap[row.user_id] = row.is_verified === true;
+        }
+      }
+    }
+
     const total = count ?? 0;
     const items = ((data || []) as any[]).map((c) => ({
       id: c.id,
@@ -490,6 +513,7 @@ export async function getGymCheckinsPaginated(
       drops_earned: c.drops_earned,
       gps_verified: c.gps_verified,
       gps_distance_m: c.gps_distance_m,
+      identity_verified: identityMap[c.user_id] ?? false,
     }));
 
     return {
@@ -750,27 +774,54 @@ export async function deleteGym(gymId: string) {
 }
 
 /**
- * Send owner invitation email
+ * Send owner invitation email.
+ * Uses Resend API when RESEND_API_KEY is set, otherwise logs URL for manual sharing.
  */
-async function sendOwnerInvitationEmail(invitation: any, gymName?: string) {
+async function sendOwnerInvitationEmail(invitation: Record<string, unknown>, gymName?: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
+    const name = gymName || 'New Gym';
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
+    const fromAddress = process.env.RESEND_FROM_EMAIL || 'SweatDrop <noreply@sweatdrop.com>';
 
-    // TODO: Integrate with email service (Resend, SendGrid, etc.)
-    // For now, log the invitation URL for manual sharing
-    logger.info('Owner Invitation Created', {
-      email: invitation.email,
-      gymName: gymName || 'New Gym',
-      acceptUrl,
-      note: 'Email service not configured. Share this URL manually with the owner.',
-    });
+    if (RESEND_API_KEY) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: invitation.email,
+          subject: `You've been invited to manage ${name} on SweatDrop`,
+          html: [
+            '<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0A0A;color:#ffffff;border-radius:12px">',
+            `<h2 style="margin:0 0 16px;color:#00E5FF">Gym Owner Invitation</h2>`,
+            `<p style="color:#d4d4d8">You've been invited to manage <strong style="color:#fff">${name}</strong> on SweatDrop.</p>`,
+            `<a href="${acceptUrl}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#00E5FF;color:#000;font-weight:bold;text-decoration:none;border-radius:8px">Accept Invitation</a>`,
+            `<p style="font-size:12px;color:#71717a;margin-top:24px">Or copy this link:<br/><a href="${acceptUrl}" style="color:#00E5FF;word-break:break-all">${acceptUrl}</a></p>`,
+            '</div>',
+          ].join(''),
+        }),
+      });
 
-    // Option 1: Use Supabase Edge Function (if configured)
-    // Option 2: Use Resend API (recommended for production)
-    // See staff-actions.ts for example implementation
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        logger.error('Resend API error (owner)', { status: response.status, body, email: invitation.email });
+      } else {
+        logger.info('Owner invitation email sent via Resend', { email: invitation.email, gymName: name });
+      }
+    } else {
+      logger.info('Owner Invitation Created (no email provider)', {
+        email: invitation.email,
+        gymName: name,
+        acceptUrl,
+        note: 'Set RESEND_API_KEY to enable email delivery. Share the URL manually for now.',
+      });
+    }
   } catch (error) {
     logger.error('Error sending owner invitation email', { error, invitationId: invitation.id });
-    // Don't throw - email failure shouldn't block invitation creation
   }
 }

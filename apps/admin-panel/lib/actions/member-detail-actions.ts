@@ -78,6 +78,15 @@ export interface MemberLedgerSummary {
   earnedScoreAllTime: number;
 }
 
+export interface MemberIdentityInfo {
+  isVerified: boolean;
+  fullNameVerified: string | null;
+  externalMembershipId: string | null;
+  verifiedByName: string | null;
+  verifiedAt: string | null;
+  notes: string | null;
+}
+
 export interface MemberDetailResult {
   profile: MemberDetail;
   sessions: MemberSession[];
@@ -86,6 +95,7 @@ export interface MemberDetailResult {
   redemptions: MemberRedemption[];
   expiry: MemberExpiryInfo | null;
   ledger: MemberLedgerSummary | null;
+  identity: MemberIdentityInfo | null;
 }
 
 export async function getMemberDetail(
@@ -98,7 +108,7 @@ export async function getMemberDetail(
       return { success: false, error: 'Not authenticated' };
     }
 
-    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+    if (!['superadmin', 'gym_owner', 'gym_admin', 'receptionist'].includes(profile.role)) {
       return { success: false, error: 'Unauthorized' };
     }
 
@@ -109,16 +119,22 @@ export async function getMemberDetail(
 
     // Verify gym access for non-superadmin
     if (profile.role !== 'superadmin') {
-      const { data: gym } = await supabase
-        .from('gyms')
-        .select('owner_id')
-        .eq('id', gymId)
-        .single();
+      if (profile.role === 'receptionist' || profile.role === 'gym_admin') {
+        if (profile.assigned_gym_id !== gymId) {
+          return { success: false, error: 'Unauthorized for this gym' };
+        }
+      } else {
+        const { data: gym } = await supabase
+          .from('gyms')
+          .select('owner_id')
+          .eq('id', gymId)
+          .single();
 
-      if (!gym) return { success: false, error: 'Gym not found' };
-      const gymData = gym as { owner_id: string | null };
-      if (gymData.owner_id !== profile.id && profile.assigned_gym_id !== gymId) {
-        return { success: false, error: 'Unauthorized for this gym' };
+        if (!gym) return { success: false, error: 'Gym not found' };
+        const gymData = gym as { owner_id: string | null };
+        if (gymData.owner_id !== profile.id && profile.assigned_gym_id !== gymId) {
+          return { success: false, error: 'Unauthorized for this gym' };
+        }
       }
     }
 
@@ -348,6 +364,39 @@ export async function getMemberDetail(
       // Non-critical
     }
 
+    // Fetch identity verification data
+    let identity: MemberIdentityInfo | null = null;
+    try {
+      const { data: idRow } = await (supabase as any)
+        .from('gym_member_identities')
+        .select('is_verified, full_name_verified, external_membership_id, verified_by, verified_at, verification_notes')
+        .eq('gym_id', gymId)
+        .eq('user_id', memberId)
+        .maybeSingle();
+
+      if (idRow) {
+        let verifiedByName: string | null = null;
+        if (idRow.verified_by) {
+          const { data: verifier } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', idRow.verified_by)
+            .single();
+          verifiedByName = (verifier as any)?.username || null;
+        }
+        identity = {
+          isVerified: idRow.is_verified === true,
+          fullNameVerified: idRow.full_name_verified || null,
+          externalMembershipId: idRow.external_membership_id || null,
+          verifiedByName,
+          verifiedAt: idRow.verified_at || null,
+          notes: idRow.verification_notes || null,
+        };
+      }
+    } catch {
+      // Non-critical — identity table may not exist yet
+    }
+
     return {
       success: true,
       data: {
@@ -370,6 +419,7 @@ export async function getMemberDetail(
         redemptions,
         expiry,
         ledger,
+        identity,
       },
     };
   } catch (error: unknown) {
