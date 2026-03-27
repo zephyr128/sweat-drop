@@ -17,6 +17,150 @@ This file tracks database schema changes and their impact on frontend applicatio
 
 ## Recent Migrations
 
+### [2026-03-26] - Dashboard V3 + Activity Log with Workout Events
+
+**Migrations:**
+- `20260326000001_dashboard_v3_rpc.sql` — initial V3 (metric fixes + activity log)
+- `20260326000002_dashboard_v3_activity_workouts.sql` — supersedes _0001, adds workout events
+
+**Bug Fixes in `get_gym_dashboard_overview`:**
+- `activeRatePct` clamped to 0–100 with `LEAST(100, ...)` — was exceeding 100%
+- `completionRatePct` computed from real `challenge_progress` data — was hardcoded to 0
+- Top Performers uses `SUM(drops_transactions.amount) WHERE amount > 0` (earned drops) — was using `local_drops_balance` (wallet balance)
+- Top Performers filters to `role = 'user'` only — was including staff/owner
+- `dropsIssued7d.deltaPct` returns NULL when prev < 50 (frontend shows absolute instead)
+- `dropsIssued7d.deltaAbsolute` always returned
+- Economy section returns `health='gray'`, `healthLabel='No data'` when no snapshot exists
+- Economy includes `totalMembers` for Top1 hide logic (hide when <= 3)
+
+**New Features:**
+- `topPerformers` array (top 5 by earned drops, role='user') included in dashboard response
+- `deskFeed` now includes `workout_finished` and `workout_auto_finished` events (excludes `workout_started` for noise control)
+- New RPC: `get_gym_activity_log(p_gym_id, p_kind, p_search, p_page, p_per_page)` — paginated activity feed merging checkins + redemptions + workouts
+  - `p_kind` supports: `'all'`, `'checkin'`, `'redemption'`, `'workout'`
+  - Workout kinds: `workout_started`, `workout_finished`, `workout_auto_finished`
+  - Details include machine name and drops earned where available
+
+**Workout Event Classification (current heuristic):**
+- `workout_finished`: session with `is_active = false` and no `auto_cancel_reason`
+- `workout_auto_finished`: session with `raw_metrics->'security'->>'auto_cancel_reason' IS NOT NULL`
+- `workout_cancelled`: not yet reliably classifiable — TODO: add `sessions.end_reason` column
+
+**New Indexes:**
+- `idx_gym_checkins_gym_checked_at` — `gym_checkins(gym_id, checked_in_at DESC)`
+- `idx_redemptions_gym_created_at` — `redemptions(gym_id, created_at DESC)`
+- `idx_sessions_gym_started_at` — `sessions(gym_id, started_at DESC)`
+- `idx_sessions_gym_active_updated` — `sessions(gym_id, is_active, updated_at DESC)`
+- `idx_drops_tx_user_gym_positive` — `drops_transactions(user_id, gym_id) WHERE amount > 0`
+
+**Frontend Impact (admin-coder):**
+- Update `DashboardOverview` type: add `topPerformers`, `dropsIssued7d.deltaAbsolute`, `economy.totalMembers`, `'gray'` health
+- Add workout kind handling to `deskFeed` rendering (`workout_finished`, `workout_auto_finished`)
+- Remove separate `getTopPerformers` call from dashboard — data now in main RPC
+- Create Activity Log page at `gym/[id]/activity` using `get_gym_activity_log` RPC
+- Activity Log needs `Workouts` tab filter (maps to `p_kind='workout'`)
+- Workout items have compound IDs (`{session_id}_start`, `{session_id}_end`)
+- Fix drops delta display: show absolute when `deltaPct` is null (prev < 50)
+- Fix economy display: handle `'gray'` health state
+
+**Follow-up TODO:**
+- Add `sessions.end_reason TEXT` column for normalized workout end classification
+- Once added, support `workout_cancelled` kind in activity log
+
+**Rollback:** Redeploy previous `get_gym_dashboard_overview` (pre-V3). Drop `get_gym_activity_log`.
+
+---
+
+### [2026-03-25] - Dashboard Premium V2 Command Center RPC
+
+**Migration Files:**
+- `backend/supabase/migrations/20260325000026_gym_dashboard_overview_rpc.sql`
+
+**Agent:** supabase-dba
+
+**Changes:**
+- New RPC: `get_gym_dashboard_overview(p_gym_id UUID, p_window_days INT DEFAULT 7) RETURNS JSONB`
+- Returns full dashboard in a single call with sections:
+  - `kpis`: members, checkins, storeDesk, economy, dropsIssued7d, risk
+  - `machineOps`: liveSummary, usageTrend7d, typeSplit, peakHour
+  - `deskFeed`: last 10 checkins/redemptions interleaved
+  - `challengeSnapshot`: active, completionRatePct, mostPopular
+  - `setupStatus`: complete flag + blockers array
+- Performance indexes added for dashboard query paths
+
+**Performance:**
+- Execution time: 207ms on production data (target: <300ms)
+- All core scans use Index Only Scan
+
+**Indexes Added:**
+- `idx_sessions_gym_started` (sessions: gym_id, started_at DESC)
+- `idx_fraud_events_gym_unresolved` (fraud_events: gym_id, created_at DESC WHERE resolved_at IS NULL)
+- `idx_economy_snapshots_gym_date` (economy_snapshots_daily: gym_id, snapshot_date DESC)
+- `idx_challenge_progress_gym` (challenge_progress: gym_id)
+- `idx_drops_transactions_gym_created` (drops_transactions: gym_id, created_at DESC)
+
+**Impact:**
+- **Admin Panel:** Call this single RPC for dashboard. Replaces multiple fragmented queries.
+- **Mobile App:** No changes.
+
+**Breaking Changes:** None (additive).
+
+**Rollback:** Drop function `get_gym_dashboard_overview(UUID, INT)`.
+
+---
+
+### [2026-03-25] - Admin Panel Paginated List RPCs + Performance Indexes
+
+**Migration Files:**
+- `backend/supabase/migrations/20260325000021_admin_paginated_list_rpcs.sql`
+- `backend/supabase/migrations/20260325000022_fix_admin_list_clamp_call.sql`
+
+**Agent:** supabase-dba
+
+**Changes:**
+- 7 new JSONB-returning RPCs for admin panel server-side pagination + search + sort:
+  - `admin_list_members(p_gym_id, p_search, p_page, p_limit, p_sort_by, p_sort_dir)`
+  - `admin_list_redemptions(p_gym_id, p_search, p_status, p_page, p_limit, p_sort_by, p_sort_dir)`
+  - `admin_list_rewards(p_gym_id, p_search, p_is_active, p_page, p_limit, p_sort_by, p_sort_dir)`
+  - `admin_list_machines(p_gym_id, p_search, p_type, p_page, p_limit, p_sort_by, p_sort_dir)`
+  - `admin_list_team(p_gym_id, p_search, p_page, p_limit, p_sort_by, p_sort_dir)`
+  - `admin_list_challenges(p_gym_id, p_search, p_is_active, p_page, p_limit, p_sort_by, p_sort_dir)`
+  - `admin_list_arenas(p_gym_id, p_search, p_is_active, p_page, p_limit, p_sort_by, p_sort_dir)`
+- Helper function `_admin_check_gym_access(p_gym_id)` for auth enforcement
+- Performance indexes added on search/sort/filter paths for all domains
+- All RPCs return consistent JSONB: `{ items, total_count, page, limit, total_pages }`
+- Bounded queries: `p_limit` clamped to [1,100], `p_page` to [1,∞], `p_sort_dir` to asc/desc
+- Sort columns whitelisted per domain to prevent injection
+
+**Contract Shape:**
+```json
+{
+  "items": [...],
+  "total_count": 42,
+  "page": 1,
+  "limit": 25,
+  "total_pages": 2
+}
+```
+
+**Validation Results:**
+- All 7 domains return data with correct pagination → PASS
+- Search filtering works (members, machines) → PASS
+- Sort ascending/descending works → PASS
+- Unauthorized user gets `{"error": "Unauthorized"}` → PASS
+- Limit clamping (999→100, 0→1) → PASS
+
+**Impact:**
+- **Admin Panel:** Replace unbounded list fetches with these RPCs. Each returns items + pagination metadata in one call.
+- **Mobile App:** No changes needed.
+
+**Breaking Changes:** None (additive only, new RPCs).
+
+**Rollback Notes:**
+Drop all `admin_list_*` functions and `_admin_check_gym_access`.
+
+---
+
 ### [2026-03-25] - Reward Band Enforcement Policy (Soft Default, Optional Hard)
 
 **Migration File:** `backend/supabase/migrations/20260325000019_reward_band_enforcement_policy.sql`
