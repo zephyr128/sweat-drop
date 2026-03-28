@@ -21,6 +21,9 @@ export function TermsContentSr() {
         <p className="text-text-2 leading-relaxed">
           Ovi uslovi važe za sve korisnike platforme: krajnje korisnike (članove teretana), vlasnike teretana (gym owner-e) i administratore.
         </p>
+        <p className="text-text-2 leading-relaxed">
+          SweatDrop nije zdravstvena usluga. Metrički podaci, izazovi i nagrade služe motivaciji i angažovanju korisnika. Pre početka ili izmene programa vežbanja posavetuj se sa stručnim licem, posebno ako imaš zdravstvene probleme.
+        </p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">2. Registracija i nalog</h2>
         <ul className="list-disc pl-6 text-text-2 space-y-2">
@@ -114,7 +117,7 @@ export function TermsContentSr() {
           SweatDrop platforma, logo, dizajn i softver su intelektualna svojina SweatDrop-a. Korišćenjem platforme ne stičeš nikakva prava na ove elemente.
         </p>
         <p className="text-text-2 leading-relaxed">
-          Sadržaj koji unosiš (avatar, korisničko ime) ostaje tvoja svojina. Dajući nam dozvolu da ga prikazujemo u okviru platforme.
+          Sadržaj koji unosiš (avatar, korisničko ime) ostaje tvoja svojina. Daješ nam neisključivu dozvolu da ga prikazujemo u okviru platforme u svrhu pružanja usluge.
         </p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">9. Dostupnost i promene servisa</h2>

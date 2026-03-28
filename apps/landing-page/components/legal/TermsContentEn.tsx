@@ -20,6 +20,9 @@ export function TermsContentEn() {
         <p className="text-text-2 leading-relaxed">
           These terms apply to all users of the platform: end users (gym members), gym owners and administrators.
         </p>
+        <p className="text-text-2 leading-relaxed">
+          SweatDrop is not a medical service. Workout metrics, challenges and rewards are for motivation and engagement only. Before starting or changing an exercise programme, consult a qualified professional, especially if you have health concerns.
+        </p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">2. Registration and account</h2>
         <ul className="list-disc pl-6 text-text-2 space-y-2">

@@ -26,7 +26,8 @@ export function PrivacyContentEn() {
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">2. What data we collect</h2>
         <h3 className="text-base font-semibold text-text-2 mt-7 mb-2">2.1 Data you provide</h3>
         <ul className="list-disc pl-6 text-text-2 space-y-2">
-          <li><strong className="text-text">Account:</strong> Name, email address, password (encrypted)</li>
+          <li><strong className="text-text">Account:</strong> Name, email address and authentication credentials. Passwords are stored using one-way hashing and are not stored in readable form.</li>
+          <li><strong className="text-text">Sign-in providers:</strong> If you use Google or Apple sign-in, we receive identity data from that provider as allowed by your settings (for example name, email and provider user ID). For email sign-in, we may require email verification before full app access.</li>
           <li><strong className="text-text">Profile:</strong> Username, profile photo, gym name</li>
           <li><strong className="text-text">Health and physical data (optional):</strong> Gender, body weight, height, date of birth, training goal. You provide these voluntarily during profile setup and use them for personalised recommendations. You can skip or delete them at any time.</li>
         </ul>
@@ -37,6 +38,8 @@ export function PrivacyContentEn() {
           <li><strong className="text-text">GPS location:</strong> We collect your location <em>only</em> when you scan the reception QR code, to confirm you are physically at the gym. We do not track location continuously.</li>
           <li><strong className="text-text">Bluetooth (BLE) data:</strong> RPM and metrics from equipment sensors. Data is processed on device and only aggregated results are sent.</li>
           <li><strong className="text-text">Gamification:</strong> Drops balance, badges, leaderboard rank, challenge progress, reward history</li>
+          <li><strong className="text-text">Social features:</strong> Referral invites, friend challenge records, and related progress needed to run invite-friend and 1v1 challenge features.</li>
+          <li><strong className="text-text">Push notifications:</strong> Device push token, delivery status and notification preferences needed to send account, activity and campaign notifications.</li>
         </ul>
         <h3 className="text-base font-semibold text-text-2 mt-7 mb-2">2.3 Technical data</h3>
         <ul className="list-disc pl-6 text-text-2 space-y-2">
@@ -76,7 +79,7 @@ export function PrivacyContentEn() {
           <li><strong className="text-text">Expo / EAS</strong> — mobile app distribution</li>
           <li><strong className="text-text">Sentry</strong> (if enabled) — anonymous error reporting</li>
         </ul>
-        <p className="text-text-2 leading-relaxed">All data processors have data processing agreements in place under applicable law.</p>
+        <p className="text-text-2 leading-relaxed">We use service providers that process personal data on our instructions and apply appropriate contractual safeguards under applicable law.</p>
         <h3 className="text-base font-semibold text-text-2 mt-7 mb-2">4.5 Sweat Arenas — cross-gym visibility</h3>
         <p className="text-text-2 leading-relaxed">By joining a Sweat Arena you accept that your score and username are visible to all arena participants, including members of other participating gyms.</p>
         <p className="text-text-2 leading-relaxed">Visible: username, avatar, total arena score. Not visible: which gym your points come from, body weight, height, email or any other personal data.</p>
@@ -93,6 +96,7 @@ export function PrivacyContentEn() {
           <li><strong className="text-text">Health data:</strong> Until you delete it or delete your account</li>
           <li><strong className="text-text">Logs:</strong> 90 days</li>
         </ul>
+        <p className="text-text-2 leading-relaxed">Some data may be retained for longer where required by law or needed for security, fraud prevention or dispute resolution, for the minimum period necessary.</p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">7. Your rights</h2>
         <p className="text-text-2 leading-relaxed">Under applicable data protection law you have the right to:</p>

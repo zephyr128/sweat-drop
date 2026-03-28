@@ -30,7 +30,8 @@ export function PrivacyContentSr() {
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">2. Koje podatke prikupljamo</h2>
         <h3 className="text-base font-semibold text-text-2 mt-7 mb-2">2.1 Podaci koje ti daješ</h3>
         <ul className="list-disc pl-6 text-text-2 space-y-2">
-          <li><strong className="text-text">Nalog:</strong> Ime, prezime, email adresa, lozinka (kriptovana)</li>
+          <li><strong className="text-text">Nalog:</strong> Ime, email adresa i podaci za autentifikaciju. Lozinka se čuva jednosmernim heširanjem i ne čuva se u čitljivom obliku.</li>
+          <li><strong className="text-text">Provajderi prijave:</strong> Ako koristiš Google ili Apple prijavu, od provajdera primamo identitetske podatke u skladu sa tvojim podešavanjima (npr. ime, email i korisnički ID kod provajdera). Za email prijavu možemo zahtevati verifikaciju email adrese pre punog pristupa aplikaciji.</li>
           <li><strong className="text-text">Profil:</strong> Korisničko ime, profilna fotografija, naziv teretane</li>
           <li><strong className="text-text">Zdravstveni i fizički podaci (opciono):</strong> Pol, telesna masa, visina, datum rođenja, cilj treninga. Ove podatke unosiš dobrovoljno tokom podešavanja profila i koristiš ih za personalizovane preporuke. Možeš ih preskočiti ili obrisati u svakom trenutku.</li>
         </ul>
@@ -41,6 +42,8 @@ export function PrivacyContentSr() {
           <li><strong className="text-text">GPS lokacija:</strong> Prikupljamo tvoju lokaciju <em>isključivo</em> u trenutku skeniranja QR koda na recepciji teretane, da bismo potvrdili da se fizički nalaziš u teretani. Lokaciju ne pratimo kontinuirano.</li>
           <li><strong className="text-text">Bluetooth (BLE) podaci:</strong> RPM i metrički podaci sa senzora na spravi. Podaci se obrađuju na uređaju i šalju samo agregirani rezultati.</li>
           <li><strong className="text-text">Gamifikacija:</strong> Drops balans, badge-evi, rang na lestvici, progres izazova, istorija nagrada</li>
+          <li><strong className="text-text">Društvene funkcije:</strong> Referral pozivnice, zapisi friend challenge funkcija i povezani progres neophodan za invite-friend i 1v1 challenge funkcionalnosti.</li>
+          <li><strong className="text-text">Push obaveštenja:</strong> Push token uređaja, status isporuke i preference obaveštenja potrebne za slanje bezbednosnih, aktivnosti i kampanjskih notifikacija.</li>
         </ul>
         <h3 className="text-base font-semibold text-text-2 mt-7 mb-2">2.3 Tehnički podaci</h3>
         <ul className="list-disc pl-6 text-text-2 space-y-2">
@@ -80,7 +83,7 @@ export function PrivacyContentSr() {
           <li><strong className="text-text">Expo / EAS</strong> — distribucija mobilne aplikacije</li>
           <li><strong className="text-text">Sentry</strong> (ako je aktivno) — anonimni izveštaji o greškama</li>
         </ul>
-        <p className="text-text-2 leading-relaxed">Svi obrađivači podataka imaju sklopljene ugovore o obradi podataka u skladu sa važećim propisima.</p>
+        <p className="text-text-2 leading-relaxed">Koristimo pružaoce usluga koji obrađuju podatke po našim uputstvima i primenjuju odgovarajuće ugovorne zaštite u skladu sa važećim propisima.</p>
         <h3 className="text-base font-semibold text-text-2 mt-7 mb-2">4.5 Sweat Arenas — cross-gym vidljivost</h3>
         <p className="text-text-2 leading-relaxed">Prijavom na Sweat Arenu prihvataš da tvoj skor i korisničko ime budu vidljivi svim učesnicima arene, uključujući članove drugih teretana koje učestvuju.</p>
         <p className="text-text-2 leading-relaxed">Prikazuje se: korisničko ime, avatar, ukupni skor u areni. Ne prikazuje se: iz koje teretane dolaze tvoji poeni, telesna masa, visina, email niti bilo koji lični podaci.</p>
@@ -97,6 +100,7 @@ export function PrivacyContentSr() {
           <li><strong className="text-text">Zdravstveni podaci:</strong> Do brisanja od strane korisnika ili brisanja naloga</li>
           <li><strong className="text-text">Log fajlovi:</strong> 90 dana</li>
         </ul>
+        <p className="text-text-2 leading-relaxed">Određeni podaci mogu se čuvati duže kada to zakon zahteva ili kada je potrebno radi bezbednosti, sprečavanja prevara ili rešavanja sporova, u najkraćem neophodnom roku.</p>
 
         <h2 className="text-xl font-semibold text-text mt-12 mb-4 pb-2 border-b border-border">7. Tvoja prava</h2>
         <p className="text-text-2 leading-relaxed">Prema Zakonu o zaštiti podataka o ličnosti, imaš pravo da:</p>
