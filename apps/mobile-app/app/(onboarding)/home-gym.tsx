@@ -3,11 +3,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
 import { GymCard } from '@/components/GymCard';
@@ -18,6 +18,7 @@ export default function HomeGymScreen() {
   const [settingGym, setSettingGym] = useState(false);
   const router = useRouter();
   const { theme: currentTheme } = useTheme();
+  const { t } = useTranslation('onboarding');
 
   useEffect(() => {
     loadGyms();
@@ -95,7 +96,7 @@ export default function HomeGymScreen() {
 
       router.replace('/home');
     } catch {
-      Alert.alert('Error', 'Failed to set home gym. Please try again.');
+      Alert.alert(t('homeGym.error'), t('homeGym.errorMsg'));
     } finally {
       setSettingGym(false);
     }
@@ -144,11 +145,8 @@ export default function HomeGymScreen() {
           <View style={styles.iconContainer}>
             <Ionicons name="fitness" size={36} color={currentTheme.colors.primary} />
           </View>
-          <Text style={styles.title}>Discover Partner Gyms</Text>
-          <Text style={styles.subtitle}>
-            SweatDrop is available at these locations.{'\n'}
-            Set your home gym to start earning drops.
-          </Text>
+          <Text style={styles.title}>{t('homeGym.title')}</Text>
+          <Text style={styles.subtitle}>{t('homeGym.subtitle')}</Text>
         </Animated.View>
 
         {/* Gym Cards */}
@@ -177,10 +175,8 @@ export default function HomeGymScreen() {
               <View style={styles.comingSoonIconRow}>
                 <Ionicons name="add-circle-outline" size={24} color={theme.colors.textTertiary} />
               </View>
-              <Text style={styles.comingSoonTitle}>More gyms coming soon</Text>
-              <Text style={styles.comingSoonSubtitle}>
-                We're expanding to new locations.{'\n'}Stay tuned for updates!
-              </Text>
+              <Text style={styles.comingSoonTitle}>{t('homeGym.comingSoon')}</Text>
+              <Text style={styles.comingSoonSubtitle}>{t('homeGym.comingSoonSub')}</Text>
             </View>
           </View>
         </Animated.View>
@@ -196,7 +192,7 @@ export default function HomeGymScreen() {
             activeOpacity={0.7}
             disabled={settingGym}
           >
-            <Text style={styles.skipText}>Continue without setting a gym</Text>
+            <Text style={styles.skipText}>{t('homeGym.skip')}</Text>
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
@@ -243,14 +239,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   title: {
+    ...fontStyles.heading,
     fontSize: 24,
-    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
+    ...fontStyles.body,
     fontSize: 15,
     color: theme.colors.textSecondary,
     textAlign: 'center',
@@ -279,12 +275,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   comingSoonTitle: {
+    ...fontStyles.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     color: theme.colors.textTertiary,
     letterSpacing: 0.3,
   },
   comingSoonSubtitle: {
+    ...fontStyles.body,
     fontSize: 13,
     color: theme.colors.textTertiary,
     textAlign: 'center',
@@ -300,6 +297,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   skipText: {
+    ...fontStyles.body,
     fontSize: 14,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,

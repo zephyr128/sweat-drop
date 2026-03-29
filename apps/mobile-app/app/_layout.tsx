@@ -1,19 +1,49 @@
-import { Stack } from 'expo-router';
+import '@/lib/i18n'; // Initialize i18n before anything else
+import { Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
-import { Session, AuthChangeEvent } from '@supabase/supabase-js';
+import { useEffect, useRef, useCallback } from 'react';
+import { Platform, Linking } from 'react-native';
 import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
+import { useAuthStore } from '@/lib/stores/authStore';
+import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import BleManager from 'react-native-ble-manager';
-import { BleManager as BleManagerIOS } from 'react-native-ble-plx';
 import * as SplashScreen from 'expo-splash-screen';
+import { useRouter } from 'expo-router';
+import { useFonts } from 'expo-font';
+import {
+  BebasNeue_400Regular,
+} from '@expo-google-fonts/bebas-neue';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import {
+  SpaceMono_400Regular,
+} from '@expo-google-fonts/space-mono';
+import {
+  PUSH_NOTIFICATIONS_ENABLED,
+  configureNotificationHandler,
+  registerForPushNotifications,
+  savePushToken,
+  addNotificationListeners,
+  getInitialNotification,
+  getDeepLinkFromNotification,
+} from '@/lib/notifications';
+import { log } from '@/lib/logger';
+import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+
+// Configure notification handler OUTSIDE of component (must run before any notification arrives)
+if (PUSH_NOTIFICATIONS_ENABLED) {
+  configureNotificationHandler();
+}
 
 // Inner component that uses theme (must be inside ThemeProvider)
 function StackNavigator() {
   const { branding } = useTheme();
-  
+
   return (
     <Stack
       screenOptions={{
@@ -22,88 +52,226 @@ function StackNavigator() {
         },
         headerTintColor: branding.onPrimary,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontFamily: 'BebasNeue_400Regular',
         },
         contentStyle: {
-          backgroundColor: '#000000', // Black background to match splash
+          backgroundColor: '#000000',
         },
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen 
-        name="(onboarding)" 
-        options={{ 
+      <Stack.Screen
+        name="(onboarding)"
+        options={{
           headerShown: false,
           animation: 'fade' as any,
           animationDuration: 300,
-        }} 
+          gestureEnabled: false,
+        }}
       />
-      <Stack.Screen 
-        name="home" 
-        options={{ 
+      <Stack.Screen
+        name="home"
+        options={{
           headerShown: false,
           animation: 'fade' as any,
           animationDuration: 300,
-        }} 
+        }}
       />
       <Stack.Screen name="wallet" options={{ headerShown: false }} />
+      <Stack.Screen name="stats" options={{ headerShown: false }} />
       <Stack.Screen name="store" options={{ headerShown: false }} />
+      <Stack.Screen name="reward-detail" options={{ headerShown: false }} />
       <Stack.Screen name="challenges" options={{ headerShown: false }} />
       <Stack.Screen name="challenge-detail" options={{ headerShown: false }} />
       <Stack.Screen name="redemptions" options={{ headerShown: false }} />
+      <Stack.Screen name="gym-details" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="gym-detail" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
       <Stack.Screen name="smartcoach" options={{ headerShown: false }} />
       <Stack.Screen name="trophy-room" options={{ headerShown: false }} />
       <Stack.Screen name="gym-plans" options={{ headerShown: false }} />
       <Stack.Screen name="plan-detail" options={{ headerShown: false }} />
-      <Stack.Screen name="gym-detail" options={{ headerShown: false }} />
-      <Stack.Screen 
-        name="scan" 
-        options={{ 
+      <Stack.Screen
+        name="scan"
+        options={{
           headerShown: false,
-          presentation: 'modal', // iOS-style slide-up modal
-          gestureEnabled: false, // Prevent swipe to dismiss
-        }} 
+          presentation: 'modal',
+          gestureEnabled: false,
+        }}
       />
+      <Stack.Screen
+        name="gym-welcome"
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+          animation: 'fade',
+          animationDuration: 400,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen name="checkin-result" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
       <Stack.Screen name="workout" options={{ headerShown: false }} />
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
+      <Stack.Screen name="workout-history" options={{ headerShown: false }} />
+      <Stack.Screen name="arenas" options={{ headerShown: false }} />
+      <Stack.Screen name="arena" options={{ headerShown: false }} />
+      <Stack.Screen name="gyms" options={{ headerShown: false }} />
+      <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
+      <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
+      <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
+      <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
     </Stack>
   );
+}
+
+function parseReferralCode(url: string | null): string | null {
+  if (!url) return null;
+  // Match sweatdrop://join/<code> or https://sweat-drop.com/join/<code>
+  const match = url.match(/(?:sweatdrop:\/\/|https?:\/\/sweat-drop\.com\/)join\/([A-Za-z0-9_-]+)/);
+  return match?.[1] ?? null;
 }
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [session, setSession] = useState<Session | null>(null);
+  const router = useRouter();
+  const segments = useSegments();
+  const initialize = useAuthStore((s) => s.initialize);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const session = useAuthStore((s) => s.session);
+  const pushTokenRegistered = useRef(false);
+  const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
+  const hydratePendingReferral = usePendingReferralStore((s) => s.hydrate);
 
+  // Hydrate pending referral code from AsyncStorage on cold start
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    hydratePendingReferral();
+  }, []);
+
+  // Deep link handler for sweatdrop://join/<code>
+  // Only stores the pending code — navigation to /invite-friend happens
+  // exclusively from home.tsx to guarantee home is always on the stack.
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const code = parseReferralCode(event.url);
+      if (code) {
+        log.debug('[App] Referral deep link received:', code);
+        setPendingCode(code);
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      const code = parseReferralCode(url);
+      if (code) {
+        log.debug('[App] Referral code from initial URL:', code);
+        setPendingCode(code);
+      }
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      setSession(session);
-    });
+    const sub = Linking.addEventListener('url', handleDeepLink);
+    return () => sub.remove();
+  }, []);
 
-    // Initialize BLE Manager
+  // Load custom fonts
+  const [fontsLoaded, fontError] = useFonts({
+    BebasNeue_400Regular,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    SpaceMono_400Regular,
+  });
+
+  // Push notification tap handler
+  const handleNotificationTap = useCallback(
+    (deepLink: string | null) => {
+      if (shouldRequireEmailVerification(session?.user)) {
+        router.replace('/(onboarding)/verify-email');
+        return;
+      }
+      if (deepLink) {
+        log.debug('[App] Navigating from notification tap:', deepLink);
+        setTimeout(() => {
+          router.push(deepLink as any);
+        }, 100);
+      }
+    },
+    [router, session?.user],
+  );
+
+  // Single auth initialization — THE ONLY auth listener in the app
+  useEffect(() => {
+    const cleanup = initialize();
+    return cleanup;
+  }, []);
+
+  // Initialize BLE Manager (Android)
+  useEffect(() => {
     if (Platform.OS === 'android') {
       BleManager.start({ showAlert: false })
         .then(() => {
-          console.log('[App] BLE Manager initialized (Android)');
+          log.debug('[App] BLE Manager initialized (Android)');
         })
-        .catch((error) => {
-          console.error('[App] Failed to initialize BLE Manager:', error);
+        .catch((error: any) => {
+          log.error('[App] Failed to initialize BLE Manager:', error);
         });
     }
-    // iOS BLE Manager is initialized in ble-service.ts
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
+
+  // Push notifications — register token when user is authenticated
+  useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+    if (!session?.user?.id) {
+      pushTokenRegistered.current = false;
+      return;
+    }
+
+    if (pushTokenRegistered.current) return;
+    pushTokenRegistered.current = true;
+
+    const registerPush = async () => {
+      const token = await registerForPushNotifications();
+      if (token) {
+        await savePushToken(session.user.id, token);
+      }
+    };
+
+    registerPush();
+
+    getInitialNotification().then((data) => {
+      if (data) {
+        const deepLink = getDeepLinkFromNotification(data);
+        handleNotificationTap(deepLink);
+      }
+    });
+  }, [session?.user?.id, handleNotificationTap]);
+
+  // Push notification listeners (foreground + tap)
+  useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+    const cleanup = addNotificationListeners(handleNotificationTap);
+    return cleanup;
+  }, [handleNotificationTap]);
+
+  // Global verification guard to prevent deep-link/restore bypass.
+  useEffect(() => {
+    if (!isInitialized || !session?.user) return;
+    if (!shouldRequireEmailVerification(session.user)) return;
+
+    const childSegment = (segments as string[])[1];
+    const inOnboarding = segments[0] === '(onboarding)';
+    const onVerifyScreen = inOnboarding && childSegment === 'verify-email';
+    if (!onVerifyScreen) {
+      router.replace('/(onboarding)/verify-email');
+    }
+  }, [isInitialized, session?.user, segments, router]);
+
+  // Block render until custom fonts are loaded
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     <ThemeProvider>

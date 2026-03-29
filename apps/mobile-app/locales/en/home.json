@@ -2,7 +2,7 @@
   "greeting": "Hello, {{name}}! 👋",
   "scanToUnlock": "Scan to unlock",
   "scanQrCode": "Scan QR code",
-  "scanQrSubtitle": "Scan the QR code on any machine\nat your gym to start training\nand start earning drops 💧",
+  "scanQrSubtitle": "Scan the QR code on any machine\nat your gym to start training\nand start earning drops",
   "step1": "Scan",
   "step2": "Train",
   "step3": "Earn",
@@ -97,5 +97,42 @@
     "startsInMin": "In {{count}} min",
     "startsInHour": "In {{count}}h",
     "startsInDay": "In {{count}}d"
-  }
+  },
+  "friendsQuick": {
+    "invite": "Invite",
+    "inviteTitle": "Invite a friend",
+    "inviteReward": "Earn +150 drops per referral"
+  },
+  "rings": {
+    "todayDrops": "TODAY",
+    "daily": "Daily",
+    "streak": "Streak",
+    "weekly": "Weekly",
+    "rank": "Rank",
+    "today": "Today",
+    "toReward": "{{drops}} to {{reward}}",
+    "toUnlock": "to unlock",
+    "dailyMax": "Daily max reached! Streak continues",
+    "perfectWeek": "Perfect week!",
+    "onFire": "On fire!",
+    "unstoppable": "Unstoppable!",
+    "legend": "Legend!",
+    "streak_week": "Perfect week",
+    "streak_fire": "On fire",
+    "streak_unstoppable": "Unstoppable",
+    "streak_legend": "Legend"
+  },
+  "cards": {
+    "checkedIn": "Checked in",
+    "checkIn": "Check in",
+    "checkInDrops": "+5 drops",
+    "happyHourLive": "x{{mult}} LIVE",
+    "happyHourSoon": "In {{time}}",
+    "noHappyHour": "None today",
+    "happyHourActive": "Happy Hour is live!",
+    "endsAt": "Ends at {{time}}",
+    "hhToday": "Today",
+    "hhTomorrow": "Tomorrow"
+  },
+  "foundingPartner": "Founding Partner"
 }

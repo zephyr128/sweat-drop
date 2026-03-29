@@ -2,7 +2,7 @@
   "greeting": "Zdravo, {{name}}! 👋",
   "scanToUnlock": "Skeniraj da otključaš",
   "scanQrCode": "Skeniraj QR kod",
-  "scanQrSubtitle": "Skeniraj QR kod na bilo kojoj spravi\nu tvojoj teretani da počneš trening\ni počneš da zarađuješ drops 💧",
+  "scanQrSubtitle": "Skeniraj QR kod na bilo kojoj spravi\nu tvojoj teretani da počneš trening\ni počneš da zarađuješ drops",
   "step1": "Skeniraj",
   "step2": "Treniraš",
   "step3": "Osvajaš",
@@ -97,5 +97,42 @@
     "startsInMin": "Za {{count}} min",
     "startsInHour": "Za {{count}}h",
     "startsInDay": "Za {{count}}d"
-  }
+  },
+  "friendsQuick": {
+    "invite": "Pozovi",
+    "inviteTitle": "Pozovi prijatelja",
+    "inviteReward": "Osvoji +150 kapi po preporuci"
+  },
+  "rings": {
+    "todayDrops": "DANAS",
+    "daily": "Dnevno",
+    "streak": "Streak",
+    "weekly": "Nedeljno",
+    "rank": "Rang",
+    "today": "Danas",
+    "toReward": "{{drops}} do {{reward}}",
+    "toUnlock": "do nagrade",
+    "dailyMax": "Dnevni maksimum! Streak nastavlja",
+    "perfectWeek": "Savršena nedelja!",
+    "onFire": "U vatri!",
+    "unstoppable": "Nezaustavljiv!",
+    "legend": "Legenda!",
+    "streak_week": "Savršena nedelja",
+    "streak_fire": "U vatri",
+    "streak_unstoppable": "Nezaustavljiv",
+    "streak_legend": "Legenda"
+  },
+  "cards": {
+    "checkedIn": "Čekiran",
+    "checkIn": "Čekiraj se",
+    "checkInDrops": "+5 kapi",
+    "happyHourLive": "x{{mult}} UŽIVO",
+    "happyHourSoon": "Za {{time}}",
+    "noHappyHour": "Nema danas",
+    "happyHourActive": "Happy Hour je aktivan!",
+    "endsAt": "Završava u {{time}}",
+    "hhToday": "Danas",
+    "hhTomorrow": "Sutra"
+  },
+  "foundingPartner": "Osnivački partner"
 }

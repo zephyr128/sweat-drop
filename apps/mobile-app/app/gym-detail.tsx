@@ -23,7 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { useGymStore, Gym, GymWorkingHours } from '@/lib/stores/useGymStore';
 import { useGymData } from '@/hooks/useGymData';
 import { useSession } from '@/hooks/useSession';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 import { BackButton } from '@/components/BackButton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');

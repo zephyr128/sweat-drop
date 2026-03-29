@@ -17,9 +17,11 @@ export interface Gym {
   city?: string;
   country?: string;
   address?: string;
+  /** Present on full gym rows / RPC; used for owner_branding join */
+  owner_id?: string | null;
   primary_color?: string;
-  background_url?: string;
-  logo_url?: string;
+  background_url?: string | null;
+  logo_url?: string | null;
   smartcoach_enabled?: boolean;
 
   description?: string | null;
@@ -39,6 +41,8 @@ export interface Gym {
   lng?: number | string | null;
   /** When backend adds a column, optional; otherwise UI uses a default range */
   working_hours?: string | null;
+  /** Pilot visibility flag used for staged rollout gym lists */
+  is_pilot_enabled?: boolean;
 }
 
 interface GymState {

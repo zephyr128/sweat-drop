@@ -530,12 +530,29 @@ export interface SendPushRequest {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** Short label for structured logs (e.g. cron name). Max 64 chars. */
+  client_ref?: string;
+  /** Include raw Expo batch JSON in `result` (large; default false). */
+  include_raw_batches?: boolean;
 }
 
-/** Output from the send-push Edge Function */
+/** Output from the send-push Edge Function (v2; legacy fields may still appear). */
 export interface SendPushResponse {
+  ok?: boolean;
+  version?: '2';
   sent: number;
-  result: unknown;
+  receipt_ok?: number;
+  receipt_error?: number;
+  requested?: number;
+  valid_tokens?: number;
+  skipped_invalid?: number;
+  deduped_in_request?: number;
+  batches_attempted?: number;
+  batches_failed?: number;
+  batch_summaries?: Array<Record<string, unknown>>;
+  skip_reason?: 'no_tokens' | 'no_valid_tokens';
+  error?: string;
+  result?: unknown;
 }
 
 export interface PushNotificationPayload {

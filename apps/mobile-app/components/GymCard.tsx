@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Gym, GymWorkingHours } from '@/lib/stores/useGymStore';
-import { theme } from '@/lib/theme';
+import { theme, fontStyles } from '@/lib/theme';
 
 interface GymCardProps {
   gym: Gym;

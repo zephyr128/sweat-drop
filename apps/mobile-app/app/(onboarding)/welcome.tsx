@@ -4,45 +4,54 @@ import { useRef, useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { theme } from '@/lib/theme';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
+import { theme, fontStyles } from '@/lib/theme';
+import {
+  getPrivacyUrl,
+  getTermsUrl,
+  openLegalUrl,
+} from '@/lib/legalUrls';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Slide {
   id: string;
   icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  body: string;
+  titleKey: string;
+  bodyKey: string;
   iconColor: string;
+  hasSteps?: boolean;
 }
 
 const SLIDES: Slide[] = [
   {
     id: '1',
     icon: 'water',
-    title: 'Turn Sweat\nInto Rewards',
-    body: 'Every rep counts. Earn drops for every workout and redeem them for real rewards at your gym.',
+    titleKey: 'welcome.slide1Title',
+    bodyKey: 'welcome.slide1Body',
     iconColor: theme.colors.primary,
   },
   {
     id: '2',
     icon: 'qr-code',
-    title: 'How It Works',
-    body: 'Scan the QR code on any machine → Train at your pace → Earn drops automatically → Redeem for rewards.',
+    titleKey: 'welcome.slide2Title',
+    bodyKey: 'welcome.slide2Body',
     iconColor: theme.colors.primary,
+    hasSteps: true,
   },
   {
     id: '3',
     icon: 'medal',
-    title: 'Now Available\nat Partner Gyms',
-    body: 'SweatDrop is launching at select partner gyms. Be among the first to join the drops revolution.',
+    titleKey: 'welcome.slide3Title',
+    bodyKey: 'welcome.slide3Body',
     iconColor: '#FFD700',
   },
 ];
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation('onboarding');
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -62,18 +71,18 @@ export default function WelcomeScreen() {
           <Ionicons name={item.icon} size={64} color={item.iconColor} />
         </View>
 
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.body}>{item.body}</Text>
+        <Text style={styles.title}>{t(item.titleKey)}</Text>
+        <Text style={styles.body}>{t(item.bodyKey)}</Text>
 
-        {item.id === '2' && (
+        {item.hasSteps && (
           <View style={styles.stepsRow}>
             {[
-              { icon: 'qr-code' as const, label: 'Scan' },
-              { icon: 'barbell' as const, label: 'Train' },
-              { icon: 'water' as const, label: 'Earn' },
-              { icon: 'gift' as const, label: 'Redeem' },
+              { icon: 'qr-code' as const, labelKey: 'welcome.stepScan' },
+              { icon: 'barbell' as const, labelKey: 'welcome.stepTrain' },
+              { icon: 'water' as const, labelKey: 'welcome.stepEarn' },
+              { icon: 'gift' as const, labelKey: 'welcome.stepRedeem' },
             ].map((step, i) => (
-              <View key={step.label} style={styles.stepGroup}>
+              <View key={step.labelKey} style={styles.stepGroup}>
                 {i > 0 && (
                   <Ionicons name="chevron-forward" size={12} color={theme.colors.textTertiary} style={styles.stepArrow} />
                 )}
@@ -81,7 +90,7 @@ export default function WelcomeScreen() {
                   <View style={styles.stepIconBox}>
                     <Ionicons name={step.icon} size={20} color={theme.colors.primary} />
                   </View>
-                  <Text style={styles.stepLabel}>{step.label}</Text>
+                  <Text style={styles.stepLabel}>{t(step.labelKey)}</Text>
                 </View>
               </View>
             ))}
@@ -113,7 +122,6 @@ export default function WelcomeScreen() {
         style={styles.flatList}
       />
 
-      {/* Bottom section: dots + button */}
       <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.bottomSection}>
         {/* Pagination dots */}
         <View style={styles.dotsContainer}>
@@ -133,28 +141,44 @@ export default function WelcomeScreen() {
         {/* CTA Button */}
         <TouchableOpacity
           style={styles.button}
-          onPress={() => router.push('/(onboarding)/auth')}
+          onPress={() => router.replace('/(onboarding)/auth')}
           activeOpacity={0.8}
         >
-          <LinearGradient
-            colors={[theme.colors.primary, theme.colors.primaryDark]}
-            style={styles.buttonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.buttonText}>Get Started</Text>
+          <View style={styles.buttonInner}>
+            <Text style={styles.buttonText}>{t('welcome.startButton')}</Text>
             <Ionicons name="arrow-forward" size={20} color={theme.colors.background} />
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
 
-        {/* Already have an account */}
-        <TouchableOpacity
-          style={styles.loginLink}
-          onPress={() => router.push('/(onboarding)/auth')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.loginLinkText}>Already have an account? <Text style={{ color: theme.colors.primary }}>Sign in</Text></Text>
-        </TouchableOpacity>
+        {/* Legal links */}
+        {getTermsUrl() || getPrivacyUrl() ? (
+          <View style={styles.legalContainer}>
+            <Text style={styles.legalIntro}>{t('auth.legalIntro')}</Text>
+            <View style={styles.legalRow}>
+              {getTermsUrl() ? (
+                <TouchableOpacity
+                  onPress={() => openLegalUrl(getTermsUrl())}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={styles.legalLink}>{t('auth.termsLink')}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {getTermsUrl() && getPrivacyUrl() ? (
+                <Text style={styles.legalSep}>{t('auth.legalSeparator')}</Text>
+              ) : null}
+              {getPrivacyUrl() ? (
+                <TouchableOpacity
+                  onPress={() => openLegalUrl(getPrivacyUrl())}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={styles.legalLink}>{t('auth.privacyLink')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.legalFallback}>{t('auth.footer')}</Text>
+        )}
       </Animated.View>
     </SafeAreaView>
   );
@@ -196,15 +220,15 @@ const styles = StyleSheet.create({
     opacity: 0.2,
   },
   title: {
+    ...fontStyles.heading,
     fontSize: 28,
-    fontWeight: '800',
     color: theme.colors.text,
     marginBottom: 14,
     textAlign: 'center',
-    letterSpacing: 0.5,
     lineHeight: 36,
   },
   body: {
+    ...fontStyles.body,
     fontSize: 15,
     color: theme.colors.textSecondary,
     textAlign: 'center',
@@ -242,8 +266,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stepLabel: {
+    ...fontStyles.bodySemiBold,
     fontSize: 10,
-    fontWeight: '600',
     color: theme.colors.textSecondary,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
@@ -271,32 +295,62 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
   button: {
-    borderRadius: 9999,
+    borderRadius: theme.borderRadius.full,
     overflow: 'hidden',
     width: '100%',
-    ...theme.shadows.glow,
+    backgroundColor: theme.colors.primary,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  buttonGradient: {
+  buttonInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 32,
+    gap: 10,
     paddingVertical: 18,
+    paddingHorizontal: 32,
   },
   buttonText: {
-    color: theme.colors.background,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    color: '#000000',
+    fontSize: 18,
   },
-  loginLink: {
-    paddingVertical: 8,
+  legalContainer: {
+    alignItems: 'center',
+    gap: 4,
   },
-  loginLinkText: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.2,
+  legalIntro: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legalSep: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+  },
+  legalLink: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
+  },
+  legalFallback: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    paddingHorizontal: theme.spacing.md,
   },
 });

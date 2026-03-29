@@ -5,6 +5,7 @@ export default function OnboardingLayout() {
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: false }}>
       <Stack.Screen name="welcome" />
       <Stack.Screen name="auth" />
+      <Stack.Screen name="verify-email" />
       <Stack.Screen name="stepper" />
       <Stack.Screen name="username" />
       <Stack.Screen name="avatar" />
@@ -14,6 +15,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="step-height" />
       <Stack.Screen name="step-birthday" />
       <Stack.Screen name="step-goal" />
+      <Stack.Screen name="home-gym" />
     </Stack>
   );
 }
