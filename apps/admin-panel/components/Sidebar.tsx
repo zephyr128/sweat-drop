@@ -78,7 +78,16 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     if (!pathname) return false;
     if (pathname === path) return true;
     if (role === 'superadmin') return pathname === path;
-    return pathname.startsWith(path + '/') || pathname.startsWith(path + '?');
+    // Exact prefix match, but exclude child nav items that have their own entry
+    // e.g. /members/engagement is its own nav link, so /members shouldn't match it
+    const isPrefix = pathname.startsWith(path + '/') || pathname.startsWith(path + '?');
+    if (!isPrefix) return false;
+    // Check if any sibling nav item is a more specific match
+    const allHrefs = navGroups.flatMap((g) => g.items.map((i) => i.href));
+    const longerMatch = allHrefs.some(
+      (h) => h !== path && h.length > path.length && pathname.startsWith(h),
+    );
+    return !longerMatch;
   };
 
   const Icon = ({ icon: IconComponent, isActive: active }: { icon: LucideIcon; isActive: boolean }) => (

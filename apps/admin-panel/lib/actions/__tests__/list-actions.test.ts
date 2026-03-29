@@ -97,12 +97,10 @@ describe('listMembers', () => {
     }));
   });
 
-  it('rejects unauthorized role', async () => {
+  it('allows receptionist access', async () => {
     setupMocks('receptionist');
     const result = await listMembers('gym-1');
-    expect(result.success).toBe(false);
-    if (result.success) return;
-    expect(result.error).toMatch(/Unauthorized/i);
+    expect(result.success).toBe(true);
   });
 
   it('handles RPC error', async () => {

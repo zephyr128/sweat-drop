@@ -229,8 +229,13 @@ export function TeamList({ gymId, isGymOwner }: TeamListProps) {
     (inv.resend_count ?? 0) < 5;
 
   const pendingInvitations = invitations.filter((inv) => inv.status === 'pending');
-  const otherInvitations = invitations.filter((inv) => inv.status !== 'pending');
-  const sortedInvitations = [...pendingInvitations, ...otherInvitations];
+  const acceptedInvitations = invitations.filter((inv) => inv.status === 'accepted');
+  const failedInvitations = invitations.filter((inv) => inv.status === 'expired' || inv.status === 'cancelled');
+  // Accepted invitations that DON'T appear in the staff list (profile not yet updated)
+  const orphanedAccepted = acceptedInvitations.filter(
+    (inv) => !data.items.some((s) => s.email?.toLowerCase() === inv.email?.toLowerCase()),
+  );
+  const sortedInvitations = [...pendingInvitations, ...orphanedAccepted, ...failedInvitations];
 
   return (
     <div className="space-y-6">

@@ -7,6 +7,10 @@ vi.mock('@/components/MemberAvatar', () => ({
   MemberAvatar: () => <div data-testid="avatar" />,
 }));
 
+vi.mock('@/components/modules/MemberIdentityVerifyDrawer', () => ({
+  MemberIdentityVerifyDrawer: () => null,
+}));
+
 import { MemberDetailView } from './MemberDetailView';
 import type { MemberDetailResult } from '@/lib/actions/member-detail-actions';
 

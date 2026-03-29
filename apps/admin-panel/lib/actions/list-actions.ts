@@ -37,7 +37,7 @@ export async function listMembers(
   gymId: string,
   input?: ListQueryInput<MemberFilters>,
 ): Promise<ListActionResult<MemberRow>> {
-  const auth = await authorizeForRpc(['superadmin', 'gym_owner', 'gym_admin']);
+  const auth = await authorizeForRpc(['superadmin', 'gym_owner', 'gym_admin', 'receptionist']);
   if (!auth.ok) return { success: false, error: auth.error };
 
   const { q, page, limit, sortBy, sortDir } = sanitizeListInput(input);
@@ -246,11 +246,59 @@ export async function listStaff(
     p_sort_dir: sortDir,
   });
 
+  if (!error) {
+    const parsed = parseRpcResponse<StaffRow>(data);
+    if (!('error' in parsed)) return { success: true, data: parsed };
+  }
+
+  // Fallback: direct profiles query if RPC fails or returns unparseable data
+  return listStaffFallback(gymId, { q, page, limit, sortBy, sortDir });
+}
+
+async function listStaffFallback(
+  gymId: string,
+  { q, page, limit, sortBy, sortDir }: { q: string; page: number; limit: number; sortBy: string; sortDir: string },
+): Promise<ListActionResult<StaffRow>> {
+  const { getAdminClient } = await import('@/lib/utils/supabase-admin');
+  const admin = getAdminClient();
+  if (!admin) return { success: false, error: 'Admin client unavailable' };
+
+  let query = admin
+    .from('profiles')
+    .select('id, username, email, full_name, avatar_url, role, created_at', { count: 'exact' })
+    .eq('assigned_gym_id', gymId)
+    .in('role', ['gym_admin', 'receptionist']);
+
+  if (q) {
+    query = query.or(`username.ilike.%${q}%,email.ilike.%${q}%,full_name.ilike.%${q}%`);
+  }
+
+  const validSortCols = ['username', 'email', 'role', 'created_at'];
+  const col = validSortCols.includes(sortBy) ? sortBy : 'created_at';
+  query = query.order(col, { ascending: sortDir === 'asc' });
+
+  const from = (page - 1) * limit;
+  query = query.range(from, from + limit - 1);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rows, count, error } = await (query as any);
   if (error) return { success: false, error: error.message };
 
-  const parsed = parseRpcResponse<StaffRow>(data);
-  if ('error' in parsed) return { success: false, error: parsed.error };
-  return { success: true, data: parsed };
+  const items: StaffRow[] = (rows ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    username: (r.username as string) || '',
+    email: (r.email as string) || '',
+    full_name: (r.full_name as string) || null,
+    avatar_url: (r.avatar_url as string) || null,
+    role: (r.role as string) || '',
+    created_at: (r.created_at as string) || '',
+  }));
+
+  const total = typeof count === 'number' ? count : items.length;
+  return {
+    success: true,
+    data: { items, total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) },
+  };
 }
 
 // ── Challenges ────────────────────────────────────────────────────

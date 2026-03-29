@@ -1,11 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useTransition, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Users, Droplet, Flame, Clock, AlertTriangle, TrendingDown } from 'lucide-react';
+import {
+  Users,
+  Droplet,
+  Flame,
+  Clock,
+  AlertTriangle,
+  TrendingDown,
+  ShieldCheck,
+  ShieldAlert,
+} from 'lucide-react';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
 import { listMembers, type MemberRow } from '@/lib/actions/list-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { MemberIdentityVerifyDrawer } from '@/components/modules/MemberIdentityVerifyDrawer';
 import { RetentionStats } from './RetentionStats';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 
@@ -50,71 +60,6 @@ function StatusBadge({ status }: { status: 'active' | 'at_risk' | 'churned' }) {
   );
 }
 
-const MEMBER_COLUMNS: ColumnDef<MemberRow>[] = [
-  {
-    key: 'username',
-    label: 'Member',
-    sortable: true,
-    render: (row) => (
-      <div className="flex items-center gap-3">
-        <MemberAvatar username={row.username} avatarUrl={row.avatar_url} size="sm" />
-        <div>
-          <p className="text-white font-medium">{row.username || 'Unknown'}</p>
-          <p className="text-zinc-500 text-xs">{row.email}</p>
-        </div>
-      </div>
-    ),
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    render: (row) => <StatusBadge status={getMemberStatus(row.last_visit_date)} />,
-  },
-  {
-    key: 'total_drops',
-    label: 'Drops',
-    sortable: true,
-    className: 'text-right',
-    headerClassName: 'text-right',
-    render: (row) => (
-      <span className="flex items-center justify-end gap-1 text-[#00E5FF]">
-        <Droplet className="w-3.5 h-3.5" />
-        {row.total_drops?.toLocaleString() ?? 0}
-      </span>
-    ),
-  },
-  {
-    key: 'streak_days',
-    label: 'Streak',
-    sortable: true,
-    className: 'text-right',
-    headerClassName: 'text-right',
-    render: (row) => (
-      <span className="flex items-center justify-end gap-1 text-amber-400">
-        <Flame className="w-3.5 h-3.5" />
-        {row.streak_days ?? 0}d
-      </span>
-    ),
-  },
-  {
-    key: 'last_visit_date',
-    label: 'Last Visit',
-    sortable: true,
-    render: (row) => (
-      <span className="flex items-center gap-1.5 text-zinc-400">
-        <Clock className="w-3.5 h-3.5" />
-        {formatDate(row.last_visit_date)}
-      </span>
-    ),
-  },
-  {
-    key: 'created_at',
-    label: 'Joined',
-    sortable: true,
-    render: (row) => <span className="text-zinc-500">{formatDate(row.joined_at)}</span>,
-  },
-];
-
 const MEMBER_FILTERS: FilterDef[] = [
   {
     key: 'status',
@@ -146,6 +91,12 @@ export function MembersPageTabs({ gymId }: MembersPageTabsProps) {
       status: searchParams.get('status') || 'all',
     },
   });
+
+  const [verifyTarget, setVerifyTarget] = useState<{
+    userId: string;
+    username: string;
+    avatarUrl: string | null;
+  } | null>(null);
 
   const fetchData = useCallback((q: DataTableQuery) => {
     startTransition(async () => {
@@ -187,6 +138,113 @@ export function MembersPageTabs({ gymId }: MembersPageTabsProps) {
     router.push(`/dashboard/gym/${gymId}/members/${row.id}`);
   }, [router, gymId]);
 
+  const handleVerified = useCallback((userId: string) => {
+    setVerifyTarget(null);
+    // MemberRow doesn't have identity_verified, just close the drawer
+    // The verification state is stored in the DB and reflected on next visit
+  }, []);
+
+  const MEMBER_COLUMNS: ColumnDef<MemberRow>[] = useMemo(() => [
+    {
+      key: 'username',
+      label: 'Member',
+      sortable: true,
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <MemberAvatar username={row.username} avatarUrl={row.avatar_url} size="sm" />
+          <div>
+            <p className="text-white font-medium">{row.username || 'Unknown'}</p>
+            <p className="text-zinc-500 text-xs">{row.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => <StatusBadge status={getMemberStatus(row.last_visit_date)} />,
+    },
+    {
+      key: 'total_drops',
+      label: 'Drops',
+      sortable: true,
+      className: 'text-right',
+      headerClassName: 'text-right',
+      render: (row) => (
+        <span className="flex items-center justify-end gap-1 text-[#00E5FF]">
+          <Droplet className="w-3.5 h-3.5" />
+          {row.total_drops?.toLocaleString() ?? 0}
+        </span>
+      ),
+    },
+    {
+      key: 'streak_days',
+      label: 'Streak',
+      sortable: true,
+      className: 'text-right',
+      headerClassName: 'text-right',
+      render: (row) => (
+        <span className="flex items-center justify-end gap-1 text-amber-400">
+          <Flame className="w-3.5 h-3.5" />
+          {row.streak_days ?? 0}d
+        </span>
+      ),
+    },
+    {
+      key: 'last_visit_date',
+      label: 'Last Visit',
+      sortable: true,
+      render: (row) => (
+        <span className="flex items-center gap-1.5 text-zinc-400">
+          <Clock className="w-3.5 h-3.5" />
+          {formatDate(row.last_visit_date)}
+        </span>
+      ),
+    },
+    {
+      key: 'identity',
+      label: 'Identity',
+      render: (row) => {
+        const isNew = row.is_newcomer;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setVerifyTarget({
+                userId: row.id,
+                username: row.username,
+                avatarUrl: row.avatar_url,
+              });
+            }}
+            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
+              isNew
+                ? 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20'
+                : 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20 hover:bg-zinc-500/20'
+            }`}
+          >
+            {isNew ? (
+              <>
+                <ShieldAlert className="w-2.5 h-2.5" />
+                New
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-2.5 h-2.5" />
+                View
+              </>
+            )}
+          </button>
+        );
+      },
+    },
+    {
+      key: 'created_at',
+      label: 'Joined',
+      sortable: true,
+      render: (row) => <span className="text-zinc-500">{formatDate(row.joined_at)}</span>,
+    },
+  ], []);
+
   return (
     <div>
       <RetentionStats gymId={gymId} />
@@ -211,6 +269,17 @@ export function MembersPageTabs({ gymId }: MembersPageTabsProps) {
         onRowClick={handleRowClick}
         rowKey={(r) => r.id}
       />
+
+      {verifyTarget && (
+        <MemberIdentityVerifyDrawer
+          gymId={gymId}
+          userId={verifyTarget.userId}
+          username={verifyTarget.username}
+          avatarUrl={verifyTarget.avatarUrl}
+          onClose={() => setVerifyTarget(null)}
+          onVerified={handleVerified}
+        />
+      )}
     </div>
   );
 }

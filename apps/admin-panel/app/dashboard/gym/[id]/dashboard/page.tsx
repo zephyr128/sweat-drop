@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { requireGymAccess } from '@/lib/auth-guard';
 import { createClient } from '@/lib/supabase-server';
 import { getGymDashboardOverview } from '@/lib/actions/dashboard-actions';
+import { getReferralData } from '@/lib/actions/referral-pilot-actions';
 import { NetworkOverviewToggle } from '@/components/dashboards/NetworkOverviewToggle';
 import { SmartCoachToggle } from '@/components/SmartCoachToggle';
 import { SetupChecklist, type SetupStatus } from '@/components/dashboards/SetupChecklist';
@@ -40,8 +41,12 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
   const gym = gymData as GymData;
   if (typeof gym.smartcoach_enabled !== 'boolean') gym.smartcoach_enabled = false;
 
-  const overviewResult = await getGymDashboardOverview(id);
+  const [overviewResult, referralResult] = await Promise.all([
+    getGymDashboardOverview(id),
+    getReferralData(id),
+  ]);
   const overview = overviewResult.data ?? null;
+  const referralData = referralResult.data ?? null;
 
   // Setup checklist for owners/admins
   let setupStatus: SetupStatus | null = null;
@@ -99,7 +104,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
 
       {/* Dashboard shell (client) renders KPIs, panels, cards */}
       {overview ? (
-        <DashboardShell overview={overview} basePath={basePath} gymId={id} />
+        <DashboardShell overview={overview} basePath={basePath} gymId={id} referralData={referralData} />
       ) : (
         <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 text-center">
           <p className="text-sm text-zinc-500">Dashboard data unavailable. Please try refreshing.</p>

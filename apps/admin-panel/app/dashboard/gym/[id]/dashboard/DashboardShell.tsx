@@ -4,17 +4,20 @@ import { DashboardKPIGrid } from '@/components/dashboards/DashboardKPIGrid';
 import { MachineOpsPanel } from '@/components/dashboards/MachineOpsPanel';
 import { DeskActivityPanel } from '@/components/dashboards/DeskActivityPanel';
 import { ChallengeSnapshotCard } from '@/components/dashboards/ChallengeSnapshotCard';
+import { ReferralPilotCard } from '@/components/dashboards/ReferralPilotCard';
 import { TopPerformersWidget } from '@/components/analytics/TopPerformersWidget';
 import { HappyHourTeaser } from '@/components/economy/HappyHourTeaser';
 import type { DashboardOverview } from '@/lib/actions/dashboard-actions';
+import type { ReferralData } from '@/lib/actions/referral-pilot-actions';
 
 interface DashboardShellProps {
   overview: DashboardOverview;
   basePath: string;
   gymId: string;
+  referralData?: ReferralData | null;
 }
 
-export function DashboardShell({ overview, basePath, gymId }: DashboardShellProps) {
+export function DashboardShell({ overview, basePath, gymId, referralData }: DashboardShellProps) {
   return (
     <div className="space-y-5">
       {/* ── Top: KPI Row ── */}
@@ -36,6 +39,9 @@ export function DashboardShell({ overview, basePath, gymId }: DashboardShellProp
           />
         </div>
       </div>
+
+      {/* ── Referral funnel KPIs + list ── */}
+      {referralData && <ReferralPilotCard data={referralData} />}
 
       {/* ── Bottom: Challenges + Top Performers ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

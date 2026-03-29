@@ -198,24 +198,43 @@ export function CheckinStatsModule({
           table: 'gym_checkins',
           filter: `gym_id=eq.${gymId}`,
         },
-        (payload) => {
+        async (payload) => {
           const row = payload.new as Record<string, unknown>;
           const userId = row.user_id as string;
 
           // Fetch full data to get username + identity status
-          fetchCheckins();
+          await fetchCheckins();
           getGymCheckinStats(gymId).then((res) => {
             if (res.success && res.data) setStats(res.data);
           });
 
-          // Show toast for the new check-in
-          // Username isn't in the realtime payload, so we resolve from existing data or show generic
-          const existing = data.items.find((i) => i.user_id === userId);
-          const name = existing?.username || 'A member';
-          toast(`New check-in: ${name}`, {
-            icon: <MapPin className="w-4 h-4 text-[#00E5FF]" />,
-            duration: 4000,
-          });
+          // Find the newly checked-in member from refreshed data
+          const member = data.items.find((i) => i.user_id === userId);
+          const name = member?.username || 'A member';
+
+          if (member && !member.identity_verified) {
+            toast.warning(`Unverified member: ${name}`, {
+              description: 'Identity verification required.',
+              icon: <ShieldAlert className="w-4 h-4 text-amber-400" />,
+              duration: 10000,
+              action: readOnly
+                ? undefined
+                : {
+                    label: 'Verify now',
+                    onClick: () =>
+                      setVerifyTarget({
+                        userId: member.user_id,
+                        username: member.username,
+                        avatarUrl: member.avatar_url,
+                      }),
+                  },
+            });
+          } else {
+            toast(`Check-in: ${name}`, {
+              icon: <MapPin className="w-4 h-4 text-[#00E5FF]" />,
+              duration: 4000,
+            });
+          }
         },
       )
       .subscribe((status) => {
