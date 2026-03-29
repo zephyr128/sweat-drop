@@ -18,6 +18,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SEO-optimized, conversion-focused landing pages
   - Next.js 15 with App Router
 
+---
+
+## [2026-03-29] - App Store Launch UX — Gym Discovery & Onboarding
+
+### Overview
+
+Complete UX overhaul for App Store / Play Store launch with Vortex as the sole partner gym. Frames the single-gym reality as an "exclusive founding partner" launch. Prevents negative reviews by setting expectations clearly.
+
+### Added (New Files)
+
+- **`backend/supabase/migrations/20260329000001_add_gym_detail_fields.sql`** — Adds `description`, `working_hours` (JSONB), `phone`, `email`, `website`, `instagram`, `latitude`, `longitude`, `is_founding_partner` to `gyms` table
+- **`apps/mobile-app/app/gym-detail.tsx`** — Full gym profile screen with hero image, address (Open in Maps), working hours, about, contact, rewards preview, sticky "Set as Home Gym" CTA
+- **`apps/mobile-app/components/GymCard.tsx`** — Reusable rich gym card with logo, name, founding partner badge, address, hours, action buttons. Used in onboarding and home screen
+- **`docs/plans/app_store_launch_ux.md`** — Comprehensive UX plan document
+
+### Changed
+
+- **`apps/mobile-app/app/(onboarding)/welcome.tsx`** — Transformed from single-screen to 3-slide carousel (Turn Sweat Into Rewards → How It Works → Now Available at Partner Gyms). Pagination dots, swipe, persistent CTA
+- **`apps/mobile-app/app/(onboarding)/home-gym.tsx`** — Full redesign from flat radio list to rich "Discover Partner Gyms" page with GymCard components, founding partner badge, "Coming Soon" dashed card, "Details" → gym-detail navigation
+- **`apps/mobile-app/app/home.tsx`** — Three distinct states:
+  - **No Gym State:** Shows "Ready to Start Earning?" hero + available gyms list + "How It Works" stepper (QR FAB hidden)
+  - **Welcome Banner:** Dismissible "Welcome to [Gym]!" banner for first-time users (stored in AsyncStorage)
+  - **Normal Dashboard:** Existing behavior preserved
+- **`apps/mobile-app/app/_layout.tsx`** — Registered `gym-detail` route
+- **`apps/mobile-app/lib/stores/useGymStore.ts`** — Extended `Gym` interface with new fields: `description`, `working_hours`, `phone`, `email`, `website`, `instagram`, `latitude`, `longitude`, `is_founding_partner`
+- **`backend/types/sweatdrop.ts`** — Added `GymDayHours`, `GymWorkingHours` types. Extended `Gym` interface with all new detail fields
+
+### Impact on Other Agents
+
+- **supabase-dba:** Migration `20260329000001` must be applied. Seed Vortex data with real description, working hours, address, phone, Instagram, `is_founding_partner = true`
+- **admin-coder:** May want to add gym detail fields (description, hours, contact) to admin panel gym edit form
+- **reviewer:** Verify: no-gym home state renders correctly, gym-detail screen loads rewards, welcome carousel swipes, founding partner badge shows for Vortex
+
 ### Changed
 - SmartCoach card on home screen now conditionally renders based on `gym.smartcoach_enabled` flag
   - Card is hidden when SmartCoach is disabled for the active gym

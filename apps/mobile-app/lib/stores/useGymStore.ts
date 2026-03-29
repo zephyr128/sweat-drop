@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export interface GymDayHours {
+  open: string;
+  close: string;
+}
+
+export type GymWorkingHours = {
+  [day in 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun']?: GymDayHours;
+};
+
 export interface Gym {
   id: string;
   name: string;
@@ -12,6 +21,17 @@ export interface Gym {
   background_url?: string;
   logo_url?: string;
   smartcoach_enabled?: boolean;
+
+  description?: string | null;
+  working_hours?: GymWorkingHours | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  instagram?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_founding_partner?: boolean;
+
   created_at?: string;
   updated_at?: string;
   /** From gyms.lat / gyms.lng (check-in GPS); used for map preview */

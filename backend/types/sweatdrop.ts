@@ -89,6 +89,19 @@ export type TierLevel = 'bronze' | 'silver' | 'gold';
 export type CaloriesSource = 'device' | 'estimated';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  VALUE OBJECTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export interface GymDayHours {
+  open: string;
+  close: string;
+}
+
+export type GymWorkingHours = {
+  [day in 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun']?: GymDayHours;
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  CORE MODELS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -98,6 +111,7 @@ export interface Gym {
   name: string;
   city: string | null;
   country: string | null;
+  address: string | null;
   owner_id: string;
   logo_url: string | null;
   primary_color: string | null;
@@ -107,6 +121,17 @@ export interface Gym {
   subscription_plan: SubscriptionPlan;
   /** Replaces is_suspended */
   is_active: boolean;
+
+  description: string | null;
+  working_hours: GymWorkingHours | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  instagram: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  is_founding_partner: boolean;
+
   created_at: string;
   updated_at: string;
 }
