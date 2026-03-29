@@ -24,7 +24,7 @@ import { useGymStore, Gym, GymWorkingHours } from '@/lib/stores/useGymStore';
 import { useGymData } from '@/hooks/useGymData';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles } from '@/lib/theme';
-import { BackButton } from '@/components/BackButton';
+import BackButton from '@/components/BackButton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 260;
