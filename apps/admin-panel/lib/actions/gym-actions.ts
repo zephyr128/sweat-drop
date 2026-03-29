@@ -86,18 +86,12 @@ export async function createGym(input: CreateGymInput) {
         console.error('Failed to create owner invitation:', invitationError);
         // Don't fail gym creation if invitation fails
       } else {
-        // Generate invitation URL
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
-
-        // Log invitation URL clearly for manual sharing (visible in Vercel logs)
-        console.log('\n========================================');
-        console.log('🚀 OWNER INVITATION LINK GENERATED 🚀');
-        console.log('========================================');
-        console.log('Email:', invitation.email);
-        console.log('Gym:', gymData.name);
-        console.log('Verification Link:', acceptUrl);
-        console.log('========================================\n');
+        // Avoid logging PII or tokenized links in production logs.
+        console.log('[createGym] Owner invitation created', {
+          invitationId: invitation.id,
+          gymId: gymData.id,
+          hasEmail: Boolean(invitation.email),
+        });
 
         // Send invitation email
         try {
@@ -486,7 +480,7 @@ export async function getGymCheckinsPaginated(
 
     // Batch-fetch identity status for all user_ids in the page
     const userIds = [...new Set(((data || []) as any[]).map((c) => c.user_id))];
-    let identityMap: Record<string, boolean> = {};
+    const identityMap: Record<string, boolean> = {};
     if (userIds.length > 0) {
       const { data: identities } = await supabaseAdmin
         .from('gym_member_identities')
@@ -563,6 +557,48 @@ export async function updateGymSmartCoach(gymId: string, enabled: boolean) {
 }
 
 /**
+ * @deprecated Use updateGymMobileListing instead.
+ */
+export async function updateGymPilotVisibility(gymId: string, enabled: boolean) {
+  return updateGymMobileListing(gymId, enabled);
+}
+
+/**
+ * Toggle mobile app visibility for a gym (SuperAdmin only).
+ * Writes to `is_mobile_listed`.
+ */
+export async function updateGymMobileListing(gymId: string, listed: boolean) {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can update mobile listing' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available. Check server environment variables.' };
+    }
+
+    const payload = {
+      is_mobile_listed: listed,
+      updated_at: new Date().toISOString(),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const query = (supabaseAdmin.from('gyms') as any).update(payload);
+    const { data, error } = await query.eq('id', gymId).select().single();
+
+    if (error) throw error;
+
+    revalidatePath('/dashboard/gyms');
+    revalidatePath('/dashboard/super');
+    revalidatePath(`/dashboard/gym/${gymId}/dashboard`);
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Suspend a gym (SuperAdmin only)
  */
 export async function suspendGym(gymId: string) {
@@ -629,20 +665,48 @@ export async function getGymsWithOwnerInfo() {
       return { success: false, error: 'Admin client not available. Check server environment variables.', data: [] };
     }
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('get_gyms_with_owner_info');
-    
-    if (!rpcError && rpcData) {
-      return { success: true, data: rpcData };
+
+    if (!rpcError && rpcData && Array.isArray(rpcData)) {
+      const rows = rpcData as Array<{ gym_id: string }>;
+      if (rows.length === 0) {
+        return { success: true, data: [] };
+      }
+      const ids = rows.map((r) => r.gym_id);
+      const { data: listingRows } = await supabaseAdmin
+        .from('gyms')
+        .select('id, is_mobile_listed')
+        .in('id', ids);
+      const listingMap = new Map(
+        ((listingRows || []) as Array<{ id: string; is_mobile_listed?: boolean | null }>).map((r) => [
+          r.id,
+          r.is_mobile_listed ?? true,
+        ]),
+      );
+      const merged = rows.map((row) => ({
+        ...row,
+        is_mobile_listed: listingMap.get(row.gym_id) ?? true,
+      }));
+      return { success: true, data: merged };
     }
 
     // Fallback: Direct query if RPC function doesn't exist
     const { data: gyms, error: gymsError } = await supabaseAdmin
       .from('gyms')
-      .select('id, name, city, country, owner_id, is_suspended, subscription_type')
+      .select('id, name, city, country, owner_id, is_suspended, subscription_type, is_mobile_listed')
       .order('name');
 
     if (gymsError) throw gymsError;
 
-    const gymsData = (gyms || []) as Array<{ id: string; name: string; city: string | null; country: string | null; owner_id: string | null; is_suspended: boolean; subscription_type: string }>;
+    const gymsData = (gyms || []) as Array<{
+      id: string;
+      name: string;
+      city: string | null;
+      country: string | null;
+      owner_id: string | null;
+      is_suspended: boolean;
+      subscription_type: string;
+      is_mobile_listed?: boolean | null;
+    }>;
 
     // Get owner profiles
     const ownerIds = gymsData.filter(g => g.owner_id).map(g => g.owner_id).filter((id): id is string => id !== null);
@@ -680,6 +744,7 @@ export async function getGymsWithOwnerInfo() {
         owner_name: ownerProfile?.full_name || null,
         is_suspended: gym.is_suspended || false,
         subscription_type: gym.subscription_type || 'Basic',
+        is_mobile_listed: gym.is_mobile_listed ?? true,
         active_machines: machinesData.filter(m => m.gym_id === gym.id).length || 0,
       };
     }) || [];

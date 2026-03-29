@@ -1,5 +1,5 @@
 export const REPORT_PERIODS = {
-  pilot: { label: 'Pilot (90d)', days: 90 },
+  pilot: { label: 'Last 90 days', days: 90 },
   month: { label: 'Last 30 days', days: 30 },
   twoMonths: { label: 'Last 60 days', days: 60 },
 } as const;

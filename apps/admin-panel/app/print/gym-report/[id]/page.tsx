@@ -54,7 +54,7 @@ export default async function GymReportPrintPage({ params, searchParams }: Print
 
   const startDate = start || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const endDate = end || new Date().toISOString();
-  const periodLabel = period || 'Pilot (90d)';
+  const periodLabel = period || 'Last 90 days';
 
   const admin = getAdminClient();
   if (!admin) notFound();

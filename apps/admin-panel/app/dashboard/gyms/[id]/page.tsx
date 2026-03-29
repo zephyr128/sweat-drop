@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/auth';
 import { SmartCoachToggle } from '@/components/SmartCoachToggle';
+import { PilotVisibilityToggle } from '@/components/PilotVisibilityToggle';
 
 interface GymDetailPageProps {
   params: Promise<{ id: string }>;
@@ -19,6 +20,7 @@ interface GymData {
   address: string | null;
   primary_color: string | null;
   smartcoach_enabled: boolean;
+  is_mobile_listed?: boolean;
 }
 
 interface AdminData {
@@ -46,10 +48,9 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
     redirect('/login');
   }
 
-  // 2. Get current user profile to check if superadmin
+  // 2. Current profile for RBAC (superadmin tools + optional MVP social health)
   const profile = await getCurrentProfile();
   const isSuperadmin = profile?.role === 'superadmin';
-
   // 3. Fetch gym data with error handling
   let gym: GymData;
   try {
@@ -68,6 +69,9 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
     // Ensure smartcoach_enabled has a default value if not present
     if (typeof gym.smartcoach_enabled !== 'boolean') {
       gym.smartcoach_enabled = false;
+    }
+    if (typeof gym.is_mobile_listed !== 'boolean') {
+      gym.is_mobile_listed = true;
     }
   } catch (error) {
     console.error('[GymDetailPage] Unexpected error fetching gym:', error);
@@ -184,15 +188,14 @@ export default async function GymDetailPage({ params }: GymDetailPageProps) {
             </div>
           )}
           {isSuperadmin && (
-            <div className="pt-4 border-t border-[#1A1A1A]">
-              <SmartCoachToggle 
-                gymId={gym.id} 
-                initialEnabled={gym.smartcoach_enabled} 
-              />
+            <div className="pt-4 border-t border-[#1A1A1A] space-y-6">
+              <PilotVisibilityToggle gymId={gym.id} initialEnabled={gym.is_mobile_listed ?? true} />
+              <SmartCoachToggle gymId={gym.id} initialEnabled={gym.smartcoach_enabled} />
             </div>
           )}
         </div>
       </div>
+
     </div>
   );
 }
