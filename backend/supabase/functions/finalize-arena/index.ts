@@ -14,6 +14,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { deliveryCountFromSendPushBody, isExpoPushToken } from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -135,7 +136,7 @@ serve(async (req) => {
 
             const winnerTokens = (winnerProfiles || [])
               .map((p: any) => p.expo_push_token)
-              .filter((t: string | null) => t && t.startsWith('ExponentPushToken'));
+              .filter((t: string | null) => isExpoPushToken(t));
 
             if (winnerTokens.length > 0) {
               const pushResponse = await fetch(
@@ -147,6 +148,7 @@ serve(async (req) => {
                     Authorization: `Bearer ${supabaseServiceKey}`,
                   },
                   body: JSON.stringify({
+                    client_ref: 'finalize_arena_winners',
                     tokens: winnerTokens,
                     title: '🏆 Arena Prize Won!',
                     body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
@@ -159,9 +161,9 @@ serve(async (req) => {
                 }
               );
 
+              const wBody = await pushResponse.json().catch(() => null);
               if (pushResponse.ok) {
-                const pushResult = await pushResponse.json();
-                winnersNotified += pushResult.sent || 0;
+                winnersNotified += deliveryCountFromSendPushBody(wBody);
               }
             }
           }
@@ -177,7 +179,7 @@ serve(async (req) => {
         const nonWinnerTokens = (allParticipants || [])
           .filter((p: any) => !winnerUserIds.includes(p.user_id))
           .map((p: any) => p.profiles?.expo_push_token)
-          .filter((t: string | null) => t && t.startsWith('ExponentPushToken'));
+          .filter((t: string | null) => isExpoPushToken(t));
 
         if (nonWinnerTokens.length > 0) {
           const pushResponse = await fetch(
@@ -189,6 +191,7 @@ serve(async (req) => {
                 Authorization: `Bearer ${supabaseServiceKey}`,
               },
               body: JSON.stringify({
+                client_ref: 'finalize_arena_participants',
                 tokens: nonWinnerTokens,
                 title: '🏁 Arena Ended',
                 body: `${arena.name} has ended. Check your final ranking!`,
@@ -201,9 +204,9 @@ serve(async (req) => {
             }
           );
 
+          const pBody = await pushResponse.json().catch(() => null);
           if (pushResponse.ok) {
-            const pushResult = await pushResponse.json();
-            participantsNotified += pushResult.sent || 0;
+            participantsNotified += deliveryCountFromSendPushBody(pBody);
           }
         }
 
@@ -212,6 +215,14 @@ serve(async (req) => {
         errors.push(`Arena ${arena.name} (${arena.id}): ${error.message}`);
       }
     }
+
+    console.log(JSON.stringify({
+      event: 'finalize-arena',
+      arenas_processed: arenasProcessed,
+      winners_notified: winnersNotified,
+      participants_notified: participantsNotified,
+      error_count: errors.length,
+    }));
 
     return new Response(
       JSON.stringify({

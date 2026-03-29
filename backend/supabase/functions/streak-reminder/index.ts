@@ -10,6 +10,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  compactSendPushMetrics,
+  deliveryCountFromSendPushBody,
+} from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,6 +69,7 @@ serve(async (req) => {
           Authorization: `Bearer ${supabaseServiceKey}`,
         },
         body: JSON.stringify({
+          client_ref: 'streak_reminder',
           tokens,
           title: '🔥 Streak at risk!',
           body: 'Visit the gym today to keep your streak alive.',
@@ -73,13 +78,24 @@ serve(async (req) => {
       }
     );
 
-    const pushResult = await pushResponse.json();
+    const pushResult = await pushResponse.json().catch(() => null);
+    const delivered = deliveryCountFromSendPushBody(pushResult);
+
+    console.log(JSON.stringify({
+      event: 'streak-reminder',
+      at_risk_count: atRisk.length,
+      tokens_submitted: tokens.length,
+      delivered,
+      http_ok: pushResponse.ok,
+    }));
 
     return new Response(
       JSON.stringify({
         at_risk_count: atRisk.length,
-        tokens_sent: tokens.length,
-        push_result: pushResult,
+        tokens_submitted: tokens.length,
+        delivered,
+        http_ok: pushResponse.ok,
+        push_metrics: compactSendPushMetrics(pushResult),
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

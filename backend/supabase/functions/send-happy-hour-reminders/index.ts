@@ -24,6 +24,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { deliveryCountFromSendPushBody, isExpoPushToken } from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -156,7 +157,7 @@ serve(async (req) => {
 
           if (userOffset !== offset) continue;
 
-          if (!token || !token.startsWith('ExponentPushToken')) {
+          if (!isExpoPushToken(token)) {
             summary.skipped_no_token++;
             continue;
           }
@@ -195,6 +196,7 @@ serve(async (req) => {
                   Authorization: `Bearer ${supabaseServiceKey}`,
                 },
                 body: JSON.stringify({
+                  client_ref: 'happy_hour_reminder',
                   tokens: [token],
                   title: buildPushTitle(offset),
                   body: buildPushBody(offset, rule.multiplier),
@@ -212,13 +214,32 @@ serve(async (req) => {
               }
             );
 
+            const pushText = await pushRes.text();
+            let pushJson: unknown;
+            try {
+              pushJson = JSON.parse(pushText);
+            } catch {
+              pushJson = null;
+            }
+
             if (!pushRes.ok) {
-              const errText = await pushRes.text();
               summary.errors.push(`push failed user=${maskId(membership.user_id)}: HTTP ${pushRes.status}`);
               summary.failed++;
-              console.error(`send-push returned ${pushRes.status} for user ${maskId(membership.user_id)}: ${errText.slice(0, 200)}`);
+              console.error(JSON.stringify({
+                event: 'happy_hour_push_http_error',
+                user: maskId(membership.user_id),
+                http_status: pushRes.status,
+              }));
             } else {
-              summary.sent++;
+              const delivered = deliveryCountFromSendPushBody(pushJson);
+              if (delivered > 0) {
+                summary.sent++;
+              } else {
+                summary.failed++;
+                summary.errors.push(
+                  `push receipts user=${maskId(membership.user_id)}: no successful Expo tickets`
+                );
+              }
             }
           } catch (pushErr: unknown) {
             const msg = pushErr instanceof Error ? pushErr.message : 'Unknown push error';

@@ -11,6 +11,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { deliveryCountFromSendPushBody, isExpoPushToken } from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -85,7 +86,7 @@ serve(async (req) => {
 
       const winnerTokens = (winnerProfiles || [])
         .map((p: any) => p.expo_push_token)
-        .filter((t: string | null) => t && t.startsWith('ExponentPushToken'));
+        .filter((t: string | null) => isExpoPushToken(t));
 
       if (winnerTokens.length > 0) {
         const pushResponse = await fetch(
@@ -97,6 +98,7 @@ serve(async (req) => {
               Authorization: `Bearer ${supabaseServiceKey}`,
             },
             body: JSON.stringify({
+              client_ref: 'notify_arena_winners',
               tokens: winnerTokens,
               title: '🏆 Arena Prize Won!',
               body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
@@ -109,11 +111,14 @@ serve(async (req) => {
           }
         );
 
-        if (pushResponse.ok) {
-          const pushResult = await pushResponse.json();
-          notified += pushResult.sent || 0;
+        const winnerPushBody = await pushResponse.json().catch(() => null);
+        const winnerDelivered = deliveryCountFromSendPushBody(winnerPushBody);
+        if (pushResponse.ok && winnerDelivered > 0) {
+          notified += winnerDelivered;
+        } else if (!pushResponse.ok) {
+          errors.push(`Failed to send winner notifications: HTTP ${pushResponse.status}`);
         } else {
-          errors.push(`Failed to send winner notifications: ${pushResponse.statusText}`);
+          errors.push('Winner push returned no successful Expo tickets');
         }
       }
     }
@@ -129,7 +134,7 @@ serve(async (req) => {
       const nonWinnerTokens = (allParticipants || [])
         .filter((p: any) => !winnerUserIds.includes(p.user_id))
         .map((p: any) => p.profiles?.expo_push_token)
-        .filter((t: string | null) => t && t.startsWith('ExponentPushToken'));
+        .filter((t: string | null) => isExpoPushToken(t));
 
       if (nonWinnerTokens.length > 0) {
         const pushResponse = await fetch(
@@ -141,6 +146,7 @@ serve(async (req) => {
               Authorization: `Bearer ${supabaseServiceKey}`,
             },
             body: JSON.stringify({
+              client_ref: 'notify_arena_participants',
               tokens: nonWinnerTokens,
               title: '🏁 Arena Ended',
               body: `${arena.name} has ended. Check your final ranking!`,
@@ -153,14 +159,25 @@ serve(async (req) => {
           }
         );
 
-        if (pushResponse.ok) {
-          const pushResult = await pushResponse.json();
-          notified += pushResult.sent || 0;
+        const partPushBody = await pushResponse.json().catch(() => null);
+        const partDelivered = deliveryCountFromSendPushBody(partPushBody);
+        if (pushResponse.ok && partDelivered > 0) {
+          notified += partDelivered;
+        } else if (!pushResponse.ok) {
+          errors.push(`Failed to send participant notifications: HTTP ${pushResponse.status}`);
         } else {
-          errors.push(`Failed to send participant notifications: ${pushResponse.statusText}`);
+          errors.push('Participant push returned no successful Expo tickets');
         }
       }
     }
+
+    console.log(JSON.stringify({
+      event: 'notify-arena-participants',
+      arena_id,
+      winners_only,
+      notified,
+      error_count: errors.length,
+    }));
 
     return new Response(
       JSON.stringify({

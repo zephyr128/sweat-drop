@@ -15,6 +15,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { deliveryCountFromSendPushBody } from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,7 +63,12 @@ serve(async (req) => {
 
     if (gymsError) throw gymsError;
 
-    const details: Array<{ gym_id: string; gym_name: string; winners: number }> = [];
+    const details: Array<{
+      gym_id: string;
+      gym_name: string;
+      winners: number;
+      push_delivered?: number;
+    }> = [];
     let totalWinners = 0;
 
     for (const gym of gyms || []) {
@@ -84,13 +90,17 @@ serve(async (req) => {
       );
 
       if (distError) {
-        console.error(`Error distributing prizes for gym ${gym.name}:`, distError);
+        console.error(JSON.stringify({
+          event: 'distribute_leaderboard_rpc_error',
+          gym_id: gym.id,
+          message: distError.message,
+        }));
         continue;
       }
 
       const winners = winnersCount || 0;
       totalWinners += winners;
-      details.push({ gym_id: gym.id, gym_name: gym.name, winners });
+      let pushDeliveredForGym = 0;
 
       // Send push notifications to winners
       if (winners > 0) {
@@ -112,14 +122,14 @@ serve(async (req) => {
               .single();
 
             if (profile?.expo_push_token) {
-              // Send push via send-push function
-              await fetch(`${supabaseUrl}/functions/v1/send-push`, {
+              const pushRes = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   Authorization: `Bearer ${serviceRoleKey}`,
                 },
                 body: JSON.stringify({
+                  client_ref: 'leaderboard_prize',
                   tokens: [profile.expo_push_token],
                   title: '🏆 Leaderboard Prize!',
                   body: `Congratulations! You finished #${user.rank} on the ${period} leaderboard at ${gym.name}!`,
@@ -131,11 +141,34 @@ serve(async (req) => {
                   },
                 }),
               });
+              const pushJson = await pushRes.json().catch(() => null);
+              pushDeliveredForGym += deliveryCountFromSendPushBody(pushJson);
+              if (!pushRes.ok) {
+                console.error(JSON.stringify({
+                  event: 'leaderboard_prize_push_http',
+                  gym_id: gym.id,
+                  http_status: pushRes.status,
+                }));
+              }
             }
           }
         }
       }
+
+      details.push({
+        gym_id: gym.id,
+        gym_name: gym.name,
+        winners,
+        push_delivered: winners > 0 ? pushDeliveredForGym : undefined,
+      });
     }
+
+    console.log(JSON.stringify({
+      event: 'distribute-leaderboard-prizes',
+      period,
+      gyms_processed: details.length,
+      total_winners: totalWinners,
+    }));
 
     return new Response(
       JSON.stringify({

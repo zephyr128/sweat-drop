@@ -14,6 +14,11 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  compactSendPushMetrics,
+  deliveryCountFromSendPushBody,
+  isExpoPushToken,
+} from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -85,7 +90,7 @@ serve(async (req) => {
       // Send per-user notifications (personalized with drop amount)
       const tokens30: string[] = [];
       for (const [_uid, { total, token }] of userMap) {
-        if (token && token.startsWith('ExponentPushToken')) {
+        if (isExpoPushToken(token)) {
           tokens30.push(token);
           // For personalized messages we'd need individual sends,
           // but for MVP we batch with a generic message
@@ -93,10 +98,6 @@ serve(async (req) => {
       }
 
       if (tokens30.length > 0) {
-        const totalDrops = [...userMap.values()].reduce(
-          (sum, v) => sum + v.total, 0
-        );
-
         const res30 = await fetch(
           `${supabaseUrl}/functions/v1/send-push`,
           {
@@ -106,6 +107,7 @@ serve(async (req) => {
               Authorization: `Bearer ${supabaseServiceKey}`,
             },
             body: JSON.stringify({
+              client_ref: 'drops_expiry_30d',
               tokens: tokens30,
               title: '💧 Drops expiring soon',
               body: 'You have drops expiring in 30 days. Visit the reward store!',
@@ -114,9 +116,12 @@ serve(async (req) => {
           }
         );
 
+        const body30 = await res30.json().catch(() => null);
         results['30d'] = {
           users: tokens30.length,
-          push: await res30.json(),
+          delivered: deliveryCountFromSendPushBody(body30),
+          http_ok: res30.ok,
+          push: compactSendPushMetrics(body30),
         };
       } else {
         results['30d'] = { users: 0, skipped: true };
@@ -158,7 +163,7 @@ serve(async (req) => {
 
       const tokens7: string[] = [];
       for (const [_uid, { token }] of userMap7) {
-        if (token && token.startsWith('ExponentPushToken')) {
+        if (isExpoPushToken(token)) {
           tokens7.push(token);
         }
       }
@@ -173,6 +178,7 @@ serve(async (req) => {
               Authorization: `Bearer ${supabaseServiceKey}`,
             },
             body: JSON.stringify({
+              client_ref: 'drops_expiry_7d',
               tokens: tokens7,
               title: '⚠️ Drops expiring in 7 days',
               body: 'Spend them in the reward store before they expire!',
@@ -181,9 +187,12 @@ serve(async (req) => {
           }
         );
 
+        const body7w = await res7.json().catch(() => null);
         results['7d'] = {
           users: tokens7.length,
-          push: await res7.json(),
+          delivered: deliveryCountFromSendPushBody(body7w),
+          http_ok: res7.ok,
+          push: compactSendPushMetrics(body7w),
         };
       } else {
         results['7d'] = { users: 0, skipped: true };
@@ -191,6 +200,12 @@ serve(async (req) => {
     } else {
       results['7d'] = { users: 0, skipped: true };
     }
+
+    console.log(JSON.stringify({
+      event: 'drops-expiry-warning',
+      window_30d: results['30d'],
+      window_7d: results['7d'],
+    }));
 
     return new Response(
       JSON.stringify(results),

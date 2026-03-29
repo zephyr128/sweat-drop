@@ -10,6 +10,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  compactSendPushMetrics,
+  deliveryCountFromSendPushBody,
+} from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,6 +32,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const results: Record<string, unknown> = {};
+    const logSummary: Record<string, unknown> = {};
 
     // --- 7-day inactive members ---
     const sevenDaysAgo = new Date();
@@ -56,6 +61,7 @@ serve(async (req) => {
             Authorization: `Bearer ${supabaseServiceKey}`,
           },
           body: JSON.stringify({
+            client_ref: 'reengagement_7d',
             tokens: tokens7,
             title: '💪 We miss you!',
             body: 'Come back and earn 2× drops this week.',
@@ -64,12 +70,20 @@ serve(async (req) => {
         }
       );
 
+      const body7 = await res7.json().catch(() => null);
       results['7d'] = {
         count: tokens7.length,
-        push: await res7.json(),
+        push: compactSendPushMetrics(body7),
+        http_ok: res7.ok,
+      };
+      logSummary['7d'] = {
+        tokens: tokens7.length,
+        delivered: deliveryCountFromSendPushBody(body7),
+        http_ok: res7.ok,
       };
     } else {
       results['7d'] = { count: 0, skipped: true };
+      logSummary['7d'] = { skipped: true };
     }
 
     // --- 14-day inactive members ---
@@ -99,6 +113,7 @@ serve(async (req) => {
             Authorization: `Bearer ${supabaseServiceKey}`,
           },
           body: JSON.stringify({
+            client_ref: 'reengagement_14d',
             tokens: tokens14,
             title: "📣 It's been 2 weeks!",
             body: 'Your drops are waiting. Get back in the game.',
@@ -107,13 +122,23 @@ serve(async (req) => {
         }
       );
 
+      const body14 = await res14.json().catch(() => null);
       results['14d'] = {
         count: tokens14.length,
-        push: await res14.json(),
+        push: compactSendPushMetrics(body14),
+        http_ok: res14.ok,
+      };
+      logSummary['14d'] = {
+        tokens: tokens14.length,
+        delivered: deliveryCountFromSendPushBody(body14),
+        http_ok: res14.ok,
       };
     } else {
       results['14d'] = { count: 0, skipped: true };
+      logSummary['14d'] = { skipped: true };
     }
+
+    console.log(JSON.stringify({ event: 're-engagement', summary: logSummary }));
 
     return new Response(
       JSON.stringify(results),
