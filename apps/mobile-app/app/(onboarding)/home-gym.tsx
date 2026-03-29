@@ -1,17 +1,21 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
+import { Gym } from '@/lib/stores/useGymStore';
+import { GymCard } from '@/components/GymCard';
 
 export default function HomeGymScreen() {
-  const [gyms, setGyms] = useState<any[]>([]);
+  const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedGymId, setSelectedGymId] = useState<string | null>(null);
+  const [settingGym, setSettingGym] = useState(false);
   const router = useRouter();
   const { theme: currentTheme } = useTheme();
 
@@ -20,32 +24,88 @@ export default function HomeGymScreen() {
   }, []);
 
   const loadGyms = async () => {
-    const { data, error } = await supabase
-      .from('gyms')
-      .select('*')
-      .order('name');
+    try {
+      const { data: gymsData, error } = await supabase
+        .from('gyms')
+        .select('*')
+        .order('is_founding_partner', { ascending: false })
+        .order('name');
 
-    if (!error && data) {
-      setGyms(data);
+      if (error) throw error;
+      if (!gymsData) {
+        setGyms([]);
+        setLoading(false);
+        return;
+      }
+
+      const gymsWithBranding = await Promise.all(
+        gymsData.map(async (gym) => {
+          let branding = {
+            primary_color: '#00E5FF',
+            logo_url: null as string | null,
+            background_url: null as string | null,
+          };
+
+          if (gym.owner_id) {
+            const { data: ownerBranding } = await supabase
+              .from('owner_branding')
+              .select('primary_color, logo_url, background_url')
+              .eq('owner_id', gym.owner_id)
+              .single();
+
+            if (ownerBranding) {
+              branding = {
+                primary_color: ownerBranding.primary_color || branding.primary_color,
+                logo_url: ownerBranding.logo_url || branding.logo_url,
+                background_url: ownerBranding.background_url || branding.background_url,
+              };
+            }
+          }
+
+          return {
+            ...gym,
+            primary_color: branding.primary_color,
+            logo_url: branding.logo_url,
+            background_url: branding.background_url,
+          };
+        })
+      );
+
+      setGyms(gymsWithBranding);
+    } catch (error) {
+      console.error('Error loading gyms:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const handleContinue = async () => {
+  const handleSetHomeGym = async (gym: Gym) => {
     const { data: { user } } = await supabase.auth.getUser();
-    
     if (!user) {
       router.replace('/home');
       return;
     }
 
-    if (selectedGymId) {
+    setSettingGym(true);
+    try {
       await supabase
         .from('profiles')
-        .update({ home_gym_id: selectedGymId })
+        .update({ home_gym_id: gym.id })
         .eq('id', user.id);
-    }
 
+      router.replace('/home');
+    } catch {
+      Alert.alert('Error', 'Failed to set home gym. Please try again.');
+    } finally {
+      setSettingGym(false);
+    }
+  };
+
+  const handleDetails = (gym: Gym) => {
+    router.push({ pathname: '/gym-detail', params: { gymId: gym.id } });
+  };
+
+  const handleSkip = () => {
     router.replace('/home');
   };
 
@@ -67,7 +127,6 @@ export default function HomeGymScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Pure black background */}
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -75,69 +134,78 @@ export default function HomeGymScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Ionicons name="fitness" size={48} color={currentTheme.colors.primary} />
-          <Text style={styles.title}>Select Your Home Gym</Text>
-          <Text style={styles.subtitle}>Optional - you can change this later</Text>
-        </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <Animated.View entering={FadeInDown.delay(50).duration(400)} style={styles.header}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="fitness" size={36} color={currentTheme.colors.primary} />
+          </View>
+          <Text style={styles.title}>Discover Partner Gyms</Text>
+          <Text style={styles.subtitle}>
+            SweatDrop is available at these locations.{'\n'}
+            Set your home gym to start earning drops.
+          </Text>
+        </Animated.View>
 
-        <ScrollView
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {gyms.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.gymItem,
-                selectedGymId === item.id && [styles.gymItemSelected, { borderColor: currentTheme.colors.primary + '60' }],
-              ]}
-              onPress={() => setSelectedGymId(item.id)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.gymItemContent}>
-                <Ionicons 
-                  name={selectedGymId === item.id ? "checkmark-circle" : "ellipse-outline"} 
-                  size={24} 
-                  color={selectedGymId === item.id ? currentTheme.colors.primary : theme.colors.textSecondary} 
-                />
-                <View style={styles.gymItemText}>
-                  <Text style={styles.gymName}>{item.name}</Text>
-                  {item.city && <Text style={styles.gymLocation}>{item.city}</Text>}
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleContinue}
-            activeOpacity={0.8}
+        {/* Gym Cards */}
+        {gyms.map((gym, index) => (
+          <Animated.View
+            key={gym.id}
+            entering={FadeInDown.delay(150 + index * 80).duration(400)}
+            style={styles.gymCardContainer}
           >
-            <LinearGradient
-              colors={[currentTheme.colors.primary, currentTheme.colors.primaryDark]}
-              style={styles.buttonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Text style={styles.buttonText}>Continue</Text>
-              <Ionicons name="arrow-forward" size={20} color={theme.colors.background} />
-            </LinearGradient>
-          </TouchableOpacity>
+            <GymCard
+              gym={gym}
+              onSetHomeGym={() => handleSetHomeGym(gym)}
+              onDetails={() => handleDetails(gym)}
+              variant="full"
+            />
+          </Animated.View>
+        ))}
 
+        {/* Coming Soon Card */}
+        <Animated.View
+          entering={FadeInDown.delay(150 + gyms.length * 80).duration(400)}
+          style={styles.comingSoonContainer}
+        >
+          <View style={styles.comingSoonCard}>
+            <View style={styles.comingSoonContent}>
+              <View style={styles.comingSoonIconRow}>
+                <Ionicons name="add-circle-outline" size={24} color={theme.colors.textTertiary} />
+              </View>
+              <Text style={styles.comingSoonTitle}>More gyms coming soon</Text>
+              <Text style={styles.comingSoonSubtitle}>
+                We're expanding to new locations.{'\n'}Stay tuned for updates!
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Skip */}
+        <Animated.View
+          entering={FadeInDown.delay(300 + gyms.length * 80).duration(400)}
+          style={styles.skipContainer}
+        >
           <TouchableOpacity
             style={styles.skipButton}
-            onPress={handleContinue}
-            activeOpacity={0.8}
+            onPress={handleSkip}
+            activeOpacity={0.7}
+            disabled={settingGym}
           >
-            <Text style={styles.skipButtonText}>Skip for now</Text>
+            <Text style={styles.skipText}>Continue without setting a gym</Text>
           </TouchableOpacity>
+        </Animated.View>
+      </ScrollView>
+
+      {settingGym && (
+        <View style={styles.overlay}>
+          <ActivityIndicator size="large" color={currentTheme.colors.primary} />
         </View>
-      </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -152,102 +220,94 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
+  scrollView: {
     flex: 1,
-    padding: theme.spacing.xl,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
+    marginBottom: 28,
+  },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   title: {
-    fontSize: theme.typography.fontSize['2xl'],
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.text,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
     textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: 15,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.5,
     textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: 0.2,
   },
-  list: {
-    flex: 1,
-    marginBottom: theme.spacing.lg,
+  gymCardContainer: {
+    marginBottom: 16,
   },
-  listContent: {
-    gap: theme.spacing.md,
+  comingSoonContainer: {
+    marginBottom: 24,
   },
-  gymItem: {
-    backgroundColor: theme.glass.background,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
+  comingSoonCard: {
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: theme.glass.border,
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
   },
-  gymItemSelected: {
-    borderWidth: 2,
-  },
-  gymItemContent: {
-    flexDirection: 'row',
+  comingSoonContent: {
+    padding: 24,
     alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: 8,
   },
-  gymItemText: {
-    flex: 1,
+  comingSoonIconRow: {
+    marginBottom: 4,
   },
-  gymName: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-    letterSpacing: 0.5,
+  comingSoonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.3,
   },
-  gymLocation: {
-    fontSize: theme.typography.fontSize.sm,
+  comingSoonSubtitle: {
+    fontSize: 13,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 20,
+    letterSpacing: 0.2,
+    opacity: 0.7,
+  },
+  skipContainer: {
+    alignItems: 'center',
+  },
+  skipButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  skipText: {
+    fontSize: 14,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },
-  buttonContainer: {
-    gap: theme.spacing.md,
-  },
-  primaryButton: {
-    borderRadius: theme.borderRadius.full,
-    overflow: 'hidden',
-    ...theme.shadows.glow,
-  },
-  buttonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  buttonText: {
-    color: theme.colors.background,
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.bold,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  skipButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: theme.glass.border,
-    borderRadius: theme.borderRadius.full,
-    paddingVertical: theme.spacing.lg,
     alignItems: 'center',
-  },
-  skipButtonText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
-    letterSpacing: 0.5,
   },
 });

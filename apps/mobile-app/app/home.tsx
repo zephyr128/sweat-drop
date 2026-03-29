@@ -15,7 +15,7 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle } from '@/lib/theme';
+import { theme as staticTheme, getNumberStyle } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { GymSelectorModal } from '@/components/GymSelectorModal';
 import { LockedOverlay } from '@/components/LockedOverlay';
@@ -28,6 +28,8 @@ import { ClosestRewardBanner } from '@/components/ClosestRewardBanner';
 import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
 import { useHomeStats } from '@/hooks/useHomeStats';
 import { Gym } from '@/lib/stores/useGymStore';
+import { GymCard } from '@/components/GymCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 12;
@@ -88,6 +90,15 @@ export default function HomeScreen() {
   const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
+  // No-gym state: available gyms for discovery
+  const [availableGyms, setAvailableGyms] = useState<Gym[]>([]);
+  const [availableGymsLoading, setAvailableGymsLoading] = useState(false);
+
+  // Welcome banner: shown until first workout or dismissed
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
+
+  const hasHomeGym = !!homeGymId;
+
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId, localDrops);
 
@@ -146,6 +157,20 @@ export default function HomeScreen() {
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
 
+  // Load available gyms when no home gym is set
+  useEffect(() => {
+    if (!hasHomeGym && session?.user) {
+      loadAvailableGyms();
+    }
+  }, [hasHomeGym, session?.user]);
+
+  // Check welcome banner visibility
+  useEffect(() => {
+    if (hasHomeGym && profile) {
+      checkWelcomeBanner();
+    }
+  }, [hasHomeGym, profile]);
+
   // Refresh challenges + stats when screen is focused
   useFocusEffect(
     useCallback(() => {
@@ -174,6 +199,70 @@ export default function HomeScreen() {
       console.error('Error loading home data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAvailableGyms = async () => {
+    setAvailableGymsLoading(true);
+    try {
+      const { data: gymsData } = await supabase
+        .from('gyms')
+        .select('*')
+        .order('is_founding_partner', { ascending: false })
+        .order('name');
+
+      if (!gymsData) { setAvailableGyms([]); return; }
+
+      const gymsWithBranding = await Promise.all(
+        gymsData.map(async (gym) => {
+          let branding = { primary_color: '#00E5FF', logo_url: null as string | null, background_url: null as string | null };
+          if (gym.owner_id) {
+            const { data: ob } = await supabase
+              .from('owner_branding')
+              .select('primary_color, logo_url, background_url')
+              .eq('owner_id', gym.owner_id)
+              .single();
+            if (ob) {
+              branding = {
+                primary_color: ob.primary_color || branding.primary_color,
+                logo_url: ob.logo_url || branding.logo_url,
+                background_url: ob.background_url || branding.background_url,
+              };
+            }
+          }
+          return { ...gym, primary_color: branding.primary_color, logo_url: branding.logo_url, background_url: branding.background_url };
+        })
+      );
+      setAvailableGyms(gymsWithBranding);
+    } catch (error) {
+      console.error('Error loading available gyms:', error);
+    } finally {
+      setAvailableGymsLoading(false);
+    }
+  };
+
+  const checkWelcomeBanner = async () => {
+    try {
+      const dismissed = await AsyncStorage.getItem('welcome_banner_dismissed');
+      if (dismissed) { setShowWelcomeBanner(false); return; }
+      const hasWorkouts = homeStats.todayDrops > 0 || homeStats.streak > 0 || homeStats.lastWorkout !== '--';
+      setShowWelcomeBanner(!hasWorkouts);
+    } catch {
+      setShowWelcomeBanner(false);
+    }
+  };
+
+  const dismissWelcomeBanner = async () => {
+    setShowWelcomeBanner(false);
+    await AsyncStorage.setItem('welcome_banner_dismissed', 'true');
+  };
+
+  const handleSetHomeGymFromCard = async (gym: Gym) => {
+    if (!session?.user) return;
+    try {
+      await updateHomeGym(gym.id);
+    } catch {
+      Alert.alert('Error', 'Failed to set home gym. Please try again.');
     }
   };
 
@@ -214,6 +303,110 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
+    );
+  }
+
+  // ═══════════════════════════════════════════
+  // NO GYM STATE — shown when user has no home gym
+  // ═══════════════════════════════════════════
+  if (!hasHomeGym && !previewGymId) {
+    return (
+      <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]}>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <LinearGradient
+            colors={['#080808', '#0A0E1A', '#080808'] as any}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity
+                style={styles.headerLeft}
+                onPress={() => setSettingsSheetVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.avatarContainer, { borderColor: 'rgba(0,229,255,0.3)' }]}>
+                  <Text style={[styles.avatarText, { color: theme.colors.primary }]}>
+                    {profile?.username?.charAt(0).toUpperCase() || 'U'}
+                  </Text>
+                </View>
+                <Text style={styles.username}>{profile?.username || 'User'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Hero — Get Started */}
+            <Animated.View style={noGymStyles.heroCard}>
+              <BlurView intensity={50} tint="dark" style={noGymStyles.heroBlur}>
+                <Ionicons name="water" size={48} color={theme.colors.primary} style={{ marginBottom: 12 }} />
+                <Text style={noGymStyles.heroTitle}>Ready to Start Earning?</Text>
+                <Text style={noGymStyles.heroSubtitle}>
+                  Set your home gym to unlock workouts, rewards, challenges, and more.
+                </Text>
+              </BlurView>
+            </Animated.View>
+
+            {/* Available Gyms */}
+            <Text style={noGymStyles.sectionTitle}>Available Gyms</Text>
+
+            {availableGymsLoading ? (
+              <View style={{ paddingVertical: 32 }}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+              </View>
+            ) : (
+              <>
+                {availableGyms.map((gym) => (
+                  <View key={gym.id} style={{ marginBottom: 16 }}>
+                    <GymCard
+                      gym={gym}
+                      onSetHomeGym={() => handleSetHomeGymFromCard(gym)}
+                      onDetails={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
+                      variant="full"
+                    />
+                  </View>
+                ))}
+
+                {/* Coming soon */}
+                <View style={noGymStyles.comingSoonCard}>
+                  <Ionicons name="add-circle-outline" size={20} color={theme.colors.textTertiary} />
+                  <Text style={noGymStyles.comingSoonText}>More gyms coming soon</Text>
+                </View>
+              </>
+            )}
+
+            {/* How It Works */}
+            <Text style={[noGymStyles.sectionTitle, { marginTop: 24 }]}>How It Works</Text>
+            <View style={noGymStyles.stepsRow}>
+              {[
+                { icon: 'qr-code' as const, label: 'Scan' },
+                { icon: 'barbell' as const, label: 'Train' },
+                { icon: 'water' as const, label: 'Earn' },
+                { icon: 'gift' as const, label: 'Redeem' },
+              ].map((step, i) => (
+                <React.Fragment key={step.label}>
+                  {i > 0 && (
+                    <Ionicons name="chevron-forward" size={14} color={theme.colors.textTertiary} style={{ marginTop: -12 }} />
+                  )}
+                  <View style={noGymStyles.stepItem}>
+                    <View style={noGymStyles.stepIconContainer}>
+                      <Ionicons name={step.icon} size={24} color={theme.colors.primary} />
+                    </View>
+                    <Text style={noGymStyles.stepLabel}>{step.label}</Text>
+                  </View>
+                </React.Fragment>
+              ))}
+            </View>
+          </ScrollView>
+
+          {/* Settings Sheet (still accessible) */}
+          <UserSettingsSheet
+            visible={settingsSheetVisible}
+            onClose={() => setSettingsSheetVisible(false)}
+            profile={profile}
+          />
+        </SafeAreaView>
+      </Animated.View>
     );
   }
 
@@ -309,6 +502,29 @@ export default function HomeScreen() {
             {activeGym?.name || ''}
           </Text>
         </View>
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* WELCOME BANNER (first visit)                  */}
+        {/* ═══════════════════════════════════════════ */}
+        {showWelcomeBanner && activeGym && (
+          <View style={[noGymStyles.welcomeBanner, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={50} tint="dark" style={noGymStyles.welcomeBannerBlur}>
+              <View style={noGymStyles.welcomeBannerContent}>
+                <View style={{ flex: 1 }}>
+                  <Text style={noGymStyles.welcomeBannerTitle}>
+                    Welcome to {activeGym.name}! 👋
+                  </Text>
+                  <Text style={noGymStyles.welcomeBannerText}>
+                    Scan a QR code on any machine to start your first workout and earn drops.
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={dismissWelcomeBanner} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close" size={18} color={theme.colors.textTertiary} />
+                </TouchableOpacity>
+              </View>
+            </BlurView>
+          </View>
+        )}
 
         {/* ═══════════════════════════════════════════ */}
         {/* QUICK STATS ROW                              */}
@@ -1224,5 +1440,118 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+});
+
+const noGymStyles = StyleSheet.create({
+  heroCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 28,
+  },
+  heroBlur: {
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    padding: 28,
+    alignItems: 'center',
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: '#B0B0B0',
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: 0.2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    marginBottom: 16,
+    textTransform: 'uppercase',
+  },
+  comingSoonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  comingSoonText: {
+    fontSize: 14,
+    color: '#808080',
+    letterSpacing: 0.3,
+  },
+  stepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 24,
+  },
+  stepItem: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B0B0B0',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  welcomeBanner: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  welcomeBannerBlur: {
+    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  welcomeBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  welcomeBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  welcomeBannerText: {
+    fontSize: 13,
+    color: '#B0B0B0',
+    lineHeight: 20,
+    letterSpacing: 0.2,
   },
 });

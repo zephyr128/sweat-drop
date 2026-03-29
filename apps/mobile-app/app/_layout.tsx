@@ -56,6 +56,7 @@ function StackNavigator() {
       <Stack.Screen name="trophy-room" options={{ headerShown: false }} />
       <Stack.Screen name="gym-plans" options={{ headerShown: false }} />
       <Stack.Screen name="plan-detail" options={{ headerShown: false }} />
+      <Stack.Screen name="gym-detail" options={{ headerShown: false }} />
       <Stack.Screen 
         name="scan" 
         options={{ 
