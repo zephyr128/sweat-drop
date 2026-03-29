@@ -234,29 +234,59 @@ export default function HomeScreen() {
   useEffect(() => {
     if (homeGymId) return;
 
-    supabase
-      .from('gyms')
-      .select('id, name, city, address, logo_url, is_active, is_founding_partner')
-      .eq('is_active', true)
-      .order('is_founding_partner', { ascending: false })
-      .order('name')
-      .limit(10)
-      .then(({ data, error }) => {
+    const loadGyms = async () => {
+      try {
+        const { data: gymsData, error } = await supabase
+          .from('gyms')
+          .select('id, name, city, address, owner_id, is_active, is_founding_partner')
+          .eq('is_active', true)
+          .order('is_founding_partner', { ascending: false })
+          .order('name')
+          .limit(10);
+
         if (error) {
-          console.warn('[Home] Failed to load available gyms:', error.message);
-          // Fallback: query without is_founding_partner filter/order
-          supabase
+          console.warn('[Home] Gyms query failed, trying fallback:', error.message);
+          const { data: fallbackData } = await supabase
             .from('gyms')
-            .select('id, name, city, address, logo_url')
-            .limit(10)
-            .then(({ data: fallbackData }) => {
-              if (fallbackData) setAvailableGyms(fallbackData);
-            });
+            .select('id, name, city, address, owner_id')
+            .limit(10);
+          if (fallbackData) {
+            setAvailableGyms(fallbackData.map(g => ({ ...g, logo_url: null })));
+          }
           return;
         }
-        if (__DEV__) console.log('[Home] Available gyms:', data?.length ?? 0);
-        if (data) setAvailableGyms(data);
-      });
+
+        if (!gymsData?.length) {
+          if (__DEV__) console.log('[Home] No available gyms found');
+          return;
+        }
+
+        // Fetch logos from owner_branding for gyms that have an owner
+        const ownerIds = [...new Set(gymsData.filter(g => g.owner_id).map(g => g.owner_id!))];
+        let logoMap: Record<string, string> = {};
+        if (ownerIds.length > 0) {
+          const { data: brandingData } = await supabase
+            .from('owner_branding')
+            .select('owner_id, logo_url')
+            .in('owner_id', ownerIds);
+          if (brandingData) {
+            logoMap = Object.fromEntries(brandingData.map(b => [b.owner_id, b.logo_url]));
+          }
+        }
+
+        const gymsWithLogos = gymsData.map(g => ({
+          ...g,
+          logo_url: (g.owner_id && logoMap[g.owner_id]) || null,
+        }));
+
+        if (__DEV__) console.log('[Home] Available gyms:', gymsWithLogos.length);
+        setAvailableGyms(gymsWithLogos);
+      } catch (e) {
+        console.warn('[Home] Unexpected error loading gyms:', e);
+      }
+    };
+
+    loadGyms();
   }, [homeGymId]);
 
   const loadData = async (silent = false) => {
