@@ -57,7 +57,7 @@ export default function StepGenderScreen() {
           onPress: async () => {
             await skip();
             useAuthStore.getState().setOnboardingStep('done');
-            router.replace('/home');
+            router.replace('/(onboarding)/home-gym');
           },
         },
       ],

@@ -9,5 +9,6 @@
   "mapLoadError": "Pregled mape nije dostupan. Dodirni ispod da otvoriš u mapama.",
   "noLocation": "Unesi adresu u podešavanjima teretane da bi se prikazala mapa.",
   "noGym": "Nije izabrana teretana",
-  "loadError": "Ne mogu da učitam podatke o teretani"
+  "loadError": "Ne mogu da učitam podatke o teretani",
+  "foundingPartner": "Osnivački partner"
 }

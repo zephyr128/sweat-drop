@@ -42,7 +42,7 @@ export default function StepGoalScreen() {
         router.replace('/profile');
       } else {
         setOnboardingStep('done');
-        router.replace('/home');
+        router.replace('/(onboarding)/home-gym');
       }
     } else {
       Alert.alert(t('profileSetup.saveError'), result.error);

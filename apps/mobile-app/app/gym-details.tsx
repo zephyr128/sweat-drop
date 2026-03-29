@@ -235,6 +235,12 @@ export default function GymDetailsScreen() {
           <Text style={styles.gymTitle} numberOfLines={3}>
             {gym.name}
           </Text>
+          {(gym as any).is_founding_partner && (
+            <View style={styles.foundingBadge}>
+              <Ionicons name="star" size={12} color="#FFD700" />
+              <Text style={styles.foundingBadgeText}>{t('foundingPartner')}</Text>
+            </View>
+          )}
         </View>
 
         <BlurView intensity={40} tint="dark" style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
@@ -362,6 +368,26 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
+  },
+  foundingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 215, 0, 0.12)',
+    borderColor: 'rgba(255, 215, 0, 0.25)',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  foundingBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    color: '#FFD700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   card: {
     borderRadius: 16,

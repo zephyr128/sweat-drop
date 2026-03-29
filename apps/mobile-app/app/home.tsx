@@ -640,6 +640,11 @@ export default function HomeScreen() {
                 <Text style={styles.gymNameText} numberOfLines={1}>
                   {activeGym.name}
                 </Text>
+                {(activeGym as any).is_founding_partner && (
+                  <View style={styles.foundingChip}>
+                    <Ionicons name="star" size={8} color="#FFD700" />
+                  </View>
+                )}
               </Animated.View>
             </TouchableOpacity>
           )}
@@ -1505,6 +1510,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     flexShrink: 1,
     maxWidth: 132,
+  },
+  foundingChip: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
   },
   /* ─── Hero Section ──────────────────────── */
   heroSection: {

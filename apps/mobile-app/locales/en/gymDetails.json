@@ -9,5 +9,6 @@
   "mapLoadError": "Map preview could not be loaded. Tap below to open in Maps.",
   "noLocation": "Add an address in gym settings to see a map preview.",
   "noGym": "No gym selected",
-  "loadError": "Could not load gym details"
+  "loadError": "Could not load gym details",
+  "foundingPartner": "Founding Partner"
 }
