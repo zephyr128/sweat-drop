@@ -241,7 +241,20 @@ export default function HomeScreen() {
       .order('is_founding_partner', { ascending: false })
       .order('name')
       .limit(10)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('[Home] Failed to load available gyms:', error.message);
+          // Fallback: query without is_founding_partner filter/order
+          supabase
+            .from('gyms')
+            .select('id, name, city, address, logo_url')
+            .limit(10)
+            .then(({ data: fallbackData }) => {
+              if (fallbackData) setAvailableGyms(fallbackData);
+            });
+          return;
+        }
+        if (__DEV__) console.log('[Home] Available gyms:', data?.length ?? 0);
         if (data) setAvailableGyms(data);
       });
   }, [homeGymId]);
