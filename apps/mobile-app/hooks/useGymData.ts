@@ -63,19 +63,12 @@ export const useGymData = () => {
         // DB has a value — update store to match
         setHomeGymId(dbGymId);
       } else if (!dbGymId && currentStoreGymId) {
-        // Store has a value but DB doesn't — DB is stale.
-        // Persist the store value to DB instead of clearing it.
+        // DB says no home gym — clear the local store to match.
+        // DB is the source of truth (user may have removed gym elsewhere).
         if (__DEV__) {
-          log.debug('[useGymData] DB home_gym_id is null but store has:', currentStoreGymId, '— persisting to DB');
+          log.debug('[useGymData] DB home_gym_id is null, clearing store (was:', currentStoreGymId, ')');
         }
-        try {
-          await supabase
-            .from('profiles')
-            .update({ home_gym_id: currentStoreGymId })
-            .eq('id', userId);
-        } catch (e) {
-          log.warn('[useGymData] Failed to persist store homeGymId to DB:', e);
-        }
+        setHomeGymId(null);
       }
       // If both are null or both match — no action needed
     } catch (error) {
