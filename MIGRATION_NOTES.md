@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-03-27 (perform_checkin lenient hotfix + diagnostics)
+**Last Updated:** 2026-03-29 (P0 reconcile award_drops: happy hour + soft tiers)
 
 ---
 
@@ -16,6 +16,341 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-03-29] - P0: Reconcile award_drops — Happy Hour + Soft Tiers + Anti-Split Merge
+
+**Migration:** `20260329000002_reconcile_award_drops_happy_hour_with_soft_tiers.sql`
+
+#### Problem
+
+Migration `20260327000005_happy_hour_drop_boost_rules.sql` added Happy Hour boost to
+`award_drops` but **completely overwrote** the sophisticated version from
+`20260325000016_fair_session_soft_threshold_policy.sql`. Production `award_drops` was
+MISSING: session soft tiers, anti-split merge, cap modes, restart grace reconciliation.
+
+The mobile `live-drops-estimator.ts` still applied soft tiers, causing visible mismatch:
+users saw one number during workout and received a different (lower) number from backend.
+
+#### What Changed
+
+`award_drops(p_session_id UUID)` rewritten to include ALL features from both migrations:
+
+| Feature | Source Migration | Status |
+|---------|-----------------|--------|
+| Raw drops calculation (v2 + legacy) | 270010 | Kept |
+| Happy Hour boost | 270005 | Restored |
+| Rewarded sessions count + restart reconciliation | 250016 | Restored |
+| Rewarded sessions cap modes (off/soft/hard) | 250016 | Restored |
+| Anti-split merge accounting | 250016 | Restored |
+| Piecewise soft session threshold | 250016 | Restored |
+| Daily/weekly hard caps | Both | Kept |
+| Balance updates, transactions, challenges, arenas | 270005 | Kept |
+
+**Order of operations:**
+1. Load session, profile, tokenomics_config (ALL columns)
+2. Short session guard (<120s)
+3. Calculate raw drops via `calculate_session_drops_v2` (or legacy)
+4. **Happy Hour boost** on `v_raw_drops`
+5. Rewarded sessions count + restart reconciliation
+6. Rewarded sessions cap mode (off/soft/hard)
+7. Anti-split merge accounting
+8. **Piecewise soft session tiers** on boosted+merged amount
+9. Daily hard cap
+10. Weekly hard cap
+11. Balance updates, transactions, challenges, arenas, checkin, streak
+
+**Key principle:** Happy hour boost multiplies `v_raw_drops` BEFORE soft tiers.
+So 1.5x HH on 100 raw = 150, which then goes through soft-tier curve.
+
+#### Telemetry (raw_metrics.drop_calc_v2)
+
+New structured blocks:
+- `happy_hour`: active, multiplier, rule_id, rule_name, pre/post_boost_drops
+- `soft_session`: threshold, tier1_end, tier factors, merged_prior, combined, adjusted, marginal_credit
+- `rewarded_sessions`: count, effective_count, restart_merged, mode, grace_sec
+- `caps`: day_remaining, week_remaining, final_drops, merge_window_sec
+- `reasons`: array of reason codes
+
+#### Impact on Frontend
+
+- **Mobile App:** No changes needed. `live-drops-estimator.ts` already implements soft tiers.
+  Backend now matches mobile's math — users will see consistent numbers.
+- **Admin Panel:** No changes needed. `get_user_drop_limits` already returns soft-tier columns.
+
+#### Rollback
+
+Re-apply the `award_drops` body from `20260327000005` to revert to hard-cap-only behavior.
+
+#### Verification Results (threshold=150, t1=0.40, t2=0.15, span=0.50)
+
+| Scenario | Raw | Combined | Soft Adjusted | Marginal |
+|----------|-----|----------|---------------|----------|
+| Below threshold (80) | 80 | 80 | 80 | 80 |
+| In tier1 (180) | 180 | 180 | 162 | 162 |
+| In tier2 (270, HH 1.5x) | 270 | 270 | 187 | 187 |
+| Split 1/2 (90+0) | 90 | 90 | 90 | 90 |
+| Split 2/2 (90+90) | 90 | 180 | 162 | 72 |
+| Continuous (180+0) | 180 | 180 | 162 | 162 |
+| Anti-split total: 90+72=162 = continuous 162 | - | - | - | Equal |
+
+---
+
+### [2026-03-28] - Mobile Listing Rename + Verified Check-in Referral Trigger
+
+**Migration:** `20260328000002_mobile_listing_and_verified_checkin_referral.sql`
+
+#### A) Mobile Listing Rename (non-breaking)
+
+**Schema Change: `gyms` table**
+- Added `is_mobile_listed BOOLEAN NOT NULL DEFAULT true`
+- Backfilled from `is_pilot_enabled` (all gyms synced)
+- Index: `idx_gyms_mobile_listed` on `(is_mobile_listed, is_active) WHERE both true`
+
+**Updated RPC: `get_public_gyms_for_mobile(p_pilot_only, p_listed_only)`**
+- Old 1-param overload dropped; replaced with 2-param version
+- `p_listed_only` (default `true`) — filters by `is_mobile_listed`
+- `p_pilot_only` (default `false`) — preserved for backward compat
+- Returns `is_mobile_listed` column in results
+
+**Frontend Impact:**
+- **Mobile App:** Update `useAvailableArenas`/gym list to use `p_listed_only` param instead of `p_pilot_only`. Old callers still work (both params default safely).
+- **Admin Panel:** Can now toggle `is_mobile_listed` per gym (independent of pilot flag).
+
+#### B) Referral: Verified Check-in Trigger (replaces workout trigger)
+
+**Schema Change: `referrals` table**
+- Added `qualified_verified_at TIMESTAMPTZ NULL` — timestamp when invitee's identity was verified AND had a check-in
+
+**Updated RPCs:**
+
+| Function | Change |
+|---|---|
+| `evaluate_referral_qualification(UUID)` | Reward trigger = first check-in + `gym_member_identities.is_verified=true` (was: first workout). Returns `qualified_verified_at` and `is_identity_verified` in active-state response. |
+| `get_referral_timeline(UUID)` | Steps: `invited → joined → first_checkin → verified_checkin → rewarded`. New step `verified_checkin` replaces `first_workout`. |
+| `get_my_referrals(UUID)` | `current_status` includes `verified_checkin` state. Returns `qualified_verified_at` per referral. |
+| `get_referral_stats(UUID)` | Counts `verified` (identity-verified invitees). All stats now reflect verified-checkin flow. |
+
+**Reward Logic:**
+- Invitee bonus: +100 drops (once, on verified qualification)
+- Referrer reward: +150 drops (monthly cap of 5, configurable via `app_runtime_flags`)
+- Cap exceeded: `reward_block_reason = 'monthly_cap_reached'`
+
+**Anti-Abuse (preserved):**
+- Self-referral blocked
+- Duplicate invitee protection
+- Expiry enforcement (30 days default)
+
+**Frontend Impact:**
+- **Mobile App:** Timeline stepper should show `verified_checkin` step (not `first_workout`). `evaluate_referral_qualification` now returns `is_identity_verified` boolean for progress UI.
+- **Admin Panel:** Member identity verification flow (`gym_member_identities`) is now the reward trigger for referrals.
+
+**Rollback:**
+```sql
+ALTER TABLE public.gyms DROP COLUMN IF EXISTS is_mobile_listed;
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS qualified_verified_at;
+-- Restore previous RPC versions from 20260328000001 migration
+```
+
+---
+
+### [2026-03-28] - Pilot: Referral Lifecycle Hardening + H2H Feature Gate
+
+**Migration:** `20260328000001_pilot_referral_h2h_gate.sql`
+
+**New Table: `app_runtime_flags`**
+- Key-value feature flag store (JSONB values). RLS: public read, superadmin write.
+- Seeded flags: `friend_challenges_enabled=false`, `referral_invites_enabled=true`, reward amounts, monthly cap, expiry days.
+
+**Extended `referrals`:**
+- `qualified_first_workout_at TIMESTAMPTZ NULL` — first completed workout (reward trigger)
+- `qualified_first_workout_id UUID NULL` — FK to sessions
+- `invitee_reward_tx_id UUID NULL` — FK to drops_transactions (invitee bonus audit)
+- `reward_block_reason TEXT NULL` — e.g. `monthly_cap_reached`
+
+**New RPCs:**
+
+| Function | Purpose |
+|---|---|
+| `get_runtime_flag(TEXT)` | Read any feature flag value (mobile H2H gate) |
+| `get_referral_stats(UUID)` | Referrer KPI cards: total, joined, workout_completed, rewarded, cap_blocked, monthly_remaining |
+
+**Patched RPCs:**
+
+| Function | Changes |
+|---|---|
+| `create_referral_invite` | Returns `join_url`, `deep_link`, `expires_at` (30-day default) |
+| `apply_referral_code` | Returns `message`, `joined_at`; enforces expiry; blocks expired codes |
+| `evaluate_referral_qualification` | Trigger is now first workout (not checkin+redemption). Invitee gets +100 drops (one-time). Referrer gets +150 drops (monthly cap 5). Cap-blocked referrals marked `reward_block_reason='monthly_cap_reached'`. |
+| `get_referral_timeline` | Added `first_checkin` and `first_workout` steps. `reward_block_reason` in response. |
+| `get_my_referrals` | Added `first_workout` current_status, `reward_block_reason`, `monthly_rewarded/cap/remaining`. |
+
+**Reward Logic:**
+- Invitee bonus: +100 drops on first workout (one-time, always paid)
+- Referrer reward: +150 drops per qualified referral (monthly cap of 5 paid referrals)
+- Over-cap referrals still mark as `rewarded` but with `reward_block_reason='monthly_cap_reached'` and referrer gets 0
+
+**Timeline `current_status` values:** `invited`, `joined`, `first_checkin`, `first_workout`, `rewarded`, `expired`, `blocked`
+
+**Frontend Impact:**
+- **Mobile App:** Read `get_runtime_flag('friend_challenges_enabled')` to hide H2H. Use `get_referral_stats` for invite screen KPIs. `create_referral_invite` now returns `join_url` and `deep_link` for sharing. `evaluate_referral_qualification` triggers on first workout, not checkin+redemption.
+- **Landing Page:** Use `join_url` from create_referral_invite for `/join/<code>` routes.
+- **Admin Panel:** Optional read-only referral KPI card using `get_referral_stats`.
+
+**Rollback:**
+```sql
+DROP TABLE IF EXISTS public.app_runtime_flags;
+DROP FUNCTION IF EXISTS public.get_runtime_flag(TEXT);
+DROP FUNCTION IF EXISTS public.get_referral_stats(UUID);
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS qualified_first_workout_at;
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS qualified_first_workout_id;
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS invitee_reward_tx_id;
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS reward_block_reason;
+-- Then restore previous RPC versions from 20260327160000 migration.
+```
+
+---
+
+### [2026-03-27] - Referral Timeline Support (UX Hotfix)
+
+**Migration:** `20260327160000_referral_timeline_support.sql`
+
+**Schema Changes:**
+
+Extended `referrals`:
+- `joined_at TIMESTAMPTZ NULL` — explicit timestamp when invitee applies code (was only derivable from `updated_at`)
+- `expires_at TIMESTAMPTZ NULL` — optional invite code expiry
+
+Status CHECK widened: `pending | active | rewarded | blocked | expired`
+
+Backfill: existing `active`/`rewarded` rows had `joined_at` set from `updated_at`.
+
+**Patched RPCs:**
+- `apply_referral_code` — now sets `joined_at = NOW()` and returns it; also respects `expires_at`
+
+**New RPCs:**
+
+| Function | Purpose |
+|---|---|
+| `get_referral_timeline(p_referral_id UUID DEFAULT NULL)` | Returns computed timeline steps array + `current_status`. Auth-scoped to referrer, invitee, or superadmin. |
+| `get_my_referrals(p_gym_id UUID)` | Referrer list view with derived `current_status` per row. |
+
+**Timeline `current_status` values:** `invited`, `joined`, `qualified_checkin`, `qualified_redemption`, `rewarded`, `expired`, `blocked`
+
+**Indexes Added:**
+- `idx_referrals_invitee` — `(invitee_user_id, created_at DESC)` partial
+- `idx_referrals_expires` — `(expires_at)` partial where pending + expires_at set
+
+**Frontend Impact:**
+- **Mobile App:** Use `get_referral_timeline()` for status stepper/timeline. Use `get_my_referrals()` for referrer list. `joined_at` now explicit in apply response.
+- **Admin Panel:** No changes needed.
+
+**Rollback:**
+```sql
+DROP FUNCTION IF EXISTS public.get_referral_timeline(UUID);
+DROP FUNCTION IF EXISTS public.get_my_referrals(UUID);
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS joined_at;
+ALTER TABLE public.referrals DROP COLUMN IF EXISTS expires_at;
+ALTER TABLE public.referrals DROP CONSTRAINT IF EXISTS referrals_status_check;
+ALTER TABLE public.referrals ADD CONSTRAINT referrals_status_check
+  CHECK (status IN ('pending', 'active', 'rewarded', 'blocked'));
+```
+
+---
+
+### [2026-03-27] - Referrals (A3) + friend 1v1 challenges (A4) MVP
+
+**Migration:** `20260327150000_referrals_and_friend_challenges_mvp.sql`
+
+**Tables (additive):**
+- `referrals` — gym-scoped referral rows: `referrer_user_id`, `invitee_user_id`, `invite_code`, `status` (`pending` | `active` | `rewarded` | `blocked`), qualification timestamps, `reward_tx_id`
+- `friend_challenges` — gym-scoped 1v1: `challenger_user_id`, `opponent_user_id`, `challenge_type` (`drops_race` | `streak_race` | `sessions_race`), `duration_days` (3/7/14), `status`, `tie_mode` (`no_winner` | `split`), optional `reward_drops_per_user` (0–100), window `starts_at`/`ends_at`, invite TTL `pending_expires_at`
+- `friend_challenge_progress` — `(challenge_id, user_id)` scores + `last_computed_at`
+
+**Referral RPCs (authenticated, `SECURITY DEFINER`):**
+| RPC | Purpose |
+|-----|---------|
+| `create_referral_invite(p_gym_id)` | Creates or returns existing **pending** invite for caller at gym; blocks if another `pending`/`active` row exists for same referrer+gym |
+| `apply_referral_code(p_invite_code, p_gym_id)` | Links caller as invitee; requires membership at `gym_id`; blocks self-referral (`blocked` + reason); one referral lifetime per invitee (`invitee_user_id` unique) |
+| `evaluate_referral_qualification(p_referral_id default null)` | **Invitee:** sets `qualified_*` from first qualifying `gym_checkins` (same `gym_id`, `drops_earned > 0`) and first `redemptions` with `status = 'confirmed'` and `source_type = 'reward_store'`; then pays referrer (constant **50** drops, capped ≤200 in function), `drops_transactions.transaction_type = 'referral_reward'`. **Referrer / gym staff / superadmin:** read-only JSON snapshot (no mutation). |
+
+**Friend challenge RPCs (authenticated, `SECURITY DEFINER`):**
+| RPC | Purpose |
+|-----|---------|
+| `create_friend_challenge(p_opponent_user_id, p_gym_id, p_challenge_type, p_duration_days, p_reward_drops_per_user default 0, p_tie_mode default 'no_winner')` | Both users must be `gym_memberships` at `p_gym_id`; pending invite expires in **48h** |
+| `respond_friend_challenge(p_challenge_id, p_accept)` | Opponent accepts (sets `starts_at`/`ends_at`) or declines |
+| `cancel_friend_challenge(p_challenge_id)` | Challenger cancels while `pending` |
+| `refresh_friend_challenge_scores(p_challenge_id)` | Recomputes scores; when `now() >= ends_at`, completes challenge, sets `winner_user_id` (tie + `split` + reward → both paid; tie + `no_winner` → no winner); optional rewards use `friend_challenge_reward` transactions |
+
+**RLS:**
+- **referrals:** `SELECT` for superadmin, gym staff (same patterns as `gym_checkins`), referrer, invitee; no direct client writes
+- **friend_challenges / friend_challenge_progress:** `SELECT` for superadmin, gym staff, both participants; progress readable by **both** participants for the same challenge
+
+**Internal helpers:** `_referral_generate_code`, `_friend_challenge_compute_score`, `_friend_challenge_credit_winner` — `REVOKE` from `PUBLIC` (not client-callable).
+
+**Verify script:** `backend/supabase/VERIFY_REFERRALS_AND_FRIEND_CHALLENGES_MVP.sql`
+
+**Frontend impact:**
+- **Mobile:** Use RPCs with user session; always pass pilot/home `gym_id` aligned with membership. After check-in and staff-confirmed redemption, invitee should call `evaluate_referral_qualification()` (e.g. app resume or post-redemption).
+- **Admin:** Optional `referrals` reads for desk/support; no migration changes to admin actions required.
+
+**MVP limitations (by design):**
+- Referrer reward amount is fixed in SQL (not per-gym config yet).
+- Phone / device loop fraud not in DB (no `phone` on `profiles`); self-referral and one-invitee-per-lifetime enforced.
+- `streak_race` score = distinct local session days at the gym in the window (MVP proxy, not “longest streak”).
+
+---
+
+### [2026-03-27] - Profiles: email verification + legal acknowledgment (auth / release hardening)
+
+**Migration:** `20260327140000_profiles_email_verified_and_release_compliance.sql`
+
+**Schema changes (additive):**
+- `profiles.email_verified_at TIMESTAMPTZ NULL` — mirrors Auth confirmation for server/client checks; backfilled from `auth.users.email_confirmed_at` where set
+- `profiles.terms_privacy_acknowledged_at TIMESTAMPTZ NULL` — in-app Terms + Privacy acknowledgment timestamp
+- `profiles.terms_privacy_document_version TEXT NULL` — version key/slug for the legal bundle shown
+
+**Index:**
+- `idx_profiles_email_pending_verification` — partial on `profiles(created_at DESC)` where `email IS NOT NULL` and `email_verified_at IS NULL`
+
+**Behavior notes:**
+- Non-destructive: no drops, no RLS policy changes; existing `profiles` policies apply to new columns.
+- Backfill does **not** overwrite non-null `email_verified_at` (safe for manual corrections).
+- Dev/prod isolation remains two Supabase **projects** + app env vars (see `docs/plans/production_env_split_dev_prod_runbook.md`); no extra env table required.
+
+**Frontend impact:**
+- **Mobile:** Use `email_verified_at` (and/or Auth `user.email_confirmed_at`) for email-provider gate per plan A1; set legal columns when user accepts published Terms/Privacy (plan H2).
+- **Admin:** Optional read for support; no required change.
+
+**DB documentation:**
+- MVP surface audit (keep / deprecate / remove candidates): `backend/supabase/docs/MVP_ACTIVE_DB_SURFACE_AUDIT.md`
+
+**Verify script:** `backend/supabase/VERIFY_PROFILES_AUTH_RELEASE_COLUMNS.sql`
+
+---
+
+### [2026-03-11] - Pilot gym visibility flag + public listing RPC
+
+**Migration:** `20260311130000_add_pilot_gym_visibility_flag.sql`
+
+**Schema changes:**
+- Added `gyms.is_pilot_enabled BOOLEAN NOT NULL DEFAULT true`
+- Added index `idx_gyms_is_pilot_enabled`
+
+**New RPC:**
+- `get_public_gyms_for_mobile(p_pilot_only BOOLEAN DEFAULT false)`
+  - Returns active gyms for mobile listing
+  - If `p_pilot_only=true`, returns only `is_pilot_enabled=true` gyms
+
+**Behavior notes:**
+- Migration is additive and non-destructive.
+- Existing gyms are preserved and marked visible by default.
+- Intended for staged pilot rollout (e.g. Vortex-only listing) without removing multi-gym architecture.
+
+**Frontend impact:**
+- Mobile uses `is_mobile_listed` semantics for public gym listing.
+- If listing columns/functions are not available yet, mobile fallback path can still list gyms.
+
+---
 
 ### [2026-03-27] - perform_checkin: lenient full checkin_drops + RPC diagnostics
 

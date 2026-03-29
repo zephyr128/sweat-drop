@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-03-29] - P0: Reconcile award_drops
+
+### Fixed
+- **award_drops** regression: Migration `20260327000005` (Happy Hour) overwrote the soft-tier award_drops from `20260325000016`, dropping session soft tiers, anti-split merge, cap modes, and restart grace reconciliation
+- Backend/mobile mismatch: `live-drops-estimator.ts` applied soft tiers but backend used hard session cap — users saw inconsistent drop counts
+- Reconciled function now includes: Happy Hour boost → soft tiers → anti-split merge → daily/weekly hard caps (in correct order)
+
+---
+
 ## [2026-03-29] - App Store Launch UX — Gym Discovery & Onboarding
 
 ### Overview

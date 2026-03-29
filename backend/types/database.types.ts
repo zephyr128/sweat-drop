@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -708,6 +707,128 @@ export type Database = {
           },
         ]
       }
+      friend_challenge_progress: {
+        Row: {
+          challenge_id: string
+          last_computed_at: string
+          score: number
+          user_id: string
+        }
+        Insert: {
+          challenge_id: string
+          last_computed_at?: string
+          score?: number
+          user_id: string
+        }
+        Update: {
+          challenge_id?: string
+          last_computed_at?: string
+          score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friend_challenge_progress_challenge_id_fkey"
+            columns: ["challenge_id"]
+            isOneToOne: false
+            referencedRelation: "friend_challenges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friend_challenge_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      friend_challenges: {
+        Row: {
+          challenger_user_id: string
+          challenge_type: string
+          completed_at: string | null
+          created_at: string
+          duration_days: number
+          ends_at: string | null
+          gym_id: string
+          id: string
+          opponent_user_id: string
+          pending_expires_at: string
+          reward_drops_per_user: number
+          starts_at: string | null
+          status: string
+          tie_mode: string
+          updated_at: string
+          winner_user_id: string | null
+        }
+        Insert: {
+          challenger_user_id: string
+          challenge_type: string
+          completed_at?: string | null
+          created_at?: string
+          duration_days: number
+          ends_at?: string | null
+          gym_id: string
+          id?: string
+          opponent_user_id: string
+          pending_expires_at: string
+          reward_drops_per_user?: number
+          starts_at?: string | null
+          status?: string
+          tie_mode?: string
+          updated_at?: string
+          winner_user_id?: string | null
+        }
+        Update: {
+          challenger_user_id?: string
+          challenge_type?: string
+          completed_at?: string | null
+          created_at?: string
+          duration_days?: number
+          ends_at?: string | null
+          gym_id?: string
+          id?: string
+          opponent_user_id?: string
+          pending_expires_at?: string
+          reward_drops_per_user?: number
+          starts_at?: string | null
+          status?: string
+          tie_mode?: string
+          updated_at?: string
+          winner_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friend_challenges_challenger_user_id_fkey"
+            columns: ["challenger_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friend_challenges_gym_id_fkey"
+            columns: ["gym_id"]
+            isOneToOne: false
+            referencedRelation: "gyms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friend_challenges_opponent_user_id_fkey"
+            columns: ["opponent_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friend_challenges_winner_user_id_fkey"
+            columns: ["winner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       global_achievements: {
         Row: {
           badge_image_url: string
@@ -749,6 +870,60 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      gym_checkins: {
+        Row: {
+          checked_in_at: string
+          created_at: string
+          drops_earned: number
+          gps_distance_m: number | null
+          gps_lat: number | null
+          gps_lng: number | null
+          gps_verified: boolean
+          gym_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          checked_in_at?: string
+          created_at?: string
+          drops_earned?: number
+          gps_distance_m?: number | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          gps_verified?: boolean
+          gym_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          checked_in_at?: string
+          created_at?: string
+          drops_earned?: number
+          gps_distance_m?: number | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          gps_verified?: boolean
+          gym_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gym_checkins_gym_id_fkey"
+            columns: ["gym_id"]
+            isOneToOne: false
+            referencedRelation: "gyms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gym_checkins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gym_challenges: {
         Row: {
@@ -1434,6 +1609,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           email: string | null
+          email_verified_at: string | null
           expo_push_token: string | null
           full_name: string | null
           home_gym_id: string | null
@@ -1444,6 +1620,8 @@ export type Database = {
           owner_id: string | null
           role: Database["public"]["Enums"]["user_role"]
           streak_days: number
+          terms_privacy_acknowledged_at: string | null
+          terms_privacy_document_version: string | null
           total_drops: number
           updated_at: string
           username: string
@@ -1456,6 +1634,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_verified_at?: string | null
           expo_push_token?: string | null
           full_name?: string | null
           home_gym_id?: string | null
@@ -1466,6 +1645,8 @@ export type Database = {
           owner_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           streak_days?: number
+          terms_privacy_acknowledged_at?: string | null
+          terms_privacy_document_version?: string | null
           total_drops?: number
           updated_at?: string
           username: string
@@ -1478,6 +1659,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_verified_at?: string | null
           expo_push_token?: string | null
           full_name?: string | null
           home_gym_id?: string | null
@@ -1488,6 +1670,8 @@ export type Database = {
           owner_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           streak_days?: number
+          terms_privacy_acknowledged_at?: string | null
+          terms_privacy_document_version?: string | null
           total_drops?: number
           updated_at?: string
           username?: string
@@ -1712,6 +1896,103 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referrals: {
+        Row: {
+          block_reason: string | null
+          created_at: string
+          gym_id: string
+          id: string
+          invite_code: string
+          invitee_user_id: string | null
+          qualified_checkin_at: string | null
+          qualified_checkin_id: string | null
+          qualified_redemption_at: string | null
+          qualified_redemption_id: string | null
+          referrer_user_id: string
+          reward_tx_id: string | null
+          rewarded_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          block_reason?: string | null
+          created_at?: string
+          gym_id: string
+          id?: string
+          invite_code: string
+          invitee_user_id?: string | null
+          qualified_checkin_at?: string | null
+          qualified_checkin_id?: string | null
+          qualified_redemption_at?: string | null
+          qualified_redemption_id?: string | null
+          referrer_user_id: string
+          reward_tx_id?: string | null
+          rewarded_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          block_reason?: string | null
+          created_at?: string
+          gym_id?: string
+          id?: string
+          invite_code?: string
+          invitee_user_id?: string | null
+          qualified_checkin_at?: string | null
+          qualified_checkin_id?: string | null
+          qualified_redemption_at?: string | null
+          qualified_redemption_id?: string | null
+          referrer_user_id?: string
+          reward_tx_id?: string | null
+          rewarded_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referrals_gym_id_fkey"
+            columns: ["gym_id"]
+            isOneToOne: false
+            referencedRelation: "gyms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_invitee_user_id_fkey"
+            columns: ["invitee_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_qualified_redemption_id_fkey"
+            columns: ["qualified_redemption_id"]
+            isOneToOne: false
+            referencedRelation: "redemptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referrer_user_id_fkey"
+            columns: ["referrer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_qualified_checkin_id_fkey"
+            columns: ["qualified_checkin_id"]
+            isOneToOne: false
+            referencedRelation: "gym_checkins"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_reward_tx_id_fkey"
+            columns: ["reward_tx_id"]
+            isOneToOne: false
+            referencedRelation: "drops_transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -2741,6 +3022,10 @@ export type Database = {
         }
         Returns: string
       }
+      apply_referral_code: {
+        Args: { p_gym_id: string; p_invite_code: string }
+        Returns: Json
+      }
       award_drops: {
         Args: { p_session_id: string }
         Returns: {
@@ -2749,6 +3034,7 @@ export type Database = {
           multiplier: number
         }[]
       }
+      cancel_friend_challenge: { Args: { p_challenge_id: string }; Returns: Json }
       cancel_redemption: {
         Args: {
           p_cancelled_by: string
@@ -2777,6 +3063,18 @@ export type Database = {
           success: boolean
         }[]
       }
+      create_friend_challenge: {
+        Args: {
+          p_challenge_type: string
+          p_duration_days: number
+          p_gym_id: string
+          p_opponent_user_id: string
+          p_reward_drops_per_user?: number
+          p_tie_mode?: string
+        }
+        Returns: Json
+      }
+      create_referral_invite: { Args: { p_gym_id: string }; Returns: Json }
       create_redemption: {
         Args: { p_gym_id: string; p_reward_id: string; p_user_id: string }
         Returns: {
@@ -2795,6 +3093,10 @@ export type Database = {
         Returns: {
           badge_name: string
         }[]
+      }
+      evaluate_referral_qualification: {
+        Args: { p_referral_id?: string }
+        Returns: Json
       }
       expire_stale_drops: { Args: never; Returns: number }
       finalize_arena: {
@@ -3182,9 +3484,17 @@ export type Database = {
           progression_type: string
         }[]
       }
+      refresh_friend_challenge_scores: {
+        Args: { p_challenge_id: string }
+        Returns: Json
+      }
       remove_staff_role: {
         Args: { p_gym_id: string; p_removed_by: string; p_user_id: string }
         Returns: undefined
+      }
+      respond_friend_challenge: {
+        Args: { p_accept: boolean; p_challenge_id: string }
+        Returns: Json
       }
       reset_daily_challenges: { Args: never; Returns: undefined }
       reset_machine_rpm: { Args: never; Returns: undefined }
