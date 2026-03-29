@@ -3,8 +3,8 @@
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["exp://localhost:8081"]
+site_url = "https://www.sweat-drop.com"
+additional_redirect_urls = ["exp://localhost:8081", "sweatdrop://", "https://www.sweat-drop.com/auth/confirm"]
 jwt_expiry = 3600
 enable_signup = true
 

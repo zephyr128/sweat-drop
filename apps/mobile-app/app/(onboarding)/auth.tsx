@@ -18,21 +18,80 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+import {
+  getPrivacyUrl,
+  getTermsUrl,
+  openLegalUrl,
+} from '@/lib/legalUrls';
 import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import Constants from 'expo-constants';
 
-// ── Google Sign-In Setup ──
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { log } from '@/lib/logger';
 
-GoogleSignin.configure({
-  webClientId:
-    Constants.expoConfig?.extra?.googleWebClientId ||
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  iosClientId:
-    Constants.expoConfig?.extra?.googleIosClientId ||
-    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-});
+const FALLBACK_GOOGLE_CLIENT_ID =
+  '620444177181-ar724tn6j7lfr28h97fpaosbn2o48352.apps.googleusercontent.com';
+
+const _googleWebClientId =
+  Constants.expoConfig?.extra?.googleWebClientId ||
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+  FALLBACK_GOOGLE_CLIENT_ID;
+const _googleIosClientId =
+  Constants.expoConfig?.extra?.googleIosClientId ||
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
+  FALLBACK_GOOGLE_CLIENT_ID;
+
+const _googleConfigured = !!_googleWebClientId;
+
+if (!_googleConfigured && __DEV__) {
+  log.warn('[Auth] Google Sign-In not configured — EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is missing');
+}
+
+type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
+let googleSigninModulePromise: Promise<GoogleSigninModule | null> | null = null;
+let googleSigninConfigured = false;
+
+async function getGoogleSigninModule(): Promise<GoogleSigninModule | null> {
+  if (!googleSigninModulePromise) {
+    googleSigninModulePromise = import('@react-native-google-signin/google-signin')
+      .then((mod) => {
+        if (
+          !mod?.GoogleSignin ||
+          typeof mod.GoogleSignin.configure !== 'function' ||
+          typeof mod.GoogleSignin.signIn !== 'function'
+        ) {
+          if (__DEV__) log.warn('[Auth] GoogleSignin module loaded but API surface invalid');
+          return null;
+        }
+        return mod;
+      })
+      .catch((e) => {
+        if (__DEV__) log.warn('[Auth] GoogleSignin import failed:', e?.message);
+        return null;
+      });
+  }
+  return googleSigninModulePromise;
+}
+
+async function ensureGoogleSigninConfigured(): Promise<GoogleSigninModule | null> {
+  const mod = await getGoogleSigninModule();
+  if (!mod) return null;
+  if (!googleSigninConfigured) {
+    try {
+      mod.GoogleSignin.configure({
+        webClientId: _googleWebClientId,
+        iosClientId: _googleIosClientId || undefined,
+      });
+      googleSigninConfigured = true;
+      if (__DEV__) log.debug('[Auth:Google] configure() ok');
+    } catch (e: any) {
+      if (__DEV__) log.error('[Auth:Google] configure() failed:', e?.message);
+      return null;
+    }
+  }
+  return mod;
+}
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -45,6 +104,9 @@ export default function AuthScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+
+  // Legal consent is implicit — tapping any auth action counts as acceptance
+  const legalAccepted = true;
 
   const isLoading = googleLoading || appleLoading || emailLoading;
 
@@ -72,10 +134,24 @@ export default function AuthScreen() {
     }
   };
 
-  // ── Role Guard ──
-  const checkRoleAndNavigate = async () => {
+  // ── After session exists: profile, role guard, email verification gate ──
+  const finishSignInAfterSession = async () => {
+    const sessionUser = useAuthStore.getState().session?.user;
+    if (sessionUser?.id) {
+      const now = new Date().toISOString();
+      await supabase
+        .from('profiles')
+        .update({
+          terms_privacy_acknowledged_at: now,
+          terms_privacy_document_version: 'v1',
+          updated_at: now,
+        })
+        .eq('id', sessionUser.id);
+    }
+
     await fetchProfile();
     const profile = useAuthStore.getState().profile;
+    const freshSessionUser = useAuthStore.getState().session?.user;
 
     if (profile?.role && profile.role !== 'member' && profile.role !== 'user') {
       await supabase.auth.signOut();
@@ -87,6 +163,11 @@ export default function AuthScreen() {
       return;
     }
 
+    if (freshSessionUser && shouldRequireEmailVerification(freshSessionUser)) {
+      router.replace('/(onboarding)/verify-email');
+      return;
+    }
+
     navigateToNextStep();
   };
 
@@ -94,13 +175,47 @@ export default function AuthScreen() {
   //  GOOGLE SIGN-IN (Native)
   // ────────────────────────────────────────────────────
   const handleGoogleSignIn = async () => {
+    if (!legalAccepted) {
+      Alert.alert(t('common:error'), t('auth.legalConsentRequired'));
+      return;
+    }
+    if (!_googleConfigured) {
+      log.warn('[Auth] Google sign-in attempted but client ID is missing');
+      Alert.alert(t('common:error'), t('auth.googleNotConfigured'));
+      return;
+    }
     try {
       setGoogleLoading(true);
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = signInResult?.data?.idToken;
+      if (__DEV__) log.debug('[Auth:Google] phase=start');
+
+      const googleModule = await ensureGoogleSigninConfigured();
+      if (!googleModule) {
+        if (__DEV__) {
+          log.warn('[Auth:Google] Native module unavailable — need a development build (not Expo Go)');
+        }
+        Alert.alert(t('common:error'), t('auth.googleNotConfigured'));
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        await googleModule.GoogleSignin.hasPlayServices();
+      }
+
+      const signInResult = await googleModule.GoogleSignin.signIn();
+
+      if (signInResult?.type === 'cancelled') {
+        if (__DEV__) log.debug('[Auth:Google] phase=user_cancelled (type field)');
+        return;
+      }
+
+      const idToken =
+        (signInResult as any)?.data?.idToken ??
+        (signInResult as any)?.idToken;
+
+      if (__DEV__) log.debug('[Auth:Google] phase=token_received, hasToken=', !!idToken);
 
       if (!idToken) {
+        if (__DEV__) log.error('[Auth:Google] signInResult keys:', Object.keys(signInResult ?? {}));
         throw new Error(t('auth.noIdTokenGoogle'));
       }
 
@@ -109,19 +224,31 @@ export default function AuthScreen() {
         token: idToken,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (__DEV__) log.error('[Auth:Google] phase=supabase_fail', error.message);
+        throw error;
+      }
 
-      await checkRoleAndNavigate();
+      if (__DEV__) log.debug('[Auth:Google] phase=supabase_ok');
+      await finishSignInAfterSession();
     } catch (error: any) {
       const code = error?.code ?? '';
-      if (code === 'SIGN_IN_CANCELLED' || code === '12501') {
+      if (
+        code === 'SIGN_IN_CANCELLED' ||
+        code === '12501' ||
+        code === 'ERR_REQUEST_CANCELED' ||
+        code === 'CANCELED'
+      ) {
+        if (__DEV__) log.debug('[Auth:Google] phase=user_cancelled');
         return;
       }
 
-      if (__DEV__) console.error('[Auth] Google sign-in error:', { code, message: error?.message });
+      if (__DEV__) log.error('[Auth:Google] phase=error', { code, message: error?.message });
 
       if (code === 'NETWORK_ERROR' || code === '7' || error?.message?.toLowerCase().includes('network')) {
         Alert.alert(t('common:error'), t('auth.googleNetworkError'));
+      } else if (code === 'DEVELOPER_ERROR' || code === '10') {
+        Alert.alert(t('common:error'), t('auth.googleConfigError'));
       } else {
         Alert.alert(t('common:error'), t('auth.googleFailed'));
       }
@@ -134,6 +261,10 @@ export default function AuthScreen() {
   //  APPLE SIGN-IN (Native)
   // ────────────────────────────────────────────────────
   const handleAppleSignIn = async () => {
+    if (!legalAccepted) {
+      Alert.alert(t('common:error'), t('auth.legalConsentRequired'));
+      return;
+    }
     try {
       setAppleLoading(true);
 
@@ -172,7 +303,7 @@ export default function AuthScreen() {
 
       if (error) throw error;
 
-      await checkRoleAndNavigate();
+      await finishSignInAfterSession();
     } catch (error: any) {
       const code = error?.code ?? '';
 
@@ -199,6 +330,10 @@ export default function AuthScreen() {
   //  first, falls back to sign-up automatically)
   // ────────────────────────────────────────────────────
   const handleEmailAuth = async () => {
+    if (!legalAccepted) {
+      Alert.alert(t('common:error'), t('auth.legalConsentRequired'));
+      return;
+    }
     if (!email.trim() || !password.trim()) {
       Alert.alert(t('common:error'), t('auth.enterEmailPassword'));
       return;
@@ -218,8 +353,7 @@ export default function AuthScreen() {
         });
 
       if (!signInError && signInData.session) {
-        // Existing user — proceed
-        await checkRoleAndNavigate();
+        await finishSignInAfterSession();
         return;
       }
 
@@ -228,10 +362,14 @@ export default function AuthScreen() {
         signInError &&
         signInError.message.toLowerCase().includes('invalid login credentials')
       ) {
+        const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
         const { data: signUpData, error: signUpError } =
           await supabase.auth.signUp({
             email: email.trim(),
             password,
+            options: siteUrl
+              ? { emailRedirectTo: siteUrl + '/auth/confirm' }
+              : undefined,
           });
 
         if (signUpError) {
@@ -241,26 +379,62 @@ export default function AuthScreen() {
 
         // Email confirmation required (no session returned)
         if (signUpData.user && !signUpData.session) {
-          Alert.alert(
-            t('auth.checkEmail'),
-            t('auth.confirmationSent'),
-          );
+          router.replace('/(onboarding)/verify-email');
           return;
         }
 
         if (signUpData.session) {
-          await checkRoleAndNavigate();
+          await finishSignInAfterSession();
         }
         return;
       }
 
       // 3. Any other sign-in error — show to user
       if (signInError) {
+        const low = signInError.message.toLowerCase();
+        if (
+          low.includes('email not confirmed') ||
+          low.includes('not confirmed')
+        ) {
+          Alert.alert(t('auth.verifyTitle'), t('auth.emailNotConfirmedBody'), [
+            { text: t('common:cancel'), style: 'cancel' },
+            {
+              text: t('auth.verifyResend'),
+              onPress: () => {
+                void supabase.auth.resend({
+                  type: 'signup',
+                  email: email.trim(),
+                });
+              },
+            },
+          ]);
+          return;
+        }
+        if (
+          low.includes('invalid refresh') ||
+          low.includes('jwt expired') ||
+          low.includes('session')
+        ) {
+          Alert.alert(t('common:error'), t('auth.sessionExpiredRecovery'));
+          return;
+        }
         Alert.alert(t('common:error'), signInError.message);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (__DEV__) console.error('[Auth] Email auth error:', err);
-      Alert.alert(t('common:error'), err.message || t('auth.somethingWentWrong'));
+      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      if (
+        msg.includes('invalid refresh') ||
+        msg.includes('jwt expired') ||
+        msg.includes('session')
+      ) {
+        Alert.alert(t('common:error'), t('auth.sessionExpiredRecovery'));
+        return;
+      }
+      Alert.alert(
+        t('common:error'),
+        err instanceof Error ? err.message : t('auth.somethingWentWrong'),
+      );
     } finally {
       setEmailLoading(false);
     }
@@ -286,17 +460,15 @@ export default function AuthScreen() {
         >
           {/* ── Header ── */}
           <Animated.View
-            entering={FadeInDown.delay(100).duration(500)}
+            entering={FadeInDown.delay(80).duration(500)}
             style={styles.headerSection}
           >
             <View style={styles.iconContainer}>
               <View style={styles.iconGlow} />
-              <Ionicons name="water" size={56} color={theme.colors.primary} />
+              <Ionicons name="water" size={52} color={theme.colors.primary} />
             </View>
             <Text style={styles.title}>{t('auth.title')}</Text>
-            <Text style={styles.subtitle}>
-              {t('auth.subtitle')}
-            </Text>
+            <Text style={styles.subtitle}>{t('auth.subtitle')}</Text>
           </Animated.View>
 
           {/* ── Social Buttons ── */}
@@ -304,41 +476,35 @@ export default function AuthScreen() {
             entering={FadeInDown.delay(200).duration(500)}
             style={styles.socialSection}
           >
-            {/* Google — white bg, black text */}
             <TouchableOpacity
               style={styles.googleButton}
               onPress={handleGoogleSignIn}
               disabled={isLoading}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               {googleLoading ? (
                 <ActivityIndicator size="small" color="#1A1A1A" />
               ) : (
                 <>
-                  <Ionicons name="logo-google" size={22} color="#4285F4" />
-                  <Text style={styles.googleButtonText}>
-                    {t('auth.continueWithGoogle')}
-                  </Text>
+                  <Ionicons name="logo-google" size={20} color="#4285F4" />
+                  <Text style={styles.googleButtonText}>{t('auth.continueWithGoogle')}</Text>
                 </>
               )}
             </TouchableOpacity>
 
-            {/* Apple — black bg, white border, iOS only */}
             {Platform.OS === 'ios' && (
               <TouchableOpacity
                 style={styles.appleButton}
                 onPress={handleAppleSignIn}
                 disabled={isLoading}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
                 {appleLoading ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
-                    <Text style={styles.appleButtonText}>
-                      {t('auth.continueWithApple')}
-                    </Text>
+                    <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+                    <Text style={styles.appleButtonText}>{t('auth.continueWithApple')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -357,7 +523,7 @@ export default function AuthScreen() {
 
           {/* ── Email / Password Form ── */}
           <Animated.View
-            entering={FadeInDown.delay(400).duration(500)}
+            entering={FadeInDown.delay(380).duration(500)}
             style={styles.form}
           >
             <View style={styles.inputContainer}>
@@ -410,46 +576,56 @@ export default function AuthScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Neutral helper text */}
-            <Text style={styles.authNote}>
-              {t('auth.authNote')}
-            </Text>
+            <Text style={styles.authNote}>{t('auth.authNote')}</Text>
 
-            {/* Primary CTA — neutral "NASTAVI" label */}
             <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                isLoading && { opacity: 0.6 },
-              ]}
+              style={[styles.primaryButton, isLoading && { opacity: 0.6 }]}
               onPress={handleEmailAuth}
               disabled={isLoading || !email.trim() || !password.trim()}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               <View style={styles.primaryButtonInner}>
                 {emailLoading ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={theme.colors.background}
-                  />
+                  <ActivityIndicator size="small" color={theme.colors.background} />
                 ) : (
                   <>
                     <Text style={styles.primaryButtonText}>{t('common:continue')}</Text>
-                    <Ionicons
-                      name="arrow-forward"
-                      size={20}
-                      color={theme.colors.background}
-                    />
+                    <Ionicons name="arrow-forward" size={20} color={theme.colors.background} />
                   </>
                 )}
               </View>
             </TouchableOpacity>
           </Animated.View>
 
-          {/* ── Footer ── */}
-          <Animated.View entering={FadeInDown.delay(500).duration(500)}>
-            <Text style={styles.footer}>
-              {t('auth.footer')}
+          {/* ── Legal footer — implicit consent pattern ── */}
+          <Animated.View
+            entering={FadeInDown.delay(480).duration(500)}
+            style={styles.footerLegal}
+          >
+            <Text style={styles.footerText}>
+              {t('auth.legalIntro')}{' '}
             </Text>
+            <View style={styles.footerLinksRow}>
+              {getTermsUrl() ? (
+                <TouchableOpacity
+                  onPress={() => openLegalUrl(getTermsUrl())}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <Text style={styles.footerLink}>{t('auth.termsLink')}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {getTermsUrl() && getPrivacyUrl() ? (
+                <Text style={styles.footerText}>{' '}{t('auth.legalSeparator')}{' '}</Text>
+              ) : null}
+              {getPrivacyUrl() ? (
+                <TouchableOpacity
+                  onPress={() => openLegalUrl(getPrivacyUrl())}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <Text style={styles.footerLink}>{t('auth.privacyLink')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -465,153 +641,153 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: theme.spacing.xl,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
   },
 
   // ── Header ──
   headerSection: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
+    marginBottom: 36,
   },
   iconContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+    marginBottom: 20,
     position: 'relative',
   },
   iconGlow: {
     position: 'absolute',
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: theme.colors.primary,
-    opacity: 0.25,
+    opacity: 0.20,
     ...theme.shadows.glow,
   },
   title: {
     ...fontStyles.heading,
-    fontSize: 26,
+    fontSize: 28,
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
+    marginBottom: 8,
+    letterSpacing: 0.2,
   },
   subtitle: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.base,
+    fontSize: 15,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
     textAlign: 'center',
+    lineHeight: 22,
   },
 
   // ── Social Buttons ──
   socialSection: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    gap: 12,
+    marginBottom: 24,
   },
-  // Google — white bg, black text
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 10,
     backgroundColor: '#FFFFFF',
-    borderRadius: theme.borderRadius.full,
-    paddingVertical: 16,
-    paddingHorizontal: theme.spacing.xl,
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 24,
   },
   googleButtonText: {
     ...fontStyles.bodySemiBold,
     color: '#1A1A1A',
-    fontSize: theme.typography.fontSize.base,
-    letterSpacing: 0.3,
+    fontSize: 15,
+    letterSpacing: 0.2,
   },
-  // Apple — pure black, white text, subtle border
   appleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    backgroundColor: '#000000',
-    borderRadius: theme.borderRadius.full,
-    paddingVertical: 16,
-    paddingHorizontal: theme.spacing.xl,
+    gap: 10,
+    backgroundColor: '#111111',
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.14)',
   },
   appleButtonText: {
     ...fontStyles.bodySemiBold,
     color: '#FFFFFF',
-    fontSize: theme.typography.fontSize.base,
-    letterSpacing: 0.3,
+    fontSize: 15,
+    letterSpacing: 0.2,
   },
 
   // ── Divider ──
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-    gap: theme.spacing.md,
+    marginBottom: 20,
+    gap: 12,
   },
   dividerLine: {
     flex: 1,
-    height: 1,
-    backgroundColor: theme.glass.border,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   dividerText: {
-    ...fontStyles.bodyMedium,
+    ...fontStyles.body,
     color: theme.colors.textTertiary,
-    fontSize: theme.typography.fontSize.sm,
-    letterSpacing: 0.5,
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 
   // ── Form ──
   form: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl,
+    gap: 12,
+    marginBottom: 28,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.glass.background,
-    borderRadius: theme.borderRadius.lg,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.glass.border,
-    paddingHorizontal: theme.spacing.md,
+    borderColor: 'rgba(255,255,255,0.10)',
+    paddingHorizontal: 16,
   },
   inputIcon: {
-    marginRight: theme.spacing.sm,
+    marginRight: 10,
   },
   input: {
     ...fontStyles.body,
     flex: 1,
-    paddingVertical: theme.spacing.md,
-    fontSize: theme.typography.fontSize.base,
+    paddingVertical: 15,
+    fontSize: 15,
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
-
-  // ── Auth note (replaces toggle link) ──
   authNote: {
     ...fontStyles.body,
     fontSize: 12,
     color: theme.colors.textTertiary,
     textAlign: 'center',
-    letterSpacing: 0.3,
-    marginTop: theme.spacing.sm,
+    letterSpacing: 0.2,
+    marginTop: 2,
   },
 
-  // ── Primary Button (solid teal, NO gradient) ──
+  // ── Primary Button ──
   primaryButton: {
     backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.full,
+    borderRadius: 14,
     overflow: 'hidden',
-    marginTop: theme.spacing.sm,
+    marginTop: 4,
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
+    shadowOpacity: 0.40,
+    shadowRadius: 18,
     elevation: 8,
   },
   primaryButtonInner: {
@@ -619,21 +795,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 18,
-    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: 17,
+    paddingHorizontal: 24,
   },
   primaryButtonText: {
     ...fontStyles.heading,
     color: '#000000',
-    fontSize: 18,
+    fontSize: 17,
+    letterSpacing: 0.3,
   },
 
-  // ── Footer ──
-  footer: {
+  // ── Legal footer — implicit consent ──
+  footerLegal: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 2,
+  },
+  footerText: {
     ...fontStyles.body,
+    fontSize: 11,
     color: theme.colors.textTertiary,
-    fontSize: theme.typography.fontSize.xs,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    lineHeight: 17,
+  },
+  footerLinksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerLink: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    textDecorationLine: 'underline',
+    letterSpacing: 0.2,
+    lineHeight: 17,
   },
 });
