@@ -3,12 +3,14 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/lib/use-language';
-import { Copy, Check, Smartphone, ExternalLink, AlertTriangle, Clock, UserX, Droplets } from 'lucide-react';
+import { Copy, Check, Smartphone, ExternalLink, AlertTriangle, Clock, UserX, Droplets, Download, ScanLine, Gift } from 'lucide-react';
 import Link from 'next/link';
 
 const REFERRAL_CODE_STORAGE_KEY = 'sweatdrop-referral-code';
 const REFERRAL_CODE_COOKIE_NAME = 'sd_ref';
 const COOKIE_MAX_AGE_DAYS = 30;
+const APP_STORE_URL = (process.env.NEXT_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/').trim();
+const GOOGLE_PLAY_URL = (process.env.NEXT_PUBLIC_GOOGLE_PLAY_URL || 'https://play.google.com/store').trim();
 
 interface ReferralPreview {
   status: 'valid' | 'expired' | 'used' | 'invalid';
@@ -44,6 +46,8 @@ function formatInviteMessage(
   if (gym) result = result.replace('{gym}', gym);
   return result;
 }
+
+const STEP_ICONS = [Download, ScanLine, Gift] as const;
 
 export const JoinInvite = memo(function JoinInvite({ code }: { code: string }) {
   const { t } = useLanguage();
@@ -203,6 +207,36 @@ export const JoinInvite = memo(function JoinInvite({ code }: { code: string }) {
           {jp.subtitle}
         </motion.p>
 
+        {/* How it works */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22 }}
+          className="w-full mb-8"
+        >
+          <p
+            className="text-xs text-text-3 uppercase tracking-widest mb-4"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {jp.howItWorksTitle}
+          </p>
+          <div className="flex flex-col gap-3">
+            {STEP_ICONS.map((StepIcon, i) => (
+              <div key={i} className="flex items-start gap-3 text-left">
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5"
+                  style={{ backgroundColor: `${accentColor}12`, border: `1px solid ${accentColor}20` }}
+                >
+                  <StepIcon className="w-4 h-4" style={{ color: accentColor }} />
+                </div>
+                <p className="text-sm text-text-2 leading-relaxed pt-1">
+                  {jp.steps[i].label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Invite code card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
@@ -283,7 +317,9 @@ export const JoinInvite = memo(function JoinInvite({ code }: { code: string }) {
           className="flex gap-3 w-full mb-6"
         >
           <a
-            href="#"
+            href={APP_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl border border-border-medium bg-bg-card text-text text-sm font-semibold transition-all hover:bg-bg-card-hover hover:border-border-strong"
             style={{ fontFamily: 'var(--font-body)' }}
           >
@@ -291,7 +327,9 @@ export const JoinInvite = memo(function JoinInvite({ code }: { code: string }) {
             {jp.appStore}
           </a>
           <a
-            href="#"
+            href={GOOGLE_PLAY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl border border-border-medium bg-bg-card text-text text-sm font-semibold transition-all hover:bg-bg-card-hover hover:border-border-strong"
             style={{ fontFamily: 'var(--font-body)' }}
           >
