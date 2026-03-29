@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 
 // Keep splash screen visible while we determine the initial route
 SplashScreen.preventAutoHideAsync();
@@ -42,6 +43,8 @@ export default function Index() {
 
         if (!session) {
           router.replace('/(onboarding)/welcome');
+        } else if (shouldRequireEmailVerification(session?.user)) {
+          router.replace('/(onboarding)/verify-email');
         } else if (onboardingStep !== 'done') {
           // Resume onboarding at the correct step
           switch (onboardingStep) {

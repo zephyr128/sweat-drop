@@ -64,6 +64,7 @@
   "securitySessionTooShort": "Drops were not awarded because workout was too short. Keep the session active longer.",
   "securityNoDropsAwarded": "Drops were not awarded for this workout due to safety or limit rules.",
   "happyHourBadge": "Happy Hour x{{multiplier}}",
+  "happyHourBadgeBonus": "x{{multiplier}} Happy Hour — bonus at end!",
   "trackingOnly": "Tracking only — daily limit reached",
   "exerciseCompleted": "Exercise completed!",
   "nextExercise": "Next exercise",
@@ -99,6 +100,8 @@
     "softSessionInfo": "Nice — {{count}} sessions today! You've earned {{earned}} drops so far. Keep it up!",
     "reducedTierApplied": "Reduced earning mode was applied after session threshold. Keep training — every rep counts!",
     "dayCapReached": "Daily limit reached — you earned {{earned}} drops today. Come back tomorrow!",
-    "weekCapReached": "Weekly limit reached — you earned {{earned}} drops this week. New week, new drops!"
+    "weekCapReached": "Weekly limit reached — you earned {{earned}} drops this week. New week, new drops!",
+    "happyHourBoost": "Happy Hour Bonus!",
+    "happyHourBreakdown": "Base: {{base}} → x{{multiplier}} → {{total}} drops"
   }
 }

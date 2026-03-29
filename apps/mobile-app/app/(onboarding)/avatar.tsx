@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -15,6 +15,7 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { theme, fontStyles } from '@/lib/theme';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
+import { OnboardingProgress } from '@/components/OnboardingProgress';
 
 const AVATARS = [
   '🔥', '💧', '⚡', '🦁',
@@ -22,58 +23,25 @@ const AVATARS = [
   '💎', '👑', '🏔️', '🌊',
 ];
 
-// ── Onboarding Progress Indicator ──
-function OnboardingProgress({
-  current,
-  total,
-}: {
-  current: number;
-  total: number;
-}) {
-  return (
-    <View style={progressStyles.container}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            progressStyles.dot,
-            {
-              width: i === current - 1 ? 24 : 8,
-              backgroundColor:
-                i < current
-                  ? theme.colors.primary
-                  : 'rgba(255,255,255,0.12)',
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
-const progressStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-  dot: {
-    height: 3,
-    borderRadius: 2,
-  },
-});
-
 export default function AvatarScreen() {
   const router = useRouter();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEdit = edit === 'true';
   const { t } = useTranslation('onboarding');
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
+  const profile = useAuthStore((s) => s.profile);
 
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(
+    isEdit && profile?.avatar_url ? profile.avatar_url : null,
+  );
   const [loading, setLoading] = useState(false);
 
   const navigateNext = () => {
+    if (isEdit) {
+      router.back();
+      return;
+    }
     if (PUSH_NOTIFICATIONS_ENABLED) {
       setOnboardingStep('notifications');
       router.replace('/(onboarding)/notifications');
@@ -93,7 +61,6 @@ export default function AvatarScreen() {
     if (result.success) {
       navigateNext();
     } else {
-      // Non-critical — continue anyway
       console.warn('[Avatar] Failed to save avatar:', result.error);
       navigateNext();
     }
@@ -113,8 +80,14 @@ export default function AvatarScreen() {
       />
 
       <View style={styles.content}>
-        {/* Progress indicator */}
-        <OnboardingProgress current={2} total={3} />
+        {/* Progress indicator — hidden in edit mode */}
+        {!isEdit && <OnboardingProgress current={2} total={3} />}
+
+        {isEdit && (
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+        )}
 
         {/* Selected Preview */}
         <Animated.View
@@ -204,9 +177,11 @@ export default function AvatarScreen() {
                 />
               ) : (
                 <>
-                  <Text style={styles.buttonText}>{t('common:continue')}</Text>
+                  <Text style={styles.buttonText}>
+                    {isEdit ? (t('common:save') || 'Save') : t('common:continue')}
+                  </Text>
                   <Ionicons
-                    name="arrow-forward"
+                    name={isEdit ? 'checkmark' : 'arrow-forward'}
                     size={20}
                     color={theme.colors.background}
                   />
@@ -215,16 +190,17 @@ export default function AvatarScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Skip */}
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleSkip}
-            disabled={loading}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.secondaryButtonText}>{t('common:skip')}</Text>
-
-          </TouchableOpacity>
+          {/* Skip — hidden in edit mode */}
+          {!isEdit && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleSkip}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.secondaryButtonText}>{t('common:skip')}</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </View>
     </SafeAreaView>
@@ -241,6 +217,14 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  backButton: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    padding: 8,
+    zIndex: 10,
   },
 
   // ── Preview ──

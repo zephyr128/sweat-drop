@@ -23,8 +23,13 @@ const POLL_INTERVAL_MS = 60_000;
 /**
  * Checks whether Happy Hour is active for the given gym.
  * Polls every 60s while mounted. Returns EMPTY when no gym.
+ * When machineType is provided, the backend filters rules by machine type
+ * so the badge only shows when the boost applies to the current machine.
  */
-export function useHappyHour(gymId: string | null | undefined) {
+export function useHappyHour(
+  gymId: string | null | undefined,
+  machineType?: string | null,
+) {
   const [info, setInfo] = useState<HappyHourInfo>(EMPTY);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -34,9 +39,11 @@ export function useHappyHour(gymId: string | null | undefined) {
       return;
     }
     try {
-      const { data, error } = await supabase.rpc('get_active_drop_boost', {
-        p_gym_id: gymId,
-      });
+      const rpcParams: Record<string, string> = { p_gym_id: gymId };
+      if (machineType) {
+        rpcParams.p_machine_type = machineType;
+      }
+      const { data, error } = await supabase.rpc('get_active_drop_boost', rpcParams);
 
       if (error) {
         log.warn('[HappyHour] RPC error:', error.message);
@@ -58,7 +65,7 @@ export function useHappyHour(gymId: string | null | undefined) {
     } catch (err) {
       log.warn('[HappyHour] fetch error:', err);
     }
-  }, [gymId]);
+  }, [gymId, machineType]);
 
   useEffect(() => {
     fetch();

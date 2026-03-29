@@ -217,6 +217,22 @@ export function getContrastColor(hex: string): string {
   return luminance > 0.55 ? '#000000' : '#FFFFFF';
 }
 
+/** Convert hex color to rgba string. Shared across all screens. */
+export function hexToRgba(hex: string, alpha: number): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(128, 128, 128, ${alpha})`;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Glass card presets for consistent styling
+export const glassCard = {
+  bg: 'rgba(18, 18, 28, 0.78)' as const,
+  blur: 40 as const,
+} as const;
+
 // Export individual color values for convenience
 export const colors = theme.colors;
 export const spacing = theme.spacing;

@@ -18,48 +18,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { theme, fontStyles } from '@/lib/theme';
-
-// ── Onboarding Progress Indicator ──
-function OnboardingProgress({
-  current,
-  total,
-}: {
-  current: number;
-  total: number;
-}) {
-  return (
-    <View style={progressStyles.container}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            progressStyles.dot,
-            {
-              width: i === current - 1 ? 24 : 8,
-              backgroundColor:
-                i < current
-                  ? theme.colors.primary
-                  : 'rgba(255,255,255,0.12)',
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
-const progressStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-  dot: {
-    height: 3,
-    borderRadius: 2,
-  },
-});
+import { OnboardingProgress } from '@/components/OnboardingProgress';
 
 export default function DisplayNameScreen() {
   const router = useRouter();

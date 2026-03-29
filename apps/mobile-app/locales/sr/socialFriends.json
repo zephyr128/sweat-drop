@@ -1,0 +1,57 @@
+{
+  "inviteTitle": "Pozovi prijatelja",
+  "signInRequired": "Prijavi se da koristiš ovu funkciju.",
+  "backendUnavailableTitle": "Još nije dostupno",
+  "backendUnavailableBody": "Pozivnice prijatelja još nisu uključene na ovom serveru. Pokušaj ponovo posle ažuriranja aplikacije.",
+  "partialBackendHint": "Deo podataka o pozivnicama nije učitan. Povuci za osveženje posle ažuriranja.",
+
+  "howItWorks": "Kako funkcioniše",
+  "howStep1Title": "Podeli svoj pozivni link",
+  "howStep1Desc": "Pošalji link prijatelju — može direktno da se pridruži",
+  "howStep2Title": "Prijatelj se registruje",
+  "howStep2Desc": "Registruje se i izabere tvoju teretanu",
+  "howStep3Title": "Prijatelj se prijavi u teretani",
+  "howStep3Desc": "Skenira QR kod za prvi verifikovani check-in",
+  "howStep4Title": "Oboje dobijate nagradu",
+  "howStep4Desc": "Ti dobijaš +150 kapi, prijatelj +100 kapi!",
+
+  "heroBonusLabel": "Ti +150 · Prijatelj +100 kapi",
+  "yourCode": "Tvoj pozivni link",
+  "shareInvite": "Podeli pozivni link",
+  "shareMessage": "Pridruži mi se na SweatDrop! {{url}} — Treniraj, osvajaj kapi i menjaj ih za nagrade u teretani. Koristi moj kod: {{code}}",
+  "copyLink": "Kopiraj link",
+  "copyCode": "Kopiraj kod",
+  "copied": "Kopirano!",
+
+  "monthlyCapTitle": "Mesečne isplate nagrada",
+  "monthlyCapDesc": "{{rewarded}} od {{max}} nagrađenih ovog meseca",
+
+  "applySection": "Imaš kod prijatelja?",
+  "applyPlaceholder": "Unesi kod prijatelja",
+  "applyCta": "Primeni kod",
+  "applyEmpty": "Prvo unesi kod.",
+  "gymRequired": "Prvo izaberi aktivnu teretanu.",
+  "applySuccess": "Kod je uspešno primenjen!",
+  "applyFailed": "Kod nije mogao da se primeni",
+
+  "deepLinkTitle": "Pozivni kod",
+  "deepLinkConfirm": "Primeni pozivni kod \"{{code}}\" za {{gym}}?",
+
+  "statusSection": "Tvoji pozivi",
+  "emptyTitle": "Još nema poziva",
+  "emptyDesc": "Podeli svoj link sa prijateljima da zajedno osvajate bonus kapi.",
+
+  "faqTitle": "Česta pitanja",
+  "faq1Q": "Kada dobijam nagradu?",
+  "faq1A": "Dobijaš +150 kapi kada tvoj prijatelj odradi prvi verifikovani check-in u teretani.",
+  "faq2Q": "Postoji li limit?",
+  "faq2A": "Možeš pozvati neograničen broj prijatelja, ali nagrade su ograničene na 5 mesečno.",
+  "faq3Q": "Šta dobija moj prijatelj?",
+  "faq3A": "Tvoj prijatelj dobija +100 bonus kapi posle prvog check-in-a — oboje dobijate!",
+
+  "loadError": "Podaci nisu učitani",
+  "statePending": "Na čekanju",
+  "stateDone": "Gotovo",
+  "stateFailed": "Neuspešno",
+  "stateInfo": "Info"
+}

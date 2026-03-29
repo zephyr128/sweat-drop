@@ -46,9 +46,10 @@ import {
   estimateStepsPerMinuteFromSpeed,
 } from '@/lib/ble-ftms';
 import {
-  parseSimulatorProfile,
+  parseSimulatorDescriptor,
   startWorkoutSimulator,
   type WorkoutSimulatorHandle,
+  type WorkoutSimulatorDescriptor,
   type WorkoutSimulatorProfile,
 } from '@/lib/workout/workout-simulator';
 
@@ -126,6 +127,7 @@ export class BLEService {
   private onReconnectCallback: (() => Promise<boolean>) | null = null;
   private onStatusCallback: ((status: string) => void) | null = null; // UI status callback
   private simulatorProfile: WorkoutSimulatorProfile | null = null;
+  private simulatorDescriptor: WorkoutSimulatorDescriptor | null = null;
   private simulatorHandle: WorkoutSimulatorHandle | null = null;
 
   // ── FTMS Protocol Support ──
@@ -303,16 +305,17 @@ export class BLEService {
    */
   async connectToDevice(sensorId: string): Promise<boolean> {
     try {
-      const simulatorProfile = parseSimulatorProfile(sensorId);
-      if (simulatorProfile) {
-        this.simulatorProfile = simulatorProfile;
-        this.device = `sim:${simulatorProfile}`;
-        this.deviceId = `sim:${simulatorProfile}`;
+      const simulator = parseSimulatorDescriptor(sensorId);
+      if (simulator) {
+        this.simulatorDescriptor = simulator;
+        this.simulatorProfile = simulator.profile;
+        this.device = sensorId;
+        this.deviceId = sensorId;
         this.isConnected = true;
-        this.activeProtocol = 'csc';
+        this.activeProtocol = simulator.profile === 'custom' ? 'ftms' : 'csc';
         this.lastMeasurementTime = Date.now();
-        this.emitStatus(`Simulator connected (${simulatorProfile})`);
-        log.debug(`[BLE] Using simulator profile: ${simulatorProfile}`);
+        this.emitStatus(`Simulator connected (${simulator.profile})`);
+        log.debug(`[BLE] Using simulator profile: ${simulator.profile}`);
         return true;
       }
 
@@ -717,6 +720,7 @@ export class BLEService {
       if (this.simulatorProfile) {
         this.simulatorHandle = startWorkoutSimulator({
           profile: this.simulatorProfile,
+          customConfig: this.simulatorDescriptor?.customConfig,
           onMeasurement: (measurement) => {
             this.lastMeasurementTime = Date.now();
             this.emitStatus('Signal OK');
@@ -1211,6 +1215,7 @@ export class BLEService {
           this.simulatorHandle?.stop();
           this.simulatorHandle = startWorkoutSimulator({
             profile: this.simulatorProfile,
+            customConfig: this.simulatorDescriptor?.customConfig,
             onMeasurement: (measurement) => {
               this.lastMeasurementTime = Date.now();
               this.emitStatus('Signal OK');
@@ -1675,6 +1680,7 @@ export class BLEService {
       this.syntheticCrankCounter = 0;
       this.ftmsNotificationSubscriptions = [];
       this.simulatorProfile = null;
+      this.simulatorDescriptor = null;
       this.simulatorHandle = null;
       
       log.debug('[BLE] Disconnected from device');

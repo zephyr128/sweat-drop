@@ -19,39 +19,7 @@ import {
   registerForPushNotifications,
 } from '@/lib/notifications';
 import { theme, fontStyles } from '@/lib/theme';
-
-// ── Onboarding Progress Indicator ──
-function OnboardingProgress({
-  current,
-  total,
-}: {
-  current: number;
-  total: number;
-}) {
-  return (
-    <View style={{
-      flexDirection: 'row',
-      gap: 6,
-      justifyContent: 'center',
-      marginBottom: 32,
-    }}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            height: 3,
-            width: i === current - 1 ? 24 : 8,
-            borderRadius: 2,
-            backgroundColor:
-              i < current
-                ? theme.colors.primary
-                : 'rgba(255,255,255,0.12)',
-          }}
-        />
-      ))}
-    </View>
-  );
-}
+import { OnboardingProgress } from '@/components/OnboardingProgress';
 
 export default function NotificationsScreen() {
   const router = useRouter();

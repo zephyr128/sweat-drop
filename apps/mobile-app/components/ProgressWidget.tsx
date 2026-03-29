@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,37 +9,27 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles } from '@/lib/theme';
+import { fontStyles } from '@/lib/theme';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_PADDING = 16; // Horizontal padding of ScrollView
-const BOTTOM_CARDS_GAP = 16;
-const BOTTOM_CARD_WIDTH = (SCREEN_WIDTH - (CARD_PADDING * 2) - BOTTOM_CARDS_GAP) / 2;
-const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP;
-const CHALLENGE_CARD_WIDTH = SMARTCOACH_CARD_WIDTH;
-
-// Helper function to add alpha to hex color
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return hex;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
 }
 
 export const ProgressWidget: React.FC = () => {
   const { t } = useTranslation('home');
+  const router = useRouter();
   const branding = useBranding();
   const { globalAchievements, gymChallenges } = useAllBadges();
   const { badges: earnedBadges } = useUserBadges();
   const { progress: userProgress } = useUserProgress();
 
-  // Find the next closest badge (not earned, with highest progress)
   const nextBadge = useMemo(() => {
     const allBadges = [
       ...globalAchievements.map((a) => ({
@@ -71,145 +61,180 @@ export const ProgressWidget: React.FC = () => {
       })
       .filter((b) => !b.isCompleted && b.progressPercent < 100)
       .sort((a, b) => {
-        const progressDiff = b.progressPercent - a.progressPercent;
-        if (progressDiff !== 0) return progressDiff;
-        return a.display_order - b.display_order;
+        const diff = b.progressPercent - a.progressPercent;
+        return diff !== 0 ? diff : a.display_order - b.display_order;
       });
 
     return unearnedBadges[0] || null;
   }, [globalAchievements, gymChallenges, userProgress, earnedBadges]);
 
-  const progressPercent = nextBadge?.progressPercent || 0;
+  const progressPercent = nextBadge?.progressPercent ?? 0;
 
-  // Always call hooks in the same order (no early return before hooks)
-  const progressStyle = useAnimatedStyle(() => {
-    return {
-      width: withTiming(`${progressPercent}%`, {
-        duration: 500,
-        easing: Easing.out(Easing.ease),
-      }),
-    };
-  });
+  // Hook must be called unconditionally
+  const progressStyle = useAnimatedStyle(() => ({
+    width: withTiming(`${progressPercent}%` as any, {
+      duration: 800,
+      easing: Easing.out(Easing.cubic),
+    }),
+  }));
 
-  // Early return after all hooks are called
-  if (!nextBadge) {
-    return null; // All badges earned or no badges available
-  }
+  if (!nextBadge) return null;
+
+  const pct = Math.round(progressPercent);
 
   return (
-    <View style={[styles.wrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-      <View
-        style={[
-          styles.container,
-          {
-            borderColor: hexToRgba(branding.primary, 0.3),
-          },
-        ]}
-      >
-        <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+    <TouchableOpacity
+      style={styles.outer}
+      onPress={() => router.push('/trophy-room')}
+      activeOpacity={0.85}
+    >
+      <BlurView intensity={50} tint="dark" style={styles.blur}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradient}
+        >
+          {/* Circular badge */}
+          <View style={styles.imageWrap}>
+            {nextBadge.badge_image_url ? (
+              <Image
+                source={{ uri: nextBadge.badge_image_url }}
+                style={styles.badgeImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.18) }]}>
+                <Ionicons name="ribbon" size={28} color={branding.primary} />
+              </View>
+            )}
+          </View>
+
+          {/* Content */}
           <View style={styles.content}>
-            <View style={styles.header}>
-              {nextBadge.badge_image_url ? (
-                <Image source={{ uri: nextBadge.badge_image_url }} style={styles.badgeIcon} />
-              ) : (
-                <View style={[styles.badgeIconPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="ribbon" size={18} color={branding.primary} />
-                </View>
-              )}
-              <View style={styles.headerText}>
-                <Text style={[styles.title, { color: branding.primary }]}>
-                  {t('nextBadge')}
-                </Text>
-                <Text style={styles.badgeName} numberOfLines={1}>
-                  {nextBadge.name}
-                </Text>
+            <View style={styles.topRow}>
+              <Text style={styles.categoryLabel}>
+                {t('nextBadge').toUpperCase()}
+              </Text>
+              <View style={[styles.pctPill, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                <Text style={[styles.pctText, { color: branding.primary }]}>{pct}%</Text>
               </View>
             </View>
 
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { backgroundColor: hexToRgba(branding.primary, 0.2) }]}>
-                <Animated.View style={progressStyle}>
+            <Text style={styles.badgeName} numberOfLines={1}>{nextBadge.name}</Text>
+
+            <View style={styles.barTrack}>
+              <View style={styles.barBg}>
+                <Animated.View style={[styles.barFillWrap, progressStyle]}>
                   <LinearGradient
-                    colors={[branding.primary, branding.primaryDark]}
+                    colors={[branding.primary, branding.primaryDark ?? branding.primary]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={styles.progressFill}
+                    style={styles.barFill}
                   />
                 </Animated.View>
               </View>
-              <Text style={styles.progressText}>{Math.round(progressPercent)}%</Text>
             </View>
           </View>
-        </BlurView>
-      </View>
-    </View>
+
+          <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.25)" style={styles.chevron} />
+        </LinearGradient>
+      </BlurView>
+    </TouchableOpacity>
   );
 };
 
+const BADGE_SIZE = 52;
+
 const styles = StyleSheet.create({
-  wrapper: {},
-  container: {
-    borderRadius: 20,
-    overflow: 'hidden',
+  outer: {
+    borderRadius: 18,
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  cardBlur: {
-    borderRadius: 20,
-    padding: theme.spacing.md,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
+    marginBottom: 24,
   },
-  content: {
-    gap: theme.spacing.md,
+  blur: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
-  header: {
+  gradient: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    padding: 16,
+    gap: 14,
   },
-  headerText: {
-    flex: 1,
-    gap: 2,
+
+  imageWrap: {
+    flexShrink: 0,
   },
-  badgeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+  badgeImage: {
+    width: BADGE_SIZE,
+    height: BADGE_SIZE,
+    borderRadius: BADGE_SIZE / 2,
   },
-  badgeIconPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+  badgePlaceholder: {
+    width: BADGE_SIZE,
+    height: BADGE_SIZE,
+    borderRadius: BADGE_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
+
+  content: {
+    flex: 1,
+    gap: 5,
+    minWidth: 0,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoryLabel: {
     ...fontStyles.heading,
-    fontSize: 13,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: 'rgba(255,255,255,0.45)',
+  },
+  pctPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pctText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
     letterSpacing: 0.3,
   },
   badgeName: {
     ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.text,
-    letterSpacing: 0.3,
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
-  progressContainer: {
-    gap: theme.spacing.xs,
+
+  barTrack: {
+    marginTop: 2,
   },
-  progressBar: {
-    height: 6,
+  barBg: {
+    height: 5,
     borderRadius: 3,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  progressFill: {
+  barFillWrap: {
+    height: '100%',
+  },
+  barFill: {
     height: '100%',
     borderRadius: 3,
   },
-  progressText: {
-    ...fontStyles.bodyMedium,
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
+
+  chevron: {
+    flexShrink: 0,
   },
 });

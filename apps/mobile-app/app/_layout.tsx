@@ -1,3 +1,6 @@
+import { initSentry } from '@/lib/sentry';
+initSentry();
+
 import '@/lib/i18n'; // Initialize i18n before anything else
 import { Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -34,6 +37,7 @@ import {
 } from '@/lib/notifications';
 import { log } from '@/lib/logger';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Configure notification handler OUTSIDE of component (must run before any notification arrives)
 if (PUSH_NOTIFICATIONS_ENABLED) {
@@ -118,6 +122,7 @@ function StackNavigator() {
       <Stack.Screen name="gyms" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
+      <Stack.Screen name="settings" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
@@ -274,10 +279,12 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <GymDataInitializer />
-      <StackNavigator />
-      <StatusBar style="light" />
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <GymDataInitializer />
+        <StackNavigator />
+        <StatusBar style="light" />
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

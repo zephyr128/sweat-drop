@@ -1,0 +1,38 @@
+{
+  "title": "MOJE STATISTIKE",
+  "totalDrops": "UKUPNO DROPS",
+  "rank": "Rang",
+  "streak": "Streak",
+  "sessions": "Sesije",
+  "time": "Vreme",
+  "dropsBreakdown": "DROPS PREGLED",
+  "dropsOrigin": "POREKLO DROPS",
+  "streakHistory": "STREAK ISTORIJA",
+  "thisWeek": "Ova nedelja",
+  "days": "dana",
+  "machines": "SPRAVE",
+  "sessionCount_one": "sesija",
+  "sessionCount_other": "sesija",
+  "avg": "prosek",
+  "achievements": "DOSTIGNUĆA",
+  "bestSession": "Najbolja sesija",
+  "bestStreak": "Najbolji streak",
+  "happyHours": "Happy Hours",
+  "used": "iskorišćeno",
+  "challengesDone": "Izazovi",
+  "completed": "završeno",
+  "myGym": "Moja teretana",
+  "global": "Globalno",
+  "period": {
+    "today": "Danas",
+    "week": "Ova nedelja",
+    "month": "Ovaj mesec",
+    "all": "Sve vreme"
+  },
+  "origin": {
+    "workout": "Workout",
+    "challenges": "Izazovi",
+    "checkin": "Check-in",
+    "bonuses": "Bonusi"
+  }
+}

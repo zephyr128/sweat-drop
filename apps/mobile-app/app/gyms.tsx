@@ -21,6 +21,7 @@ import { useGymStore, Gym } from '@/lib/stores/useGymStore';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { theme as baseTheme, fontStyles } from '@/lib/theme';
+import { shouldRetryGymsWithoutColumnFilter } from '@/lib/mobileGymListing';
 
 function hexToRgba(hex: string, alpha: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -138,17 +139,43 @@ export default function GymsScreen() {
   const branding = useBranding();
   const { gyms, setGyms, homeGymId, setLoading, isLoading, setActiveGym, setPreviewGymId } = useGymStore();
   const [localLoading, setLocalLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadGyms = useCallback(async () => {
     setLocalLoading(true);
     setLoading(true);
+    setLoadError(null);
     try {
-      const { data: gymsData, error } = await supabase
-        .from('gyms')
-        .select('*')
-        .order('name', { ascending: true });
+      let gymsData: Gym[] | null = null;
 
-      if (error) throw error;
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'get_public_gyms_for_mobile',
+      );
+
+      if (!rpcError && rpcData) {
+        gymsData = rpcData as Gym[];
+      } else {
+        if (__DEV__ && rpcError) {
+          console.warn('[Gyms] get_public_gyms_for_mobile:', rpcError.message);
+        }
+        const filtered = await supabase
+          .from('gyms')
+          .select('*')
+          .eq('is_mobile_listed', true)
+          .order('name', { ascending: true });
+        let tableError = filtered.error;
+        gymsData = filtered.data;
+        if (shouldRetryGymsWithoutColumnFilter(tableError)) {
+          const fallback = await supabase
+            .from('gyms')
+            .select('*')
+            .order('name', { ascending: true });
+          gymsData = fallback.data;
+          tableError = fallback.error;
+        }
+        if (tableError) throw tableError;
+      }
+
       if (!gymsData) {
         setGyms([]);
         setLoading(false);
@@ -193,11 +220,14 @@ export default function GymsScreen() {
       setGyms(gymsWithBranding);
     } catch (error) {
       console.error('Error loading gyms:', error);
+      const message =
+        error instanceof Error ? error.message : t('load_failed');
+      setLoadError(message);
     } finally {
       setLoading(false);
       setLocalLoading(false);
     }
-  }, []);
+  }, [t, setGyms, setLoading]);
 
   useEffect(() => {
     loadGyms();
@@ -301,6 +331,18 @@ export default function GymsScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={branding.primary} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="cloud-offline-outline" size={48} color={baseTheme.colors.textSecondary} />
+          <Text style={styles.emptyText}>{t('load_failed')}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { borderColor: hexToRgba(branding.primary, 0.35) }]}
+            onPress={() => loadGyms()}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.retryButtonText, { color: branding.primary }]}>{t('retry')}</Text>
+          </TouchableOpacity>
         </View>
       ) : gyms.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -431,6 +473,19 @@ const styles = StyleSheet.create({
     ...fontStyles.heading,
     fontSize: 22,
     color: baseTheme.colors.text,
+    textAlign: 'center',
+    paddingHorizontal: baseTheme.spacing.lg,
+  },
+  retryButton: {
+    marginTop: baseTheme.spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: baseTheme.spacing.xl,
+    borderRadius: baseTheme.borderRadius.full,
+    borderWidth: 1,
+  },
+  retryButtonText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
   },
 
   // Gym card

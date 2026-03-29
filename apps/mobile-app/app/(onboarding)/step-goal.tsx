@@ -39,7 +39,7 @@ export default function StepGoalScreen() {
     const result = await submit();
     if (result.success) {
       if (isEdit) {
-        router.replace('/profile');
+        router.replace('/settings');
       } else {
         setOnboardingStep('done');
         router.replace('/(onboarding)/home-gym');
@@ -57,7 +57,7 @@ export default function StepGoalScreen() {
       onNext={handleFinish}
       onBack={() => router.back()}
       nextDisabled={!data.fitness_goal}
-      nextLabel={`${t('profileSetup.finish')} ✓`}
+      nextLabel={t('profileSetup.finish')}
       isEdit={isEdit}
     >
       <View style={styles.grid}>

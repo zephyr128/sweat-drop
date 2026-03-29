@@ -58,7 +58,12 @@
     "confirmationSent": "Poslali smo ti link za potvrdu. Klikni na link u email-u i pokušaj ponovo da se prijaviš.",
     "somethingWentWrong": "Nešto je pošlo naopako",
     "accessDenied": "Pristup odbijen",
-    "adminNotAllowed": "Admin nalozi ne mogu koristiti mobilnu aplikaciju. Koristi korisnički nalog."
+    "adminNotAllowed": "Admin nalozi ne mogu koristiti mobilnu aplikaciju. Koristi korisnički nalog.",
+    "forgotPassword": "Zaboravljena lozinka?",
+    "resetPassword": "Resetuj lozinku",
+    "sendResetLink": "Pošalji link za reset",
+    "resetEmailSent": "Proverite email za link za resetovanje lozinke.",
+    "backToSignIn": "Nazad na prijavu"
   },
   "stepper": {
     "title": "Kako funkcioniše",
@@ -93,12 +98,13 @@
   "profileSetup": {
     "skip": "Preskoči",
     "next": "DALJE",
-    "finish": "ZAVRŠI",
+    "finish": "ZAVRŠI ✓",
     "stepOf": "Korak {{step}} od {{total}}",
     "gender": {
       "title": "KOJI SI POL?",
       "male": "MUŠKI",
-      "female": "ŽENSKI"
+      "female": "ŽENSKI",
+      "other": "DRUGO"
     },
     "weight": {
       "title": "KOLIKO IMAŠ KILOGRAMA?",

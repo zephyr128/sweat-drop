@@ -56,6 +56,10 @@ function formatStartsIn(minutes: number, t: (key: string, opts?: Record<string, 
   return t('happyHours:startsInDay', { count: days });
 }
 
+const GOLD = '#FFD700';
+const GOLD_DIM = 'rgba(255, 215, 0, 0.55)';
+const GLASS_BG = 'rgba(18, 18, 28, 0.80)';
+
 const OFFSET_OPTIONS = [30, 10, 0] as const;
 
 export default function HappyHoursScreen() {
@@ -131,9 +135,11 @@ export default function HappyHoursScreen() {
         >
           {/* Explanation card */}
           <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-            <View style={[styles.explainCard, { borderColor: hexToRgba('#FFD700', 0.12) }]}>
-              <BlurView intensity={35} tint="dark" style={[styles.explainBlur, { backgroundColor: 'rgba(30, 28, 15, 0.70)' }]}>
-                <Text style={styles.explainEmoji}>⚡</Text>
+            <View style={[styles.explainCard, { borderColor: hexToRgba('#FFD700', 0.18) }]}>
+              <BlurView intensity={50} tint="dark" style={styles.explainBlur}>
+                <View style={styles.explainIconWrap}>
+                  <Ionicons name="flash" size={22} color={GOLD} />
+                </View>
                 <Text style={styles.explainTitle}>{t('whatIsTitle')}</Text>
                 <Text style={styles.explainBody}>{t('whatIsBody')}</Text>
               </BlurView>
@@ -144,7 +150,7 @@ export default function HappyHoursScreen() {
           {liveWindow && (
             <Animated.View entering={FadeInDown.delay(150).duration(400)}>
               <View style={[styles.liveCard, { borderColor: hexToRgba('#FFD700', 0.35) }]}>
-                <BlurView intensity={45} tint="dark" style={[styles.liveBlur, { backgroundColor: 'rgba(40, 35, 10, 0.80)' }]}>
+                <BlurView intensity={50} tint="dark" style={styles.liveBlur}>
                   <View style={styles.liveHeader}>
                     <View style={styles.livePill}>
                       <View style={styles.liveDot} />
@@ -167,15 +173,15 @@ export default function HappyHoursScreen() {
             {loading && windows.length === 0 ? (
               <ActivityIndicator color={branding.primary} style={{ marginTop: 24 }} />
             ) : windows.length === 0 ? (
-              <View style={[styles.emptyCard, { borderColor: hexToRgba('#FFD700', 0.08) }]}>
-                <BlurView intensity={30} tint="dark" style={[styles.emptyBlur, { backgroundColor: 'rgba(30, 28, 15, 0.60)' }]}>
+              <View style={[styles.emptyCard, { borderColor: 'rgba(255,255,255,0.08)' }]}>
+                <BlurView intensity={50} tint="dark" style={styles.emptyBlur}>
                   <Ionicons name="flash-off-outline" size={28} color="rgba(255, 215, 0, 0.3)" />
                   <Text style={styles.emptyText}>{t('noUpcoming')}</Text>
                 </BlurView>
               </View>
             ) : (
-              <View style={[styles.listCard, { borderColor: hexToRgba('#FFD700', 0.10) }]}>
-                <BlurView intensity={35} tint="dark" style={[styles.listBlur, { backgroundColor: 'rgba(25, 24, 15, 0.65)' }]}>
+              <View style={[styles.listCard, { borderColor: hexToRgba('#FFD700', 0.15) }]}>
+                <BlurView intensity={50} tint="dark" style={styles.listBlur}>
                   {windows.map((w, i) => {
                     const isLive = new Date(w.startAt) <= now && new Date(w.endAt) > now;
                     return (
@@ -207,8 +213,8 @@ export default function HappyHoursScreen() {
           {/* Reminder settings */}
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
             <Text style={styles.sectionTitle}>{t('remindersTitle')}</Text>
-            <View style={[styles.settingsCard, { borderColor: hexToRgba(branding.primary, 0.10) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.settingsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.70)' }]}>
+            <View style={[styles.settingsCard, { borderColor: 'rgba(255,255,255,0.10)' }]}>
+              <BlurView intensity={50} tint="dark" style={styles.settingsBlur}>
                 {/* Toggle */}
                 <View style={styles.settingsRow}>
                   <View style={[styles.settingsIcon, { backgroundColor: 'rgba(255, 215, 0, 0.10)' }]}>
@@ -262,15 +268,11 @@ export default function HappyHoursScreen() {
             </View>
           </Animated.View>
 
-          <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
-
-const GOLD = '#FFD700';
-const GOLD_DIM = 'rgba(255, 215, 0, 0.55)';
 
 const styles = StyleSheet.create({
   container: {
@@ -304,24 +306,33 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 40,
   },
 
   // Explanation
   explainCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 16,
   },
   explainBlur: {
-    borderRadius: 14,
+    flex: 1,
+    borderRadius: 16,
     overflow: 'hidden',
-    padding: 16,
+    padding: 18,
     alignItems: 'center',
+    backgroundColor: GLASS_BG,
   },
-  explainEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
+  explainIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,215,0,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   explainTitle: {
     ...fontStyles.bodySemiBold,
@@ -340,15 +351,17 @@ const styles = StyleSheet.create({
 
   // Live card
   liveCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 20,
   },
   liveBlur: {
-    borderRadius: 14,
+    flex: 1,
+    borderRadius: 16,
     overflow: 'hidden',
     padding: 16,
+    backgroundColor: GLASS_BG,
   },
   liveHeader: {
     flexDirection: 'row',
@@ -394,27 +407,29 @@ const styles = StyleSheet.create({
   // Section title
   sectionTitle: {
     ...fontStyles.bodySemiBold,
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.5,
+    fontSize: 11,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: 10,
-    marginTop: 4,
+    color: theme.colors.textTertiary,
+    marginBottom: 8,
+    marginTop: 18,
   },
 
   // Empty
   emptyCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 20,
   },
   emptyBlur: {
-    borderRadius: 14,
+    flex: 1,
+    borderRadius: 16,
     overflow: 'hidden',
-    padding: 24,
+    padding: 28,
     alignItems: 'center',
     gap: 8,
+    backgroundColor: GLASS_BG,
   },
   emptyText: {
     ...fontStyles.body,
@@ -425,16 +440,18 @@ const styles = StyleSheet.create({
 
   // Schedule list
   listCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 20,
   },
   listBlur: {
-    borderRadius: 14,
+    flex: 1,
+    borderRadius: 16,
     overflow: 'hidden',
     paddingVertical: 4,
     paddingHorizontal: 14,
+    backgroundColor: GLASS_BG,
   },
   listRow: {
     flexDirection: 'row',
@@ -478,15 +495,17 @@ const styles = StyleSheet.create({
 
   // Settings
   settingsCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 20,
   },
   settingsBlur: {
-    borderRadius: 14,
+    flex: 1,
+    borderRadius: 16,
     overflow: 'hidden',
     padding: 14,
+    backgroundColor: GLASS_BG,
   },
   settingsRow: {
     flexDirection: 'row',

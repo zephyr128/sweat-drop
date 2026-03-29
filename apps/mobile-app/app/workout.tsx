@@ -48,7 +48,7 @@ import {
   markInactivityFinalized,
   InactivityFinalizeCoordinator,
 } from '@/lib/workout/inactivity-autofinish';
-import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig } from '@/lib/workout/live-drops-estimator';
+import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig, type DiminishingConfig } from '@/lib/workout/live-drops-estimator';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { useHappyHour } from '@/hooks/useHappyHour';
 import { log } from '@/lib/logger';
@@ -138,7 +138,7 @@ export default function WorkoutScreen() {
   const { t } = useTranslation('workout');
   const dropLimit = useDropLimitStatus(gymId || null);
   const isTrackingOnly = dropLimit.limitReached;
-  const happyHour = useHappyHour(gymId || null);
+  const happyHour = useHappyHour(gymId || null, paramMachineType || null);
   const [session, setSession] = useState<any>(null);
   // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
   const [duration, setDuration] = useState(0);
@@ -222,6 +222,7 @@ export default function WorkoutScreen() {
     lastVisitDate: null,
   });
   const machineConfigRef = useRef<MachineDropConfig | null>(null);
+  const diminishingConfigRef = useRef<DiminishingConfig | null>(null);
   // RPM history for average calculation (long-term, 30 values)
   const rpmHistoryRef = useRef<number[]>([]);
   // RPM smoothing: Track last 4 raw RPM values for moving average (Walking Mode)
@@ -1436,7 +1437,7 @@ export default function WorkoutScreen() {
         const resolvedType = (machineType || 'generic').toLowerCase();
         const { data: dmcRow } = await supabase
           .from('drop_model_config')
-          .select('machine_base_json')
+          .select('machine_base_json, full_rate_until_min, reduced_rate_until_min, low_rate_until_min, post_limit_factor')
           .or(`gym_id.eq.${session.gym_id},gym_id.is.null`)
           .order('gym_id', { ascending: false, nullsFirst: false })
           .limit(1)
@@ -1453,6 +1454,15 @@ export default function WorkoutScreen() {
               sustainedHighEffortRatio: mcfg.sustainedHighEffortRatio ?? 0.55,
             };
           }
+        }
+
+        if (dmcRow?.full_rate_until_min != null) {
+          diminishingConfigRef.current = {
+            fullRateUntilMin: Number(dmcRow.full_rate_until_min),
+            reducedRateUntilMin: Number(dmcRow.reduced_rate_until_min ?? 90),
+            lowRateUntilMin: Number(dmcRow.low_rate_until_min ?? 120),
+            postLimitFactor: Number(dmcRow.post_limit_factor ?? 0.4),
+          };
         }
       } catch (configError) {
         log.warn('[Workout] Could not load drop_model_config for live estimator, using defaults.', configError);
@@ -2469,6 +2479,7 @@ export default function WorkoutScreen() {
           streak: streakContextRef.current,
           todayDate: getBelgradeDateString(now),
           machineConfig: machineConfigRef.current,
+          diminishingConfig: diminishingConfigRef.current,
         });
 
         setSessionTier(result.tier);
@@ -3822,7 +3833,7 @@ export default function WorkoutScreen() {
             <View style={styles.happyHourWorkoutBadge}>
               <Text style={styles.happyHourWorkoutEmoji}>⚡</Text>
               <Text style={styles.happyHourWorkoutText}>
-                {t('happyHourBadge', { multiplier: happyHour.multiplier })}
+                {t('happyHourBadgeBonus', { multiplier: happyHour.multiplier })}
               </Text>
             </View>
           )}

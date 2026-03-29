@@ -1,0 +1,38 @@
+{
+  "title": "MY STATS",
+  "totalDrops": "TOTAL DROPS",
+  "rank": "Rank",
+  "streak": "Streak",
+  "sessions": "Sessions",
+  "time": "Time",
+  "dropsBreakdown": "DROPS BREAKDOWN",
+  "dropsOrigin": "DROPS ORIGIN",
+  "streakHistory": "STREAK HISTORY",
+  "thisWeek": "This week",
+  "days": "days",
+  "machines": "MACHINES",
+  "sessionCount_one": "session",
+  "sessionCount_other": "sessions",
+  "avg": "avg",
+  "achievements": "ACHIEVEMENTS",
+  "bestSession": "Best session",
+  "bestStreak": "Best streak",
+  "happyHours": "Happy Hours",
+  "used": "used",
+  "challengesDone": "Challenges",
+  "completed": "completed",
+  "myGym": "My gym",
+  "global": "Global",
+  "period": {
+    "today": "Today",
+    "week": "This week",
+    "month": "This month",
+    "all": "All time"
+  },
+  "origin": {
+    "workout": "Workout",
+    "challenges": "Challenges",
+    "checkin": "Check-in",
+    "bonuses": "Bonuses"
+  }
+}

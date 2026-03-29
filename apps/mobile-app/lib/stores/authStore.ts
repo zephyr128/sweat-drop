@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
+import { setUser as setSentryUser } from '@/lib/sentry';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -175,10 +176,12 @@ export const useAuthStore = create<AuthState>()(
             set({ session, user: session?.user ?? null });
 
             if (event === 'SIGNED_IN' && session?.user) {
+              setSentryUser(session.user.id, session.user.email);
               await get().fetchProfile();
             }
 
             if (event === 'SIGNED_OUT') {
+              setSentryUser(null);
               get().reset();
             }
           },

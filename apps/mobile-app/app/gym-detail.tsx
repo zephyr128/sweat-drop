@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { useGymStore, Gym, GymWorkingHours } from '@/lib/stores/useGymStore';
 import { useGymData } from '@/hooks/useGymData';
 import { useSession } from '@/hooks/useSession';
+import { useTranslation } from 'react-i18next';
 import { theme, fontStyles } from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 
@@ -38,15 +39,6 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-const DAY_LABELS: Record<string, string> = {
-  mon: 'Monday',
-  tue: 'Tuesday',
-  wed: 'Wednesday',
-  thu: 'Thursday',
-  fri: 'Friday',
-  sat: 'Saturday',
-  sun: 'Sunday',
-};
 const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 
 function getTodayKey(): string {
@@ -64,9 +56,15 @@ interface RewardPreview {
 export default function GymDetailScreen() {
   const router = useRouter();
   const { session } = useSession();
+  const { t } = useTranslation('gymDetails');
   const params = useLocalSearchParams<{ gymId: string }>();
   const { homeGymId, setHomeGymId, setActiveGym, clearPreview } = useGymStore();
   const { updateHomeGym } = useGymData();
+
+  const DAY_LABELS: Record<string, string> = {
+    mon: t('monday'), tue: t('tuesday'), wed: t('wednesday'),
+    thu: t('thursday'), fri: t('friday'), sat: t('saturday'), sun: t('sunday'),
+  };
 
   const [gym, setGym] = useState<Gym | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,12 +150,12 @@ export default function GymDetailScreen() {
     try {
       await updateHomeGym(gym.id);
       Alert.alert(
-        'Home Gym Set!',
-        `${gym.name} is now your home gym. You can start earning drops here!`,
-        [{ text: 'Great!', onPress: () => router.back() }]
+        t('homeGymSet'),
+        t('homeGymSetMsg', { name: gym.name }),
+        [{ text: t('great'), onPress: () => router.back() }]
       );
     } catch {
-      Alert.alert('Error', 'Failed to set home gym. Please try again.');
+      Alert.alert(t('common:error'), t('failedToSetGym'));
     } finally {
       setSettingHome(false);
     }
@@ -214,9 +212,9 @@ export default function GymDetailScreen() {
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Gym not found</Text>
+          <Text style={styles.errorText}>{t('gymNotFound')}</Text>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.errorLink, { color: theme.colors.primary }]}>Go back</Text>
+            <Text style={[styles.errorLink, { color: theme.colors.primary }]}>{t('goBack')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -278,7 +276,7 @@ export default function GymDetailScreen() {
                     <Ionicons name="location" size={20} color={brandColor} />
                   </View>
                   <View style={styles.cardContent}>
-                    <Text style={styles.cardLabel}>Address</Text>
+                    <Text style={styles.cardLabel}>{t('address')}</Text>
                     <Text style={styles.cardValue}>
                       {gym.address || ''}{gym.address && gym.city ? ', ' : ''}{gym.city || ''}
                       {gym.country ? `, ${gym.country}` : ''}
@@ -300,7 +298,7 @@ export default function GymDetailScreen() {
                   <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.15) }]}>
                     <Ionicons name="time" size={20} color={brandColor} />
                   </View>
-                  <Text style={styles.cardLabel}>Working Hours</Text>
+                  <Text style={styles.cardLabel}>{t('hours')}</Text>
                 </View>
                 <View style={styles.hoursGrid}>
                   {DAY_ORDER.map((day) => {
@@ -312,7 +310,7 @@ export default function GymDetailScreen() {
                           {DAY_LABELS[day]}
                         </Text>
                         <Text style={[styles.hoursTime, isToday && { color: brandColor, fontWeight: '600' }]}>
-                          {hours ? `${hours.open} – ${hours.close}` : 'Closed'}
+                          {hours ? `${hours.open} – ${hours.close}` : t('closed')}
                         </Text>
                       </View>
                     );
@@ -332,7 +330,7 @@ export default function GymDetailScreen() {
                   <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.15) }]}>
                     <Ionicons name="information-circle" size={20} color={brandColor} />
                   </View>
-                  <Text style={styles.cardLabel}>About</Text>
+                  <Text style={styles.cardLabel}>{t('about')}</Text>
                 </View>
                 <Text style={styles.descriptionText}>{gym.description}</Text>
               </BlurView>
@@ -349,21 +347,21 @@ export default function GymDetailScreen() {
                   <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.15) }]}>
                     <Ionicons name="call" size={20} color={brandColor} />
                   </View>
-                  <Text style={styles.cardLabel}>Contact</Text>
+                  <Text style={styles.cardLabel}>{t('contact')}</Text>
                 </View>
                 <View style={styles.contactList}>
                   {gym.phone && (
                     <TouchableOpacity style={styles.contactRow} onPress={callPhone} activeOpacity={0.7}>
                       <Ionicons name="call-outline" size={16} color={theme.colors.textSecondary} />
                       <Text style={styles.contactText}>{gym.phone}</Text>
-                      <Text style={[styles.contactAction, { color: brandColor }]}>Call</Text>
+                      <Text style={[styles.contactAction, { color: brandColor }]}>{t('call')}</Text>
                     </TouchableOpacity>
                   )}
                   {gym.instagram && (
                     <TouchableOpacity style={styles.contactRow} onPress={openInstagram} activeOpacity={0.7}>
                       <Ionicons name="logo-instagram" size={16} color={theme.colors.textSecondary} />
                       <Text style={styles.contactText}>{gym.instagram}</Text>
-                      <Text style={[styles.contactAction, { color: brandColor }]}>Open</Text>
+                      <Text style={[styles.contactAction, { color: brandColor }]}>{t('openLink')}</Text>
                     </TouchableOpacity>
                   )}
                   {gym.website && (
@@ -374,7 +372,7 @@ export default function GymDetailScreen() {
                     >
                       <Ionicons name="globe-outline" size={16} color={theme.colors.textSecondary} />
                       <Text style={styles.contactText} numberOfLines={1}>{gym.website}</Text>
-                      <Text style={[styles.contactAction, { color: brandColor }]}>Visit</Text>
+                      <Text style={[styles.contactAction, { color: brandColor }]}>{t('visit')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -392,7 +390,7 @@ export default function GymDetailScreen() {
                   <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.15) }]}>
                     <Ionicons name="gift" size={20} color={brandColor} />
                   </View>
-                  <Text style={styles.cardLabel}>Available Rewards</Text>
+                  <Text style={styles.cardLabel}>{t('availableRewards')}</Text>
                 </View>
                 <View style={styles.rewardsList}>
                   {rewards.map((reward) => (
@@ -409,7 +407,7 @@ export default function GymDetailScreen() {
                 </View>
                 {rewards.length >= 4 && (
                   <Text style={[styles.moreText, { color: hexToRgba(brandColor, 0.6) }]}>
-                    ...and more
+                    {t('andMore')}
                   </Text>
                 )}
               </BlurView>
@@ -436,7 +434,7 @@ export default function GymDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="home-outline" size={20} color="#000" />
-                  <Text style={styles.ctaText}>Set as Home Gym</Text>
+                  <Text style={styles.ctaText}>{t('setAsHomeGym')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -453,30 +451,33 @@ interface HeroContentProps {
   isHome: boolean;
 }
 
-const HeroContent: React.FC<HeroContentProps> = ({ gym, brandColor, isHome }) => (
-  <View style={styles.heroContent}>
-    {gym.logo_url ? (
-      <Image source={{ uri: gym.logo_url }} style={styles.heroLogo} resizeMode="contain" />
-    ) : (
-      <View style={[styles.heroLogoPlaceholder, { backgroundColor: brandColor + '25' }]}>
-        <Ionicons name="fitness" size={40} color={brandColor} />
-      </View>
-    )}
-    <Text style={styles.heroName}>{gym.name}</Text>
-    {gym.is_founding_partner && (
-      <View style={styles.heroFoundingBadge}>
-        <Ionicons name="medal" size={14} color="#FFD700" />
-        <Text style={styles.heroFoundingText}>Founding Partner</Text>
-      </View>
-    )}
-    {isHome && (
-      <View style={[styles.heroHomeBadge, { borderColor: brandColor + '50' }]}>
-        <Ionicons name="checkmark-circle" size={14} color={brandColor} />
-        <Text style={[styles.heroHomeText, { color: brandColor }]}>Your Home Gym</Text>
-      </View>
-    )}
-  </View>
-);
+const HeroContent: React.FC<HeroContentProps> = ({ gym, brandColor, isHome }) => {
+  const { t } = useTranslation('gymDetails');
+  return (
+    <View style={styles.heroContent}>
+      {gym.logo_url ? (
+        <Image source={{ uri: gym.logo_url }} style={styles.heroLogo} resizeMode="contain" />
+      ) : (
+        <View style={[styles.heroLogoPlaceholder, { backgroundColor: brandColor + '25' }]}>
+          <Ionicons name="fitness" size={40} color={brandColor} />
+        </View>
+      )}
+      <Text style={styles.heroName}>{gym.name}</Text>
+      {gym.is_founding_partner && (
+        <View style={styles.heroFoundingBadge}>
+          <Ionicons name="medal" size={14} color="#FFD700" />
+          <Text style={styles.heroFoundingText}>{t('foundingPartner')}</Text>
+        </View>
+      )}
+      {isHome && (
+        <View style={[styles.heroHomeBadge, { borderColor: brandColor + '50' }]}>
+          <Ionicons name="checkmark-circle" size={14} color={brandColor} />
+          <Text style={[styles.heroHomeText, { color: brandColor }]}>{t('yourHomeGym')}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {

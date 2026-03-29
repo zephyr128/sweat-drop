@@ -4,5 +4,7 @@
   "currently_active": "Currently active:",
   "set_home_prompt": "Set this gym as your home gym?",
   "set_home_confirm": "Set as Home",
-  "no_gyms": "No gyms available."
+  "no_gyms": "No gyms available.",
+  "load_failed": "Could not load gyms.",
+  "retry": "Try again"
 }

@@ -75,6 +75,7 @@ export default function StepGenderScreen() {
   const cards: { value: Gender; emoji: string; labelKey: string }[] = [
     { value: 'male', emoji: '♂', labelKey: 'profileSetup.gender.male' },
     { value: 'female', emoji: '♀', labelKey: 'profileSetup.gender.female' },
+    { value: 'other', emoji: '⚧', labelKey: 'profileSetup.gender.other' },
   ];
 
   return (
@@ -125,8 +126,9 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    maxWidth: '47%',
-    aspectRatio: 0.85,
+    minWidth: '28%',
+    maxWidth: '31%',
+    aspectRatio: 0.75,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.1)',

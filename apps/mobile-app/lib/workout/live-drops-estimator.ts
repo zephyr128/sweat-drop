@@ -35,6 +35,13 @@ export interface StreakContext {
   lastVisitDate: string | null;
 }
 
+export interface DiminishingConfig {
+  fullRateUntilMin: number;
+  reducedRateUntilMin: number;
+  lowRateUntilMin: number;
+  postLimitFactor: number;
+}
+
 export interface LiveDropsInput {
   durationSeconds: number;
   calories: number;
@@ -50,6 +57,8 @@ export interface LiveDropsInput {
   todayDate: string;
   /** Per-machine config from backend; when provided, overrides hardcoded defaults */
   machineConfig?: MachineDropConfig | null;
+  /** Diminishing return segments from backend; falls back to DEFAULT_DIMINISHING */
+  diminishingConfig?: DiminishingConfig | null;
 }
 
 export interface LiveDropsResult {
@@ -165,21 +174,22 @@ export function estimateLiveDropsDetailed(input: LiveDropsInput): LiveDropsResul
   let raw = durationMin * baseRate * intensity * spikePenalty;
   raw = Math.min(raw, durationMin * maxDropsPerMinute);
 
-  const seg1 = Math.min(durationMin, DEFAULT_DIMINISHING.fullRateUntilMin);
+  const dim = input.diminishingConfig ?? DEFAULT_DIMINISHING;
+  const seg1 = Math.min(durationMin, dim.fullRateUntilMin);
   const seg2 = Math.min(
-    Math.max(durationMin - DEFAULT_DIMINISHING.fullRateUntilMin, 0),
-    DEFAULT_DIMINISHING.reducedRateUntilMin - DEFAULT_DIMINISHING.fullRateUntilMin
+    Math.max(durationMin - dim.fullRateUntilMin, 0),
+    dim.reducedRateUntilMin - dim.fullRateUntilMin
   );
   const seg3 = Math.min(
-    Math.max(durationMin - DEFAULT_DIMINISHING.reducedRateUntilMin, 0),
-    DEFAULT_DIMINISHING.lowRateUntilMin - DEFAULT_DIMINISHING.reducedRateUntilMin
+    Math.max(durationMin - dim.reducedRateUntilMin, 0),
+    dim.lowRateUntilMin - dim.reducedRateUntilMin
   );
-  const seg4 = Math.max(durationMin - DEFAULT_DIMINISHING.lowRateUntilMin, 0);
+  const seg4 = Math.max(durationMin - dim.lowRateUntilMin, 0);
   const weightedMin =
     seg1 +
     (seg2 * 0.8) +
     (seg3 * 0.6) +
-    (seg4 * DEFAULT_DIMINISHING.postLimitFactor);
+    (seg4 * dim.postLimitFactor);
   const adjusted = raw * (durationMin > 0 ? weightedMin / durationMin : 0);
 
   // Calories bonus: backend only applies this for 'generic' machine type.

@@ -1,72 +1,264 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import {
+  theme,
+  getNumberStyle,
+  fontStyles,
+  hexToRgba,
+  glassCard,
+} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
+import { useLocalDrops } from '@/hooks/useLocalDrops';
+import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import * as Haptics from 'expo-haptics';
 
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+// ────────────────────────────────────────────────────
+//  Types
+// ────────────────────────────────────────────────────
 
-interface GymDropsData {
-  gymName: string;
-  localBalance: number;
-  weeklyDrops: number;
-  monthlyDrops: number;
+type ExpiryState = 'safe' | 'warning' | 'critical';
+
+interface EarnedData {
+  today: number;
+  week: number;
+  month: number;
+  allTime: number;
 }
 
 interface ExpiryData {
   expiringIn7d: number;
   expiringIn30d: number;
   nextExpiryDate: string | null;
+  daysSinceLastVisit: number;
 }
 
-interface LedgerSummary {
-  walletBalance: number;
-  earnedScoreAllTime: number;
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  created_at: string;
+  metadata?: Record<string, any>;
 }
+
+const TX_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  session: 'bicycle-outline',
+  checkin: 'location-outline',
+  challenge: 'trophy-outline',
+  referral_reward: 'people-outline',
+  redemption: 'bag-outline',
+  milestone: 'medal-outline',
+  streak: 'flame-outline',
+  expired: 'hourglass-outline',
+  bonus: 'star-outline',
+  arena: 'shield-outline',
+  refund: 'arrow-undo-outline',
+};
+
+const PAGE_SIZE = 15;
+
+// ────────────────────────────────────────────────────
+//  Screen
+// ────────────────────────────────────────────────────
 
 export default function WalletScreen() {
+  const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('wallet');
   const { activeGym, getActiveGymId } = useGymStore();
-  const [profile, setProfile] = useState<any>(null);
-  const [todayDrops, setTodayDrops] = useState(0);
-  const [gymDrops, setGymDrops] = useState<GymDropsData | null>(null);
-  const [expiry, setExpiry] = useState<ExpiryData | null>(null);
-  const [ledger, setLedger] = useState<LedgerSummary | null>(null);
-
   const activeGymId = getActiveGymId();
+  const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
+  const dropLimits = useDropLimitStatus(activeGymId);
 
-  const refreshAll = useCallback(() => {
-    loadProfile();
-    loadTodayDrops();
-    loadGymDrops();
-    loadExpiry();
-    loadLedger();
-  }, []);
+  const [earned, setEarned] = useState<EarnedData>({ today: 0, week: 0, month: 0, allTime: 0 });
+  const [expiry, setExpiry] = useState<ExpiryData | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [txLoading, setTxLoading] = useState(true);
+  const [hasMoreTx, setHasMoreTx] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const pageRef = useRef(0);
+
+  type ScopeType = 'gym' | 'global';
+  const [scope, setScope] = useState<ScopeType>('gym');
+  const selectedGymId = scope === 'gym' ? activeGymId : null;
+  const [userGyms, setUserGyms] = useState<{ id: string; name: string; local_drops: number }[]>([]);
+  const [totalDrops, setTotalDrops] = useState(0);
+
+  // ── Data loading ──
+
+  const loadGyms = useCallback(async () => {
+    if (!session?.user) return;
+    const [{ data: memberships }, { data: profile }] = await Promise.all([
+      supabase
+        .from('gym_memberships')
+        .select('gym_id, local_drops_balance, gyms(id, name)')
+        .eq('user_id', session.user.id),
+      supabase
+        .from('profiles')
+        .select('total_drops')
+        .eq('id', session.user.id)
+        .single(),
+    ]);
+    setTotalDrops(profile?.total_drops ?? 0);
+    setUserGyms(
+      (memberships ?? [])
+        .filter((m: any) => m.gyms)
+        .map((m: any) => ({
+          id: m.gym_id,
+          name: (m.gyms as any).name,
+          local_drops: m.local_drops_balance ?? 0,
+        })),
+    );
+  }, [session?.user]);
+
+  const loadEarned = useCallback(async () => {
+    if (!session?.user || !activeGymId) return;
+    const userId = session.user.id;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayOfWeek = now.getDay();
+    const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const EARN_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak'];
+
+    let query = supabase
+      .from('drops_transactions')
+      .select('amount, created_at')
+      .eq('user_id', userId)
+      .gt('amount', 0)
+      .in('transaction_type', EARN_TYPES)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (selectedGymId) query = query.eq('gym_id', selectedGymId);
+
+    const { data: txRows } = await query;
+
+    let today = 0;
+    let week = 0;
+    let month = 0;
+    let allTime = 0;
+    for (const row of txRows ?? []) {
+      const a = row.amount ?? 0;
+      const d = new Date(row.created_at);
+      allTime += a;
+      if (d >= monthStart) month += a;
+      if (d >= weekStart) week += a;
+      if (d >= todayStart) today += a;
+    }
+    setEarned({ today, week, month, allTime });
+  }, [session?.user, activeGymId, scope]);
+
+  const loadExpiry = useCallback(async () => {
+    if (!session?.user || !activeGymId) { setExpiry(null); return; }
+    try {
+      const { data, error } = await supabase.rpc('get_user_expiring_drops', { p_gym_id: activeGymId });
+      if (error) {
+        if (error.code === 'PGRST202') { setExpiry(null); return; }
+        setExpiry(null);
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+
+      const { data: lastCheckin } = await supabase
+        .from('gym_checkins')
+        .select('checked_in_at')
+        .eq('user_id', session.user.id)
+        .order('checked_in_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const daysSinceLastVisit = lastCheckin?.checked_in_at
+        ? Math.floor((Date.now() - new Date(lastCheckin.checked_in_at).getTime()) / 86400000)
+        : 999;
+
+      if (row) {
+        setExpiry({
+          expiringIn7d: Number(row.expiring_in_7d ?? 0),
+          expiringIn30d: Number(row.expiring_in_30d ?? 0),
+          nextExpiryDate: row.next_expiry_date ?? null,
+          daysSinceLastVisit,
+        });
+      } else {
+        setExpiry({ expiringIn7d: 0, expiringIn30d: 0, nextExpiryDate: null, daysSinceLastVisit });
+      }
+    } catch {
+      setExpiry(null);
+    }
+  }, [session?.user, activeGymId]);
+
+  const loadTransactions = useCallback(async (page: number) => {
+    if (!session?.user) return;
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE;
+
+    let query = supabase
+      .from('drops_transactions')
+      .select('id, amount, transaction_type, created_at, metadata')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (selectedGymId) query = query.eq('gym_id', selectedGymId);
+
+    const { data } = await query;
+
+    const rows: Transaction[] = (data ?? []).map((r) => ({
+      id: r.id,
+      type: r.transaction_type,
+      amount: r.amount ?? 0,
+      created_at: r.created_at,
+      metadata: r.metadata as Record<string, any> | undefined,
+    }));
+
+    if (page === 0) {
+      setTransactions(rows);
+    } else {
+      setTransactions((prev) => [...prev, ...rows]);
+    }
+    setHasMoreTx(rows.length > PAGE_SIZE);
+    setTxLoading(false);
+  }, [session?.user, scope]);
+
+  const refreshAll = useCallback(async () => {
+    pageRef.current = 0;
+    setTxLoading(true);
+    await Promise.all([
+      loadGyms(),
+      loadEarned(),
+      loadExpiry(),
+      loadTransactions(0),
+      refreshLocalDrops(),
+    ]);
+  }, [loadGyms, loadEarned, loadExpiry, loadTransactions, refreshLocalDrops]);
 
   useEffect(() => {
-    if (session?.user) {
-      refreshAll();
-    }
-  }, [session, activeGymId]);
+    if (session?.user) refreshAll();
+  }, [session?.user, activeGymId, scope]);
+
+  useFocusEffect(useCallback(() => {
+    if (session?.user) refreshAll();
+  }, [session?.user, activeGymId]));
 
   useRealtimeRefresh({
     table: 'drops_transactions',
@@ -77,188 +269,77 @@ export default function WalletScreen() {
     enabled: !!session?.user,
   });
 
-  useRealtimeRefresh({
-    table: 'redemptions',
-    filterColumn: 'user_id',
-    filterValue: session?.user?.id ?? null,
-    events: ['INSERT', 'UPDATE'],
-    onEvent: refreshAll,
-    pollIntervalMs: 60_000,
-    enabled: !!session?.user,
-  });
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshAll();
+    setRefreshing(false);
+  }, [refreshAll]);
 
-  const loadProfile = async () => {
-    if (!session?.user) return;
+  const loadMoreTx = useCallback(() => {
+    pageRef.current += 1;
+    loadTransactions(pageRef.current);
+  }, [loadTransactions]);
 
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
+  // ── Derived state ──
 
-    if (data) {
-      setProfile(data);
-    }
-  };
+  const expiryState: ExpiryState = (() => {
+    if (!expiry) return 'safe';
+    if (expiry.daysSinceLastVisit >= 28) return 'critical';
+    if (expiry.daysSinceLastVisit >= 25) return 'warning';
+    if (expiry.expiringIn7d > 0) return 'warning';
+    return 'safe';
+  })();
 
-  const loadTodayDrops = async () => {
-    if (!session?.user) return;
+  const daysUntilExpiry = expiry ? Math.max(0, 30 - expiry.daysSinceLastVisit) : 30;
+  const dropsAtRisk = expiry
+    ? expiryState === 'critical'
+      ? expiry.expiringIn7d + expiry.expiringIn30d
+      : expiry.expiringIn7d
+    : 0;
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weeklyTarget = dropLimits.maxDropsPerWeek || 1500;
+  const weeklyProgress = Math.min(earned.week / weeklyTarget, 1);
 
-    const { data: todayData } = await supabase
-      .from('drops_transactions')
-      .select('amount')
-      .eq('user_id', session.user.id)
-      .gte('created_at', today.toISOString())
-      .gt('amount', 0)
-      .in('transaction_type', ['session', 'challenge', 'bonus', 'arena']);
+  const heroBalance = scope === 'gym' ? localDrops : totalDrops;
+  const heroLabel = scope === 'gym'
+    ? t('availableToSpend')
+    : t('totalBalance');
 
-    const todayTotal = todayData?.reduce((sum, tx) => sum + (tx.amount || 0), 0) || 0;
-    setTodayDrops(todayTotal);
-  };
+  // ── Render helpers ──
 
-  const loadGymDrops = async () => {
-    if (!session?.user || !activeGymId) {
-      setGymDrops(null);
-      return;
-    }
-
-    try {
-      // Get local drops balance from gym_memberships
-      const { data: membership } = await supabase
-        .from('gym_memberships')
-        .select('local_drops_balance')
-        .eq('user_id', session.user.id)
-        .eq('gym_id', activeGymId)
-        .single();
-
-      // Get gym-specific weekly drops (from sessions)
-      const weekStart = getWeekStart();
-      const { data: weekSessions } = await supabase
-        .from('sessions')
-        .select('drops_earned')
-        .eq('user_id', session.user.id)
-        .eq('gym_id', activeGymId)
-        .gte('started_at', weekStart.toISOString())
-        .gt('drops_earned', 0);
-
-      const weeklyDrops = weekSessions?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
-
-      // Get gym-specific monthly drops (from sessions)
-      const monthStart = getMonthStart();
-      const { data: monthSessions } = await supabase
-        .from('sessions')
-        .select('drops_earned')
-        .eq('user_id', session.user.id)
-        .eq('gym_id', activeGymId)
-        .gte('started_at', monthStart.toISOString())
-        .gt('drops_earned', 0);
-
-      const monthlyDrops = monthSessions?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
-
-      setGymDrops({
-        gymName: activeGym?.name || t('currentGym'),
-        localBalance: membership?.local_drops_balance || 0,
-        weeklyDrops,
-        monthlyDrops,
-      });
-    } catch (err) {
-      console.error('Error loading gym drops:', err);
-      setGymDrops(null);
-    }
-  };
-
-  const loadExpiry = async () => {
-    if (!session?.user || !activeGymId) {
-      setExpiry(null);
-      return;
-    }
-    try {
-      const { data, error } = await supabase.rpc('get_user_expiring_drops', {
-        p_gym_id: activeGymId,
-      });
-      if (error) {
-        if (error.code === 'PGRST202') {
-          // RPC not deployed yet — silently skip
-          setExpiry(null);
-          return;
-        }
-        console.warn('[Wallet] expiry RPC error:', error.message);
-        setExpiry(null);
-        return;
-      }
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row) {
-        setExpiry({
-          expiringIn7d: Number(row.expiring_in_7d ?? 0),
-          expiringIn30d: Number(row.expiring_in_30d ?? 0),
-          nextExpiryDate: row.next_expiry_date ?? null,
-        });
-      } else {
-        setExpiry({ expiringIn7d: 0, expiringIn30d: 0, nextExpiryDate: null });
-      }
-    } catch {
-      setExpiry(null);
-    }
-  };
-
-  const loadLedger = async () => {
-    if (!session?.user || !activeGymId) {
-      setLedger(null);
-      return;
-    }
-    try {
-      const { data, error } = await supabase.rpc('get_user_drops_ledger_summary', {
-        p_gym_id: activeGymId,
-      });
-      if (error) {
-        if (error.code === 'PGRST202') {
-          setLedger(null);
-          return;
-        }
-        console.warn('[Wallet] ledger RPC error:', error.message);
-        setLedger(null);
-        return;
-      }
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row) {
-        setLedger({
-          walletBalance: Number(row.wallet_balance ?? 0),
-          earnedScoreAllTime: Number(row.earned_score_all_time ?? 0),
-        });
-      }
-    } catch {
-      setLedger(null);
-    }
-  };
-
-  const formatExpiryDate = (iso: string): string => {
+  const formatDate = (iso: string): string => {
     const d = new Date(iso);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+
+    if (d >= todayStart) {
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    }
+    if (d >= yesterdayStart) {
+      return t('common:back') || 'Yesterday';
+    }
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
-  /** Returns Monday 00:00 of the current week (ISO week) */
-  const getWeekStart = (): Date => {
-    const now = new Date();
-    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const diff = day === 0 ? 6 : day - 1; // days since Monday
-    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
-    return monday;
+  const getTxIcon = (type: string): keyof typeof Ionicons.glyphMap =>
+    TX_ICONS[type] ?? 'swap-horizontal-outline';
+
+  const getTxLabel = (tx: Transaction): string => {
+    const key = `txType.${tx.type}`;
+    const translated = t(key);
+    if (translated !== key) return translated;
+    return tx.type.replace(/_/g, ' ');
   };
 
-  /** Returns 1st of current month 00:00 */
-  const getMonthStart = (): Date => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  };
+  // ────────────────────────────────────────────────────
+  //  UI
+  // ────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Gradient background */}
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <LinearGradient
-        colors={['#000000', '#0A0E1A', '#000000']}
+        colors={['#000000', '#080A14', '#000000']}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
@@ -268,207 +349,436 @@ export default function WalletScreen() {
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Total Balance Card */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-          <View style={[styles.totalCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.totalCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={branding.primary}
+          />
+        }
+      >
+        {/* ═══════════ SCOPE TOGGLE: My Gym | Global ═══════════ */}
+        <Animated.View entering={FadeInDown.delay(40).duration(400)}>
+          <View style={[styles.scopeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <BlurView intensity={glassCard.blur} tint="dark" style={[styles.scopeToggleBlur, { backgroundColor: glassCard.bg }]}>
+              {([
+                { key: 'gym' as ScopeType, label: t('myGym'), icon: 'location' as const },
+                { key: 'global' as ScopeType, label: t('global'), icon: 'globe-outline' as const },
+              ]).map((tab) => (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.scopeTab,
+                    scope === tab.key && {
+                      backgroundColor: hexToRgba(branding.primary, 0.15),
+                      borderColor: hexToRgba(branding.primary, 0.3),
+                      borderWidth: 1,
+                    },
+                  ]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setScope(tab.key);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={tab.icon}
+                    size={14}
+                    color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.40)'}
+                  />
+                  <Text
+                    style={[
+                      styles.scopeTabText,
+                      scope === tab.key && { color: branding.primary },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ═══════════ HERO CARD ═══════════ */}
+        <Animated.View entering={FadeInDown.delay(80).duration(500)}>
+          <View style={[styles.heroOuter, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
+            <BlurView intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
               <LinearGradient
-                colors={[hexToRgba(branding.primary, 0.08), 'rgba(20, 20, 35, 0.9)', hexToRgba(branding.primary, 0.04)]}
+                colors={[
+                  hexToRgba(branding.primary, 0.14),
+                  'rgba(12, 12, 22, 0.92)',
+                  hexToRgba(branding.primary, 0.06),
+                ]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.totalCardGradient}
+                style={styles.heroGradient}
               >
-                <Text style={styles.totalLabel}>{t('totalBalance')}</Text>
-                <View style={styles.totalRow}>
-                  <Ionicons name="water" size={40} color={branding.primary} />
-                  <Text style={[styles.totalValue, getNumberStyle(48), { color: branding.primary }]}>
-                    {profile?.total_drops || 0}
-                  </Text>
+                <Text style={styles.heroLabel}>{heroLabel}</Text>
+
+                <View style={styles.heroRow}>
+                  <Ionicons name="water" size={36} color={branding.primary} />
+                  <Animated.Text
+                    key={`hero-${scope}`}
+                    entering={FadeInDown.duration(300)}
+                    style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}
+                  >
+                    {heroBalance.toLocaleString()}
+                  </Animated.Text>
                 </View>
-                <Text style={[styles.totalSubLabel, { color: hexToRgba(branding.primary, 0.5) }]}>{t('drops')}</Text>
+
+                <Text style={[styles.heroSub, { color: hexToRgba(branding.primary, 0.5) }]}>
+                  {scope === 'gym' ? `${activeGym?.name ?? ''} ` : ''}{t('drops')}
+                </Text>
+
+                {scope === 'gym' && (
+                  <TouchableOpacity
+                    style={[styles.heroCTA, { backgroundColor: branding.primary }]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push('/store');
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.heroCTAText, { color: branding.onPrimary }]}>
+                      {t('goToStore')} →
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </LinearGradient>
             </BlurView>
           </View>
         </Animated.View>
 
-        {/* Global Earned Drops Section */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-          <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <Text style={styles.sectionTitle}>{t('earnedDrops')}</Text>
+        {/* ═══════════ EARNED SECTION ═══════════ */}
+        <Animated.View entering={FadeInDown.delay(180).duration(500)}>
+          <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+            <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+              <Text style={styles.sectionTitle}>{t('earned')}</Text>
 
-              <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
-                <View style={styles.statLabelRow}>
-                  <Ionicons name="today-outline" size={18} color={branding.primary} />
-                  <Text style={styles.statLabel}>{t('today')}</Text>
-                </View>
-                <View style={styles.statValueContainer}>
-                  <Ionicons name="water" size={18} color={branding.primary} />
-                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{todayDrops}</Text>
-                </View>
-              </View>
-
-              <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
-                <View style={styles.statLabelRow}>
-                  <Ionicons name="calendar-outline" size={18} color={branding.primary} />
-                  <Text style={styles.statLabel}>{t('thisWeek')}</Text>
-                </View>
-                <View style={styles.statValueContainer}>
-                  <Ionicons name="water" size={18} color={branding.primary} />
-                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.weekly_drops || 0}</Text>
-                </View>
-              </View>
-
-              <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
-                <View style={styles.statLabelRow}>
-                  <Ionicons name="stats-chart-outline" size={18} color={branding.primary} />
-                  <Text style={styles.statLabel}>{t('thisMonth')}</Text>
-                </View>
-                <View style={styles.statValueContainer}>
-                  <Ionicons name="water" size={18} color={branding.primary} />
-                  <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{profile?.monthly_drops || 0}</Text>
-                </View>
-              </View>
+              <EarnedRow
+                icon="today-outline"
+                label={t('today')}
+                value={earned.today}
+                color={branding.primary}
+                last={false}
+              />
+              <EarnedRow
+                icon="calendar-outline"
+                label={t('thisWeek')}
+                value={earned.week}
+                color={branding.primary}
+                last={false}
+                progressFill={weeklyProgress}
+                progressLabel={t('weeklyTarget', { target: weeklyTarget.toLocaleString() })}
+              />
+              <EarnedRow
+                icon="stats-chart-outline"
+                label={t('thisMonth')}
+                value={earned.month}
+                color={branding.primary}
+                last={false}
+              />
+              <EarnedRow
+                icon="trophy-outline"
+                label={t('allTime')}
+                value={earned.allTime}
+                color={branding.primary}
+                last
+              />
             </BlurView>
           </View>
         </Animated.View>
 
-        {/* Gym Drops Section */}
-        {gymDrops && (
-          <Animated.View entering={FadeInDown.delay(350).duration(400)}>
-            <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15), marginTop: theme.spacing.lg }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <View style={styles.gymSectionHeader}>
-                  <Ionicons name="fitness-outline" size={20} color={branding.primary} />
-                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{gymDrops.gymName}</Text>
-                </View>
-
-                <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
-                  <View style={styles.statLabelRow}>
-                    <Ionicons name="wallet-outline" size={18} color={branding.primary} />
-                    <Text style={styles.statLabel}>{t('gymBalance')}</Text>
-                  </View>
-                  <View style={styles.statValueContainer}>
-                    <Ionicons name="water" size={18} color={branding.primary} />
-                    <Text style={[styles.statValue, getNumberStyle(18), { color: branding.primary }]}>{gymDrops.localBalance}</Text>
-                  </View>
-                </View>
-
-                <View style={[styles.statRow, { borderBottomColor: hexToRgba(branding.primary, 0.08) }]}>
-                  <View style={styles.statLabelRow}>
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
-                    <Text style={styles.statLabel}>{t('thisWeek')}</Text>
-                  </View>
-                  <View style={styles.statValueContainer}>
-                    <Ionicons name="water" size={18} color={theme.colors.textSecondary} />
-                    <Text style={[styles.statValue, getNumberStyle(18), { color: theme.colors.textSecondary }]}>{gymDrops.weeklyDrops}</Text>
-                  </View>
-                </View>
-
-                <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
-                  <View style={styles.statLabelRow}>
-                    <Ionicons name="stats-chart-outline" size={18} color={theme.colors.textSecondary} />
-                    <Text style={styles.statLabel}>{t('thisMonth')}</Text>
-                  </View>
-                  <View style={styles.statValueContainer}>
-                    <Ionicons name="water" size={18} color={theme.colors.textSecondary} />
-                    <Text style={[styles.statValue, getNumberStyle(18), { color: theme.colors.textSecondary }]}>{gymDrops.monthlyDrops}</Text>
-                  </View>
-                </View>
+        {/* ═══════════ PER-GYM BREAKDOWN ═══════════ */}
+        {scope === 'global' && userGyms.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(240).duration(500)}>
+            <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+              <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+                <Text style={styles.sectionTitle}>{t('balanceByGym')}</Text>
+                {(() => {
+                  const maxDrops = Math.max(...userGyms.map((g) => g.local_drops), 1);
+                  return userGyms.map((gym, idx) => (
+                    <Animated.View
+                      key={gym.id}
+                      entering={FadeInDown.delay(260 + idx * 60).duration(350)}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.gymBreakdownRow,
+                          idx < userGyms.length - 1 && styles.gymBreakdownRowBorder,
+                        ]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setScope('gym');
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.gymBreakdownTop}>
+                          <Text style={styles.gymBreakdownName} numberOfLines={1}>
+                            {gym.name}
+                          </Text>
+                          <View style={styles.gymBreakdownDropsRow}>
+                            <Ionicons name="water" size={14} color={branding.primary} />
+                            <Text
+                              style={[
+                                styles.gymBreakdownDrops,
+                                getNumberStyle(15),
+                                { color: branding.primary },
+                              ]}
+                            >
+                              {gym.local_drops.toLocaleString()}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.gymBreakdownBarTrack}>
+                          <Animated.View
+                            style={[
+                              styles.gymBreakdownBarFill,
+                              {
+                                width: `${Math.round((gym.local_drops / maxDrops) * 100)}%`,
+                                backgroundColor: branding.primary,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  ));
+                })()}
               </BlurView>
             </View>
           </Animated.View>
         )}
 
-        {/* Expiry Card */}
+        {/* ═══════════ EXPIRY SECTION ═══════════ */}
         {expiry && (
-          <Animated.View entering={FadeInDown.delay(450).duration(400)}>
-            <View style={[styles.statsContainer, { borderColor: hexToRgba(branding.primary, 0.15), marginTop: theme.spacing.lg }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.statsBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <View style={styles.gymSectionHeader}>
-                  <Ionicons name="hourglass-outline" size={20} color="#FDE68A" />
-                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t('expiryTitle')}</Text>
-                </View>
+          <Animated.View entering={FadeInDown.delay(280).duration(500)}>
+            <ExpiryCard
+              state={expiryState}
+              dropsAtRisk={dropsAtRisk}
+              daysUntilExpiry={daysUntilExpiry}
+              primary={branding.primary}
+              t={t}
+              onSpend={() => router.push('/store')}
+            />
+          </Animated.View>
+        )}
 
-                {expiry.expiringIn7d === 0 && expiry.expiringIn30d === 0 ? (
-                  <View style={styles.expiryEmpty}>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.textTertiary} />
-                    <Text style={styles.expiryEmptyText}>{t('noExpirySoon')}</Text>
+        {/* ═══════════ TRANSACTIONS ═══════════ */}
+        <Animated.View entering={FadeInDown.delay(380).duration(500)}>
+          <Text style={styles.sectionTitle}>{t('activity')}</Text>
+
+          {txLoading ? (
+            <ActivityIndicator
+              color={branding.primary}
+              style={{ marginTop: theme.spacing.lg }}
+            />
+          ) : transactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="water-outline" size={48} color={theme.colors.textTertiary} />
+              <Text style={styles.emptyTitle}>{t('noActivity')}</Text>
+              <Text style={styles.emptySub}>{t('noActivityDesc')}</Text>
+              <TouchableOpacity
+                style={[styles.emptyCTA, { borderColor: hexToRgba(branding.primary, 0.3) }]}
+                onPress={() => router.push('/scan')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.emptyCTAText, { color: branding.primary }]}>
+                  {t('startWorkout')} →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {transactions.map((tx, idx) => (
+                <Animated.View
+                  key={tx.id}
+                  entering={FadeInDown.delay(400 + idx * 40).duration(350)}
+                >
+                  <View style={[styles.txRow, idx < transactions.length - 1 && styles.txRowBorder]}>
+                    <View style={[styles.txIconWrap, { backgroundColor: hexToRgba(tx.amount >= 0 ? branding.primary : '#FF3B30', 0.08) }]}>
+                      <Ionicons
+                        name={getTxIcon(tx.type)}
+                        size={18}
+                        color={tx.amount >= 0 ? branding.primary : '#FF3B30'}
+                      />
+                    </View>
+                    <View style={styles.txInfo}>
+                      <Text style={styles.txLabel} numberOfLines={1}>
+                        {getTxLabel(tx)}
+                      </Text>
+                      <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.txAmount,
+                        getNumberStyle(16),
+                        { color: tx.amount >= 0 ? branding.primary : '#FF3B30' },
+                      ]}
+                    >
+                      {tx.amount >= 0 ? '+' : ''}{tx.amount} 💧
+                    </Text>
                   </View>
-                ) : (
-                  <>
-                    {expiry.expiringIn7d > 0 && (
-                      <View style={[styles.statRow, { borderBottomColor: hexToRgba('#FDE68A', 0.15) }]}>
-                        <View style={styles.statLabelRow}>
-                          <Ionicons name="alert-circle-outline" size={18} color="#FCA5A5" />
-                          <Text style={styles.statLabel}>{t('expiringIn7d')}</Text>
-                        </View>
-                        <View style={styles.statValueContainer}>
-                          <Ionicons name="water" size={18} color="#FCA5A5" />
-                          <Text style={[styles.statValue, getNumberStyle(18), { color: '#FCA5A5' }]}>{expiry.expiringIn7d}</Text>
-                        </View>
-                      </View>
-                    )}
-
-                    {expiry.expiringIn30d > 0 && (
-                      <View style={[styles.statRow, { borderBottomColor: hexToRgba('#FDE68A', 0.15) }]}>
-                        <View style={styles.statLabelRow}>
-                          <Ionicons name="time-outline" size={18} color="#FDE68A" />
-                          <Text style={styles.statLabel}>{t('expiringIn30d')}</Text>
-                        </View>
-                        <View style={styles.statValueContainer}>
-                          <Ionicons name="water" size={18} color="#FDE68A" />
-                          <Text style={[styles.statValue, getNumberStyle(18), { color: '#FDE68A' }]}>{expiry.expiringIn30d}</Text>
-                        </View>
-                      </View>
-                    )}
-
-                    {expiry.nextExpiryDate && (
-                      <View style={[styles.statRow, { borderBottomWidth: 0 }]}>
-                        <View style={styles.statLabelRow}>
-                          <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
-                          <Text style={styles.statLabel}>{t('nextExpiryDate')}</Text>
-                        </View>
-                        <Text style={[styles.statValue, { color: theme.colors.textSecondary, fontSize: 14 }]}>
-                          {formatExpiryDate(expiry.nextExpiryDate)}
-                        </Text>
-                      </View>
-                    )}
-                  </>
-                )}
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Ledger split — earned score vs wallet (if backend provides it) */}
-        {ledger && (
-          <Animated.View entering={FadeInDown.delay(550).duration(400)}>
-            <View style={styles.ledgerRow}>
-              <View style={[styles.ledgerCell, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                <Ionicons name="wallet-outline" size={16} color={branding.primary} />
-                <Text style={styles.ledgerLabel}>{t('walletBalance')}</Text>
-                <Text style={[styles.ledgerValue, getNumberStyle(18), { color: branding.primary }]}>{ledger.walletBalance}</Text>
-              </View>
-              <View style={[styles.ledgerCell, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                <Ionicons name="trophy-outline" size={16} color={branding.primary} />
-                <Text style={styles.ledgerLabel}>{t('earnedScore')}</Text>
-                <Text style={[styles.ledgerValue, getNumberStyle(18), { color: branding.primary }]}>{ledger.earnedScoreAllTime}</Text>
-              </View>
-            </View>
-          </Animated.View>
-        )}
+                </Animated.View>
+              ))}
+              {hasMoreTx && (
+                <TouchableOpacity style={styles.loadMore} onPress={loadMoreTx} activeOpacity={0.7}>
+                  <Text style={[styles.loadMoreText, { color: branding.primary }]}>
+                    {t('loadMore')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// ────────────────────────────────────────────────────
+//  Sub-components
+// ────────────────────────────────────────────────────
+
+function EarnedRow({
+  icon,
+  label,
+  value,
+  color,
+  last,
+  progressFill,
+  progressLabel,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: number;
+  color: string;
+  last: boolean;
+  progressFill?: number;
+  progressLabel?: string;
+}) {
+  return (
+    <View style={[styles.earnedRow, !last && styles.earnedRowBorder]}>
+      <View style={styles.earnedLeft}>
+        <Ionicons name={icon} size={18} color={color} />
+        <Text style={styles.earnedLabel}>{label}</Text>
+      </View>
+      <View style={styles.earnedRight}>
+        <View style={styles.earnedAmountRow}>
+          <Ionicons name="water" size={16} color={color} />
+          <Text style={[styles.earnedValue, getNumberStyle(17), { color }]}>
+            {value.toLocaleString()}
+          </Text>
+        </View>
+        {progressFill != null && (
+          <View style={styles.progressWrap}>
+            <View style={styles.progressTrack}>
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.round(progressFill * 100)}%`, backgroundColor: color },
+                ]}
+              />
+            </View>
+            {progressLabel && (
+              <Text style={styles.progressLabel}>{progressLabel}</Text>
+            )}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function ExpiryCard({
+  state,
+  dropsAtRisk,
+  daysUntilExpiry,
+  primary,
+  t,
+  onSpend,
+}: {
+  state: ExpiryState;
+  dropsAtRisk: number;
+  daysUntilExpiry: number;
+  primary: string;
+  t: (key: string, opts?: Record<string, any>) => string;
+  onSpend: () => void;
+}) {
+  const cfg = {
+    safe: {
+      icon: 'checkmark-circle-outline' as const,
+      color: '#4CD964',
+      bg: 'rgba(76, 217, 100, 0.06)',
+      border: 'rgba(76, 217, 100, 0.15)',
+    },
+    warning: {
+      icon: 'alert-circle-outline' as const,
+      color: '#FF9500',
+      bg: 'rgba(255, 149, 0, 0.06)',
+      border: 'rgba(255, 149, 0, 0.2)',
+    },
+    critical: {
+      icon: 'warning-outline' as const,
+      color: '#FF3B30',
+      bg: 'rgba(255, 59, 48, 0.08)',
+      border: 'rgba(255, 59, 48, 0.3)',
+    },
+  }[state];
+
+  const title = state === 'safe'
+    ? t('expiry.safe.title')
+    : state === 'warning'
+      ? t('expiry.warning.title')
+      : t('expiry.critical.title', { days: daysUntilExpiry });
+
+  const message = state === 'safe'
+    ? t('expiry.safe.message')
+    : state === 'warning'
+      ? t('expiry.warning.message', { count: dropsAtRisk, days: daysUntilExpiry })
+      : t('expiry.critical.message', { count: dropsAtRisk });
+
+  const showCTA = state !== 'safe';
+
+  return (
+    <View style={[styles.expiryCard, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+      <View style={styles.expiryHeader}>
+        <Ionicons name={cfg.icon} size={20} color={cfg.color} />
+        <Text style={[styles.expiryTitle, { color: cfg.color }]}>{title}</Text>
+      </View>
+      <Text style={styles.expiryMessage}>{message}</Text>
+      {showCTA && (
+        <TouchableOpacity
+          style={[styles.expiryCTA, { borderColor: cfg.color }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onSpend();
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.expiryCTAText, { color: cfg.color }]}>
+            {state === 'warning' ? t('expiry.warning.cta') : t('expiry.critical.cta')} →
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// ────────────────────────────────────────────────────
+//  Styles
+// ────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
     backgroundColor: '#000000',
   },
@@ -486,129 +796,320 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'center',
   },
-  headerSpacer: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  scroll: { flex: 1 },
   scrollContent: {
     padding: theme.spacing.lg,
+    paddingBottom: 48,
   },
-  totalCard: {
+
+  // ── Scope toggle ──
+  scopeToggle: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     borderWidth: 1,
   },
-  totalCardBlur: {
+  scopeToggleBlur: {
+    flexDirection: 'row',
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
+    padding: 4,
   },
-  totalCardGradient: {
-    padding: theme.spacing.xl,
+  scopeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  scopeTabText: {
+    ...fontStyles.heading,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.40)',
+  },
+
+  // ── Hero ──
+  heroOuter: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginBottom: theme.spacing.lg,
+  },
+  heroBlur: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    backgroundColor: glassCard.bg,
+  },
+  heroGradient: {
+    padding: 28,
     alignItems: 'center',
   },
-  totalLabel: {
+  heroLabel: {
     ...fontStyles.heading,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: 11,
     color: theme.colors.textSecondary,
+    letterSpacing: 2,
     marginBottom: theme.spacing.md,
   },
-  totalRow: {
+  heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  totalValue: {
-    ...fontStyles.number,
-  },
-  totalSubLabel: {
+  heroNumber: {},
+  heroSub: {
     ...fontStyles.heading,
-    fontSize: theme.typography.fontSize.sm,
-    marginTop: theme.spacing.xs,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    marginTop: 2,
   },
-  statsContainer: {
+  heroCTA: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: theme.borderRadius.md,
+  },
+  heroCTAText: {
+    ...fontStyles.heading,
+    fontSize: 15,
+    letterSpacing: 1,
+  },
+
+  // ── Section card ──
+  sectionCard: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
     borderWidth: 1,
+    marginBottom: theme.spacing.lg,
   },
-  statsBlur: {
+  sectionBlur: {
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
+    backgroundColor: glassCard.bg,
     padding: theme.spacing.lg,
   },
   sectionTitle: {
     ...fontStyles.heading,
-    fontSize: 20,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.lg,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    letterSpacing: 2,
+    marginBottom: theme.spacing.md,
   },
-  gymSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-  },
-  statRow: {
+
+  // ── Earned rows ──
+  earnedRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
+    alignItems: 'flex-start',
+    paddingVertical: 14,
   },
-  statLabelRow: {
+  earnedRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  earnedLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  statLabel: {
+  earnedLabel: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.base,
+    fontSize: 15,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
   },
-  statValueContainer: {
+  earnedRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  earnedAmountRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  statValue: {
-    ...fontStyles.number,
-  },
-  expiryEmpty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: theme.spacing.md,
-  },
-  expiryEmptyText: {
-    ...fontStyles.body,
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textTertiary,
-  },
-  ledgerRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
-  },
-  ledgerCell: {
-    flex: 1,
     alignItems: 'center',
     gap: 4,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.borderRadius.xl,
-    borderWidth: 1,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
   },
-  ledgerLabel: {
+  earnedValue: {},
+  progressWrap: {
+    alignItems: 'flex-end',
+    gap: 3,
+    width: 100,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressLabel: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
+  },
+
+  // ── Gym breakdown ──
+  gymBreakdownRow: {
+    paddingVertical: 14,
+    gap: 8,
+  },
+  gymBreakdownRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  gymBreakdownTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gymBreakdownName: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+    flex: 1,
+    marginRight: theme.spacing.sm,
+  },
+  gymBreakdownDropsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  gymBreakdownDrops: {},
+  gymBreakdownBarTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  gymBreakdownBarFill: {
+    height: '100%',
+    borderRadius: 2,
+    minWidth: 4,
+  },
+
+  // ── Expiry card ──
+  expiryCard: {
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+  },
+  expiryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: 6,
+  },
+  expiryTitle: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 1.5,
+  },
+  expiryMessage: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.3,
+    lineHeight: 19,
+  },
+  expiryCTA: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.sm,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignSelf: 'flex-start',
+  },
+  expiryCTAText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+
+  // ── Transactions ──
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  txRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  txIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  txInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  txLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+  },
+  txDate: {
     ...fontStyles.body,
     fontSize: 11,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
   },
-  ledgerValue: {
-    ...fontStyles.number,
+  txAmount: {},
+
+  // ── Empty state ──
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing['2xl'],
+    gap: theme.spacing.sm,
+  },
+  emptyTitle: {
+    ...fontStyles.heading,
+    fontSize: 18,
+    color: theme.colors.text,
+  },
+  emptySub: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  emptyCTA: {
+    marginTop: theme.spacing.md,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  emptyCTAText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    letterSpacing: 0.3,
+  },
+
+  // ── Load more ──
+  loadMore: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.lg,
+  },
+  loadMoreText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    letterSpacing: 0.3,
   },
 });

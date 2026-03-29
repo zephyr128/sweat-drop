@@ -1,6 +1,5 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import * as Localization from 'expo-localization';
 
 // ── Serbian translations ──
 import srCommon from '@/locales/sr/common.json';
@@ -25,6 +24,9 @@ import srCheckin from '@/locales/sr/checkin.json';
 import srMemberProfile from '@/locales/sr/memberProfile.json';
 import srGymDetails from '@/locales/sr/gymDetails.json';
 import srHappyHours from '@/locales/sr/happyHours.json';
+import srSocialFriends from '@/locales/sr/socialFriends.json';
+import srStats from '@/locales/sr/stats.json';
+import srSettings from '@/locales/sr/settings.json';
 
 // ── English translations ──
 import enCommon from '@/locales/en/common.json';
@@ -49,6 +51,9 @@ import enCheckin from '@/locales/en/checkin.json';
 import enMemberProfile from '@/locales/en/memberProfile.json';
 import enGymDetails from '@/locales/en/gymDetails.json';
 import enHappyHours from '@/locales/en/happyHours.json';
+import enSocialFriends from '@/locales/en/socialFriends.json';
+import enStats from '@/locales/en/stats.json';
+import enSettings from '@/locales/en/settings.json';
 
 const resources = {
   sr: {
@@ -74,6 +79,9 @@ const resources = {
     memberProfile: srMemberProfile,
     gymDetails: srGymDetails,
     happyHours: srHappyHours,
+    socialFriends: srSocialFriends,
+    stats: srStats,
+    settings: srSettings,
   },
   en: {
     common: enCommon,
@@ -98,11 +106,24 @@ const resources = {
     memberProfile: enMemberProfile,
     gymDetails: enGymDetails,
     happyHours: enHappyHours,
+    socialFriends: enSocialFriends,
+    stats: enStats,
+    settings: enSettings,
   },
 };
 
+function detectDeviceLanguageCode(): string {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    if (!locale) return 'sr';
+    return locale.split('-')[0]?.toLowerCase() || 'sr';
+  } catch {
+    return 'sr';
+  }
+}
+
 // Detect device locale — prefer Serbian if device is sr/hr/bs/cnr
-const deviceLocale = Localization.getLocales()?.[0]?.languageCode ?? 'sr';
+const deviceLocale = detectDeviceLanguageCode();
 const defaultLang = ['sr', 'hr', 'bs', 'cnr'].includes(deviceLocale) ? 'sr' : 'en';
 
 i18n.use(initReactI18next).init({
@@ -133,6 +154,9 @@ i18n.use(initReactI18next).init({
     'memberProfile',
     'gymDetails',
     'happyHours',
+    'socialFriends',
+    'stats',
+    'settings',
   ],
   interpolation: {
     escapeValue: false, // React already escapes

@@ -6,8 +6,12 @@ import { useSession } from './useSession';
 export interface HomeStats {
   /** Consecutive days with at least one completed session */
   streak: number;
-  /** Drops earned today (positive transactions) */
+  /** Total drops earned today (all sources) */
   todayDrops: number;
+  /** Drops earned today from capped sources only (session + checkin) */
+  todayCappedDrops: number;
+  /** Bonus drops today that bypass the daily cap (challenge, referral, arena, bonus) */
+  todayBonusDrops: number;
   /** Info about the most recent completed session */
   lastWorkout: {
     durationSeconds: number;
@@ -34,15 +38,13 @@ export interface HomeStats {
 const EMPTY_STATS: HomeStats = {
   streak: 0,
   todayDrops: 0,
+  todayCappedDrops: 0,
+  todayBonusDrops: 0,
   lastWorkout: null,
   closestReward: null,
   weeklyActivity: [],
   activeDaysThisWeek: 0,
 };
-
-function toLocalDateStr(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
 
 function getPeriodStart(limit: string, now: Date): Date {
   if (limit === 'once') return new Date(0);
@@ -82,13 +84,24 @@ export function useHomeStats(gymId: string | null) {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const { data: todayTx } = await supabase
         .from('drops_transactions')
-        .select('amount')
+        .select('amount, transaction_type')
         .eq('user_id', userId)
         .gte('created_at', todayStart.toISOString())
         .gt('amount', 0)
-        .in('transaction_type', ['session', 'challenge', 'bonus', 'arena']);
+        .in('transaction_type', ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward']);
 
-      const todayDrops = todayTx?.reduce((s, t) => s + (t.amount || 0), 0) || 0;
+      const CAPPED_TYPES = new Set(['session', 'checkin']);
+      let todayCappedDrops = 0;
+      let todayBonusDrops = 0;
+      for (const tx of todayTx ?? []) {
+        const a = tx.amount ?? 0;
+        if (CAPPED_TYPES.has(tx.transaction_type)) {
+          todayCappedDrops += a;
+        } else {
+          todayBonusDrops += a;
+        }
+      }
+      const todayDrops = todayCappedDrops + todayBonusDrops;
 
       // ── 2. Last workout ───────────────────────────
       const { data: lastSession } = await supabase
@@ -108,44 +121,17 @@ export function useHomeStats(gymId: string | null) {
           }
         : null;
 
-      // ── 3. Streak (consecutive days with a session) ─
-      const sixtyDaysAgo = new Date(now);
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      // ── 3. Streak — use server-computed value (profiles.streak_days) ─
+      // The backend (award_drops + perform_checkin) maintains streak_days
+      // using Belgrade timezone and only counts sessions with drops_earned > 0.
+      // Client-side recomputation was buggy (counted 0-drop sessions).
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('streak_days')
+        .eq('id', userId)
+        .single();
 
-      const { data: sessionDates } = await supabase
-        .from('sessions')
-        .select('started_at')
-        .eq('user_id', userId)
-        .eq('is_active', false)
-        .gte('started_at', sixtyDaysAgo.toISOString())
-        .order('started_at', { ascending: false });
-
-      let streak = 0;
-      if (sessionDates && sessionDates.length > 0) {
-        const uniqueDates = new Set<string>();
-        for (const s of sessionDates) {
-          if (s.started_at) {
-            uniqueDates.add(toLocalDateStr(new Date(s.started_at)));
-          }
-        }
-
-        const todayStr = toLocalDateStr(now);
-        let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-        if (!uniqueDates.has(todayStr)) {
-          checkDate.setDate(checkDate.getDate() - 1);
-        }
-
-        while (true) {
-          const dateStr = toLocalDateStr(checkDate);
-          if (uniqueDates.has(dateStr)) {
-            streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
-          } else {
-            break;
-          }
-        }
-      }
+      const streak = profileRow?.streak_days ?? 0;
 
       // ── 4. Closest reward (excluding already-claimed) ──
       let closestReward: HomeStats['closestReward'] = null;
@@ -252,6 +238,8 @@ export function useHomeStats(gymId: string | null) {
       setStats({
         streak,
         todayDrops,
+        todayCappedDrops,
+        todayBonusDrops,
         lastWorkout,
         closestReward,
         weeklyActivity,

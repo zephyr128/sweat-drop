@@ -164,7 +164,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
-        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.28) }]}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
             <View style={styles.row}>
               <Text style={[styles.username, { color: theme.colors.textSecondary }]}>Loading...</Text>
@@ -181,7 +181,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
-        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.28) }]}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
             <View style={styles.row}>
               <Text style={[styles.username, { color: theme.colors.textSecondary }]}>{t('noLeaderboardData')}</Text>
@@ -225,7 +225,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
       </View>
 
       {/* Leaderboard Card */}
-      <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+      <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.28) }]}>
         <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
           {topUsers.map((entry, index) => {
             const isMe = isCurrentUser(entry.user_id);
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   blurContainer: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   row: {
     flexDirection: 'row',

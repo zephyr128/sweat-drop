@@ -39,8 +39,6 @@ export interface Gym {
   /** From gyms.lat / gyms.lng (check-in GPS); used for map preview */
   lat?: number | string | null;
   lng?: number | string | null;
-  /** When backend adds a column, optional; otherwise UI uses a default range */
-  working_hours?: string | null;
   /** Pilot visibility flag used for staged rollout gym lists */
   is_pilot_enabled?: boolean;
 }

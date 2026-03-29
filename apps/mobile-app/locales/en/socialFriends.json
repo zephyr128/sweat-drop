@@ -1,0 +1,57 @@
+{
+  "inviteTitle": "Invite a friend",
+  "signInRequired": "Sign in to use this feature.",
+  "backendUnavailableTitle": "Not available yet",
+  "backendUnavailableBody": "Friend invites are not enabled on this server yet. Try again after the app updates.",
+  "partialBackendHint": "Some invite data could not be loaded. Pull to refresh after an update.",
+
+  "howItWorks": "How it works",
+  "howStep1Title": "Share your invite link",
+  "howStep1Desc": "Send the link to a friend — they can join directly",
+  "howStep2Title": "Friend signs up",
+  "howStep2Desc": "They register and select your gym",
+  "howStep3Title": "Friend checks in at the gym",
+  "howStep3Desc": "They scan the QR code for their first verified check-in",
+  "howStep4Title": "You both earn a reward",
+  "howStep4Desc": "You get +150 drops, they get +100 drops!",
+
+  "heroBonusLabel": "You +150 · Friend +100 drops",
+  "yourCode": "Your invite link",
+  "shareInvite": "Share invite link",
+  "shareMessage": "Join me on SweatDrop! {{url}} — Train, earn drops, and redeem rewards at the gym. Use my code: {{code}}",
+  "copyLink": "Copy link",
+  "copyCode": "Copy code",
+  "copied": "Copied!",
+
+  "monthlyCapTitle": "Monthly reward payouts",
+  "monthlyCapDesc": "{{rewarded}} of {{max}} rewarded this month",
+
+  "applySection": "Have a friend's code?",
+  "applyPlaceholder": "Enter friend's code",
+  "applyCta": "Apply code",
+  "applyEmpty": "Enter a code first.",
+  "gymRequired": "Select an active gym first.",
+  "applySuccess": "Code applied successfully!",
+  "applyFailed": "Could not apply code",
+
+  "deepLinkTitle": "Referral code",
+  "deepLinkConfirm": "Apply invite code \"{{code}}\" at {{gym}}?",
+
+  "statusSection": "Your referrals",
+  "emptyTitle": "No referrals yet",
+  "emptyDesc": "Share your link with friends to start earning bonus drops together.",
+
+  "faqTitle": "FAQ",
+  "faq1Q": "When do I get my reward?",
+  "faq1A": "You earn +150 drops when your friend completes their first verified check-in at the gym.",
+  "faq2Q": "Is there a limit?",
+  "faq2A": "You can invite unlimited friends, but rewards are capped at 5 per month.",
+  "faq3Q": "What does my friend get?",
+  "faq3A": "Your friend receives +100 bonus drops after their first check-in — it's a win-win!",
+
+  "loadError": "Could not load data",
+  "statePending": "Pending",
+  "stateDone": "Done",
+  "stateFailed": "Failed",
+  "stateInfo": "Info"
+}

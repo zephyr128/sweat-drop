@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.";
+"NSBluetoothAlwaysUsageDescription" = "SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.";
+"NSBluetoothPeripheralUsageDescription" = "SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.";

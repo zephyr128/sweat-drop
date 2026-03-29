@@ -1,18 +1,51 @@
 {
   "title": "Novčanik",
-  "totalBalance": "Ukupno stanje",
-  "drops": "drops",
-  "earnedDrops": "Zarađeni drops",
+  "totalBalance": "UKUPAN BALANS",
+  "balanceAtGym": "BALANS U {{gym}}",
+  "balanceByGym": "BALANS PO TERETANAMA",
+  "myGym": "Moja teretana",
+  "global": "Globalno",
+  "availableToSpend": "DOSTUPNO ZA TROŠENJE",
+  "drops": "DROPS",
+  "goToStore": "Idi u Store",
+  "earned": "ZARAĐENO",
   "today": "Danas",
   "thisWeek": "Ova nedelja",
   "thisMonth": "Ovaj mesec",
-  "currentGym": "Teretana",
-  "gymBalance": "Lokalni balans",
-  "expiryTitle": "Isticanje drops",
-  "expiringIn7d": "Ističe za 7 dana",
-  "expiringIn30d": "Ističe za 30 dana",
-  "nextExpiryDate": "Sledeće isticanje",
-  "noExpirySoon": "Nema drops koji uskoro ističu",
-  "walletBalance": "Novčanik",
-  "earnedScore": "Zarađeno (ukupno)"
+  "allTime": "Ukupno",
+  "weeklyTarget": "od {{target}}",
+  "expiry": {
+    "safe": {
+      "title": "DROPS SU BEZBEDNI",
+      "message": "Aktivan si! Nastavi da dolažiš."
+    },
+    "warning": {
+      "title": "DROPS ISTIČU USKORO",
+      "message": "{{count}} drops ističe za {{days}} dana.",
+      "cta": "Potroši odmah"
+    },
+    "critical": {
+      "title": "{{days}} DANA DO ISTEKA!",
+      "message": "{{count}} drops ističe. Dođi odmah!",
+      "cta": "Hitno potroši"
+    }
+  },
+  "activity": "AKTIVNOST",
+  "noActivity": "Još nema aktivnosti",
+  "noActivityDesc": "Odradi prvi trening da počneš da zarađuješ",
+  "startWorkout": "Skeniraj spravu",
+  "loadMore": "Učitaj još",
+  "txType": {
+    "session": "Trening",
+    "checkin": "Check-in",
+    "challenge": "Nagrada izazova",
+    "referral_reward": "Referral bonus",
+    "redemption": "Kupovina iz Store-a",
+    "milestone": "Milestone nagrada",
+    "streak": "Streak bonus",
+    "expired": "Istekli drops",
+    "bonus": "Bonus",
+    "arena": "Arena nagrada",
+    "refund": "Povrat"
+  }
 }

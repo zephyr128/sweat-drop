@@ -23,8 +23,6 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
-import ViewShot, { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
 import { UserBadge } from '@/hooks/useUserBadges';
@@ -72,7 +70,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
   const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { session } = useSession();
-  const viewShotRef = useRef<ViewShot>(null);
+  const viewShotRef = useRef<View>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -158,6 +156,8 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
 
     setIsSharing(true);
     try {
+      const { captureRef } = await import('react-native-view-shot');
+      const Sharing = await import('expo-sharing');
       const uri = await captureRef(viewShotRef, {
         format: 'png',
         quality: 1,
@@ -413,9 +413,9 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
 
       {/* Off-screen shareable card for capturing */}
       <View style={styles.offScreenCapture} pointerEvents="none">
-        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
+        <View ref={viewShotRef} collapsable={false}>
           <ShareableBadgeCard data={shareData} />
-        </ViewShot>
+        </View>
       </View>
     </Modal>
   );

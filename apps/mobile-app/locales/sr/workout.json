@@ -64,6 +64,7 @@
   "securitySessionTooShort": "Drops nisu dodeljeni jer je trening prekratko trajao. Produži sesiju sledeći put.",
   "securityNoDropsAwarded": "Drops nisu dodeljeni za ovaj trening zbog bezbednosnih ili limit pravila.",
   "happyHourBadge": "Happy Hour x{{multiplier}}",
+  "happyHourBadgeBonus": "x{{multiplier}} Happy Hour — bonus na kraju!",
   "trackingOnly": "Samo praćenje — dnevni limit dostignut",
   "exerciseCompleted": "Vežba završena!",
   "nextExercise": "Sledeća vežba",
@@ -100,6 +101,8 @@
     "softSessionInfo": "Svaka čast — {{count}} sesija danas! Zaradio si {{earned}} drops do sada. Samo nastavi!",
     "reducedTierApplied": "Smanjena zarada primenjena nakon praga sesije. Nastavi trening — svaki rep se računa!",
     "dayCapReached": "Dnevni limit dostignut — zaradio si {{earned}} drops danas. Vrati se sutra!",
-    "weekCapReached": "Nedeljni limit dostignut — zaradio si {{earned}} drops ove nedelje. Nova nedelja, novi drops!"
+    "weekCapReached": "Nedeljni limit dostignut — zaradio si {{earned}} drops ove nedelje. Nova nedelja, novi drops!",
+    "happyHourBoost": "Happy Hour Bonus!",
+    "happyHourBreakdown": "Baza: {{base}} → x{{multiplier}} → {{total}} drops"
   }
 }

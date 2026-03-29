@@ -1,3 +1,15 @@
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '620444177181-ar724tn6j7lfr28h97fpaosbn2o48352.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_IOS_URL_SCHEME =
+  'com.googleusercontent.apps.620444177181-ar724tn6j7lfr28h97fpaosbn2o48352';
+
+const googleWebClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
+const googleIosClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
+const googleIosUrlScheme =
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME || DEFAULT_GOOGLE_IOS_URL_SCHEME;
+
 module.exports = {
   expo: {
     name: 'SweatDrop',
@@ -19,12 +31,14 @@ module.exports = {
       bundleIdentifier: 'com.sweatdrop.app',
       infoPlist: {
         NSCameraUsageDescription:
-          'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
+          'SweatDrop uses the camera to scan QR codes on fitness equipment.',
         NSBluetoothAlwaysUsageDescription:
-          'SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.',
+          'SweatDrop uses Bluetooth to communicate with Magene fitness sensors during workouts.',
         NSBluetoothPeripheralUsageDescription:
-          'SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.',
+          'SweatDrop uses Bluetooth to communicate with Magene fitness sensors during workouts.',
         UIBackgroundModes: ['bluetooth-central'],
+        CFBundleLocalizations: ['en', 'sr'],
+        CFBundleDevelopmentRegion: 'en',
       },
     },
     android: {
@@ -47,13 +61,13 @@ module.exports = {
       [
         'react-native-vision-camera',
         {
-          cameraPermissionText: 'SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.',
+          cameraPermissionText: 'SweatDrop uses the camera to scan QR codes on fitness equipment.',
         },
       ],
       [
         '@react-native-google-signin/google-signin',
         {
-          iosUrlScheme: 'com.googleusercontent.apps.620444177181-ar724tn6j7lfr28h97fpaosbn2o48352',
+          iosUrlScheme: googleIosUrlScheme,
         },
       ],
       [
@@ -76,9 +90,12 @@ module.exports = {
             ],
           ]
         : []),
+      '@sentry/react-native',
     ],
     scheme: 'sweatdrop',
     extra: {
+      googleWebClientId,
+      googleIosClientId,
       router: {
         origin: false,
       },

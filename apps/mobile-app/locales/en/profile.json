@@ -2,6 +2,7 @@
   "title": "Profile",
   "sections": {
     "activity": "ACTIVITY",
+    "social": "FRIENDS",
     "rewards": "REWARDS",
     "settings": "SETTINGS"
   },
@@ -50,5 +51,15 @@
   "happyHours": "Happy Hour",
   "notifications": "Notifications",
   "notificationsOn": "Enabled",
-  "notificationsEnable": "Enable"
+  "notificationsEnable": "Enable",
+  "legalSection": "LEGAL",
+  "termsOfService": "Terms of Service",
+  "privacyPolicy": "Privacy Policy",
+  "legalLinkUnavailableTitle": "Link unavailable",
+  "legalLinkUnavailableBody": "This link is not configured for this build yet.",
+  "viewDetailedStats": "View detailed stats →",
+  "myGyms": "MY GYMS",
+  "homeGymBadge": "HOME",
+  "achievements": "ACHIEVEMENTS",
+  "viewTrophyRoom": "View Trophy Room →"
 }

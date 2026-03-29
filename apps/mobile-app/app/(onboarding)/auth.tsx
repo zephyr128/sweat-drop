@@ -30,17 +30,14 @@ import Constants from 'expo-constants';
 
 import { log } from '@/lib/logger';
 
-const FALLBACK_GOOGLE_CLIENT_ID =
-  '620444177181-ar724tn6j7lfr28h97fpaosbn2o48352.apps.googleusercontent.com';
-
 const _googleWebClientId =
   Constants.expoConfig?.extra?.googleWebClientId ||
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-  FALLBACK_GOOGLE_CLIENT_ID;
+  '';
 const _googleIosClientId =
   Constants.expoConfig?.extra?.googleIosClientId ||
   process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
-  FALLBACK_GOOGLE_CLIENT_ID;
+  '';
 
 const _googleConfigured = !!_googleWebClientId;
 
@@ -104,6 +101,9 @@ export default function AuthScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   // Legal consent is implicit — tapping any auth action counts as acceptance
   const legalAccepted = true;
@@ -277,7 +277,10 @@ export default function AuthScreen() {
 
       const Crypto = await import('expo-crypto');
 
-      const nonce = Math.random().toString(36).substring(2, 10);
+      const randomBytes = await Crypto.getRandomBytesAsync(32);
+      const nonce = Array.from(new Uint8Array(randomBytes))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
       const hashedNonce = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         nonce,
@@ -322,6 +325,30 @@ export default function AuthScreen() {
       }
     } finally {
       setAppleLoading(false);
+    }
+  };
+
+  // ────────────────────────────────────────────────────
+  //  FORGOT PASSWORD
+  // ────────────────────────────────────────────────────
+  const handleResetPassword = async () => {
+    if (!email.trim()) {
+      Alert.alert(t('common:error'), t('auth.enterEmailPassword'));
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: siteUrl ? siteUrl + '/auth/reset' : undefined,
+      });
+      if (error) throw error;
+      setResetSent(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('auth.somethingWentWrong');
+      Alert.alert(t('common:error'), msg);
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -542,59 +569,107 @@ export default function AuthScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
-                editable={!isLoading}
+                editable={!isLoading && !resetLoading}
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color={theme.colors.textSecondary}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder={t('auth.passwordPlaceholder')}
-                placeholderTextColor={theme.colors.textTertiary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoComplete="password"
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword((p) => !p)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={theme.colors.textTertiary}
-                />
-              </TouchableOpacity>
-            </View>
+            {showForgotPassword ? (
+              resetSent ? (
+                <>
+                  <Text style={styles.resetSentText}>{t('auth.resetEmailSent')}</Text>
+                  <TouchableOpacity
+                    onPress={() => { setShowForgotPassword(false); setResetSent(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.forgotPasswordText}>{t('auth.backToSignIn')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.primaryButton, (resetLoading || !email.trim()) && { opacity: 0.6 }]}
+                    onPress={handleResetPassword}
+                    disabled={resetLoading || !email.trim()}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.primaryButtonInner}>
+                      {resetLoading ? (
+                        <ActivityIndicator size="small" color={theme.colors.background} />
+                      ) : (
+                        <Text style={styles.primaryButtonText}>{t('auth.sendResetLink')}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setShowForgotPassword(false)}
+                    activeOpacity={0.7}
+                    style={styles.backToSignInContainer}
+                  >
+                    <Text style={styles.forgotPasswordText}>{t('auth.backToSignIn')}</Text>
+                  </TouchableOpacity>
+                </>
+              )
+            ) : (
+              <>
+                <View style={styles.inputContainer}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={20}
+                    color={theme.colors.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t('auth.passwordPlaceholder')}
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoComplete="password"
+                    editable={!isLoading}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword((p) => !p)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={theme.colors.textTertiary}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-            <Text style={styles.authNote}>{t('auth.authNote')}</Text>
+                <TouchableOpacity
+                  onPress={() => setShowForgotPassword(true)}
+                  activeOpacity={0.7}
+                  style={styles.forgotPasswordContainer}
+                >
+                  <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.primaryButton, isLoading && { opacity: 0.6 }]}
-              onPress={handleEmailAuth}
-              disabled={isLoading || !email.trim() || !password.trim()}
-              activeOpacity={0.85}
-            >
-              <View style={styles.primaryButtonInner}>
-                {emailLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.background} />
-                ) : (
-                  <>
-                    <Text style={styles.primaryButtonText}>{t('common:continue')}</Text>
-                    <Ionicons name="arrow-forward" size={20} color={theme.colors.background} />
-                  </>
-                )}
-              </View>
-            </TouchableOpacity>
+                <Text style={styles.authNote}>{t('auth.authNote')}</Text>
+
+                <TouchableOpacity
+                  style={[styles.primaryButton, isLoading && { opacity: 0.6 }]}
+                  onPress={handleEmailAuth}
+                  disabled={isLoading || !email.trim() || !password.trim()}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.primaryButtonInner}>
+                    {emailLoading ? (
+                      <ActivityIndicator size="small" color={theme.colors.background} />
+                    ) : (
+                      <>
+                        <Text style={styles.primaryButtonText}>{t('common:continue')}</Text>
+                        <Ionicons name="arrow-forward" size={20} color={theme.colors.background} />
+                      </>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </>
+            )}
           </Animated.View>
 
           {/* ── Legal footer — implicit consent pattern ── */}
@@ -776,6 +851,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.2,
     marginTop: 2,
+  },
+  forgotPasswordContainer: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
+  },
+  forgotPasswordText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.2,
+  },
+  backToSignInContainer: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  resetSentText: {
+    ...fontStyles.body,
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: 0.2,
+    marginVertical: 8,
   },
 
   // ── Primary Button ──

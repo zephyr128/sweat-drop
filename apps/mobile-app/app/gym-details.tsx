@@ -47,6 +47,28 @@ function buildMapsQuery(gym: Gym): string {
   return gym.name;
 }
 
+function formatWorkingHoursForDisplay(gym: Gym, fallback: string): string {
+  const hours = gym.working_hours;
+  if (!hours) return fallback;
+  const days: Array<keyof NonNullable<Gym['working_hours']>> = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const labels: Record<(typeof days)[number], string> = {
+    mon: 'Mon',
+    tue: 'Tue',
+    wed: 'Wed',
+    thu: 'Thu',
+    fri: 'Fri',
+    sat: 'Sat',
+    sun: 'Sun',
+  };
+  const parts: string[] = [];
+  for (const day of days) {
+    const slot = hours[day];
+    if (!slot?.open || !slot?.close) continue;
+    parts.push(`${labels[day]} ${slot.open}-${slot.close}`);
+  }
+  return parts.length > 0 ? parts.join(' | ') : fallback;
+}
+
 function openInMaps(gym: Gym, lat: number | null, lng: number | null) {
   if (lat != null && lng != null) {
     const q = `${lat},${lng}`;
@@ -158,7 +180,7 @@ export default function GymDetailsScreen() {
   }, [dbLat, dbLng, geocoded?.lat, geocoded?.lng]);
 
   const addressLines = gym ? buildAddressLines(gym) : [];
-  const hoursText = (gym?.working_hours && gym.working_hours.trim()) || t('defaultHours');
+  const hoursText = gym ? formatWorkingHoursForDisplay(gym, t('defaultHours')) : t('defaultHours');
 
   if (!gymId) {
     return (

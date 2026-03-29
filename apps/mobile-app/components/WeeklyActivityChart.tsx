@@ -151,12 +151,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(255,255,255,0.12)',
     marginBottom: 24,
   },
   blur: {
     padding: 16,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   headerRow: {
     flexDirection: 'row',

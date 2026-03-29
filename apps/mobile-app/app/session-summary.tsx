@@ -11,7 +11,7 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
@@ -100,6 +100,17 @@ export default function SessionSummaryScreen() {
   const wasReducedTier = sessionTier === 'tier1' || sessionTier === 'tier2';
   const wasDayCapHit = dropsNum <= 0 && dropLimit.dailyRemaining <= 0 && !securityStatus;
   const wasWeekCapHit = dropsNum <= 0 && dropLimit.weeklyRemaining <= 0 && !securityStatus;
+
+  const happyHourBreakdown = useMemo(() => {
+    const rm = session?.raw_metrics as Record<string, any> | null;
+    const hh = rm?.drop_calc_v2?.happy_hour;
+    if (!hh || hh.active !== true) return null;
+    const mult = Number(hh.multiplier ?? 1);
+    if (mult <= 1) return null;
+    const preBoost = Number(rm?.drop_calc_v2?.raw_drops ?? 0);
+    const postBoost = Math.round(preBoost * mult);
+    return { multiplier: mult, preBoostDrops: preBoost, postBoostDrops: postBoost };
+  }, [session]);
 
   // Trophy pulse animation for badge earned
   const trophyScale = useSharedValue(1);
@@ -601,6 +612,27 @@ export default function SessionSummaryScreen() {
           </Animated.View>
         )}
 
+        {/* ── Happy Hour Breakdown ── */}
+        {happyHourBreakdown && (
+          <Animated.View entering={FadeInDown.delay(510).duration(350)}>
+            <View style={[styles.happyHourBreakdown, { borderColor: 'rgba(255, 214, 0, 0.2)' }]}>
+              <Text style={styles.happyHourBreakdownEmoji}>⚡</Text>
+              <View style={styles.happyHourBreakdownContent}>
+                <Text style={styles.happyHourBreakdownTitle}>
+                  {t('summary.happyHourBoost')}
+                </Text>
+                <Text style={styles.happyHourBreakdownDetail}>
+                  {t('summary.happyHourBreakdown', {
+                    base: happyHourBreakdown.preBoostDrops,
+                    multiplier: happyHourBreakdown.multiplier,
+                    total: happyHourBreakdown.postBoostDrops,
+                  })}
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
+        )}
+
         {/* ── Challenge Rewards (completed during this session) ── */}
         {completedChallenges.length > 0 && (
           <Animated.View entering={FadeInDown.delay(520).duration(400)}>
@@ -1038,6 +1070,36 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
     letterSpacing: 0.3,
+  },
+  /* Happy Hour Breakdown */
+  happyHourBreakdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 214, 0, 0.06)',
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: theme.spacing.sm,
+  },
+  happyHourBreakdownEmoji: {
+    fontSize: 20,
+  },
+  happyHourBreakdownContent: {
+    flex: 1,
+  },
+  happyHourBreakdownTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#FFD700',
+    letterSpacing: 0.3,
+  },
+  happyHourBreakdownDetail: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
   /* Challenge Reward (completed during session) */
   challengeRewardSection: {

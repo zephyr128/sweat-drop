@@ -5,7 +5,20 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Platform, Linking, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  TouchableOpacity,
+  Platform,
+  Linking,
+  Dimensions,
+  Modal,
+  Switch,
+  TextInput,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
@@ -24,7 +37,6 @@ import Animated, {
   interpolate,
   runOnJS,
 } from 'react-native-reanimated';
-import * as Location from 'expo-location';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymData } from '@/hooks/useGymData';
@@ -33,6 +45,10 @@ import { useBranding } from '@/lib/hooks/useBranding';
 import { theme, fontStyles } from '@/lib/theme';
 import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
+import {
+  encodeCustomSimulatorSensorId,
+  type WorkoutSimulatorProfile,
+} from '@/lib/workout/workout-simulator';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -43,6 +59,8 @@ const CORNER_WIDTH = 4;
 // Change this to your test machine's QR UUID
 // To find your machine's QR UUID, scan the QR code once and check the console logs
 const DEV_QR_UUID = '92e1ad0d-8a2a-4993-8b19-61244ab82164'; // Replace with your test machine QR UUID
+
+type DevPresetMode = Exclude<WorkoutSimulatorProfile, 'custom' | 'disconnect_mid_session'> | 'custom';
 
 interface MachineStatus {
   machine_id: string;
@@ -91,6 +109,18 @@ export function ScannerScreen() {
   const [isScanning, setIsScanning] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [showDevSimulatorModal, setShowDevSimulatorModal] = useState(false);
+  const [devPreset, setDevPreset] = useState<DevPresetMode>('normal_30min');
+  const [devDurationMinutes, setDevDurationMinutes] = useState('30');
+  const [devBaseRpm, setDevBaseRpm] = useState('72');
+  const [devRpmAmplitude, setDevRpmAmplitude] = useState('8');
+  const [devSpeedKmh, setDevSpeedKmh] = useState('8.5');
+  const [devInclinePct, setDevInclinePct] = useState('1.5');
+  const [devPowerWatts, setDevPowerWatts] = useState('165');
+  const [devIntervalEnabled, setDevIntervalEnabled] = useState(false);
+  const [devIntervalHighRpm, setDevIntervalHighRpm] = useState('112');
+  const [devIntervalSeconds, setDevIntervalSeconds] = useState('45');
+  const [devTimeScale, setDevTimeScale] = useState('1');
   const router = useRouter();
   const params = useLocalSearchParams<{
     planId?: string;
@@ -300,6 +330,10 @@ export function ScannerScreen() {
     let lng: number | null = null;
 
     try {
+      const Location = await import('expo-location').catch(() => null);
+      if (!Location) {
+        throw new Error('expo-location-unavailable');
+      }
       const { status } = await Location.getForegroundPermissionsAsync();
 
       if (status === 'granted') {
@@ -325,7 +359,9 @@ export function ScannerScreen() {
         }
       }
     } catch (locationError) {
-      console.warn('[CheckIn] GPS error, proceeding without location:', locationError);
+      if ((locationError as Error)?.message !== 'expo-location-unavailable') {
+        console.warn('[CheckIn] GPS error, proceeding without location:', locationError);
+      }
     }
 
     try {
@@ -350,6 +386,18 @@ export function ScannerScreen() {
         rawStatus === 'fraud_blocked'
           ? rawStatus
           : getSecurityStatusFromErrorMessage(rawStatus);
+
+      if (normalizedStatus === 'success') {
+        // Settle referral rewards as part of the verified check-in event.
+        void supabase
+          .rpc('evaluate_referral_qualification', { p_referral_id: null })
+          .then(({ error: qualificationError }) => {
+            if (qualificationError && __DEV__) {
+              console.warn('[CheckIn] evaluate_referral_qualification failed:', qualificationError.message);
+            }
+          });
+      }
+
       router.replace({
         pathname: '/checkin-result',
         params: {
@@ -552,7 +600,11 @@ export function ScannerScreen() {
     }
   };
 
-  const proceedWithWorkout = async (machine: MachineStatus, isFirstGym = false) => {
+  const proceedWithWorkout = async (
+    machine: MachineStatus,
+    isFirstGym = false,
+    sensorIdOverride?: string,
+  ) => {
     try {
       setIsProcessing(true);
 
@@ -632,7 +684,7 @@ export function ScannerScreen() {
         machineId: machine.machine_id,
         gymId: machine.gym_id,
         machineType: machine.machine_type,
-        sensorId: machine.sensor_id || '',
+        sensorId: sensorIdOverride || machine.sensor_id || '',
         bleProtocol: machine.ble_protocol || '',
         ...(planParams ? {
           planId: planParams.planId,
@@ -681,9 +733,39 @@ export function ScannerScreen() {
     }
   };
 
-  // Development mode: Automatically connect to test device
+  const parsePositiveNumber = (value: string, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  };
+
+  const buildDevSimulatorSensorId = (): string => {
+    if (devPreset !== 'custom') {
+      return `sim:${devPreset}`;
+    }
+
+    return encodeCustomSimulatorSensorId({
+      durationMinutes: Math.max(1, Math.round(parsePositiveNumber(devDurationMinutes, 30))),
+      baseRpm: Math.round(parsePositiveNumber(devBaseRpm, 72)),
+      rpmAmplitude: Math.max(0, Math.round(parsePositiveNumber(devRpmAmplitude, 8))),
+      speedKmh: parsePositiveNumber(devSpeedKmh, 8.5),
+      inclinePct: parsePositiveNumber(devInclinePct, 1.5),
+      powerWatts: parsePositiveNumber(devPowerWatts, 165),
+      intervalEnabled: devIntervalEnabled,
+      intervalHighRpm: Math.round(parsePositiveNumber(devIntervalHighRpm, 112)),
+      intervalSeconds: Math.round(parsePositiveNumber(devIntervalSeconds, 45)),
+      timeScale: parsePositiveNumber(devTimeScale, 1),
+    });
+  };
+
+  // Development mode: open debug simulator panel
   const handleDevelopMode = async () => {
+    if (!__DEV__) return;
+    setShowDevSimulatorModal(true);
+  };
+
+  const startDevelopWorkout = async (sensorIdOverride: string) => {
     try {
+      setShowDevSimulatorModal(false);
       setIsProcessing(true);
       setIsScanning(false);
 
@@ -768,11 +850,11 @@ export function ScannerScreen() {
         } catch (error) {
           console.error('[Scanner][Dev] Error setting home gym:', error);
         }
-        proceedWithWorkout(machine, true);
+        proceedWithWorkout(machine, true, sensorIdOverride);
         return;
       }
 
-      proceedWithWorkout(machine);
+      proceedWithWorkout(machine, false, sensorIdOverride);
     } catch (error: any) {
       console.error('[Scanner] Development mode error:', error);
       Alert.alert(
@@ -1031,21 +1113,130 @@ export function ScannerScreen() {
       )}
 
       {/* Development Mode Button */}
-      <TouchableOpacity
-        style={styles.developButton}
-        onPress={handleDevelopMode}
-        activeOpacity={0.7}
-        disabled={isProcessing}
+      {__DEV__ && (
+        <TouchableOpacity
+          style={styles.developButton}
+          onPress={handleDevelopMode}
+          activeOpacity={0.7}
+          disabled={isProcessing}
+        >
+          <BlurView intensity={80} tint="dark" style={styles.buttonBlur}>
+            <View style={styles.buttonBorder} />
+            <Ionicons
+              name="code-slash"
+              size={24}
+              color={isProcessing ? theme.colors.textSecondary : branding.primary}
+            />
+          </BlurView>
+        </TouchableOpacity>
+      )}
+
+      <Modal
+        visible={showDevSimulatorModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowDevSimulatorModal(false)}
       >
-        <BlurView intensity={80} tint="dark" style={styles.buttonBlur}>
-          <View style={styles.buttonBorder} />
-          <Ionicons
-            name="code-slash"
-            size={24}
-            color={isProcessing ? theme.colors.textSecondary : branding.primary}
-          />
-        </BlurView>
-      </TouchableOpacity>
+        <View style={styles.devModalBackdrop}>
+          <View style={styles.devModalCard}>
+            <Text style={styles.devModalTitle}>{t('devSimTitle')}</Text>
+            <Text style={styles.devModalSubtitle}>{t('devSimSubtitle')}</Text>
+
+            <View style={styles.devPresetRow}>
+              <TouchableOpacity
+                style={[styles.devPresetChip, devPreset === 'normal_30min' && styles.devPresetChipActive]}
+                onPress={() => setDevPreset('normal_30min')}
+              >
+                <Text style={styles.devPresetLabel}>{t('devSimPresetNormal')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.devPresetChip, devPreset === 'interval_training' && styles.devPresetChipActive]}
+                onPress={() => setDevPreset('interval_training')}
+              >
+                <Text style={styles.devPresetLabel}>{t('devSimPresetInterval')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.devPresetChip, devPreset === 'suspicious_spike' && styles.devPresetChipActive]}
+                onPress={() => setDevPreset('suspicious_spike')}
+              >
+                <Text style={styles.devPresetLabel}>{t('devSimPresetSpike')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.devPresetChip, devPreset === 'custom' && styles.devPresetChipActive]}
+                onPress={() => setDevPreset('custom')}
+              >
+                <Text style={styles.devPresetLabel}>{t('devSimPresetCustom')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {devPreset === 'custom' && (
+              <View style={styles.devFieldsContainer}>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimDuration')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devDurationMinutes} onChangeText={setDevDurationMinutes} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimBaseRpm')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devBaseRpm} onChangeText={setDevBaseRpm} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimAmplitude')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devRpmAmplitude} onChangeText={setDevRpmAmplitude} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimSpeed')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devSpeedKmh} onChangeText={setDevSpeedKmh} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimIncline')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devInclinePct} onChangeText={setDevInclinePct} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimPower')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devPowerWatts} onChangeText={setDevPowerWatts} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimTimeScale')}</Text>
+                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devTimeScale} onChangeText={setDevTimeScale} />
+                </View>
+                <View style={styles.devFieldRow}>
+                  <Text style={styles.devFieldLabel}>{t('devSimIntervals')}</Text>
+                  <Switch value={devIntervalEnabled} onValueChange={setDevIntervalEnabled} />
+                </View>
+                {devIntervalEnabled && (
+                  <>
+                    <View style={styles.devFieldRow}>
+                      <Text style={styles.devFieldLabel}>{t('devSimIntervalHighRpm')}</Text>
+                      <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devIntervalHighRpm} onChangeText={setDevIntervalHighRpm} />
+                    </View>
+                    <View style={styles.devFieldRow}>
+                      <Text style={styles.devFieldLabel}>{t('devSimIntervalSeconds')}</Text>
+                      <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devIntervalSeconds} onChangeText={setDevIntervalSeconds} />
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+
+            <View style={styles.devActionsRow}>
+              <TouchableOpacity
+                style={styles.devCancelButton}
+                onPress={() => setShowDevSimulatorModal(false)}
+                disabled={isProcessing}
+              >
+                <Text style={styles.devCancelText}>{t('common:cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.devStartButton, { backgroundColor: branding.primary }]}
+                onPress={() => startDevelopWorkout(buildDevSimulatorSensorId())}
+                disabled={isProcessing}
+              >
+                <Text style={[styles.devStartText, { color: branding.onPrimary }]}>{t('devSimStart')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1279,5 +1470,107 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginTop: 10,
     fontSize: 14,
+  },
+  devModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  devModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#0D111A',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  devModalTitle: {
+    ...fontStyles.heading,
+    color: theme.colors.text,
+    fontSize: 18,
+  },
+  devModalSubtitle: {
+    ...fontStyles.body,
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  devPresetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  devPresetChip: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  devPresetChipActive: {
+    borderColor: 'rgba(89, 177, 255, 0.9)',
+    backgroundColor: 'rgba(89, 177, 255, 0.18)',
+  },
+  devPresetLabel: {
+    ...fontStyles.body,
+    color: theme.colors.text,
+    fontSize: 12,
+  },
+  devFieldsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingTop: 10,
+    gap: 8,
+  },
+  devFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  devFieldLabel: {
+    ...fontStyles.body,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    flex: 1,
+  },
+  devFieldInput: {
+    width: 96,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 8,
+    color: theme.colors.text,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    textAlign: 'right',
+  },
+  devActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 14,
+  },
+  devCancelButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  devCancelText: {
+    ...fontStyles.bodyMedium,
+    color: theme.colors.text,
+  },
+  devStartButton: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  devStartText: {
+    ...fontStyles.bodyMedium,
   },
 });

@@ -58,7 +58,12 @@
     "confirmationSent": "We sent you a confirmation link. Click the link in the email and try signing in again.",
     "somethingWentWrong": "Something went wrong",
     "accessDenied": "Access denied",
-    "adminNotAllowed": "Admin accounts cannot use the mobile app. Use a user account."
+    "adminNotAllowed": "Admin accounts cannot use the mobile app. Use a user account.",
+    "forgotPassword": "Forgot password?",
+    "resetPassword": "Reset Password",
+    "sendResetLink": "Send Reset Link",
+    "resetEmailSent": "Check your email for a password reset link.",
+    "backToSignIn": "Back to Sign In"
   },
   "stepper": {
     "title": "How it works",
@@ -93,12 +98,13 @@
   "profileSetup": {
     "skip": "Skip",
     "next": "NEXT",
-    "finish": "FINISH",
+    "finish": "FINISH ✓",
     "stepOf": "Step {{step}} of {{total}}",
     "gender": {
       "title": "WHAT'S YOUR GENDER?",
       "male": "MALE",
-      "female": "FEMALE"
+      "female": "FEMALE",
+      "other": "OTHER"
     },
     "weight": {
       "title": "HOW MUCH DO YOU WEIGH?",

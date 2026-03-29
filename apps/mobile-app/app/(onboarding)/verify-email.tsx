@@ -33,6 +33,31 @@ export default function VerifyEmailScreen() {
 
   const email = user?.email ?? '';
 
+  const navigateByStep = useCallback((step: string) => {
+    switch (step) {
+      case 'stepper':
+        router.replace('/(onboarding)/stepper');
+        break;
+      case 'display_name':
+        router.replace('/(onboarding)/username');
+        break;
+      case 'avatar':
+        router.replace('/(onboarding)/avatar');
+        break;
+      case 'notifications':
+        router.replace('/(onboarding)/notifications');
+        break;
+      case 'profile_setup':
+        router.replace('/(onboarding)/step-gender');
+        break;
+      case 'done':
+        router.replace('/home');
+        break;
+      default:
+        router.replace('/(onboarding)/stepper');
+    }
+  }, [router]);
+
   // Auto-poll: check session every 8s to detect email confirmation.
   // If refreshSession fails (session invalidated after confirmation),
   // stop polling silently — user will tap the button to proceed.
@@ -107,31 +132,6 @@ export default function VerifyEmailScreen() {
       setSignOutLoading(false);
     }
   }, [router, signOut]);
-
-  const navigateByStep = useCallback((step: string) => {
-    switch (step) {
-      case 'stepper':
-        router.replace('/(onboarding)/stepper');
-        break;
-      case 'display_name':
-        router.replace('/(onboarding)/username');
-        break;
-      case 'avatar':
-        router.replace('/(onboarding)/avatar');
-        break;
-      case 'notifications':
-        router.replace('/(onboarding)/notifications');
-        break;
-      case 'profile_setup':
-        router.replace('/(onboarding)/step-gender');
-        break;
-      case 'done':
-        router.replace('/home');
-        break;
-      default:
-        router.replace('/(onboarding)/stepper');
-    }
-  }, [router]);
 
   const handleRecheck = useCallback(async () => {
     // Try refreshing the existing session first

@@ -39,38 +39,30 @@ export default function HomeGymScreen() {
         return;
       }
 
-      const gymsWithBranding = await Promise.all(
-        gymsData.map(async (gym) => {
-          let branding = {
-            primary_color: '#00E5FF',
-            logo_url: null as string | null,
-            background_url: null as string | null,
-          };
+      const ownerIds = gymsData
+        .map((g) => g.owner_id)
+        .filter((id): id is string => !!id);
 
-          if (gym.owner_id) {
-            const { data: ownerBranding } = await supabase
-              .from('owner_branding')
-              .select('primary_color, logo_url, background_url')
-              .eq('owner_id', gym.owner_id)
-              .single();
+      const { data: brandingData } = ownerIds.length
+        ? await supabase
+            .from('owner_branding')
+            .select('owner_id, primary_color, logo_url, background_url')
+            .in('owner_id', ownerIds)
+        : { data: [] };
 
-            if (ownerBranding) {
-              branding = {
-                primary_color: ownerBranding.primary_color || branding.primary_color,
-                logo_url: ownerBranding.logo_url || branding.logo_url,
-                background_url: ownerBranding.background_url || branding.background_url,
-              };
-            }
-          }
-
-          return {
-            ...gym,
-            primary_color: branding.primary_color,
-            logo_url: branding.logo_url,
-            background_url: branding.background_url,
-          };
-        })
+      const brandingMap = new Map(
+        (brandingData || []).map((b) => [b.owner_id, b])
       );
+
+      const gymsWithBranding = gymsData.map((gym) => {
+        const branding = brandingMap.get(gym.owner_id);
+        return {
+          ...gym,
+          primary_color: branding?.primary_color || '#00E5FF',
+          logo_url: branding?.logo_url || null,
+          background_url: branding?.background_url || null,
+        };
+      });
 
       setGyms(gymsWithBranding);
     } catch (error) {

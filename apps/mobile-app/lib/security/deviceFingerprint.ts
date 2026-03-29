@@ -1,13 +1,12 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Application from 'expo-application';
-import * as Device from 'expo-device';
 import * as Crypto from 'expo-crypto';
 
 let fingerprintCache: string | null = null;
 let fingerprintPromise: Promise<string> | null = null;
 
-function buildRawFingerprintInput(): string {
+async function buildRawFingerprintInput(): Promise<string> {
   const parts = [
     'sweatdrop-mobile',
     Platform.OS,
@@ -15,12 +14,12 @@ function buildRawFingerprintInput(): string {
     Application.applicationId ?? '',
     Application.nativeApplicationVersion ?? '',
     Application.nativeBuildVersion ?? '',
-    Device.brand ?? '',
-    Device.manufacturer ?? '',
-    Device.modelName ?? '',
-    Device.osName ?? '',
-    Device.osVersion ?? '',
-    Device.deviceYearClass ? String(Device.deviceYearClass) : '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
     Constants.expoConfig?.slug ?? '',
     Constants.executionEnvironment ?? '',
   ];
@@ -29,7 +28,7 @@ function buildRawFingerprintInput(): string {
 }
 
 async function computeDeviceFingerprint(): Promise<string> {
-  const base = buildRawFingerprintInput();
+  const base = await buildRawFingerprintInput();
   let androidId = '';
   let iosVendorId = '';
 

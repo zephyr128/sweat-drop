@@ -21,11 +21,34 @@
  */
 
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
+
+type NotificationsModule = typeof import('expo-notifications');
+type NotificationSubscription = { remove: () => void };
+
+let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+
+async function getNotificationsModule(): Promise<NotificationsModule | null> {
+  if (!PUSH_NOTIFICATIONS_ENABLED || __DEV__) {
+    return null;
+  }
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications')
+      .then((module) => {
+        if (
+          typeof module?.getPermissionsAsync !== 'function' ||
+          typeof module?.requestPermissionsAsync !== 'function'
+        ) {
+          return null;
+        }
+        return module;
+      })
+      .catch(() => null);
+  }
+  return notificationsModulePromise;
+}
 
 /**
  * Feature flag driven by EXPO_PUBLIC_PUSH_ENABLED env var.
@@ -66,14 +89,20 @@ type NotificationTrigger =
  * Must be called ONCE at app startup (before any notification arrives).
  */
 export function configureNotificationHandler(): void {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false, // We don't use badge count in MVP
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+  void getNotificationsModule().then((Notifications) => {
+    if (!Notifications || typeof Notifications.setNotificationHandler !== 'function') {
+      log.debug('[Notifications] expo-notifications unavailable, handler not configured');
+      return;
+    }
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false, // We don't use badge count in MVP
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
   });
 }
 
@@ -92,9 +121,9 @@ export function configureNotificationHandler(): void {
  * @returns The Expo push token string, or null if registration fails
  */
 export async function registerForPushNotifications(): Promise<string | null> {
-  // Push notifications only work on physical devices
-  if (!Device.isDevice) {
-    log.debug('[Notifications] Skipping push registration — not a physical device');
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    log.debug('[Notifications] expo-notifications unavailable, skipping push registration');
     return null;
   }
 
@@ -151,6 +180,21 @@ export async function registerForPushNotifications(): Promise<string | null> {
   } catch (error) {
     log.error('[Notifications] Failed to register:', error);
     return null;
+  }
+}
+
+export async function getPushPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | 'unsupported'> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    return 'unsupported';
+  }
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status === 'granted') return 'granted';
+    if (status === 'denied') return 'denied';
+    return 'undetermined';
+  } catch {
+    return 'unsupported';
   }
 }
 
@@ -315,29 +359,43 @@ function sanitizeDeepLink(raw: string): string {
 export function addNotificationListeners(
   onNotificationTap: (deepLink: string | null) => void
 ): () => void {
-  // Foreground: notification received while app is open
-  const receivedSubscription = Notifications.addNotificationReceivedListener(
-    (notification) => {
-      const data = notification.request.content.data as NotificationData;
-      log.debug('[Notifications] Received (foreground):', data?.type);
-      // The notification banner is shown automatically via setNotificationHandler
-    }
-  );
+  let receivedSubscription: NotificationSubscription | null = null;
+  let responseSubscription: NotificationSubscription | null = null;
 
-  // Background/Killed: user tapped a notification
-  const responseSubscription = Notifications.addNotificationResponseReceivedListener(
-    (response) => {
-      const data = response.notification.request.content.data as NotificationData;
-      log.debug('[Notifications] Tapped:', data?.type);
-      const deepLink = getDeepLinkFromNotification(data);
-      onNotificationTap(deepLink);
+  void getNotificationsModule().then((Notifications) => {
+    if (
+      !Notifications ||
+      typeof Notifications.addNotificationReceivedListener !== 'function' ||
+      typeof Notifications.addNotificationResponseReceivedListener !== 'function'
+    ) {
+      log.debug('[Notifications] expo-notifications unavailable, listeners not attached');
+      return;
     }
-  );
+
+    // Foreground: notification received while app is open
+    receivedSubscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const data = notification.request.content.data as NotificationData;
+        log.debug('[Notifications] Received (foreground):', data?.type);
+        // The notification banner is shown automatically via setNotificationHandler
+      }
+    );
+
+    // Background/Killed: user tapped a notification
+    responseSubscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data as NotificationData;
+        log.debug('[Notifications] Tapped:', data?.type);
+        const deepLink = getDeepLinkFromNotification(data);
+        onNotificationTap(deepLink);
+      }
+    );
+  });
 
   // Return cleanup function
   return () => {
-    receivedSubscription.remove();
-    responseSubscription.remove();
+    receivedSubscription?.remove();
+    responseSubscription?.remove();
   };
 }
 
@@ -348,6 +406,10 @@ export function addNotificationListeners(
  * @returns The notification data if app was opened from notification, null otherwise
  */
 export async function getInitialNotification(): Promise<NotificationData | null> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications || typeof Notifications.getLastNotificationResponseAsync !== 'function') {
+    return null;
+  }
   const response = await Notifications.getLastNotificationResponseAsync();
   if (response) {
     const data = response.notification.request.content.data as NotificationData;

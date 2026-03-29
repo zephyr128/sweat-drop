@@ -19,7 +19,6 @@ import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
 import { getNumberStyle, theme as appTheme, fontStyles } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { LockedOverlay } from '@/components/LockedOverlay';
-import { UserSettingsSheet } from '@/components/UserSettingsSheet';
 import { ProgressWidget } from '@/components/ProgressWidget';
 import { ActivityRings } from '@/components/ActivityRings';
 import { StatsCards } from '@/components/StatsCards';
@@ -90,7 +89,6 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
-  const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -400,7 +398,7 @@ export default function HomeScreen() {
                   </Text>
                 )}
               </View>
-              <Text style={es.username}>{profile?.username || 'User'}</Text>
+              <Text style={es.username}>{profile?.username || t('common:user')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -657,7 +655,7 @@ export default function HomeScreen() {
               </Text>
             )}
           </View>
-          <Text style={styles.username}>{profile?.username || 'User'}</Text>
+          <Text style={styles.username}>{profile?.username || t('common:user')}</Text>
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
@@ -1388,13 +1386,6 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </View>
-
-      {/* User Settings Sheet */}
-      <UserSettingsSheet
-        visible={settingsSheetVisible}
-        onClose={() => setSettingsSheetVisible(false)}
-        profile={profile}
-      />
 
       {/* Confetti Effect for Badge Earned */}
       {showConfetti && (

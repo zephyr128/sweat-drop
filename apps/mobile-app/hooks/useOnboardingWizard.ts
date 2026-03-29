@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
 
-export type Gender = 'male' | 'female';
+export type Gender = 'male' | 'female' | 'other';
 export type FitnessGoal = 'weight_loss' | 'strength' | 'cardio' | 'health';
 
 interface OnboardingWizardData {

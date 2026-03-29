@@ -2,6 +2,7 @@
   "title": "Profil",
   "sections": {
     "activity": "AKTIVNOST",
+    "social": "PRIJATELJI",
     "rewards": "NAGRADE",
     "settings": "PODEŠAVANJA"
   },
@@ -51,5 +52,15 @@
   "happyHours": "Happy Hour",
   "notifications": "Obaveštenja",
   "notificationsOn": "Uključeno",
-  "notificationsEnable": "Uključi"
+  "notificationsEnable": "Uključi",
+  "legalSection": "PRAVNO",
+  "termsOfService": "Uslovi korišćenja",
+  "privacyPolicy": "Politika privatnosti",
+  "legalLinkUnavailableTitle": "Link nije dostupan",
+  "legalLinkUnavailableBody": "Ovaj link još nije podešen za ovu verziju aplikacije.",
+  "viewDetailedStats": "Pogledaj detaljne statistike →",
+  "myGyms": "MOJE TERETANE",
+  "homeGymBadge": "MATIČNA",
+  "achievements": "DOSTIGNUĆA",
+  "viewTrophyRoom": "Pogledaj trofejnu sobu →"
 }
