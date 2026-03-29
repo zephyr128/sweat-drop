@@ -33,42 +33,42 @@ export default function VerifyEmailScreen() {
 
   const email = user?.email ?? '';
 
-  // Auto-poll: check session every 5s to detect email confirmation
+  // Auto-poll: check session every 8s to detect email confirmation.
+  // If refreshSession fails (session invalidated after confirmation),
+  // stop polling silently — user will tap the button to proceed.
   useEffect(() => {
+    let stopped = false;
+
     const checkConfirmation = async () => {
       try {
-        const { data } = await supabase.auth.refreshSession();
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error || stopped) return;
         const u = data.session?.user;
         if (u && !shouldRequireEmailVerification(u)) {
+          stopped = true;
           if (pollRef.current) clearInterval(pollRef.current);
           await useAuthStore.getState().fetchProfile();
           const step = useAuthStore.getState().onboardingStep;
-          switch (step) {
-            case 'stepper':
-              router.replace('/(onboarding)/stepper');
-              break;
-            case 'display_name':
-              router.replace('/(onboarding)/username');
-              break;
-            default:
-              router.replace('/(onboarding)/stepper');
-          }
+          navigateByStep(step);
         }
-      } catch {}
+      } catch {
+        // Session gone — stop polling, let user tap the button
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
     };
 
-    pollRef.current = setInterval(checkConfirmation, 5000);
+    pollRef.current = setInterval(checkConfirmation, 8000);
 
-    // Also check immediately when app returns from background
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkConfirmation();
+      if (state === 'active' && !stopped) checkConfirmation();
     });
 
     return () => {
+      stopped = true;
       if (pollRef.current) clearInterval(pollRef.current);
       sub.remove();
     };
-  }, [router]);
+  }, [router, navigateByStep]);
 
   const handleResend = useCallback(async () => {
     if (!email.trim()) return;
@@ -108,42 +108,67 @@ export default function VerifyEmailScreen() {
     }
   }, [router, signOut]);
 
+  const navigateByStep = useCallback((step: string) => {
+    switch (step) {
+      case 'stepper':
+        router.replace('/(onboarding)/stepper');
+        break;
+      case 'display_name':
+        router.replace('/(onboarding)/username');
+        break;
+      case 'avatar':
+        router.replace('/(onboarding)/avatar');
+        break;
+      case 'notifications':
+        router.replace('/(onboarding)/notifications');
+        break;
+      case 'profile_setup':
+        router.replace('/(onboarding)/step-gender');
+        break;
+      case 'done':
+        router.replace('/home');
+        break;
+      default:
+        router.replace('/(onboarding)/stepper');
+    }
+  }, [router]);
+
   const handleRecheck = useCallback(async () => {
+    // Try refreshing the existing session first
     const { data, error } = await supabase.auth.refreshSession();
+
     if (error) {
-      Alert.alert(t('common:error'), error.message);
+      // Session expired/invalidated after email confirmation — send user
+      // back to auth screen so they can sign in with their credentials.
+      // This is expected behavior with some Supabase configurations.
+      Alert.alert(
+        t('auth.verifyTitle'),
+        t('auth.sessionExpiredRecovery'),
+        [
+          {
+            text: t('auth.verifySignOut'),
+            onPress: () => {
+              signOut().then(() => router.replace('/(onboarding)/auth'));
+            },
+          },
+        ],
+      );
       return;
     }
+
     const session = data.session;
     const u = session?.user;
     if (u && !shouldRequireEmailVerification(u)) {
       await useAuthStore.getState().fetchProfile();
       const step = useAuthStore.getState().onboardingStep;
-      if (step === 'done') {
-        router.replace('/home');
-        return;
-      }
-      switch (step) {
-        case 'stepper':
-          router.replace('/(onboarding)/stepper');
-          break;
-        case 'display_name':
-          router.replace('/(onboarding)/username');
-          break;
-        case 'avatar':
-          router.replace('/(onboarding)/avatar');
-          break;
-        case 'notifications':
-          router.replace('/(onboarding)/notifications');
-          break;
-        case 'profile_setup':
-          router.replace('/(onboarding)/step-gender');
-          break;
-        default:
-          router.replace('/home');
-      }
+      navigateByStep(step);
+    } else {
+      Alert.alert(
+        t('auth.verifyTitle'),
+        t('auth.verifyInstructions'),
+      );
     }
-  }, [router]);
+  }, [router, navigateByStep, signOut, t]);
 
   const busy = resendLoading || signOutLoading;
 
