@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Save, Shield, ShieldAlert, Link2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Save, Shield, ShieldAlert, Link2, Zap } from 'lucide-react';
 import {
   updateEconomyConfig,
   type BandEnforcementMode,
@@ -35,10 +35,10 @@ const LIMITS = {
 };
 
 const TOOLTIPS: Record<string, string> = {
-  maxDropsPerSession: 'Maximum drops a member can earn in a single workout. Prevents abuse from extremely long sessions.',
+  maxDropsPerSession: 'Earning threshold per session. Members earn at full rate up to this amount, then at reduced rates (40% → 15%). This prevents diminishing returns from feeling like a hard wall.',
   maxDropsPerDay: 'Total drops a member can earn across all workouts in one day.',
   maxDropsPerWeek: 'Total drops a member can earn across the entire week. Limits excessive farming.',
-  maxRewardedSessionsPerDay: 'How many workouts per day actually earn drops. Extra sessions beyond this are free but earn nothing.',
+  maxRewardedSessionsPerDay: 'Maximum rewarded sessions per day. Behavior depends on the cap mode configured in the database (off/soft/hard). Default: hard — exceeding this count stops drops for the day.',
   maxCheckinDropsPerDay:
     'Same value as Gym Setup → Location & check-in → Drops per check-in. Publishing Economy copies it to the gym record used by the QR flow. Set to 0 to disable check-in rewards.',
   dropsEarned: 'Total drops earned by all members in the last 30 days.',
@@ -182,6 +182,14 @@ export function EconomySettingsPanel({
       {/* ── Happy Hour ── */}
       <section id="happy-hour">
         <HappyHourRulesManager gymId={gymId} />
+        <div className="mt-3 flex gap-2.5 rounded-xl border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
+          <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            <span className="text-zinc-300 font-medium">How boost interacts with limits:</span>{' '}
+            Happy Hour multiplier is applied before session thresholds but is still subject to daily and weekly caps.
+            A 1.5× boost during Happy Hour means members reach the session threshold faster, earning more total drops per session.
+          </p>
+        </div>
       </section>
 
       {/* ── Earning Limits ── */}

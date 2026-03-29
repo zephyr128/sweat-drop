@@ -26,9 +26,13 @@
     "test:admin": "node scripts/testing/run-suite.cjs admin",
     "test:e2e": "node scripts/testing/run-suite.cjs e2e",
     "test:smoke": "node scripts/testing/run-smoke.cjs",
+    "test:mobile-gates": "node scripts/testing/verify-mobile-gates.cjs",
+    "test:release-preflight": "node scripts/testing/release-preflight.cjs",
     "test:fixtures:reset": "node scripts/testing/fixtures-reset.cjs",
     "test:fixtures:seed": "node scripts/testing/fixtures-seed.cjs",
     "test:ci": "node scripts/testing/run-ci.cjs",
+    "env:mobile:dev": "node scripts/use-mobile-env.cjs dev",
+    "env:mobile:prod": "node scripts/use-mobile-env.cjs prod",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
