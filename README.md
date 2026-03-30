@@ -94,10 +94,26 @@ The database includes the following main tables:
 
 ## Development
 
-- `npm run dev:mobile` - Start mobile app development server
-- `npm run dev:admin` - Start admin panel development server
-- `npm run lint` - Run linting across all workspaces
-- `npm run type-check` - Type check all workspaces
+### Mobile App
+
+- `pnpm dev:mobile` - Start mobile app development server
+- `pnpm android:run` - Complete Android setup and run (first time)
+- `pnpm android:dev` - Quick Android development start
+- `pnpm android` - Direct Android run (no setup)
+- `pnpm ios:build` - Complete iOS setup and build
+
+See [ANDROID_SETUP.md](./ANDROID_SETUP.md) for detailed Android setup instructions.  
+For troubleshooting, see [ANDROID_TROUBLESHOOTING.md](./ANDROID_TROUBLESHOOTING.md).
+
+### Admin Panel
+
+- `pnpm dev:admin` - Start admin panel development server
+- `pnpm build:admin` - Build admin panel for production
+
+### General
+
+- `pnpm lint` - Run linting across all workspaces
+- `pnpm type-check` - Type check all workspaces
 
 ## Technology Stack
 

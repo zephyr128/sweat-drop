@@ -1,0 +1,44 @@
+╔════════════════════════════════════════════════════════════╗
+║         SweatDrop Android - Quick Reference               ║
+╚════════════════════════════════════════════════════════════╝
+
+🚀 POKRETANJE
+  pnpm android:setup   Setup environment (samo prvi put)
+  pnpm android:run     Prvi put / kompletan setup
+  pnpm android:dev     Svakodnevni development
+  pnpm android         Direktno (bez provera)
+
+🔧 PREDUSLOVI
+  # Java 17+
+  brew install openjdk@17
+  export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+  
+  # Android SDK
+  export ANDROID_HOME=$HOME/Library/Android/sdk
+  export PATH=$PATH:$ANDROID_HOME/platform-tools
+  export PATH=$PATH:$ANDROID_HOME/emulator
+
+🐛 DEBUGGING
+  adb devices                          Prikaži uređaje
+  adb logcat | grep ReactNative        Prikaži logove
+  adb shell input keyevent 82          Otvori dev menu
+  adb shell pm clear com.sweatdrop     Očisti app data
+
+🔄 TROUBLESHOOTING
+  npx expo start -c                    Očisti Metro cache
+  ./clean-install.sh                   Očisti i reinstaliraj
+  cd apps/mobile-app/android && ./gradlew clean
+
+📚 DOKUMENTACIJA
+  QUICKSTART.md        Brzi start guide
+  ANDROID_SETUP.md     Detaljan setup
+  SCRIPTS.md           Sve komande
+  pnpm help            Prikaži sve komande
+
+💡 TIPS
+  - Kreiraj AVD u Android Studio (Tools > Device Manager)
+  - Koristi android:dev za brzo pokretanje
+  - Dodaj aliase u .zshrc za često korišćene komande
+  - Proveri setup: java -version && echo $ANDROID_HOME
+
+═══════════════════════════════════════════════════════════════
