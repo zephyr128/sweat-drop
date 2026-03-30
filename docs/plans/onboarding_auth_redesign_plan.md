@@ -895,7 +895,7 @@ Shown ONCE after first auth, never again.
   └──────────────────────────────────────────┘
 
   ┌──────────────────────────────────────────┐
-  │  🏆  2. Takmič se                       │
+  │  🏆  2. Takmiči se                       │
   │      Ispunjavaj izazove, osvajaj bedževe │
   │      i penji se na leaderboard u svojoj  │
   │      teretani.                           │
@@ -927,7 +927,7 @@ const steps = [
   },
   {
     icon: '🏆',
-    title: 'Takmič se',
+    title: 'Takmiči se',
     description: 'Ispunjavaj izazove, osvajaj bedževe i penji se na leaderboard u svojoj teretani.',
   },
   {

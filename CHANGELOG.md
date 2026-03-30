@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-03-30] - Pre-Production Dead Feature Cleanup
+
+### Removed
+- **16 dead tables** from database: SmartCoach programs stack (`coach_profiles`, `coach_gym_affiliations`, `live_sessions`, `smartcoach_user_progress`, `workout_day_templates`, `day_template_items`, `workout_programs`, `program_days`, `program_items`, `user_active_programs`, `workout_plan_progress`, `completed_exercises`, `plan_session_history`, `equipment`) + deprecated (`user_challenge_progress`, `user_progress`)
+- **3 dead functions**: `process_smartcoach_progress`, `get_plan_item_for_machine`, `load_day_template_into_program`
+- **1 dead column**: `sessions.equipment_id`
+- **49 debug/temp SQL files** from `backend/supabase/` (DEBUG_*, VERIFY_*, FIX_*, DIAGNOSE_*, etc.)
+
+---
+
 ## [2026-03-29] - P0: Reconcile award_drops
 
 ### Fixed

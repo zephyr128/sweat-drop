@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-03-29 (P0 reconcile award_drops: happy hour + soft tiers)
+**Last Updated:** 2026-03-30 (pre-production dead feature cleanup)
 
 ---
 
@@ -16,6 +16,58 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-03-30] - Pre-Production Dead Feature Cleanup
+
+**Migrations:**
+- `20260330000001_pre_production_dead_feature_cleanup.sql`
+- `20260330000002_cleanup_remaining_dead_tables.sql`
+
+#### Tables Dropped (16)
+
+**SmartCoach / Programs stack** (never shipped, feature-gated off, 0 active users):
+- `coach_profiles`, `coach_gym_affiliations`
+- `live_sessions`, `smartcoach_user_progress`
+- `workout_day_templates`, `day_template_items`
+- `workout_programs`, `program_days`, `program_items`
+- `user_active_programs`, `workout_plan_progress`
+- `completed_exercises`, `plan_session_history`
+- `equipment`
+
+**Deprecated / superseded:**
+- `user_challenge_progress` (replaced by `challenge_progress`)
+- `user_progress` (created but never wired)
+
+#### Columns Dropped (1)
+- `sessions.equipment_id` (FK to equipment, all 402 rows NULL)
+
+#### Functions Dropped (3)
+- `process_smartcoach_progress`
+- `get_plan_item_for_machine`
+- `load_day_template_into_program`
+
+#### Files Deleted (49)
+- 13 DEBUG_*.sql, 26 VERIFY_*.sql, 3 FIX_*.sql
+- 2 DIAGNOSE_*.sql, 1 EXPLAIN_*.sql, 1 AUDIT_*.sql
+- 1 OPT_*.sql, 1 DATABASE_AUDIT_REPORT.md, 1 repair.sh
+
+#### Intentionally Kept
+- `workout_plans`, `workout_plan_items`, `active_subscriptions` (used by mobile + admin)
+- `gyms.smartcoach_enabled` (feature flag, referenced in app code)
+- `drop_limits` (config table, may be read by tokenomics)
+
+#### Impact on Frontend
+- **Mobile App (Faza 2):** SmartCoach screens (`smartcoach.tsx`, `gym-plans.tsx`, `plan-detail.tsx`)
+  can be removed or left feature-gated. `get_plan_item_for_machine` RPC no longer exists — any
+  SmartCoach workout flow will fail if enabled. Remove or guard accordingly.
+- **Admin Panel (Faza 2):** `WorkoutPlansManager`, `SmartCoachToggle`, `SmartCoachOverview`,
+  `workout-plan-actions.ts`, `smartcoach-progress.ts` can be removed.
+
+#### Rollback
+Re-run original creation migrations to restore tables if needed.
+Data was dev-only (0-75 rows, no production users).
+
+---
 
 ### [2026-03-29] - P0: Reconcile award_drops — Happy Hour + Soft Tiers + Anti-Split Merge
 
