@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
@@ -21,6 +21,8 @@ interface RealtimeRefreshOptions {
   enabled?: boolean;
 }
 
+const DEFAULT_EVENTS: Array<'INSERT' | 'UPDATE' | 'DELETE'> = ['INSERT', 'UPDATE'];
+
 /**
  * Subscribe to Supabase Realtime changes on a table, with fallback polling.
  * When realtime delivers an event matching the filter, `onEvent` fires immediately.
@@ -30,7 +32,7 @@ export function useRealtimeRefresh({
   table,
   filterColumn,
   filterValue,
-  events = ['INSERT', 'UPDATE'],
+  events,
   onEvent,
   pollIntervalMs = 30_000,
   enabled = true,
@@ -38,8 +40,17 @@ export function useRealtimeRefresh({
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef(AppState.currentState);
+  const onEventRef = useRef(onEvent);
 
-  const stableOnEvent = useCallback(onEvent, [onEvent]);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  // Keep event list stable across renders so we do not constantly re-subscribe.
+  const eventList = useMemo<Array<'INSERT' | 'UPDATE' | 'DELETE'>>(() => {
+    const source = events?.length ? events : DEFAULT_EVENTS;
+    return [...new Set(source)];
+  }, [events?.join('|')]);
 
   useEffect(() => {
     if (!enabled || !filterValue) return;
@@ -53,13 +64,13 @@ export function useRealtimeRefresh({
         : undefined;
 
       channel = supabase.channel(channelName);
-      for (const event of events) {
+      for (const event of eventList) {
         channel = channel.on(
           'postgres_changes' as any,
           { event, schema: 'public', table, filter } as any,
           () => {
             log.debug(`[Realtime] ${table} ${event} received`);
-            stableOnEvent();
+            onEventRef.current();
           }
         );
       }
@@ -78,7 +89,7 @@ export function useRealtimeRefresh({
 
     pollRef.current = setInterval(() => {
       if (appStateRef.current === 'active') {
-        stableOnEvent();
+        onEventRef.current();
       }
     }, pollIntervalMs);
 
@@ -86,7 +97,7 @@ export function useRealtimeRefresh({
       const wasBackground = appStateRef.current !== 'active';
       appStateRef.current = next;
       if (next === 'active' && wasBackground) {
-        stableOnEvent();
+        onEventRef.current();
       }
     });
 
@@ -101,5 +112,5 @@ export function useRealtimeRefresh({
       }
       appListener.remove();
     };
-  }, [table, filterColumn, filterValue, enabled, pollIntervalMs, stableOnEvent]);
+  }, [table, filterColumn, filterValue, enabled, pollIntervalMs, eventList]);
 }
