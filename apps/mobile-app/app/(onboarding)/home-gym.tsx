@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
@@ -12,6 +12,7 @@ import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
 import { GymCard } from '@/components/GymCard';
 import { log } from '@/lib/logger';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -20,6 +21,7 @@ export default function HomeGymScreen() {
   const router = useRouter();
   const { theme: currentTheme } = useTheme();
   const { t } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
 
   useEffect(() => {
     loadGyms();
@@ -89,7 +91,7 @@ export default function HomeGymScreen() {
 
       router.replace('/home');
     } catch {
-      Alert.alert(t('homeGym.error'), t('homeGym.errorMsg'));
+      showModal({ title: t('homeGym.error'), body: t('homeGym.errorMsg') });
     } finally {
       setSettingGym(false);
     }

@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
@@ -48,6 +49,7 @@ export default function RewardDetailScreen() {
   const { getActiveGymId } = useGymStore();
   const activeGymId = gymId || getActiveGymId() || '';
   const { t } = useTranslation('store');
+  const showModal = useAppModal((s) => s.showModal);
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const [reward, setReward] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -167,21 +169,21 @@ export default function RewardDetailScreen() {
       if (error) {
         const kind = classifyRewardClaimError(error.message);
         if (kind === 'limit_once') {
-          Alert.alert(t('common:error'), t('limitOnceReached'));
+          showModal({ title: t('common:error'), body: t('limitOnceReached') });
         } else if (kind === 'limit_daily') {
-          Alert.alert(t('common:error'), t('limitDailyReached'));
+          showModal({ title: t('common:error'), body: t('limitDailyReached') });
         } else if (kind === 'limit_weekly') {
-          Alert.alert(t('common:error'), t('limitWeeklyReached'));
+          showModal({ title: t('common:error'), body: t('limitWeeklyReached') });
         } else if (kind === 'limit_monthly') {
-          Alert.alert(t('common:error'), t('limitMonthlyReached'));
+          showModal({ title: t('common:error'), body: t('limitMonthlyReached') });
         } else if (kind === 'temporarily_unavailable') {
-          Alert.alert(t('common:error'), t('temporarilyUnavailable'));
+          showModal({ title: t('common:error'), body: t('temporarilyUnavailable') });
         } else if (kind === 'fraud_blocked') {
-          Alert.alert(t('common:error'), t('fraudBlocked'));
+          showModal({ title: t('common:error'), body: t('fraudBlocked') });
         } else if (kind === 'rate_limited') {
-          Alert.alert(t('common:error'), t('rateLimited'));
+          showModal({ title: t('common:error'), body: t('rateLimited') });
         } else {
-          Alert.alert(t('common:error'), error.message);
+          showModal({ title: t('common:error'), body: error.message });
         }
         setClaiming(false);
         return;
@@ -189,23 +191,16 @@ export default function RewardDetailScreen() {
 
       if (!data || data.length === 0 || !data[0].success) {
         const kind = classifyRewardClaimError(data?.[0]?.error_message || '');
-        if (kind === 'limit_once') {
-          Alert.alert(t('redemptionFailed'), t('limitOnceReached'));
-        } else if (kind === 'limit_daily') {
-          Alert.alert(t('redemptionFailed'), t('limitDailyReached'));
-        } else if (kind === 'limit_weekly') {
-          Alert.alert(t('redemptionFailed'), t('limitWeeklyReached'));
-        } else if (kind === 'limit_monthly') {
-          Alert.alert(t('redemptionFailed'), t('limitMonthlyReached'));
-        } else if (kind === 'temporarily_unavailable') {
-          Alert.alert(t('redemptionFailed'), t('temporarilyUnavailable'));
-        } else if (kind === 'fraud_blocked') {
-          Alert.alert(t('redemptionFailed'), t('fraudBlocked'));
-        } else if (kind === 'rate_limited') {
-          Alert.alert(t('redemptionFailed'), t('rateLimited'));
-        } else {
-          Alert.alert(t('redemptionFailed'), data?.[0]?.error_message || t('redemptionFailed'));
-        }
+        const errorBody =
+          kind === 'limit_once' ? t('limitOnceReached') :
+          kind === 'limit_daily' ? t('limitDailyReached') :
+          kind === 'limit_weekly' ? t('limitWeeklyReached') :
+          kind === 'limit_monthly' ? t('limitMonthlyReached') :
+          kind === 'temporarily_unavailable' ? t('temporarilyUnavailable') :
+          kind === 'fraud_blocked' ? t('fraudBlocked') :
+          kind === 'rate_limited' ? t('rateLimited') :
+          (data?.[0]?.error_message || t('redemptionFailed'));
+        showModal({ title: t('redemptionFailed'), body: errorBody });
         setClaiming(false);
         return;
       }
@@ -216,7 +211,7 @@ export default function RewardDetailScreen() {
       refreshLocalDrops();
       loadReward();
     } catch (err: any) {
-      Alert.alert(t('common:error'), err.message || t('redemptionFailed'));
+      showModal({ title: t('common:error'), body: err.message || t('redemptionFailed') });
     } finally {
       setClaiming(false);
     }
@@ -224,14 +219,14 @@ export default function RewardDetailScreen() {
 
   const confirmRedeem = () => {
     if (!reward) return;
-    Alert.alert(
-      t('redeemReward'),
-      t('redeemConfirm', { name: reward.name, price: reward.price_drops }),
-      [
-        { text: t('common:cancel'), style: 'cancel' },
-        { text: t('redeem'), onPress: handleRedeem },
-      ]
-    );
+    showModal({
+      title: t('redeemReward'),
+      body: t('redeemConfirm', { name: reward.name, price: reward.price_drops }),
+      buttons: [
+        { label: t('common:cancel'), style: 'cancel' },
+        { label: t('redeem'), onPress: handleRedeem },
+      ],
+    });
   };
 
   if (loading) {

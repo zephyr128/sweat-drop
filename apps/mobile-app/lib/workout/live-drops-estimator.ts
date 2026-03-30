@@ -59,6 +59,8 @@ export interface LiveDropsInput {
   machineConfig?: MachineDropConfig | null;
   /** Diminishing return segments from backend; falls back to DEFAULT_DIMINISHING */
   diminishingConfig?: DiminishingConfig | null;
+  /** Drops from prior sessions within the merge window (mirrors backend anti-split logic) */
+  mergedPriorDrops?: number;
 }
 
 export interface LiveDropsResult {
@@ -206,42 +208,45 @@ export function estimateLiveDropsDetailed(input: LiveDropsInput): LiveDropsResul
     return { drops: 0, tier: 'normal', rawSessionDrops: 0, sessionThreshold, dailyRemaining: dayRemaining, weeklyRemaining: weekRemaining, hardCapReached: true };
   }
 
-  // Soft session-threshold tiering:
-  // 0..threshold → 100% rate
-  // threshold..threshold*(1+spanRatio) → tier1Factor rate
-  // beyond → tier2Factor rate
-  let tieredDrops: number;
+  // Soft session-threshold tiering with merge window (mirrors backend award_drops).
+  // The backend combines drops from recent prior sessions within the merge window
+  // with this session's raw drops, applies tiers to the combined total, then
+  // subtracts the prior sessions' tiered contribution to get marginal credit.
+  const priorDrops = Math.max(0, input.mergedPriorDrops ?? 0);
+  const tier1Span = sessionThreshold * tier1SpanRatio;
+  const tier1End = sessionThreshold + tier1Span;
+
+  const applyTiers = (d: number): number => {
+    if (d <= sessionThreshold) return d;
+    if (d <= tier1End) return sessionThreshold + (d - sessionThreshold) * tier1Factor;
+    return sessionThreshold + tier1Span * tier1Factor + (d - tier1End) * tier2Factor;
+  };
+
+  const combinedDrops = priorDrops + rawSessionDrops;
+  const combinedTiered = applyTiers(combinedDrops);
+  const priorTiered = applyTiers(priorDrops);
+  const tieredDrops = Math.max(0, combinedTiered - priorTiered);
+
   let tier: SessionTier;
-
-  if (rawSessionDrops <= sessionThreshold) {
-    tieredDrops = rawSessionDrops;
-    tier = 'normal';
-  } else {
-    const overThreshold = rawSessionDrops - sessionThreshold;
-    const tier1Span = sessionThreshold * tier1SpanRatio;
-
-    if (overThreshold <= tier1Span) {
-      tieredDrops = sessionThreshold + overThreshold * tier1Factor;
-      tier = 'tier1';
-    } else {
-      const tier1Contribution = tier1Span * tier1Factor;
-      const tier2Excess = overThreshold - tier1Span;
-      tieredDrops = sessionThreshold + tier1Contribution + tier2Excess * tier2Factor;
-      tier = 'tier2';
-    }
-  }
+  if (combinedDrops <= sessionThreshold) tier = 'normal';
+  else if (combinedDrops <= tier1End) tier = 'tier1';
+  else tier = 'tier2';
 
   const finalDrops = Math.max(0, Math.round(
     Math.min(tieredDrops, dayRemaining, weekRemaining)
   ));
+
+  const postSessionDayRemaining = Math.max(0, dayRemaining - finalDrops);
+  const postSessionWeekRemaining = Math.max(0, weekRemaining - finalDrops);
 
   return {
     drops: finalDrops,
     tier,
     rawSessionDrops: Math.round(rawSessionDrops),
     sessionThreshold,
-    dailyRemaining: Math.max(0, dayRemaining - finalDrops),
-    weeklyRemaining: Math.max(0, weekRemaining - finalDrops),
-    hardCapReached: finalDrops <= 0 && hardCapReached,
+    dailyRemaining: postSessionDayRemaining,
+    weeklyRemaining: postSessionWeekRemaining,
+    // Cap is reached if it was already exhausted OR this session just drained it to zero
+    hardCapReached: hardCapReached || postSessionDayRemaining <= 0 || postSessionWeekRemaining <= 0,
   };
 }

@@ -4,7 +4,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
@@ -29,6 +28,7 @@ import { useTranslation } from 'react-i18next';
 import Constants from 'expo-constants';
 
 import { log } from '@/lib/logger';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 const _googleWebClientId =
   Constants.expoConfig?.extra?.googleWebClientId ||
@@ -93,6 +93,7 @@ async function ensureGoogleSigninConfigured(): Promise<GoogleSigninModule | null
 export default function AuthScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
 
   const [email, setEmail] = useState('');
@@ -156,10 +157,7 @@ export default function AuthScreen() {
     if (profile?.role && profile.role !== 'member' && profile.role !== 'user') {
       await supabase.auth.signOut();
       useAuthStore.getState().reset();
-      Alert.alert(
-        t('auth.accessDenied'),
-        t('auth.adminNotAllowed'),
-      );
+      showModal({ title: t('auth.accessDenied'), body: t('auth.adminNotAllowed') });
       return;
     }
 
@@ -176,12 +174,12 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   const handleGoogleSignIn = async () => {
     if (!legalAccepted) {
-      Alert.alert(t('common:error'), t('auth.legalConsentRequired'));
+      showModal({ title: t('common:error'), body: t('auth.legalConsentRequired') });
       return;
     }
     if (!_googleConfigured) {
       log.warn('[Auth] Google sign-in attempted but client ID is missing');
-      Alert.alert(t('common:error'), t('auth.googleNotConfigured'));
+      showModal({ title: t('common:error'), body: t('auth.googleNotConfigured') });
       return;
     }
     try {
@@ -193,7 +191,7 @@ export default function AuthScreen() {
         if (__DEV__) {
           log.warn('[Auth:Google] Native module unavailable — need a development build (not Expo Go)');
         }
-        Alert.alert(t('common:error'), t('auth.googleNotConfigured'));
+        showModal({ title: t('common:error'), body: t('auth.googleNotConfigured') });
         return;
       }
 
@@ -246,11 +244,11 @@ export default function AuthScreen() {
       if (__DEV__) log.error('[Auth:Google] phase=error', { code, message: error?.message });
 
       if (code === 'NETWORK_ERROR' || code === '7' || error?.message?.toLowerCase().includes('network')) {
-        Alert.alert(t('common:error'), t('auth.googleNetworkError'));
+        showModal({ title: t('common:error'), body: t('auth.googleNetworkError') });
       } else if (code === 'DEVELOPER_ERROR' || code === '10') {
-        Alert.alert(t('common:error'), t('auth.googleConfigError'));
+        showModal({ title: t('common:error'), body: t('auth.googleConfigError') });
       } else {
-        Alert.alert(t('common:error'), t('auth.googleFailed'));
+        showModal({ title: t('common:error'), body: t('auth.googleFailed') });
       }
     } finally {
       setGoogleLoading(false);
@@ -262,7 +260,7 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   const handleAppleSignIn = async () => {
     if (!legalAccepted) {
-      Alert.alert(t('common:error'), t('auth.legalConsentRequired'));
+      showModal({ title: t('common:error'), body: t('auth.legalConsentRequired') });
       return;
     }
     try {
@@ -271,7 +269,7 @@ export default function AuthScreen() {
       const AppleAuthentication = await import('expo-apple-authentication');
       const isAvailable = await AppleAuthentication.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert(t('common:error'), t('auth.appleNotAvailable'));
+        showModal({ title: t('common:error'), body: t('auth.appleNotAvailable') });
         return;
       }
 
@@ -317,11 +315,11 @@ export default function AuthScreen() {
       if (__DEV__) log.error('[Auth] Apple sign-in error:', { code, message: error?.message });
 
       if (code === 'ERR_INVALID_RESPONSE' || code === 'ERR_REQUEST_FAILED') {
-        Alert.alert(t('common:error'), t('auth.appleNetworkError'));
+        showModal({ title: t('common:error'), body: t('auth.appleNetworkError') });
       } else if (error?.message?.toLowerCase().includes('network')) {
-        Alert.alert(t('common:error'), t('auth.appleNetworkError'));
+        showModal({ title: t('common:error'), body: t('auth.appleNetworkError') });
       } else {
-        Alert.alert(t('common:error'), t('auth.appleFailed'));
+        showModal({ title: t('common:error'), body: t('auth.appleFailed') });
       }
     } finally {
       setAppleLoading(false);
@@ -333,7 +331,7 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   const handleResetPassword = async () => {
     if (!email.trim()) {
-      Alert.alert(t('common:error'), t('auth.enterEmailPassword'));
+      showModal({ title: t('common:error'), body: t('auth.enterEmailPassword') });
       return;
     }
     setResetLoading(true);
@@ -346,7 +344,7 @@ export default function AuthScreen() {
       setResetSent(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('auth.somethingWentWrong');
-      Alert.alert(t('common:error'), msg);
+      showModal({ title: t('common:error'), body: msg });
     } finally {
       setResetLoading(false);
     }
@@ -358,15 +356,15 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   const handleEmailAuth = async () => {
     if (!legalAccepted) {
-      Alert.alert(t('common:error'), t('auth.legalConsentRequired'));
+      showModal({ title: t('common:error'), body: t('auth.legalConsentRequired') });
       return;
     }
     if (!email.trim() || !password.trim()) {
-      Alert.alert(t('common:error'), t('auth.enterEmailPassword'));
+      showModal({ title: t('common:error'), body: t('auth.enterEmailPassword') });
       return;
     }
     if (password.length < 6) {
-      Alert.alert(t('common:error'), t('auth.passwordMinLength'));
+      showModal({ title: t('common:error'), body: t('auth.passwordMinLength') });
       return;
     }
 
@@ -400,7 +398,7 @@ export default function AuthScreen() {
           });
 
         if (signUpError) {
-          Alert.alert(t('common:error'), signUpError.message);
+          showModal({ title: t('common:error'), body: signUpError.message });
           return;
         }
 
@@ -423,18 +421,19 @@ export default function AuthScreen() {
           low.includes('email not confirmed') ||
           low.includes('not confirmed')
         ) {
-          Alert.alert(t('auth.verifyTitle'), t('auth.emailNotConfirmedBody'), [
-            { text: t('common:cancel'), style: 'cancel' },
-            {
-              text: t('auth.verifyResend'),
-              onPress: () => {
-                void supabase.auth.resend({
-                  type: 'signup',
-                  email: email.trim(),
-                });
+          showModal({
+            title: t('auth.verifyTitle'),
+            body: t('auth.emailNotConfirmedBody'),
+            buttons: [
+              { label: t('common:cancel'), style: 'cancel' },
+              {
+                label: t('auth.verifyResend'),
+                onPress: () => {
+                  void supabase.auth.resend({ type: 'signup', email: email.trim() });
+                },
               },
-            },
-          ]);
+            ],
+          });
           return;
         }
         if (
@@ -442,10 +441,10 @@ export default function AuthScreen() {
           low.includes('jwt expired') ||
           low.includes('session')
         ) {
-          Alert.alert(t('common:error'), t('auth.sessionExpiredRecovery'));
+          showModal({ title: t('common:error'), body: t('auth.sessionExpiredRecovery') });
           return;
         }
-        Alert.alert(t('common:error'), signInError.message);
+        showModal({ title: t('common:error'), body: signInError.message });
       }
     } catch (err: unknown) {
       if (__DEV__) log.error('[Auth] Email auth error:', err);
@@ -455,13 +454,10 @@ export default function AuthScreen() {
         msg.includes('jwt expired') ||
         msg.includes('session')
       ) {
-        Alert.alert(t('common:error'), t('auth.sessionExpiredRecovery'));
+        showModal({ title: t('common:error'), body: t('auth.sessionExpiredRecovery') });
         return;
       }
-      Alert.alert(
-        t('common:error'),
-        err instanceof Error ? err.message : t('auth.somethingWentWrong'),
-      );
+      showModal({ title: t('common:error'), body: err instanceof Error ? err.message : t('auth.somethingWentWrong') });
     } finally {
       setEmailLoading(false);
     }

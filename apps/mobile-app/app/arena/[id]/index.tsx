@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Clipboard } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -16,6 +16,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { AvailableArena } from '@/hooks/useAvailableArenas';
 import ArenaGymBreakdown from '@/components/ArenaGymBreakdown';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 // ── Types ──
 interface LeaderboardEntry {
@@ -59,6 +60,7 @@ export default function ArenaDetailScreen() {
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('arena');
+  const showModal = useAppModal((s) => s.showModal);
 
   const [arena, setArena] = useState<AvailableArena | null>(null);
   const [miniLeaderboard, setMiniLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -233,7 +235,7 @@ export default function ArenaDetailScreen() {
       });
 
       if (error) {
-        Alert.alert(t('error'), error.message || t('failedToJoin'));
+        showModal({ title: t('error'), body: error.message || t('failedToJoin') });
       } else {
         // Check if RPC returned an error row
         const result = Array.isArray(data) ? data[0] : data;
@@ -241,17 +243,17 @@ export default function ArenaDetailScreen() {
           // Parse the error message for user-friendly display
           const msg = result.error_message as string;
           if (msg.includes('Not enough drops')) {
-            Alert.alert(t('error'), t('notEnoughDrops', { needed: arena?.opt_in_value || 0 }));
+            showModal({ title: t('error'), body: t('notEnoughDrops', { needed: arena?.opt_in_value || 0 }) });
           } else if (msg.includes('Streak too low')) {
-            Alert.alert(t('error'), t('streakTooLow', { needed: arena?.opt_in_value || 0 }));
+            showModal({ title: t('error'), body: t('streakTooLow', { needed: arena?.opt_in_value || 0 }) });
           } else if (msg.includes('Not enough reputation')) {
-            Alert.alert(t('error'), t('notEnoughReputation', { needed: arena?.opt_in_value || 0 }));
+            showModal({ title: t('error'), body: t('notEnoughReputation', { needed: arena?.opt_in_value || 0 }) });
           } else if (msg.includes('Already opted in')) {
-            Alert.alert(t('error'), t('alreadyOptedIn'));
+            showModal({ title: t('error'), body: t('alreadyOptedIn') });
           } else if (msg.includes('already ended')) {
-            Alert.alert(t('error'), t('arenaEnded'));
+            showModal({ title: t('error'), body: t('arenaEnded') });
           } else {
-            Alert.alert(t('error'), msg);
+            showModal({ title: t('error'), body: msg });
           }
         } else {
           // Success — refresh arena data
@@ -259,7 +261,7 @@ export default function ArenaDetailScreen() {
         }
       }
     } catch (err: any) {
-      Alert.alert(t('error'), err?.message || t('somethingWentWrong'));
+      showModal({ title: t('error'), body: err?.message || t('somethingWentWrong') });
     } finally {
       setOptInLoading(false);
     }

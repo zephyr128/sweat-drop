@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   Switch,
   RefreshControl,
   Linking,
@@ -30,6 +29,7 @@ import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { getPrivacyUrl, getTermsUrl, openLegalUrl } from '@/lib/legalUrls';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 interface ProfileData {
   id: string;
@@ -59,6 +59,7 @@ interface ProfileData {
 export default function SettingsScreen() {
   const { t } = useTranslation('settings');
   const { t: tOnboarding } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();
   const branding = useBranding();
   const router = useRouter();
@@ -136,7 +137,7 @@ export default function SettingsScreen() {
       .limit(1);
 
     if (existing && existing.length > 0) {
-      Alert.alert(t('error') || 'Error', t('usernameTaken') || 'This username is already taken.');
+      showModal({ title: t('error') || 'Error', body: t('usernameTaken') || 'This username is already taken.' });
       setSavingUsername(false);
       return;
     }
@@ -147,7 +148,7 @@ export default function SettingsScreen() {
       .eq('id', session.user.id);
 
     if (error) {
-      Alert.alert(t('error') || 'Error', error.message);
+      showModal({ title: t('error') || 'Error', body: error.message });
     } else {
       setProfile((prev: any) => (prev ? { ...prev, username: trimmed } : prev));
       setEditingUsername(false);
@@ -157,13 +158,13 @@ export default function SettingsScreen() {
 
   /* ── Logout ────────────────────────── */
   const handleLogout = () => {
-    Alert.alert(
-      t('logoutTitle') || 'Log Out',
-      t('logoutConfirm') || 'Are you sure you want to log out?',
-      [
-        { text: t('cancel') || 'Cancel', style: 'cancel' },
+    showModal({
+      title: t('logoutTitle') || 'Log Out',
+      body: t('logoutConfirm') || 'Are you sure you want to log out?',
+      buttons: [
+        { label: t('cancel') || 'Cancel', style: 'cancel' },
         {
-          text: t('logout') || 'Log Out',
+          label: t('logout') || 'Log Out',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -172,12 +173,12 @@ export default function SettingsScreen() {
               if (router.canDismiss()) router.dismissAll();
               router.replace('/(onboarding)/welcome');
             } catch (error: any) {
-              Alert.alert(t('error') || 'Error', error.message || 'Failed to log out');
+              showModal({ title: t('error') || 'Error', body: error.message || 'Failed to log out' });
             }
           },
         },
       ],
-    );
+    });
   };
 
   /* ── Delete Account ────────────────── */
@@ -188,7 +189,7 @@ export default function SettingsScreen() {
     try {
       const { data: { session: authSession } } = await supabase.auth.getSession();
       if (!authSession?.access_token) {
-        Alert.alert(t('error') || 'Error', t('sessionExpired') || 'Session expired. Please sign in again.');
+        showModal({ title: t('error') || 'Error', body: t('sessionExpired') || 'Session expired. Please sign in again.' });
         setIsDeleting(false);
         return;
       }
@@ -207,10 +208,7 @@ export default function SettingsScreen() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        Alert.alert(
-          t('error') || 'Error',
-          errorData.error || t('failedDelete') || 'Failed to delete account. Please try again.',
-        );
+        showModal({ title: t('error') || 'Error', body: errorData.error || t('failedDelete') || 'Failed to delete account. Please try again.' });
         setIsDeleting(false);
         return;
       }
@@ -220,42 +218,39 @@ export default function SettingsScreen() {
       if (router.canDismiss()) router.dismissAll();
       router.replace('/(onboarding)/welcome');
     } catch (error: any) {
-      Alert.alert(
-        t('error') || 'Error',
-        error.message || 'Failed to delete account',
-      );
+      showModal({ title: t('error') || 'Error', body: error.message || 'Failed to delete account' });
     } finally {
       setIsDeleting(false);
     }
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      t('deleteAccountTitle') || 'Delete Account',
-      t('deleteAccountConfirm') ||
+    showModal({
+      title: t('deleteAccountTitle') || 'Delete Account',
+      body: t('deleteAccountConfirm') ||
         'This will permanently delete your account and all associated data. This action cannot be undone.',
-      [
-        { text: t('cancel') || 'Cancel', style: 'cancel' },
+      buttons: [
+        { label: t('cancel') || 'Cancel', style: 'cancel' },
         {
-          text: t('deleteAccount') || 'Delete',
+          label: t('deleteAccount') || 'Delete',
           style: 'destructive',
           onPress: () => {
-            Alert.alert(
-              t('deleteConfirm2Title') || 'Confirm Deletion',
-              t('deleteConfirm2') || 'Are you really sure? This cannot be undone.',
-              [
-                { text: t('cancel') || 'Cancel', style: 'cancel' },
+            showModal({
+              title: t('deleteConfirm2Title') || 'Confirm Deletion',
+              body: t('deleteConfirm2') || 'Are you really sure? This cannot be undone.',
+              buttons: [
+                { label: t('cancel') || 'Cancel', style: 'cancel' },
                 {
-                  text: t('yesDelete') || 'I understand, delete',
+                  label: t('yesDelete') || 'I understand, delete',
                   style: 'destructive',
                   onPress: executeAccountDeletion,
                 },
               ],
-            );
+            });
           },
         },
       ],
-    );
+    });
   };
 
   /* ── Body data helpers ─────────────── */
@@ -712,18 +707,11 @@ export default function SettingsScreen() {
                   onPress={() => {
                     const url = getTermsUrl();
                     if (!url) {
-                      Alert.alert(
-                        t('legalLinkUnavailableTitle') || 'Unavailable',
-                        t('legalLinkUnavailableBody') || 'This link is not yet available.',
-                      );
+                      showModal({ title: t('legalLinkUnavailableTitle') || 'Unavailable', body: t('legalLinkUnavailableBody') || 'This link is not yet available.' });
                       return;
                     }
                     void openLegalUrl(url, {
-                      onInvalid: () =>
-                        Alert.alert(
-                          t('legalLinkUnavailableTitle') || 'Unavailable',
-                          t('legalLinkUnavailableBody') || 'This link is not yet available.',
-                        ),
+                      onInvalid: () => showModal({ title: t('legalLinkUnavailableTitle') || 'Unavailable', body: t('legalLinkUnavailableBody') || 'This link is not yet available.' }),
                     });
                   }}
                   activeOpacity={0.7}
@@ -745,18 +733,11 @@ export default function SettingsScreen() {
                   onPress={() => {
                     const url = getPrivacyUrl();
                     if (!url) {
-                      Alert.alert(
-                        t('legalLinkUnavailableTitle') || 'Unavailable',
-                        t('legalLinkUnavailableBody') || 'This link is not yet available.',
-                      );
+                      showModal({ title: t('legalLinkUnavailableTitle') || 'Unavailable', body: t('legalLinkUnavailableBody') || 'This link is not yet available.' });
                       return;
                     }
                     void openLegalUrl(url, {
-                      onInvalid: () =>
-                        Alert.alert(
-                          t('legalLinkUnavailableTitle') || 'Unavailable',
-                          t('legalLinkUnavailableBody') || 'This link is not yet available.',
-                        ),
+                      onInvalid: () => showModal({ title: t('legalLinkUnavailableTitle') || 'Unavailable', body: t('legalLinkUnavailableBody') || 'This link is not yet available.' }),
                     });
                   }}
                   activeOpacity={0.7}

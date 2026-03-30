@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, RefreshControl } from 'react-native';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -48,6 +49,7 @@ const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
 export default function HomeScreen() {
   const router = useRouter();
   const { t } = useTranslation('home');
+  const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();
   const { theme, activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
@@ -348,23 +350,23 @@ export default function HomeScreen() {
 
   const handleSetAsHomeGym = async () => {
     if (!activeGym) return;
-    Alert.alert(
-      t('setAsHomeGym'),
-      t('setAsHomeGymMsg', { name: activeGym.name }),
-      [
-        { text: t('common:cancel'), style: 'cancel' },
+    showModal({
+      title: t('setAsHomeGym'),
+      body: t('setAsHomeGymMsg', { name: activeGym.name }),
+      buttons: [
+        { label: t('common:cancel'), style: 'cancel' },
         {
-          text: t('setAsHome'),
+          label: t('setAsHome'),
           onPress: async () => {
             try {
               await updateHomeGym(activeGym.id);
             } catch (error) {
-              Alert.alert(t('common:error'), t('failedToUpdateGym'));
+              showModal({ title: t('common:error'), body: t('failedToUpdateGym') });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (loading) {

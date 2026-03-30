@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Clipboard } from 'react-native';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
@@ -24,6 +25,7 @@ const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons
 
 export default function RedemptionsScreen() {
   const { t } = useTranslation('redemptions');
+  const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const branding = useBranding();
@@ -93,7 +95,7 @@ export default function RedemptionsScreen() {
 
   const copyCode = (code: string) => {
     Clipboard.setString(code);
-    Alert.alert(t('copied'), t('codeCopied'));
+    showModal({ title: t('copied'), body: t('codeCopied') });
   };
 
   if (loading) {

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -56,7 +56,7 @@ interface ChallengeProgressItem {
 }
 
 export default function SessionSummaryScreen() {
-  const { sessionId, drops, duration, multiplier, badges, gymId, securityStatus, securityMessage, sessionTier } = useLocalSearchParams<{
+  const { sessionId, drops, duration, multiplier, badges, gymId, securityStatus, securityMessage, sessionTier, trackingOnly } = useLocalSearchParams<{
     sessionId: string;
     drops: string;
     duration: string;
@@ -66,6 +66,7 @@ export default function SessionSummaryScreen() {
     securityStatus?: string;
     securityMessage?: string;
     sessionTier?: string;
+    trackingOnly?: string;
   }>();
   // Parse multiplier from award_drops() response (default 1.0)
   const streakMultiplier = multiplier ? parseFloat(multiplier) : 1.0;
@@ -81,12 +82,14 @@ export default function SessionSummaryScreen() {
   const [challengeProgress, setChallengeProgress] = useState<ChallengeProgressItem[]>([]);
   const [completedChallenges, setCompletedChallenges] = useState<ChallengeProgressItem[]>([]);
   const [streakDays, setStreakDays] = useState<number>(0);
+  const [selectedBadge, setSelectedBadge] = useState<any | null>(null);
   const router = useRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
   const { activeGym } = useTheme();
   const dropLimit = useDropLimitStatus(gymId || null);
   const dropsNum = parseInt(drops || '0');
+  const wasTrackingOnly = trackingOnly === '1';
   const isLimitCapped = dropsNum <= 0 && dropLimit.limitReached && !securityStatus;
   const isSoftWarning = dropsNum > 0 && dropLimit.softSessionWarning && !securityStatus;
   const wasReducedTier = sessionTier === 'tier1' || sessionTier === 'tier2';
@@ -96,13 +99,24 @@ export default function SessionSummaryScreen() {
   const happyHourBreakdown = useMemo(() => {
     const rm = session?.raw_metrics as Record<string, any> | null;
     const hh = rm?.drop_calc_v2?.happy_hour;
-    if (!hh || hh.active !== true) return null;
+    log.debug('[SessionSummary] HH check:', {
+      hasSession: !!session,
+      hasRawMetrics: !!rm,
+      hasDropCalcV2: !!rm?.drop_calc_v2,
+      happyHour: hh ? JSON.stringify(hh) : 'null',
+      dropsNum,
+      wasTrackingOnly,
+    });
+    if (!hh || !hh.active) return null;
     const mult = Number(hh.multiplier ?? 1);
     if (mult <= 1) return null;
-    const preBoost = Number(rm?.drop_calc_v2?.raw_drops ?? 0);
-    const postBoost = Math.round(preBoost * mult);
-    return { multiplier: mult, preBoostDrops: preBoost, postBoostDrops: postBoost };
-  }, [session]);
+    const preBoost = Number(hh.pre_boost_drops ?? rm?.drop_calc_v2?.raw_drops ?? 0);
+    const postBoost = Number(hh.post_boost_drops ?? Math.round(preBoost * mult));
+    if (preBoost <= 0) return null;
+    const result = { multiplier: mult, preBoostDrops: preBoost, postBoostDrops: postBoost };
+    log.debug('[SessionSummary] HH breakdown result:', result);
+    return result;
+  }, [session, dropsNum, wasTrackingOnly]);
 
   // Trophy pulse animation for badge earned
   const trophyScale = useSharedValue(1);
@@ -199,24 +213,46 @@ export default function SessionSummaryScreen() {
       return;
     }
 
-    try {
-      const { data } = await supabase
-        .from('sessions')
-        .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
-        .eq('id', sessionId)
-        .single();
+    // Retry up to 4 times (0ms, 400ms, 1200ms, 2400ms) waiting for award_drops()
+    // to finish writing drop_calc_v2 into raw_metrics before giving up.
+    const delays = [0, 400, 1200, 2400];
+    let lastData: any = null;
 
-      if (data) {
-        setSession(data);
-        if (data.gym?.name) {
-          setGymName(data.gym.name);
-        }
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt] > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
       }
-    } catch (err) {
-      log.error('[SessionSummary] Error in loadSession:', err);
-    } finally {
-      setLoading(false);
+      try {
+        const { data } = await supabase
+          .from('sessions')
+          .select('*, machine:machine_id(*), gym:gym_id(*)')
+          .eq('id', sessionId)
+          .single();
+
+        if (data) {
+          lastData = data;
+          const hasCalc = !!(data.raw_metrics as any)?.drop_calc_v2;
+          if (hasCalc) break; // drop_calc_v2 is available, no need to retry
+        }
+      } catch (err) {
+        log.error('[SessionSummary] Error in loadSession attempt', attempt, err);
+      }
     }
+
+    if (lastData) {
+      const dc = (lastData.raw_metrics as any)?.drop_calc_v2;
+      log.debug('[SessionSummary] Loaded session raw_metrics.drop_calc_v2:', {
+        hasDropCalcV2: !!dc,
+        happyHour: dc?.happy_hour ? JSON.stringify(dc.happy_hour) : 'missing',
+        dropsEarned: lastData.drops_earned,
+        sessionId: lastData.id,
+      });
+      setSession(lastData);
+      if (lastData.gym?.name) {
+        setGymName(lastData.gym.name);
+      }
+    }
+    setLoading(false);
   };
 
   const loadLeaderboardRank = async () => {
@@ -431,11 +467,17 @@ export default function SessionSummaryScreen() {
       )}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Celebration Header */}
+        {/* Header */}
         <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.celebrationHeader}>
-          <Text style={styles.emoji}>🎉</Text>
-          <Text style={styles.title}>{t('summary.workoutComplete')}</Text>
-          <Text style={styles.subtitle}>{t('summary.greatJob')}</Text>
+          <View style={[styles.headerIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+            <Ionicons name="checkmark-circle" size={36} color={branding.primary} />
+          </View>
+          <Text style={styles.title}>
+            {dropsNum === 0 ? t('summary.workoutLogged') : t('summary.workoutComplete')}
+          </Text>
+          <Text style={styles.subtitle}>
+            {dropsNum === 0 ? t('summary.noDropsHint') : t('summary.greatJob')}
+          </Text>
         </Animated.View>
 
         {securityStatus ? (
@@ -501,7 +543,7 @@ export default function SessionSummaryScreen() {
           </Animated.View>
         )}
 
-        {/* ── Drops Ring (matches home screen HeroDropsRing) ── */}
+        {/* ── Drops Ring ── */}
         <Animated.View entering={FadeInDown.delay(350).duration(500)} style={[ringScaleStyle, { alignSelf: 'center' }]}>
           <View style={[styles.ringWrapper, { width: RING_SIZE + 50, height: RING_SIZE + 50 }]}>
             {/* Glow pulse */}
@@ -585,24 +627,16 @@ export default function SessionSummaryScreen() {
               {/* Center text */}
               <View style={styles.ringCenter}>
                 <Text
-                  style={[styles.ringDropsValue, getNumberStyle(36), { color: '#FFFFFF' }]}
+                  style={[styles.ringDropsValue, getNumberStyle(36), { color: dropsNum === 0 ? 'rgba(255,255,255,0.35)' : '#FFFFFF' }]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.7}
                 >
-                  +{drops || '0'}
+                  {dropsNum === 0 ? '0' : `+${drops}`}
                 </Text>
                 <Text style={[styles.ringDropsLabel, { color: hexToRgba(branding.primary, 0.65) }]}>
                   {t('summary.dropsEarned')}
                 </Text>
-                {streakMultiplier > 1.0 && (
-                  <View style={[styles.ringMultiplier, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                    <Ionicons name="flame" size={11} color={branding.primary} />
-                    <Text style={[styles.ringMultiplierText, { color: branding.primary }]}>
-                      x{streakMultiplier.toFixed(1)}
-                    </Text>
-                  </View>
-                )}
               </View>
             </View>
           </View>
@@ -611,51 +645,81 @@ export default function SessionSummaryScreen() {
         {/* Gym name under ring */}
         {gymName && (
           <Animated.View entering={FadeInDown.delay(500).duration(300)}>
-            <Text style={styles.gymNameText}>📍 {gymName}</Text>
-          </Animated.View>
-        )}
-
-        {/* ── Happy Hour Breakdown ── */}
-        {happyHourBreakdown && (
-          <Animated.View entering={FadeInDown.delay(510).duration(350)}>
-            <View style={[styles.happyHourBreakdown, { borderColor: 'rgba(255, 214, 0, 0.2)' }]}>
-              <Text style={styles.happyHourBreakdownEmoji}>⚡</Text>
-              <View style={styles.happyHourBreakdownContent}>
-                <Text style={styles.happyHourBreakdownTitle}>
-                  {t('summary.happyHourBoost')}
-                </Text>
-                <Text style={styles.happyHourBreakdownDetail}>
-                  {t('summary.happyHourBreakdown', {
-                    base: happyHourBreakdown.preBoostDrops,
-                    multiplier: happyHourBreakdown.multiplier,
-                    total: happyHourBreakdown.postBoostDrops,
-                  })}
-                </Text>
-              </View>
+            <View style={styles.gymNameRow}>
+              <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.4)" />
+              <Text style={styles.gymNameText}>{gymName}</Text>
             </View>
           </Animated.View>
         )}
 
-        {/* ── Challenge Rewards (completed during this session) ── */}
-        {completedChallenges.length > 0 && (
+        {/* ── Happy Hour Breakdown — hidden when session was tracking-only ── */}
+        {happyHourBreakdown && !wasTrackingOnly && (
+          <Animated.View entering={FadeInDown.delay(510).duration(350)}>
+            <View style={[styles.glassCard, { borderColor: 'rgba(255,214,0,0.22)' }]}>
+              <BlurView intensity={50} tint="dark" style={styles.glassCardBlur}>
+                <View style={[styles.glassCardIcon, { backgroundColor: 'rgba(255,214,0,0.12)' }]}>
+                  <Ionicons name="flash" size={18} color="#FFD700" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.happyHourTitle}>{t('summary.happyHourBoost')}</Text>
+                  <Text style={styles.happyHourDetail}>
+                    {dropsNum >= happyHourBreakdown.postBoostDrops
+                      ? t('summary.happyHourBreakdown', {
+                          base: happyHourBreakdown.preBoostDrops,
+                          multiplier: happyHourBreakdown.multiplier,
+                          total: happyHourBreakdown.postBoostDrops,
+                        })
+                      : t('summary.happyHourApplied', {
+                          multiplier: happyHourBreakdown.multiplier,
+                          earned: dropsNum,
+                        })
+                    }
+                  </Text>
+                </View>
+                <View style={[styles.multiplierPill, { backgroundColor: 'rgba(255,214,0,0.12)' }]}>
+                  <Text style={styles.multiplierPillText}>x{happyHourBreakdown.multiplier}</Text>
+                </View>
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ── Tracking-only: no rewards or challenges ── */}
+        {wasTrackingOnly && (
+          <Animated.View entering={FadeInDown.delay(520).duration(400)}>
+            <View style={styles.trackingOnlyCard}>
+              <BlurView intensity={40} tint="dark" style={styles.trackingOnlyCardBlur}>
+                <View style={[styles.glassCardIcon, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
+                  <Ionicons name="analytics-outline" size={18} color="rgba(255,255,255,0.5)" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.trackingOnlyCardTitle}>{t('summary.trackingOnlyTitle')}</Text>
+                  <Text style={styles.trackingOnlyCardBody}>{t('summary.trackingOnlyBody')}</Text>
+                </View>
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ── Challenge Rewards (completed during this session, hidden if tracking-only) ── */}
+        {completedChallenges.length > 0 && !wasTrackingOnly && (
           <Animated.View entering={FadeInDown.delay(520).duration(400)}>
             <View style={styles.challengeRewardSection}>
               {completedChallenges.map((challenge) => (
-                <View key={challenge.challenge_id} style={styles.challengeRewardCard}>
-                  <View style={styles.challengeRewardLeft}>
-                    <Text style={styles.challengeRewardEmoji}>🎯</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.challengeRewardLabel}>
-                        {t('summary.challengeCompleted')}
-                      </Text>
-                      <Text style={styles.challengeRewardName} numberOfLines={1}>
-                        {challenge.challenge_name}
-                      </Text>
+                <View key={challenge.challenge_id} style={[styles.glassCard, { borderColor: 'rgba(76,217,100,0.22)' }]}>
+                  <BlurView intensity={50} tint="dark" style={styles.glassCardBlur}>
+                    <View style={[styles.glassCardIcon, { backgroundColor: 'rgba(76,217,100,0.12)' }]}>
+                      <Ionicons name="checkmark-circle" size={18} color="#4CD964" />
                     </View>
-                  </View>
-                  <Text style={[styles.challengeRewardDropsText, { color: branding.primary }]}>
-                    +{challenge.reward_drops} 💧
-                  </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.challengeRewardLabel}>{t('summary.challengeCompleted')}</Text>
+                      <Text style={styles.challengeRewardName} numberOfLines={1}>{challenge.challenge_name}</Text>
+                    </View>
+                    <View style={[styles.rewardDropsPill, { backgroundColor: 'rgba(76,217,100,0.12)' }]}>
+                      <Ionicons name="water" size={11} color="#4CD964" />
+                      <Text style={[styles.rewardDropsPillText, { color: '#4CD964' }]}>+{challenge.reward_drops}</Text>
+                    </View>
+                  </BlurView>
                 </View>
               ))}
             </View>
@@ -700,9 +764,11 @@ export default function SessionSummaryScreen() {
               <View style={styles.statPillWrapper}>
                 <BlurView intensity={50} tint="dark" style={styles.statPill}>
                   <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                    <Text style={{ fontSize: 14 }}>
-                      {userRank === 1 ? '🥇' : userRank === 2 ? '🥈' : userRank === 3 ? '🥉' : '🏆'}
-                    </Text>
+                    <Ionicons
+                      name={userRank <= 3 ? 'medal' : 'podium-outline'}
+                      size={16}
+                      color={userRank === 1 ? '#FFD700' : userRank === 2 ? '#C0C0C0' : userRank === 3 ? '#CD7F32' : branding.primary}
+                    />
                   </View>
                   <View style={styles.statPillTextCol}>
                     <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>
@@ -716,7 +782,7 @@ export default function SessionSummaryScreen() {
               <View style={styles.statPillWrapper}>
                 <BlurView intensity={50} tint="dark" style={styles.statPill}>
                   <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                    <Text style={{ fontSize: 14 }}>📊</Text>
+                    <Ionicons name="stats-chart-outline" size={16} color={branding.primary} />
                   </View>
                   <View style={styles.statPillTextCol}>
                     <Text style={[styles.statPillValue, getNumberStyle(16)]}>
@@ -730,56 +796,69 @@ export default function SessionSummaryScreen() {
           </View>
         </Animated.View>
 
-        {/* Earned Badges — horizontal scroll */}
+        {/* ── Earned Badges ── */}
         {earnedBadges.length > 0 && (
           <Animated.View entering={FadeInDown.delay(700).duration(400)}>
-            <View style={[styles.badgesSection, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <Animated.View style={[styles.badgesHeader, trophyAnimStyle]}>
-                <Ionicons name="trophy" size={20} color="#FFD700" />
-                <Text style={styles.badgesSectionTitle}>
-                  {t('summary.newBadge', { count: earnedBadges.length })}
-                </Text>
-              </Animated.View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.badgesScroll}
-              >
-                {earnedBadges.map((badge, index) => (
-                  <Animated.View
-                    key={badge.badge_id}
-                    entering={ZoomIn.delay(800 + index * 100).duration(400).springify()}
-                  >
-                    <View style={[styles.badgeCard, { borderColor: hexToRgba('#FFD700', 0.25) }]}>
-                      {badge.badge_image_url ? (
-                        <Image
-                          source={badge.badge_image_url}
-                          style={styles.badgeImage}
-                          contentFit="contain"
-                          transition={200}
-                        />
-                      ) : (
-                        <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
-                          <Ionicons name="trophy" size={24} color="#FFD700" />
+            <View style={[styles.badgesSection, { borderColor: hexToRgba('#FFD700', 0.22) }]}>
+              <BlurView intensity={50} tint="dark" style={styles.badgesSectionBlur}>
+                <Animated.View style={[styles.badgesHeader, trophyAnimStyle]}>
+                  <View style={styles.badgesHeaderIconWrap}>
+                    <Ionicons name="trophy" size={18} color="#FFD700" />
+                  </View>
+                  <Text style={styles.badgesSectionTitle}>
+                    {t('summary.newBadge', { count: earnedBadges.length })}
+                  </Text>
+                  <Text style={styles.badgesTapHint}>{t('summary.tapToView')}</Text>
+                </Animated.View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.badgesScroll}
+                >
+                  {earnedBadges.map((badge, index) => (
+                    <Animated.View
+                      key={badge.badge_id}
+                      entering={ZoomIn.delay(800 + index * 100).duration(400).springify()}
+                    >
+                      <TouchableOpacity
+                        style={[styles.badgeCard, { borderColor: hexToRgba('#FFD700', 0.30) }]}
+                        onPress={() => setSelectedBadge(badge)}
+                        activeOpacity={0.8}
+                      >
+                        {badge.badge_image_url ? (
+                          <Image
+                            source={badge.badge_image_url}
+                            style={styles.badgeImage}
+                            contentFit="contain"
+                            transition={200}
+                          />
+                        ) : (
+                          <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
+                            <Ionicons name="trophy" size={28} color="#FFD700" />
+                          </View>
+                        )}
+                        <Text style={styles.badgeName} numberOfLines={2}>
+                          {badge.badge_name ?? badge.challenge_name}
+                        </Text>
+                        <View style={styles.badgeTapIndicator}>
+                          <Ionicons name="information-circle-outline" size={12} color="rgba(255,215,0,0.45)" />
                         </View>
-                      )}
-                      <Text style={styles.badgeName} numberOfLines={2}>
-                        {badge.challenge_name}
-                      </Text>
-                    </View>
-                  </Animated.View>
-                ))}
-              </ScrollView>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  ))}
+                </ScrollView>
+              </BlurView>
             </View>
           </Animated.View>
         )}
 
-        {/* Challenge Progress Section */}
-        {challengeProgress.length > 0 && (
+        {/* Challenge Progress Section (hidden when session was tracking-only) */}
+        {challengeProgress.length > 0 && !wasTrackingOnly && (
           <Animated.View entering={FadeInDown.delay(850).duration(400)}>
-            <View style={[styles.challengeSection, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+            <View style={[styles.challengeSection, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
+              <BlurView intensity={50} tint="dark" style={styles.challengeSectionBlur}>
               <View style={styles.challengeHeader}>
-                <Ionicons name="flag" size={18} color={branding.primary} />
+                <Ionicons name="flag-outline" size={16} color={branding.primary} />
                 <Text style={styles.challengeSectionTitle}>{t('summary.challengeProgress')}</Text>
               </View>
               {challengeProgress.map((challenge, index) => {
@@ -849,6 +928,7 @@ export default function SessionSummaryScreen() {
                   </Animated.View>
                 );
               })}
+              </BlurView>
             </View>
           </Animated.View>
         )}
@@ -903,6 +983,74 @@ export default function SessionSummaryScreen() {
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
+
+      {/* ── Badge Detail Modal ── */}
+      <Modal
+        visible={!!selectedBadge}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedBadge(null)}
+        statusBarTranslucent
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedBadge(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <BlurView intensity={60} tint="dark" style={styles.modalBlur}>
+              <LinearGradient
+                colors={['rgba(255,215,0,0.12)', 'rgba(18,18,28,0.95)']}
+                start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+                style={styles.modalGradient}
+              >
+                {/* Badge image */}
+                <View style={styles.modalImageWrap}>
+                  {selectedBadge?.badge_image_url ? (
+                    <Image
+                      source={selectedBadge.badge_image_url}
+                      style={styles.modalBadgeImage}
+                      contentFit="contain"
+                      transition={200}
+                    />
+                  ) : (
+                    <View style={[styles.modalBadgePlaceholder, { backgroundColor: 'rgba(255,215,0,0.12)' }]}>
+                      <Ionicons name="trophy" size={56} color="#FFD700" />
+                    </View>
+                  )}
+                  <View style={[styles.modalBadgeGlow, { shadowColor: '#FFD700' }]} />
+                </View>
+
+                {/* Badge info */}
+                <Text style={styles.modalBadgeName}>
+                  {selectedBadge?.badge_name ?? selectedBadge?.challenge_name}
+                </Text>
+                <View style={styles.modalEarnedRow}>
+                  <Ionicons name="checkmark-circle" size={14} color="#4CD964" />
+                  <Text style={styles.modalEarnedText}>{t('summary.justEarned')}</Text>
+                </View>
+                {selectedBadge?.description ? (
+                  <Text style={styles.modalBadgeDesc}>{selectedBadge.description}</Text>
+                ) : null}
+
+                {/* Actions */}
+                <TouchableOpacity
+                  style={[styles.modalPrimaryBtn, { backgroundColor: branding.primary }]}
+                  onPress={() => {
+                    setSelectedBadge(null);
+                    router.push('/trophy-room');
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="trophy-outline" size={18} color={branding.onPrimary} />
+                  <Text style={[styles.modalPrimaryBtnText, { color: branding.onPrimary }]}>
+                    {t('summary.viewInTrophy')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setSelectedBadge(null)} style={styles.modalDismiss}>
+                  <Text style={styles.modalDismissText}>{t('summary.dismiss')}</Text>
+                </TouchableOpacity>
+              </LinearGradient>
+            </BlurView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -925,27 +1073,34 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing['2xl'],
     gap: 8,
   },
-  /* Celebration */
+  /* Header */
   celebrationHeader: {
     alignItems: 'center',
     marginBottom: theme.spacing.xs,
     paddingTop: theme.spacing.md,
+    gap: 6,
   },
-  emoji: {
-    fontSize: 40,
-    marginBottom: theme.spacing.xs,
+  headerIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   title: {
     ...fontStyles.heading,
-    fontSize: 28,
+    fontSize: 26,
     color: theme.colors.text,
+    textAlign: 'center',
   },
   subtitle: {
     ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
-    marginTop: theme.spacing.xs,
+    marginTop: 2,
     letterSpacing: 0.3,
+    textAlign: 'center',
   },
   securityCard: {
     flexDirection: 'row',
@@ -964,6 +1119,33 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#FDE68A',
+  },
+  trackingOnlyCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 12,
+  },
+  trackingOnlyCardBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  trackingOnlyCardTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.65)',
+    marginBottom: 3,
+  },
+  trackingOnlyCardBody: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.35)',
+    lineHeight: 17,
   },
   limitCard: {
     flexDirection: 'row',
@@ -1053,87 +1235,78 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: 1,
   },
-  ringMultiplier: {
+  /* Gym name */
+  gymNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: theme.borderRadius.full,
+    gap: 4,
+    justifyContent: 'center',
   },
-  ringMultiplierText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    letterSpacing: 0.3,
-  },
-  /* Gym name */
   gymNameText: {
     ...fontStyles.body,
     fontSize: 13,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
+    color: 'rgba(255,255,255,0.40)',
     letterSpacing: 0.3,
   },
-  /* Happy Hour Breakdown */
-  happyHourBreakdown: {
+
+  /* Shared glass card */
+  glassCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  glassCardBlur: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(255, 214, 0, 0.06)',
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginTop: theme.spacing.sm,
+    gap: 12,
+    padding: 14,
+    backgroundColor: 'rgba(18,18,28,0.80)',
   },
-  happyHourBreakdownEmoji: {
-    fontSize: 20,
+  glassCardIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
   },
-  happyHourBreakdownContent: {
-    flex: 1,
-  },
-  happyHourBreakdownTitle: {
+
+  /* Happy Hour */
+  happyHourTitle: {
     ...fontStyles.bodySemiBold,
     fontSize: 13,
     color: '#FFD700',
     letterSpacing: 0.3,
   },
-  happyHourBreakdownDetail: {
+  happyHourDetail: {
     ...fontStyles.body,
     fontSize: 12,
     color: theme.colors.textSecondary,
     marginTop: 2,
   },
-  /* Challenge Reward (completed during session) */
+  multiplierPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  multiplierPillText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#FFD700',
+    letterSpacing: 0.3,
+  },
+
+  /* Challenge reward (completed) */
   challengeRewardSection: {
-    marginBottom: theme.spacing.xs,
-  },
-  challengeRewardCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(76, 217, 100, 0.06)',
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(76, 217, 100, 0.15)',
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  challengeRewardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flex: 1,
-  },
-  challengeRewardEmoji: {
-    fontSize: 20,
+    gap: 6,
   },
   challengeRewardLabel: {
     ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    color: theme.colors.secondary,
-    letterSpacing: 0.5,
+    fontSize: 10,
+    color: '#4CD964',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   challengeRewardName: {
@@ -1142,10 +1315,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginTop: 2,
   },
-  challengeRewardDropsText: {
-    ...fontStyles.heading,
-    fontSize: 18,
-    letterSpacing: -0.5,
+  rewardDropsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  rewardDropsPillText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   /* ── Quick Stats Row (matches QuickStatsRow pills) ── */
   statsRow: {
@@ -1166,7 +1347,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
     gap: 8,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   statPillIconBg: {
     width: 30,
@@ -1190,64 +1371,193 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginTop: 1,
   },
-  /* Badges — horizontal scroll */
+  /* Badges section */
   badgesSection: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
-    padding: theme.spacing.md,
+  },
+  badgesSectionBlur: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: 'rgba(18,18,28,0.80)',
   },
   badgesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
+    gap: 8,
+    marginBottom: 12,
+  },
+  badgesHeaderIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,215,0,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   badgesSectionTitle: {
     ...fontStyles.heading,
-    fontSize: 18,
+    fontSize: 16,
     color: '#FFD700',
+    flex: 1,
+  },
+  badgesTapHint: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 0.2,
   },
   badgesScroll: {
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 2,
+    paddingBottom: 2,
   },
   badgeCard: {
-    width: 80,
+    width: 90,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 215, 0, 0.04)',
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.sm,
+    backgroundColor: 'rgba(255,215,0,0.05)',
+    borderRadius: 14,
+    padding: 10,
     borderWidth: 1,
+    gap: 6,
   },
   badgeImage: {
-    width: 44,
-    height: 44,
-    marginBottom: 4,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
   },
   badgePlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.borderRadius.lg,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
   },
   badgeName: {
     ...fontStyles.bodyMedium,
     fontSize: 10,
     color: theme.colors.text,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    lineHeight: 14,
+  },
+  badgeTapIndicator: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+  },
+
+  /* Badge detail modal */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderRadius: 28,
+    overflow: 'hidden',
+    margin: 16,
+    marginBottom: 32,
+  },
+  modalBlur: {
+    overflow: 'hidden',
+    borderRadius: 28,
+    backgroundColor: 'rgba(18,18,28,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.20)',
+  },
+  modalGradient: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalImageWrap: {
+    width: 120,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  modalBadgeImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 20,
+  },
+  modalBadgePlaceholder: {
+    width: 110,
+    height: 110,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBadgeGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 12,
+  },
+  modalBadgeName: {
+    ...fontStyles.heading,
+    fontSize: 22,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  modalEarnedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  modalEarnedText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#4CD964',
+  },
+  modalBadgeDesc: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  modalPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+    marginTop: 6,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  modalPrimaryBtnText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 16,
+  },
+  modalDismiss: {
+    paddingVertical: 8,
+  },
+  modalDismissText: {
+    ...fontStyles.body,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.40)',
   },
   /* Challenge Progress */
   challengeSection: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
-    padding: theme.spacing.md,
+  },
+  challengeSectionBlur: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: 'rgba(18,18,28,0.80)',
   },
   challengeHeader: {
     flexDirection: 'row',
@@ -1256,8 +1566,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   challengeSectionTitle: {
-    ...fontStyles.heading,
-    fontSize: 18,
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
     color: theme.colors.text,
   },
   challengeItem: {

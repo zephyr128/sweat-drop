@@ -7,8 +7,8 @@ import {
   FlatList,
   ActivityIndicator,
   Image,
-  Alert,
 } from 'react-native';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -125,6 +125,7 @@ function GymCard({
 export default function GymsScreen() {
   const { t } = useTranslation('gyms');
   const { t: tCommon } = useTranslation('common');
+  const showModal = useAppModal((s) => s.showModal);
   const router = useRouter();
   const { activeGym } = useTheme();
   const branding = useBranding();
@@ -242,16 +243,13 @@ export default function GymsScreen() {
 
     // If not already home gym — ask to set as home
     if (!isAlreadyHome && profile) {
-      Alert.alert(
-        gym.name,
-        t('set_home_prompt'),
-        [
+      showModal({
+        title: gym.name,
+        body: t('set_home_prompt'),
+        buttons: [
+          { label: tCommon('cancel'), style: 'cancel' },
           {
-            text: tCommon('cancel'),
-            style: 'cancel',
-          },
-          {
-            text: t('set_home_confirm'),
+            label: t('set_home_confirm'),
             onPress: async () => {
               try {
                 const { error } = await supabase
@@ -268,8 +266,8 @@ export default function GymsScreen() {
               }
             },
           },
-        ]
-      );
+        ],
+      });
     }
 
     router.back();

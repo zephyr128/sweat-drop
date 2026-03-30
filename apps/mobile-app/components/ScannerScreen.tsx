@@ -4,12 +4,11 @@
  * Uses react-native-vision-camera for QR code scanning
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   TouchableOpacity,
   Platform,
@@ -50,6 +49,7 @@ import {
   encodeCustomSimulatorSensorId,
   type WorkoutSimulatorProfile,
 } from '@/lib/workout/workout-simulator';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -103,6 +103,7 @@ function getSecurityStatusFromErrorMessage(message: string): 'cap_reached' | 'ra
 
 export function ScannerScreen() {
   const { t } = useTranslation('scanner');
+  const showModal = useAppModal((s) => s.showModal);
   const [hasPermission, setHasPermission] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -146,6 +147,12 @@ export function ScannerScreen() {
   const isProcessingRef = useRef(isProcessing);
   isProcessingRef.current = isProcessing;
   
+  const resetScan = useCallback(() => {
+    hasScannedRef.current = false;
+    setIsScanning(true);
+    setIsProcessing(false);
+  }, []);
+
   // Premium Animations - All on UI thread for 60/120 FPS
   const scanLineY = useSharedValue(0);
   const frameScale = useSharedValue(1);
@@ -242,63 +249,39 @@ export function ScannerScreen() {
       if (permission === 'granted') {
         setHasPermission(true);
       } else if (permission === 'denied') {
-        Alert.alert(
-          t('permissionRequired'),
-          t('permissionDesc'),
-          [
-            { text: t('common:cancel'), style: 'cancel' },
-            {
-              text: t('openSettings'),
-              onPress: () => {
-                if (Platform.OS === 'ios') {
-                  Linking.openURL('app-settings:');
-                } else {
-                  Linking.openSettings();
-                }
-              },
-            },
-          ]
-        );
+        const openSettings = () => Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings();
+        showModal({
+          title: t('permissionRequired'),
+          body: t('permissionDesc'),
+          buttons: [
+            { label: t('common:cancel'), style: 'cancel' },
+            { label: t('openSettings'), onPress: openSettings },
+          ],
+        });
         setHasPermission(false);
       } else {
-        Alert.alert(
-          t('permissionRestricted'),
-          t('permissionRestrictedDesc'),
-          [
-            { text: t('common:cancel'), style: 'cancel' },
-            {
-              text: t('openSettings'),
-              onPress: () => {
-                if (Platform.OS === 'ios') {
-                  Linking.openURL('app-settings:');
-                } else {
-                  Linking.openSettings();
-                }
-              },
-            },
-          ]
-        );
+        const openSettings = () => Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings();
+        showModal({
+          title: t('permissionRestricted'),
+          body: t('permissionRestrictedDesc'),
+          buttons: [
+            { label: t('common:cancel'), style: 'cancel' },
+            { label: t('openSettings'), onPress: openSettings },
+          ],
+        });
         setHasPermission(false);
       }
     } catch (error) {
       log.error('[Scanner] Camera permission error:', error);
-      Alert.alert(
-        t('permissionError'),
-        t('permissionErrorDesc'),
-        [
-          { text: t('common:cancel'), style: 'cancel' },
-          {
-            text: t('openSettings'),
-            onPress: () => {
-              if (Platform.OS === 'ios') {
-                Linking.openURL('app-settings:');
-              } else {
-                Linking.openSettings();
-              }
-            },
-          },
-        ]
-      );
+      const openSettings = () => Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings();
+      showModal({
+        title: t('permissionError'),
+        body: t('permissionErrorDesc'),
+        buttons: [
+          { label: t('common:cancel'), style: 'cancel' },
+          { label: t('openSettings'), onPress: openSettings },
+        ],
+      });
       setHasPermission(false);
     }
   };
@@ -477,20 +460,7 @@ export function ScannerScreen() {
       }
 
       if (!machineStatus || machineStatus.length === 0) {
-        Alert.alert(
-          t('machineNotFound'),
-          t('machineNotFoundDesc'),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                hasScannedRef.current = false;
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('machineNotFound'), body: t('machineNotFoundDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
         return;
       }
 
@@ -498,58 +468,19 @@ export function ScannerScreen() {
 
       // Check if machine is under maintenance
       if (machine.is_under_maintenance) {
-        Alert.alert(
-          t('machineUnavailable'),
-          t('machineUnavailableDesc'),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                hasScannedRef.current = false;
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('machineUnavailable'), body: t('machineUnavailableDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
         return;
       }
 
       // Check if machine is busy
       if (machine.is_busy && machine.current_user_id !== sessionRef.current?.user?.id) {
-        Alert.alert(
-          t('machineBusy'),
-          t('machineBusyDesc'),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                hasScannedRef.current = false;
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('machineBusy'), body: t('machineBusyDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
         return;
       }
 
       // Check if machine has sensor_id
       if (!machine.sensor_id) {
-        Alert.alert(
-          t('sensorNotPaired'),
-          t('sensorNotPairedDesc'),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                hasScannedRef.current = false;
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('sensorNotPaired'), body: t('sensorNotPairedDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
         return;
       }
 
@@ -581,20 +512,7 @@ export function ScannerScreen() {
       proceedWithWorkout(machine);
     } catch (error: any) {
       log.error('[Scanner] Error processing QR code:', error);
-      Alert.alert(
-        t('error'),
-        error.message || t('errorProcessing'),
-        [
-          {
-            text: t('common:ok'),
-            onPress: () => {
-              hasScannedRef.current = false;
-              setIsScanning(true);
-              setIsProcessing(false);
-            },
-          },
-        ]
-      );
+      showModal({ title: t('error'), body: error.message || t('errorProcessing'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
     }
   };
 
@@ -644,20 +562,7 @@ export function ScannerScreen() {
       if (!startResult?.success || !startResult?.session_id) {
         const errorCode = startResult?.error_code;
         if (errorCode === 'machine_busy' || errorCode === 'user_active_session_conflict') {
-          Alert.alert(
-            t('machineBusy'),
-            t('machineBusyDesc'),
-            [
-              {
-                text: t('common:ok'),
-                onPress: () => {
-                  hasScannedRef.current = false;
-                  setIsScanning(true);
-                  setIsProcessing(false);
-                },
-              },
-            ]
-          );
+          showModal({ title: t('machineBusy'), body: t('machineBusyDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
           return;
         }
         throw new Error(startResult?.error_message || t('errorWorkout'));
@@ -714,20 +619,7 @@ export function ScannerScreen() {
       }
     } catch (error: any) {
       log.error('[Scanner] Error proceeding with workout:', error);
-      Alert.alert(
-        t('error'),
-        error.message || t('errorWorkout'),
-        [
-          {
-            text: t('common:ok'),
-            onPress: () => {
-              hasScannedRef.current = false;
-              setIsScanning(true);
-              setIsProcessing(false);
-            },
-          },
-        ]
-      );
+      showModal({ title: t('error'), body: error.message || t('errorWorkout'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
     }
   };
 
@@ -763,9 +655,10 @@ export function ScannerScreen() {
 
   const startDevelopWorkout = async (sensorIdOverride: string) => {
     if (!DEV_QR_UUID) {
-      Alert.alert('Dev Mode', 'Set EXPO_PUBLIC_DEV_QR_UUID in .env');
+      showModal({ title: 'Dev Mode', body: 'Set EXPO_PUBLIC_DEV_QR_UUID in .env' });
       return;
     }
+    const resetDevScan = () => { setIsScanning(true); setIsProcessing(false); };
     try {
       setShowDevSimulatorModal(false);
       setIsProcessing(true);
@@ -781,19 +674,7 @@ export function ScannerScreen() {
       }
 
       if (!machineStatus || machineStatus.length === 0) {
-        Alert.alert(
-          t('machineNotFound'),
-          t('devModeNotFound', { uuid: DEV_QR_UUID }),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('machineNotFound'), body: t('devModeNotFound', { uuid: DEV_QR_UUID }), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
         return;
       }
 
@@ -801,37 +682,13 @@ export function ScannerScreen() {
 
       // Check if machine is under maintenance
       if (machine.is_under_maintenance) {
-        Alert.alert(
-          t('machineUnavailable'),
-          t('machineUnavailableDesc'),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('machineUnavailable'), body: t('machineUnavailableDesc'), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
         return;
       }
 
       // Check if machine has sensor_id
       if (!machine.sensor_id) {
-        Alert.alert(
-          t('sensorNotPaired'),
-          t('sensorNotPairedDesc'),
-          [
-            {
-              text: t('common:ok'),
-              onPress: () => {
-                setIsScanning(true);
-                setIsProcessing(false);
-              },
-            },
-          ]
-        );
+        showModal({ title: t('sensorNotPaired'), body: t('sensorNotPairedDesc'), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
         return;
       }
 
@@ -857,19 +714,7 @@ export function ScannerScreen() {
       proceedWithWorkout(machine, false, sensorIdOverride);
     } catch (error: any) {
       log.error('[Scanner] Development mode error:', error);
-      Alert.alert(
-        t('devModeError'),
-        error.message || t('errorProcessing'),
-        [
-          {
-            text: t('common:ok'),
-            onPress: () => {
-              setIsScanning(true);
-              setIsProcessing(false);
-            },
-          },
-        ]
-      );
+      showModal({ title: t('devModeError'), body: error.message || t('errorProcessing'), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
     }
   };
 

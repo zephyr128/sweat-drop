@@ -39,6 +39,7 @@ import { log } from '@/lib/logger';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { AppModal } from '@/components/AppModal';
 
 // Configure notification handler OUTSIDE of component (must run before any notification arrives)
 if (PUSH_NOTIFICATIONS_ENABLED) {
@@ -286,6 +287,7 @@ export default function RootLayout() {
         <StackNavigator />
         <StatusBar style="light" />
         <OfflineBanner />
+        <AppModal />
       </ThemeProvider>
     </ErrorBoundary>
   );

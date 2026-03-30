@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles } from '@/lib/theme';
 import { log } from '@/lib/logger';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 interface ReportIssueModalProps {
   visible: boolean;
@@ -18,6 +19,7 @@ type ReportType = 'sensor_not_connecting' | 'machine_broken' | 'missing_qr';
 
 export function ReportIssueModal({ visible, onClose, machineId, machineName }: ReportIssueModalProps) {
   const { session } = useSession();
+  const showModal = useAppModal((s) => s.showModal);
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,7 +31,7 @@ export function ReportIssueModal({ visible, onClose, machineId, machineName }: R
 
   const handleSubmit = async () => {
     if (!selectedType || !session?.user) {
-      Alert.alert('Error', 'Please select an issue type');
+      showModal({ title: 'Error', body: 'Please select an issue type' });
       return;
     }
 
@@ -44,18 +46,14 @@ export function ReportIssueModal({ visible, onClose, machineId, machineName }: R
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Issue reported successfully. Thank you!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            setSelectedType(null);
-            onClose();
-          },
-        },
-      ]);
+      showModal({
+        title: 'Success',
+        body: 'Issue reported successfully. Thank you!',
+        buttons: [{ label: 'OK', onPress: () => { setSelectedType(null); onClose(); } }],
+      });
     } catch (error: any) {
       log.error('Error reporting issue:', error);
-      Alert.alert('Error', `Failed to report issue: ${error.message}`);
+      showModal({ title: 'Error', body: `Failed to report issue: ${error.message}` });
     } finally {
       setSubmitting(false);
     }

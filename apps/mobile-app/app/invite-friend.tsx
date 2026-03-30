@@ -7,7 +7,6 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Share,
   Platform,
   Clipboard,
@@ -21,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import {
@@ -102,6 +102,7 @@ export default function InviteFriendScreen() {
   const branding = useBranding();
   const { activeGym } = useTheme();
   const { t } = useTranslation('socialFriends');
+  const showModal = useAppModal((s) => s.showModal);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -162,30 +163,30 @@ export default function InviteFriendScreen() {
     const autoApply = async () => {
       if (__DEV__) log.debug('[InviteFriend] Auto-applying pending referral code:', pendingCode);
 
-      Alert.alert(
-        t('deepLinkTitle'),
-        t('deepLinkConfirm', { code: pendingCode, gym: activeGym.name || '' }),
-        [
+      showModal({
+        title: t('deepLinkTitle'),
+        body: t('deepLinkConfirm', { code: pendingCode, gym: activeGym.name || '' }),
+        buttons: [
           {
-            text: t('common:cancel'),
+            label: t('common:cancel'),
             style: 'cancel',
             onPress: () => clearPendingCode(),
           },
           {
-            text: t('applyCta'),
+            label: t('applyCta'),
             onPress: async () => {
               const res = await applyFriendInviteCode(pendingCode, activeGym.id);
               clearPendingCode();
               if (res.ok) {
-                Alert.alert(t('applySuccess'));
+                showModal({ title: t('applySuccess') });
                 await load();
               } else {
-                Alert.alert(t('applyFailed'), res.message || t('loadError'));
+                showModal({ title: t('applyFailed'), body: res.message || t('loadError') });
               }
             },
           },
         ],
-      );
+      });
     };
 
     autoApply();
@@ -222,28 +223,28 @@ export default function InviteFriendScreen() {
   const onApply = useCallback(async () => {
     const trimmed = applyInput.trim();
     if (!trimmed) {
-      Alert.alert(t('applyFailed'), t('applyEmpty'));
+      showModal({ title: t('applyFailed'), body: t('applyEmpty') });
       return;
     }
     if (!activeGym?.id) {
-      Alert.alert(t('applyFailed'), t('gymRequired'));
+      showModal({ title: t('applyFailed'), body: t('gymRequired') });
       return;
     }
     setApplying(true);
     const res = await applyFriendInviteCode(trimmed, activeGym.id);
     setApplying(false);
     if (res.unavailable) {
-      Alert.alert(t('backendUnavailableTitle'), t('backendUnavailableBody'));
+      showModal({ title: t('backendUnavailableTitle'), body: t('backendUnavailableBody') });
       return;
     }
     if (res.ok) {
       setApplyInput('');
       setShowApply(false);
-      Alert.alert(t('applySuccess'));
+      showModal({ title: t('applySuccess') });
       await load();
       return;
     }
-    Alert.alert(t('applyFailed'), res.message || t('loadError'));
+    showModal({ title: t('applyFailed'), body: res.message || t('loadError') });
   }, [activeGym?.id, applyInput, load, t]);
 
   if (!session?.user) {

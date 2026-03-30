@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard, type FitnessGoal } from '@/hooks/useOnboardingWizard';
 import { useAuthStore } from '@/lib/stores/authStore';
 import OnboardingStepLayout from '@/components/OnboardingStep';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 const GOALS: { value: FitnessGoal; emoji: string; labelKey: string; descKey: string }[] = [
   { value: 'weight_loss', emoji: '🔥', labelKey: 'profileSetup.goal.weight_loss', descKey: 'profileSetup.goal.weight_loss_desc' },
@@ -17,6 +18,7 @@ const GOALS: { value: FitnessGoal; emoji: string; labelKey: string; descKey: str
 export default function StepGoalScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
   const { data, setField, submit, isEdit } = useOnboardingWizard();
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 
@@ -36,7 +38,7 @@ export default function StepGoalScreen() {
         router.replace('/(onboarding)/home-gym');
       }
     } else {
-      Alert.alert(t('profileSetup.saveError'), result.error);
+      showModal({ title: t('profileSetup.saveError'), body: result.error });
     }
   };
 

@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Linking,
-  Alert,
   ActivityIndicator,
   Platform,
   Dimensions,
@@ -26,6 +25,7 @@ import { useSession } from '@/hooks/useSession';
 import { useTranslation } from 'react-i18next';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 260;
@@ -47,6 +47,7 @@ export default function GymDetailScreen() {
   const router = useRouter();
   const { session } = useSession();
   const { t } = useTranslation('gymDetails');
+  const showModal = useAppModal((s) => s.showModal);
   const params = useLocalSearchParams<{ gymId: string }>();
   const { homeGymId, setHomeGymId, setActiveGym, clearPreview } = useGymStore();
   const { updateHomeGym } = useGymData();
@@ -139,13 +140,13 @@ export default function GymDetailScreen() {
     setSettingHome(true);
     try {
       await updateHomeGym(gym.id);
-      Alert.alert(
-        t('homeGymSet'),
-        t('homeGymSetMsg', { name: gym.name }),
-        [{ text: t('great'), onPress: () => router.back() }]
-      );
+      showModal({
+        title: t('homeGymSet'),
+        body: t('homeGymSetMsg', { name: gym.name }),
+        buttons: [{ label: t('great'), onPress: () => router.back() }],
+      });
     } catch {
-      Alert.alert(t('common:error'), t('failedToSetGym'));
+      showModal({ title: t('common:error'), body: t('failedToSetGym') });
     } finally {
       setSettingHome(false);
     }

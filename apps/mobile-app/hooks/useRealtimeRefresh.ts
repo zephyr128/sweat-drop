@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+type RealtimeEventType = 'INSERT' | 'UPDATE' | 'DELETE';
+
 interface RealtimeRefreshOptions {
   /** Supabase table to subscribe to */
   table: string;
@@ -12,7 +14,7 @@ interface RealtimeRefreshOptions {
   /** Value to match for filterColumn */
   filterValue?: string | null;
   /** Event types to listen for */
-  events?: Array<'INSERT' | 'UPDATE' | 'DELETE'>;
+  events?: RealtimeEventType[];
   /** Callback when a matching event arrives */
   onEvent: () => void;
   /** Fallback poll interval in ms (default 30000) */
@@ -21,7 +23,7 @@ interface RealtimeRefreshOptions {
   enabled?: boolean;
 }
 
-const DEFAULT_EVENTS: Array<'INSERT' | 'UPDATE' | 'DELETE'> = ['INSERT', 'UPDATE'];
+const DEFAULT_EVENTS: RealtimeEventType[] = ['INSERT', 'UPDATE'];
 
 /**
  * Subscribe to Supabase Realtime changes on a table, with fallback polling.
@@ -47,10 +49,14 @@ export function useRealtimeRefresh({
   }, [onEvent]);
 
   // Keep event list stable across renders so we do not constantly re-subscribe.
-  const eventList = useMemo<Array<'INSERT' | 'UPDATE' | 'DELETE'>>(() => {
+  const eventListKey = useMemo(() => {
     const source = events?.length ? events : DEFAULT_EVENTS;
-    return [...new Set(source)];
-  }, [events?.join('|')]);
+    return [...new Set(source)].join('|');
+  }, [events]);
+
+  const eventList = useMemo(() => {
+    return eventListKey.split('|').filter(Boolean) as RealtimeEventType[];
+  }, [eventListKey]);
 
   useEffect(() => {
     if (!enabled || !filterValue) return;

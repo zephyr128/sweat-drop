@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -24,6 +25,7 @@ import Animated, {
   cancelAnimation,
   SharedValue,
   FadeIn,
+  FadeInDown,
   FadeOut,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
@@ -50,7 +52,7 @@ import {
   InactivityFinalizeCoordinator,
 } from '@/lib/workout/inactivity-autofinish';
 import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig, type DiminishingConfig } from '@/lib/workout/live-drops-estimator';
-import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
+
 import { useHappyHour } from '@/hooks/useHappyHour';
 import { log } from '@/lib/logger';
 
@@ -86,6 +88,64 @@ const AnimatedText = ({ text, style }: { text: SharedValue<string>; style?: any 
     </Animated.Text>
   );
 };
+
+// Compact status badge — consistent icon pill for the left header column
+interface StatusBadgeProps {
+  icon: string;
+  label: string;
+  color: string;
+  pulse?: boolean;
+}
+
+const StatusBadge = ({ icon, label, color, pulse }: StatusBadgeProps) => {
+  const pulseAnim = useSharedValue(1);
+
+  useEffect(() => {
+    if (pulse) {
+      pulseAnim.value = withRepeat(
+        withSequence(
+          withTiming(0.55, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      pulseAnim.value = 1;
+    }
+  }, [pulse]);
+
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseAnim.value }));
+
+  return (
+    <Animated.View style={[statusBadgeStyles.row, pulseStyle]}>
+      <Ionicons name={icon as any} size={11} color={color} />
+      <Text style={[statusBadgeStyles.label, { color }]}>{label}</Text>
+    </Animated.View>
+  );
+};
+
+const statusBadgeStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  label: {
+    fontFamily: 'System',
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+  },
+});
 
 function mapSecurityError(message: string): 'cap' | 'rate' | 'fraud' | 'other' {
   const msg = message.toLowerCase();
@@ -137,8 +197,8 @@ export default function WorkoutScreen() {
   const { branding, activeGym } = useTheme();
   const brandingHook = useBranding();
   const { t } = useTranslation('workout');
-  const dropLimit = useDropLimitStatus(gymId || null);
-  const isTrackingOnly = dropLimit.limitReached;
+  const showModal = useAppModal((s) => s.showModal);
+  const [isTrackingOnly, setIsTrackingOnly] = useState(false);
   const happyHour = useHappyHour(gymId || null, paramMachineType || null);
   const [session, setSession] = useState<any>(null);
   // REMOVED: drops, displayDrops, earnedDrops, activeDrops, rpm, smoothedRPM - now using SharedValues
@@ -148,6 +208,13 @@ export default function WorkoutScreen() {
   const [targetDrops, setTargetDrops] = useState(120);
   const [sessionTier, setSessionTier] = useState<SessionTier>('normal');
   const [dailyRemaining, setDailyRemaining] = useState<number>(300);
+  // Segment-based progress: resets each time a session cap is completed
+  // sessionBaseShared = total drops at the start of current segment
+  // segmentTargetShared = drops to earn in this segment (min of session cap & daily remaining)
+  const sessionBaseShared = useSharedValue(0);
+  const segmentTargetShared = useSharedValue(120);
+  const segmentTargetRef = useRef(120); // JS-thread mirror for imperative updates
+  const segmentAdvancedAtRef = useRef<number>(-1); // total drops value at which we last advanced
   const [hardCapHitDuringSession, setHardCapHitDuringSession] = useState(false);
   const tier1ShownRef = useRef(false);
   const tier2ShownRef = useRef(false);
@@ -176,6 +243,7 @@ export default function WorkoutScreen() {
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
   const [bleConnected, setBleConnected] = useState(false);
   const [bleStatus, setBleStatus] = useState<string>('');
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [isResumingFromPause, setIsResumingFromPause] = useState(false);
   const [signalStatus, setSignalStatus] = useState<'ok' | 'lost'>('ok');
   const [awaitingActivityProof, setAwaitingActivityProof] = useState(false);
@@ -224,6 +292,7 @@ export default function WorkoutScreen() {
   });
   const machineConfigRef = useRef<MachineDropConfig | null>(null);
   const diminishingConfigRef = useRef<DiminishingConfig | null>(null);
+  const mergedPriorDropsRef = useRef<number>(0);
   // RPM history for average calculation (long-term, 30 values)
   const rpmHistoryRef = useRef<number[]>([]);
   // RPM smoothing: Track last 4 raw RPM values for moving average (Walking Mode)
@@ -694,7 +763,17 @@ export default function WorkoutScreen() {
         await bleService.startMonitoring(
           async (measurement: CSCMeasurement) => {
             const now = Date.now();
-            
+
+            // Throttled packet log: print once every 2 seconds to avoid spam
+            if (now - lastRPMUpdateRef.current > 2000 || measurement.rpm > 0) {
+              log.debug(
+                `[Workout] 📦 packet — protocol:${measurement.protocol}` +
+                ` rpm:${measurement.rpm?.toFixed(1)}` +
+                ` crank:${measurement.crankRevolutions}` +
+                ` crankTime:${measurement.lastCrankEventTime}`
+              );
+            }
+
             // Hard Fix: Glitch Filter - Ignore sudden drop to 0 if we're currently moving fast (> 20 RPM)
             // Only applies to CSC protocol (Magene S3+) where BLE echo packets can glitch
             // FTMS data comes directly from the machine and is reliable — skip glitch filter
@@ -1367,7 +1446,12 @@ export default function WorkoutScreen() {
               ? Number(effectiveLimits.session_soft_tier_1_span_ratio) : undefined,
           };
           setTargetDrops(maxSessionDrops);
-          setDailyRemaining(Math.max(0, maxDayDrops - dropHistoryRef.current.mintedToday));
+          const initialDayRemaining = Math.max(0, maxDayDrops - dropHistoryRef.current.mintedToday);
+          setDailyRemaining(initialDayRemaining);
+          // Initialize first segment target: smaller of session cap and daily remaining
+          const initialSegTarget = Math.max(1, Math.min(maxSessionDrops, initialDayRemaining));
+          segmentTargetRef.current = initialSegTarget;
+          segmentTargetShared.value = initialSegTarget;
         }
       } catch (limitsError) {
         log.warn('[Workout] Could not load economy limits for live estimator, using defaults.', limitsError);
@@ -1393,7 +1477,7 @@ export default function WorkoutScreen() {
       try {
         const { data: rewardedSessions } = await supabase
           .from('sessions')
-          .select('drops_earned,started_at')
+          .select('drops_earned,started_at,ended_at,machine_id')
           .eq('user_id', authSession.user.id)
           .eq('is_active', false)
           .gt('drops_earned', 0)
@@ -1412,6 +1496,10 @@ export default function WorkoutScreen() {
         let rewardedSessionsToday = 0;
         let mintedToday = 0;
         let mintedWeek = 0;
+        let mergedPriorDrops = 0;
+
+        const mergeWindowSec = 900;
+        const sessionStartMs = new Date(session.started_at).getTime();
 
         for (const row of rewardedSessions || []) {
           const dateStr = getBelgradeDateString(new Date(row.started_at));
@@ -1419,6 +1507,19 @@ export default function WorkoutScreen() {
           if (dateStr === todayStr) {
             rewardedSessionsToday += 1;
             mintedToday += earned;
+
+            // Merge window: prior sessions that ended recently before this
+            // session started (within mergeWindowSec). Prevents splitting
+            // a long workout into many short sessions to reset tiers.
+            if (row.ended_at) {
+              const endedMs = new Date(row.ended_at).getTime();
+              if (
+                endedMs <= sessionStartMs &&
+                sessionStartMs <= endedMs + mergeWindowSec * 1000
+              ) {
+                mergedPriorDrops += earned;
+              }
+            }
           }
           if (dateStr >= weekStartStr) {
             mintedWeek += earned;
@@ -1430,6 +1531,7 @@ export default function WorkoutScreen() {
           mintedToday,
           mintedWeek,
         };
+        mergedPriorDropsRef.current = mergedPriorDrops;
       } catch (historyError) {
         log.warn('[Workout] Could not load rewarded sessions history for live estimator.', historyError);
       }
@@ -1512,6 +1614,7 @@ export default function WorkoutScreen() {
   const splashAnim = useSharedValue(0);
   const pausedOverlayOpacity = useSharedValue(0);
   const finishPressProgress = useSharedValue(0);
+
 
   // Auto-Zero RPM Timer: Reset RPM to 0 if no change in crankEventTime for 3 seconds
   const autoZeroTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1606,8 +1709,11 @@ export default function WorkoutScreen() {
 
   // Connecting State: Subtle pulse animation while waiting for BLE connection
   useEffect(() => {
-    if (bleConnected || !session?.machine_id) {
-      // Stop connecting animation when connected or no machine
+    const hasMachine = !!(machineId || session?.machine_id);
+    const hasSensor = !!(sensorId || session?.machine?.sensor_id);
+
+    if (bleConnected || !hasMachine || !hasSensor) {
+      // Stop connecting animation when connected or nothing to connect to
       connectingPulseScale.value = withTiming(1, { duration: 300 });
       connectingPulseOpacity.value = withTiming(0, { duration: 300 });
       return;
@@ -1631,7 +1737,7 @@ export default function WorkoutScreen() {
       -1,
       false
     );
-  }, [bleConnected, session?.machine_id]);
+  }, [bleConnected, machineId, sensorId, session?.machine_id, session?.machine?.sensor_id]);
 
   // Performance Fix: Optimized smoothing for faster response
   // Layer 1: Lerp smoothing (balanced response, prevents jitter)
@@ -1886,6 +1992,7 @@ export default function WorkoutScreen() {
                       duration: duration.toString(),
                       gymId: session.gym_id || '',
                       sessionTier,
+                      trackingOnly: isTrackingOnly ? '1' : undefined,
                     },
                   });
                 } catch (routerError) {
@@ -1968,7 +2075,7 @@ export default function WorkoutScreen() {
       log.debug('[SmartCoach] Moved to next exercise:', item.exercise_name);
     } catch (err) {
         log.error('[SmartCoach] Error in handleNextExercise:', err);
-        Alert.alert(t('common:error'), t('failedNextExercise'));
+        showModal({ title: t('common:error'), body: t('failedNextExercise') });
     }
   }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, isPlanCompleted]);
 
@@ -2126,8 +2233,10 @@ export default function WorkoutScreen() {
   );
 
   // ============================================================================
-  // Gauge fills relative to daily cap for continuous sense of progress.
-  // Session threshold is shown as a label, not a progress ceiling.
+  // Gauge fills relative to current segment (same as progress bar).
+  // segmentTargetShared = min(sessionCap, dailyRemaining) for this segment.
+  // sessionBaseShared = total drops at the start of this segment.
+  // gaugeTarget retained for drop emitter start-position calculation only.
   const gaugeTarget = useMemo(
     () => Math.max(targetDrops, dropLimitsRef.current.maxDropsPerDay || 300),
     [targetDrops],
@@ -2137,13 +2246,14 @@ export default function WorkoutScreen() {
     () => totalDropsShared.value,
     (drops) => {
       'worklet';
-      const targetProgress = Math.min(drops / gaugeTarget, 1);
+      const segmentDrops = Math.max(0, drops - sessionBaseShared.value);
+      const targetProgress = Math.min(segmentDrops / Math.max(segmentTargetShared.value, 1), 1);
       progressShared.value = withTiming(targetProgress, {
         duration: 300,
         easing: Easing.out(Easing.quad),
       });
     },
-    [totalDropsShared, gaugeTarget]
+    [totalDropsShared, sessionBaseShared, segmentTargetShared]
   );
 
   // PRO-FITNESS: Calculate calories based on machine type
@@ -2188,10 +2298,11 @@ export default function WorkoutScreen() {
   // Initialize session
   useEffect(() => {
     if (sessionId) {
-      loadSession();
+      setSessionLoading(true);
+      loadSession().finally(() => setSessionLoading(false));
     } else if (authSession?.user && equipmentId && gymId) {
-      // Create new session if equipmentId and gymId provided
-      createSession();
+      setSessionLoading(true);
+      createSession().finally(() => setSessionLoading(false));
     } else {
       // Mock session for development
       const mockStartTime = new Date();
@@ -2202,6 +2313,7 @@ export default function WorkoutScreen() {
         equipment: { name: 'Treadmill #1' },
         gym: { name: 'Your Gym' },
       });
+      setSessionLoading(false);
     }
   }, [sessionId, equipmentId, gymId, authSession]);
 
@@ -2224,7 +2336,7 @@ export default function WorkoutScreen() {
     // Hardening: never create a session without a machine lock path.
     if (!machineId) {
       setBleStatus(t('sessionStartRequiresLock'));
-      Alert.alert(t('sessionStartBlockedTitle'), t('sessionStartRequiresLock'));
+      showModal({ title: t('sessionStartBlockedTitle'), body: t('sessionStartRequiresLock') });
       router.replace('/scan');
       return;
     }
@@ -2257,7 +2369,7 @@ export default function WorkoutScreen() {
 
     if (lockError || !lockResult) {
       setBleStatus(t('sessionStartMachineBusy'));
-      Alert.alert(t('sessionStartBlockedTitle'), t('sessionStartMachineBusy'));
+      showModal({ title: t('sessionStartBlockedTitle'), body: t('sessionStartMachineBusy') });
       router.replace('/scan');
       return;
     }
@@ -2270,7 +2382,6 @@ export default function WorkoutScreen() {
         user_id: authSession.user.id,
         gym_id: gymId,
         machine_id: machineId,
-        equipment_id: equipmentId, // Keep for backward compatibility
         started_at: new Date().toISOString(),
         is_active: true,
         raw_metrics: {
@@ -2281,7 +2392,7 @@ export default function WorkoutScreen() {
           },
         },
       })
-      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
+      .select('*, machine:machine_id(*), gym:gym_id(*)')
       .single();
 
     if (error) {
@@ -2311,11 +2422,16 @@ export default function WorkoutScreen() {
   const loadSession = async () => {
     if (!sessionId) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('sessions')
-      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
+      .select('*, machine:machine_id(*), gym:gym_id(*)')
       .eq('id', sessionId)
       .single();
+
+    if (error) {
+      log.error('[Workout] Failed to load session:', error);
+      return;
+    }
 
     if (data) {
       setSession(data);
@@ -2325,8 +2441,7 @@ export default function WorkoutScreen() {
         id: data.id,
         gymId: data.gym_id,
         machine: data.machine,
-        equipment: data.equipment,
-        machineType: data.machine?.type || data.equipment?.equipment_type,
+        machineType: data.machine?.type,
       });
       
       // Load saved progress (update SharedValues)
@@ -2481,28 +2596,67 @@ export default function WorkoutScreen() {
           todayDate: getBelgradeDateString(now),
           machineConfig: machineConfigRef.current,
           diminishingConfig: diminishingConfigRef.current,
+          mergedPriorDrops: mergedPriorDropsRef.current,
         });
 
         setSessionTier(result.tier);
         setDailyRemaining(result.dailyRemaining);
         if (result.hardCapReached && !hardCapHitDuringSession) {
           setHardCapHitDuringSession(true);
+          setIsTrackingOnly(true);
+          setTierToast(t('dailyCapHitBanner'));
+          if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
+          tierToastTimerRef.current = setTimeout(() => setTierToast(null), 5000);
+        } else if (!result.hardCapReached && isTrackingOnly) {
+          setIsTrackingOnly(false);
         }
 
-        // One-time tier transition toasts
-        if (result.tier === 'tier1' && !tier1ShownRef.current) {
-          tier1ShownRef.current = true;
-          setTierToast(t('thresholdReached'));
-          if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
-          tierToastTimerRef.current = setTimeout(() => setTierToast(null), 4000);
-        } else if (result.tier === 'tier2' && !tier2ShownRef.current) {
-          tier2ShownRef.current = true;
-          setTierToast(t('deepReducedMode'));
-          if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
-          tierToastTimerRef.current = setTimeout(() => setTierToast(null), 4000);
+        // Segment advance: when user earns their first drop PAST the current segment target,
+        // advance the base so the bar resets and shows progress into the next segment.
+        // We use strictly > (not >=) so the bar stays full at 100% until the next drop arrives.
+        if (!result.hardCapReached && result.drops > 0) {
+          const currentDrops = result.drops;
+          const currentBase = sessionBaseShared.value;
+          const segmentMilestone = currentBase + segmentTargetRef.current;
+          if (
+            currentDrops > segmentMilestone &&
+            currentDrops !== segmentAdvancedAtRef.current
+          ) {
+            // New base = the milestone we just crossed (not currentDrops),
+            // so that the drops already past the milestone show correctly as partial fill.
+            const newBase = segmentMilestone;
+            const newTarget = Math.max(1, Math.min(
+              dropLimitsRef.current.maxDropsPerSession,
+              result.dailyRemaining,
+            ));
+            segmentAdvancedAtRef.current = currentDrops;
+            sessionBaseShared.value = newBase;
+            segmentTargetRef.current = newTarget;
+            segmentTargetShared.value = newTarget;
+            // Cancel any in-flight withTiming before setting new value
+            cancelAnimation(progressShared);
+            const dropsIntoNewSegment = currentDrops - newBase;
+            const newFill = Math.min(dropsIntoNewSegment / Math.max(newTarget, 1), 1);
+            progressShared.value = withTiming(newFill, { duration: 150 });
+          }
         }
 
-        if (!isTrackingOnly) {
+        // One-time tier transition toasts (only if cap not hit)
+        if (!result.hardCapReached) {
+          if (result.tier === 'tier1' && !tier1ShownRef.current) {
+            tier1ShownRef.current = true;
+            setTierToast(t('thresholdReached'));
+            if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
+            tierToastTimerRef.current = setTimeout(() => setTierToast(null), 4000);
+          } else if (result.tier === 'tier2' && !tier2ShownRef.current) {
+            tier2ShownRef.current = true;
+            setTierToast(t('deepReducedMode'));
+            if (tierToastTimerRef.current) clearTimeout(tierToastTimerRef.current);
+            tierToastTimerRef.current = setTimeout(() => setTierToast(null), 4000);
+          }
+        }
+
+        if (!result.hardCapReached) {
           applyLiveDropsEstimate(result.drops);
         }
       }
@@ -2806,9 +2960,10 @@ export default function WorkoutScreen() {
         securityStatus: 'cap',
         securityMessage: message,
         sessionTier,
+        trackingOnly: isTrackingOnly ? '1' : undefined,
       },
     });
-  }, [authSession?.user, duration, router, session, t]);
+  }, [authSession?.user, duration, isTrackingOnly, router, session, t]);
 
   useEffect(() => {
     if (!session?.machine_id || !bleConnected || isPaused) {
@@ -2920,7 +3075,30 @@ export default function WorkoutScreen() {
     finishPressProgress.value = withTiming(1, { duration: 1000, easing: Easing.linear });
     longPressTimerRef.current = setTimeout(() => {
       finishPressProgress.value = 1;
-      handleFinishWorkout();
+
+      // Warn user if workout is shorter than 2 minutes — they'll get 0 drops
+      if (duration < 120) {
+        showModal({
+          title: t('shortWorkoutTitle'),
+          body: t('shortWorkoutBody', { seconds: duration }),
+          buttons: [
+            {
+              label: t('common:cancel'),
+              style: 'cancel',
+              onPress: () => {
+                finishPressProgress.value = withTiming(0, { duration: 200 });
+              },
+            },
+            {
+              label: t('shortWorkoutConfirm'),
+              style: 'destructive',
+              onPress: () => handleFinishWorkout(),
+            },
+          ],
+        });
+      } else {
+        handleFinishWorkout();
+      }
     }, 1000);
   };
 
@@ -2988,6 +3166,7 @@ export default function WorkoutScreen() {
           duration: duration.toString(),
           gymId: session?.gym_id || '',
           sessionTier,
+          trackingOnly: isTrackingOnly ? '1' : undefined,
         },
       });
       return;
@@ -3240,6 +3419,7 @@ export default function WorkoutScreen() {
         securityStatus: securityStatus || undefined,
         securityMessage: securityMessage || undefined,
         sessionTier,
+        trackingOnly: (isTrackingOnly || hardCapHitDuringSession) ? '1' : undefined,
       },
     });
   };
@@ -3377,13 +3557,15 @@ export default function WorkoutScreen() {
     () => totalDropsShared.value,
     (drops) => {
       'worklet';
-      const overachieved = drops > gaugeTarget;
+      // Segment-relative: overachieved when drops in current segment reach segment target
+      const segmentDrops = Math.max(0, drops - sessionBaseShared.value);
+      const overachieved = segmentDrops >= segmentTargetShared.value;
       const bonus = drops > 0 && Math.floor(drops) % 100 === 0;
 
       runOnJS(setIsOverachieved)(overachieved);
       runOnJS(setShowBonus)(bonus);
     },
-    [totalDropsShared, gaugeTarget]
+    [totalDropsShared, sessionBaseShared, segmentTargetShared]
   );
 
   const progress = useDerivedValue(() => {
@@ -3394,18 +3576,43 @@ export default function WorkoutScreen() {
   const [progressJS, setProgressJS] = useState(0);
   const [progressWidth, setProgressWidth] = useState('0%');
   const [liquidGaugeValue, setLiquidGaugeValue] = useState('0'); // JS state for LiquidGauge display value
+  const [segmentTarget, setSegmentTarget] = useState(120); // JS mirror of segmentTargetShared for rendering
+  const [sessionBase, setSessionBase] = useState(0); // JS mirror of sessionBaseShared for rendering
+
+  // Progress bar uses segment-relative drops: resets at each session cap completion.
+  // segmentTargetShared = min(sessionCap, dailyRemaining) for the current segment.
   useAnimatedReaction(
-    () => progressShared.value,
-    (value) => {
+    () => totalDropsShared.value,
+    (drops) => {
       'worklet';
-      const jsValue = Math.min(value, 1);
-      const widthPercent = `${Math.min(jsValue * 100, 100)}%`;
-      runOnJS(setProgressJS)(Math.min(progress.value, 1));
+      const segmentDrops = Math.max(0, drops - sessionBaseShared.value);
+      const segProgress = Math.min(segmentDrops / Math.max(segmentTargetShared.value, 1), 1);
+      const widthPercent = `${Math.min(segProgress * 100, 100)}%`;
+      runOnJS(setProgressJS)(segProgress);
       runOnJS(setProgressWidth)(widthPercent);
     },
-    [progressShared, progress]
+    [totalDropsShared, sessionBaseShared, segmentTargetShared]
   );
   
+  // Sync segmentTargetShared and sessionBaseShared → JS state for goal row rendering
+  useAnimatedReaction(
+    () => segmentTargetShared.value,
+    (value) => {
+      'worklet';
+      runOnJS(setSegmentTarget)(value);
+    },
+    [segmentTargetShared]
+  );
+
+  useAnimatedReaction(
+    () => sessionBaseShared.value,
+    (value) => {
+      'worklet';
+      runOnJS(setSessionBase)(value);
+    },
+    [sessionBaseShared]
+  );
+
   // CRITICAL: Sync liquidGaugeDisplayValueShared to JS state for LiquidGauge value prop (avoid reading .value during render)
   useAnimatedReaction(
     () => liquidGaugeDisplayValueShared.value,
@@ -3425,23 +3632,98 @@ export default function WorkoutScreen() {
           style={StyleSheet.absoluteFillObject}
           contentFit="cover"
           transition={200}
+          pointerEvents="none"
         />
       )}
       {/* Blurred dark overlay for contrast */}
-      <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark">
+      <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
       </BlurView>
 
-      {/* Header with Gym Info */}
+      {/* Header with Gym Info + Status Badges */}
       <View style={styles.header}>
+        {/* Left column: vertical status badges */}
         <View style={styles.leftHeader}>
-          {session?.gym?.name && (
-            <View style={styles.gymTag}>
-              <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
-              <Text style={styles.gymTagText}>{t('atGym', { name: session.gym.name })}</Text>
-            </View>
+          {/* Happy Hour badge — pulsates, tappable */}
+          {bleConnected && happyHour.active && (
+            <TouchableOpacity
+              onPress={() => showModal({
+                title: t('happyHourBadge', { multiplier: happyHour.multiplier }),
+                body: t('happyHourInfoBody', { multiplier: happyHour.multiplier }),
+              })}
+              activeOpacity={0.75}
+            >
+              <StatusBadge
+                icon="flash"
+                label={t('happyHourBadge', { multiplier: happyHour.multiplier })}
+                color="#FFD700"
+                pulse
+              />
+            </TouchableOpacity>
+          )}
+
+          {/* Tracking only badge */}
+          {isTrackingOnly && bleConnected && (
+            <TouchableOpacity
+              onPress={() => showModal({
+                title: t('trackingOnlyBadgeLabel'),
+                body: t('trackingOnlyInfoBody'),
+              })}
+              activeOpacity={0.75}
+            >
+              <StatusBadge
+                icon="water-outline"
+                label={t('trackingOnlyBadgeLabel')}
+                color="#93C5FD"
+              />
+            </TouchableOpacity>
+          )}
+
+          {/* Hard day cap badge */}
+          {hardCapHitDuringSession && !isTrackingOnly && bleConnected && (
+            <TouchableOpacity
+              onPress={() => showModal({
+                title: t('hardCapBadgeLabel'),
+                body: t('hardDayCapReached'),
+              })}
+              activeOpacity={0.75}
+            >
+              <StatusBadge
+                icon="calendar-outline"
+                label={t('hardCapBadgeLabel')}
+                color="#93C5FD"
+              />
+            </TouchableOpacity>
+          )}
+
+          {/* Reduced rate tier badge */}
+          {sessionTier !== 'normal' && !isTrackingOnly && bleConnected && (
+            <TouchableOpacity
+              onPress={() => showModal({
+                title: sessionTier === 'tier2' ? t('deepReduced') : t('reducedRate'),
+                body: sessionTier === 'tier2' ? t('deepReducedMode') : t('thresholdReached'),
+              })}
+              activeOpacity={0.75}
+            >
+              <StatusBadge
+                icon="trending-down-outline"
+                label={sessionTier === 'tier2' ? t('deepReduced') : t('reducedRate')}
+                color="#FDE68A"
+              />
+            </TouchableOpacity>
+          )}
+
+          {/* Activity proof pending badge */}
+          {awaitingActivityProof && !isPaused && bleConnected && (
+            <StatusBadge
+              icon="shield-checkmark-outline"
+              label={t('provingActivity')}
+              color="#FDE68A"
+              pulse
+            />
           )}
         </View>
+
         <View style={styles.headerRight}>
           {/* Challenges Overlay Button */}
           {challenges.length > 0 && (
@@ -3579,9 +3861,10 @@ export default function WorkoutScreen() {
       <View style={styles.waterContainer}>
         {/* Radial gradient background behind gauge (back-lit effect) */}
         <View style={styles.gaugeBackgroundGlow} />
+
         <View style={styles.circleWrapper}>
-          {/* Connecting State: Subtle pulse while waiting for BLE connection */}
-          {!bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
+          {/* Connecting State: pulse while waiting for BLE — visible from the moment we have a sensor ID */}
+          {!bleConnected && (machineId || session?.machine_id) && (sensorId || session?.machine?.sensor_id) && (
             <Animated.View
               style={[
                 styles.connectingCircle,
@@ -3591,9 +3874,18 @@ export default function WorkoutScreen() {
                 },
               ]}
             >
-              <Text style={styles.connectingText}>
-                Connecting to {session?.machine?.name || 'sensor'}...
-              </Text>
+              {sessionLoading ? (
+                <>
+                  <ActivityIndicator size="small" color={theme.colors.textSecondary} style={{ marginBottom: 8 }} />
+                  <Text style={styles.connectingText}>{t('connecting')}</Text>
+                </>
+              ) : (
+                <Text style={styles.connectingText}>
+                  {session?.machine?.name
+                    ? `${t('connecting').replace('...', '')} ${session.machine.name}...`
+                    : t('connecting')}
+                </Text>
+              )}
             </Animated.View>
           )}
 
@@ -3614,9 +3906,9 @@ export default function WorkoutScreen() {
           )}
 
 
-          {/* LiquidGauge Component - Only show when BLE is connected */}
+          {/* LiquidGauge Component - Only show when BLE connected and cap not hit */}
           {/* Render LiquidGauge FIRST so it's below CircularProgressRing */}
-          {bleConnected && (
+          {bleConnected && !isTrackingOnly && !hardCapHitDuringSession && (
             <>
               {/* Premium UI: Advanced LiquidGauge with Damping Effect */}
               {/* LiquidGauge follows rawRPM via smoothedRPMShared (already has damping from smoothing chain) */}
@@ -3635,9 +3927,9 @@ export default function WorkoutScreen() {
             </>
           )}
 
-          {/* Circular Progress Ring - Only show when BLE is connected */}
+          {/* Circular Progress Ring - Only show when BLE connected and cap not hit */}
           {/* Render AFTER LiquidGauge so it's on top */}
-          {bleConnected && (
+          {bleConnected && !isTrackingOnly && !hardCapHitDuringSession && (
             <CircularProgressRing
               progress={progressJS}
               size={290}
@@ -3647,8 +3939,19 @@ export default function WorkoutScreen() {
             />
           )}
 
-          {/* DROPS Label - Only show when BLE is connected */}
-          {bleConnected && (
+          {/* Daily limit reached state — replaces gauge when cap hit (DB or live) */}
+          {bleConnected && (isTrackingOnly || hardCapHitDuringSession) && (
+            <View style={styles.trackingOnlyCircle}>
+              <View style={styles.trackingOnlyInner}>
+                <Ionicons name="checkmark-circle" size={44} color="#4CD964" style={{ marginBottom: 10 }} />
+                <Text style={styles.trackingOnlyHeading}>{t('dailyGoalReached')}</Text>
+                <Text style={styles.trackingOnlySubtext}>{t('workoutTracked')}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* DROPS Label - Only show when earning drops */}
+          {bleConnected && !isTrackingOnly && !hardCapHitDuringSession && (
             <View style={styles.dropsLabelContainer}>
               <Text style={styles.dropsLabel}>{t('drops')}</Text>
               {isOverachieved && (
@@ -3658,7 +3961,7 @@ export default function WorkoutScreen() {
           )}
 
           {/* Premium DropEmitter - Zero-Lag Optimized (no Skia per drop) */}
-          {bleConnected && !isTrackingOnly && (
+          {bleConnected && !isTrackingOnly && !hardCapHitDuringSession && (
             <DropEmitter
               drops={activeDrops}
               containerSize={280}
@@ -3671,14 +3974,6 @@ export default function WorkoutScreen() {
             />
           )}
 
-          {/* Hard cap / tracking-only badge */}
-          {isTrackingOnly && bleConnected && (
-            <View style={styles.trackingOnlyBadge}>
-              <Ionicons name="fitness-outline" size={16} color="#93C5FD" />
-              <Text style={styles.trackingOnlyText}>{t('trackingOnly')}</Text>
-            </View>
-          )}
-          {/* Hard cap badge is now shown as a floating toast */}
         </View>
       </View>
 
@@ -3797,52 +4092,74 @@ export default function WorkoutScreen() {
         </View>
       )}
 
-      {/* Progress Bar */}
+      {/* Progress Bar + Goal Row */}
       <View style={styles.progressBarContainer}>
+        {/* Goal label row */}
+        <View style={styles.goalRow}>
+          <View style={styles.goalLeft}>
+            <Ionicons name="water-outline" size={13} color="rgba(255,255,255,0.35)" />
+            <Text style={styles.goalLabel}>{t('goal')}</Text>
+          </View>
+          <Text style={[styles.goalProgress, getNumberStyle(13)]}>
+            <Text style={[styles.goalProgressCurrent, isOverachieved && { color: theme.colors.secondary }]}>
+              {parseInt(liquidGaugeValue || '0')}
+            </Text>
+            <Text style={styles.goalProgressSep}> / </Text>
+            <Text style={styles.goalProgressTarget}>{Math.round(sessionBase) + segmentTarget}</Text>
+          </Text>
+        </View>
+
+        {/* Thin progress bar */}
         <View style={styles.progressBar}>
           <View
-              style={[
-                styles.progressBarFill,
-                {
-                  width: progressWidth as any, // TypeScript workaround for percentage width
-                  backgroundColor: isOverachieved ? theme.colors.secondary : branding.primary,
-                },
-              ]}
+            style={[
+              styles.progressBarFill,
+              {
+                width: progressWidth as any,
+                backgroundColor: isOverachieved ? theme.colors.secondary : branding.primary,
+              },
+            ]}
           />
         </View>
-        <View style={styles.targetContainer}>
-          <View style={styles.targetRow}>
-            <Text style={styles.targetText}>{t('threshold')}</Text>
-            <Text style={[styles.targetNumber, getNumberStyle(16)]}>{targetDrops}</Text>
-            <Ionicons name="water" size={14} color={theme.colors.primary} />
-            {sessionTier !== 'normal' && (
-              <View style={[styles.tierBadge, sessionTier === 'tier2' && styles.tierBadgeTier2]}>
-                <Text style={styles.tierBadgeText}>
-                  {sessionTier === 'tier1' ? t('reducedRate') : t('deepReduced')}
-                </Text>
-              </View>
-            )}
-          </View>
-          {!isTrackingOnly && (
-            <View style={styles.dailyRemainingRow}>
-              <Ionicons name="calendar-outline" size={12} color={theme.colors.textSecondary} />
-              <Text style={styles.dailyRemainingText}>
-                {t('dailyRemaining', { count: dailyRemaining })}
+
+        {/* Bottom info row */}
+        <View style={styles.infoRow}>
+          {!isTrackingOnly && dailyRemaining > 0 ? (
+            <View style={styles.remainingPill}>
+              <Ionicons name="water" size={11} color={branding.primary} />
+              <Text style={[styles.remainingPillText, { color: branding.primary }]}>
+                {dailyRemaining}
               </Text>
+              <Text style={styles.remainingPillSuffix}>{t('remainingToday')}</Text>
             </View>
-          )}
-          {happyHour.active && (
-            <View style={styles.happyHourWorkoutBadge}>
-              <Text style={styles.happyHourWorkoutEmoji}>⚡</Text>
-              <Text style={styles.happyHourWorkoutText}>
-                {t('happyHourBadgeBonus', { multiplier: happyHour.multiplier })}
-              </Text>
+          ) : isTrackingOnly ? (
+            <View style={styles.remainingPill}>
+              <Ionicons name="checkmark-circle" size={11} color="#4CD964" />
+              <Text style={[styles.remainingPillText, { color: 'rgba(255,255,255,0.30)' }]}>{t('limitReached')}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
 
-      {/* NOTE: Tier toast and activity proof are rendered as floating overlays at the end of the component tree */}
+      {/* Tier / daily-cap notification banner — fades in below progress bar */}
+      {!!tierToast && (
+        <Animated.View
+          entering={FadeInDown.duration(300)}
+          style={styles.tierBanner}
+        >
+          <Ionicons
+            name={hardCapHitDuringSession ? 'alert-circle-outline' : 'information-circle-outline'}
+            size={14}
+            color={hardCapHitDuringSession ? '#FDE68A' : 'rgba(255,255,255,0.70)'}
+          />
+          <Text style={[
+            styles.tierBannerText,
+            hardCapHitDuringSession && { color: '#FDE68A' },
+          ]}>
+            {tierToast}
+          </Text>
+        </Animated.View>
+      )}
 
       {/* Inactivity warning countdown (blocking) */}
       {showInactivityWarning && !isPaused && (
@@ -4003,47 +4320,6 @@ export default function WorkoutScreen() {
           </View>
         </Pressable>
       </View>
-      {/* Floating toast notifications — absolutely positioned, no layout shift */}
-      {tierToast && (
-        <Animated.View
-          entering={FadeIn.duration(250)}
-          exiting={FadeOut.duration(250)}
-          style={styles.floatingToast}
-          pointerEvents="none"
-        >
-          <View style={styles.floatingToastInner}>
-            <Ionicons name="trending-down-outline" size={16} color="#FDE68A" />
-            <Text style={styles.floatingToastText}>{tierToast}</Text>
-          </View>
-        </Animated.View>
-      )}
-
-      {awaitingActivityProof && !isPaused && bleConnected && (
-        <Animated.View
-          entering={FadeIn.duration(250)}
-          exiting={FadeOut.duration(250)}
-          style={styles.floatingToast}
-          pointerEvents="none"
-        >
-          <View style={[styles.floatingToastInner, styles.floatingToastWarning]}>
-            <Ionicons name="shield-checkmark-outline" size={16} color={theme.colors.warning || '#F59E0B'} />
-            <Text style={[styles.floatingToastText, styles.floatingToastTextWarning]}>{t('activityProofPending')}</Text>
-          </View>
-        </Animated.View>
-      )}
-
-      {hardCapHitDuringSession && !isTrackingOnly && bleConnected && (
-        <Animated.View
-          entering={FadeIn.duration(250)}
-          style={styles.floatingToast}
-          pointerEvents="none"
-        >
-          <View style={[styles.floatingToastInner, styles.floatingToastInfo]}>
-            <Ionicons name="calendar-outline" size={16} color="#93C5FD" />
-            <Text style={[styles.floatingToastText, styles.floatingToastTextInfo]}>{t('hardDayCapReached')}</Text>
-          </View>
-        </Animated.View>
-      )}
     </SafeAreaView>
   );
 }
@@ -4063,21 +4339,7 @@ const styles = StyleSheet.create({
   },
   leftHeader: {
     flex: 1,
-  },
-  gymTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.borderRadius.full,
-    alignSelf: 'flex-start',
-  },
-  gymTagText: {
-    ...fontStyles.bodyMedium,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.sm,
+    alignItems: 'flex-start',
   },
   headerRight: {
     flexDirection: 'row',
@@ -4141,6 +4403,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: theme.spacing.xl,
     position: 'relative',
+  },
+  trackingOnlyCircle: {
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    borderWidth: 2,
+    borderColor: 'rgba(76,217,100,0.25)',
+    backgroundColor: 'rgba(76,217,100,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trackingOnlyInner: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  trackingOnlyHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4CD964',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  trackingOnlySubtext: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    lineHeight: 17,
   },
   gaugeBackgroundGlow: {
     position: 'absolute',
@@ -4301,106 +4591,78 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: theme.borderRadius.sm,
   },
-  targetContainer: {
+  goalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 2,
+    marginBottom: 6,
   },
-  targetRow: {
+  goalLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 5,
   },
-  targetText: {
+  goalLabel: {
     ...fontStyles.body,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.35)',
   },
-  targetNumber: {
+  goalProgress: {
     ...fontStyles.number,
-    color: theme.colors.text,
   },
-  tierBadge: {
-    backgroundColor: 'rgba(120, 80, 0, 0.55)',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginLeft: 4,
+  goalProgressCurrent: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.90)',
   },
-  tierBadgeTier2: {
-    backgroundColor: 'rgba(180, 50, 50, 0.55)',
+  goalProgressSep: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.25)',
   },
-  tierBadgeText: {
-    ...fontStyles.body,
-    fontSize: 11,
-    color: '#FDE68A',
-    fontWeight: theme.typography.fontWeight.medium,
+  goalProgressTarget: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.40)',
   },
-  dailyRemainingRow: {
+  infoRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  remainingPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
   },
-  dailyRemainingText: {
-    ...fontStyles.body,
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-  },
-  happyHourWorkoutBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    backgroundColor: 'rgba(255, 215, 0, 0.10)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-  },
-  happyHourWorkoutEmoji: {
+  remainingPillText: {
+    ...fontStyles.number,
     fontSize: 12,
   },
-  happyHourWorkoutText: {
-    ...fontStyles.bodySemiBold,
+  remainingPillSuffix: {
+    ...fontStyles.body,
     fontSize: 11,
-    color: '#FFD700',
+    color: 'rgba(255,255,255,0.30)',
+    marginLeft: 2,
   },
-  floatingToast: {
-    position: 'absolute',
-    top: 100,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 999,
-  },
-  floatingToastInner: {
+  tierBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(120, 80, 0, 0.92)',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    maxWidth: '85%',
-    ...theme.shadows.md,
+    gap: 6,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.10)',
+    marginTop: 6,
+    marginBottom: 16,
   },
-  floatingToastWarning: {
-    backgroundColor: 'rgba(120, 80, 0, 0.92)',
-  },
-  floatingToastInfo: {
-    backgroundColor: 'rgba(30, 64, 120, 0.92)',
-  },
-  floatingToastText: {
+  tierBannerText: {
     ...fontStyles.body,
-    fontSize: 13,
-    color: '#FDE68A',
-    flexShrink: 1,
-  },
-  floatingToastTextWarning: {
-    color: '#FDE68A',
-  },
-  floatingToastTextInfo: {
-    color: '#93C5FD',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    letterSpacing: 0.1,
   },
   inactivityOverlay: {
     position: 'absolute',
@@ -4434,24 +4696,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.md,
     textAlign: 'center',
-  },
-  trackingOnlyBadge: {
-    position: 'absolute',
-    bottom: 30,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(30, 64, 120, 0.75)',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  trackingOnlyText: {
-    ...fontStyles.body,
-    color: '#93C5FD',
-    fontSize: 13,
-    fontWeight: theme.typography.fontWeight.medium,
   },
   noActivityCancelOverlay: {
     position: 'absolute',

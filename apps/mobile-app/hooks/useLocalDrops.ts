@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
@@ -17,7 +17,7 @@ export function useLocalDrops(gymId: string | null) {
   });
   const [loading, setLoading] = useState(true);
 
-  const loadLocalDrops = async () => {
+  const loadLocalDrops = useCallback(async () => {
     if (!session?.user || !gymId) {
       return;
     }
@@ -51,7 +51,7 @@ export function useLocalDrops(gymId: string | null) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session?.user?.id, gymId]);
 
   useEffect(() => {
     if (!session?.user || !gymId) {
@@ -63,9 +63,9 @@ export function useLocalDrops(gymId: string | null) {
     loadLocalDrops();
   }, [session?.user?.id, gymId]);
 
-  const refreshLocalDrops = () => {
+  const refreshLocalDrops = useCallback(() => {
     loadLocalDrops();
-  };
+  }, [loadLocalDrops]);
 
   return {
     localDrops: localDrops.local_drops_balance,

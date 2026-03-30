@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -7,12 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard, type Gender } from '@/hooks/useOnboardingWizard';
 import { useAuthStore } from '@/lib/stores/authStore';
 import OnboardingStepLayout from '@/components/OnboardingStep';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 export default function StepGenderScreen() {
   const router = useRouter();
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const isEdit = edit === 'true';
   const { t } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
   const { data, setField, setEditMode, initializeFromProfile, skip, reset } = useOnboardingWizard();
   const profile = useAuthStore((s) => s.profile);
 
@@ -38,13 +40,13 @@ export default function StepGenderScreen() {
   };
 
   const handleSkip = () => {
-    Alert.alert(
-      t('profileSetup.skipConfirmTitle'),
-      t('profileSetup.skipConfirmMessage'),
-      [
-        { text: t('profileSetup.skipConfirmNo'), style: 'cancel' },
+    showModal({
+      title: t('profileSetup.skipConfirmTitle'),
+      body: t('profileSetup.skipConfirmMessage'),
+      buttons: [
+        { label: t('profileSetup.skipConfirmNo'), style: 'cancel' },
         {
-          text: t('profileSetup.skipConfirmYes'),
+          label: t('profileSetup.skipConfirmYes'),
           onPress: async () => {
             await skip();
             useAuthStore.getState().setOnboardingStep('done');
@@ -52,7 +54,7 @@ export default function StepGenderScreen() {
           },
         },
       ],
-    );
+    });
   };
 
   const handleBack = () => {

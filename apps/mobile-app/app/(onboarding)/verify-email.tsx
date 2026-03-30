@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
-  Alert,
   AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,9 +19,11 @@ import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { theme, fontStyles } from '@/lib/theme';
 import { log } from '@/lib/logger';
 import { useRouter } from 'expo-router';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 export default function VerifyEmailScreen() {
   const { t } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
@@ -114,11 +115,11 @@ export default function VerifyEmailScreen() {
       });
       if (error) throw error;
       setLastResendAt(now);
-      Alert.alert(t('auth.checkEmail'), t('auth.verifyResendDone'));
+      showModal({ title: t('auth.checkEmail'), body: t('auth.verifyResendDone') });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('auth.verifyResendFailed');
       log.warn('[VerifyEmail] resend:', message);
-      Alert.alert(t('common:error'), message);
+      showModal({ title: t('common:error'), body: message });
     } finally {
       setResendLoading(false);
     }
@@ -142,18 +143,18 @@ export default function VerifyEmailScreen() {
       // Session expired/invalidated after email confirmation — send user
       // back to auth screen so they can sign in with their credentials.
       // This is expected behavior with some Supabase configurations.
-      Alert.alert(
-        t('auth.verifyTitle'),
-        t('auth.sessionExpiredRecovery'),
-        [
+      showModal({
+        title: t('auth.verifyTitle'),
+        body: t('auth.sessionExpiredRecovery'),
+        buttons: [
           {
-            text: t('auth.verifySignOut'),
+            label: t('auth.verifySignOut'),
             onPress: () => {
               signOut().then(() => router.replace('/(onboarding)/auth'));
             },
           },
         ],
-      );
+      });
       return;
     }
 
@@ -164,10 +165,7 @@ export default function VerifyEmailScreen() {
       const step = useAuthStore.getState().onboardingStep;
       navigateByStep(step);
     } else {
-      Alert.alert(
-        t('auth.verifyTitle'),
-        t('auth.verifyInstructions'),
-      );
+      showModal({ title: t('auth.verifyTitle'), body: t('auth.verifyInstructions') });
     }
   }, [router, navigateByStep, signOut, t]);
 

@@ -4,7 +4,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -19,10 +18,12 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { theme, fontStyles } from '@/lib/theme';
 import { OnboardingProgress } from '@/components/OnboardingProgress';
+import { useAppModal } from '@/lib/stores/useAppModal';
 
 export default function DisplayNameScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const showModal = useAppModal((s) => s.showModal);
   const profile = useAuthStore((s) => s.profile);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
@@ -40,7 +41,7 @@ export default function DisplayNameScreen() {
   const handleContinue = async () => {
     const trimmed = displayName.trim();
     if (!trimmed || trimmed.length < 2) {
-      Alert.alert(t('common:error'), t('username.minLengthError'));
+      showModal({ title: t('common:error'), body: t('username.minLengthError') });
       return;
     }
 
@@ -53,9 +54,9 @@ export default function DisplayNameScreen() {
       router.replace('/(onboarding)/avatar');
     } else {
       if (result.error?.includes('already taken') || result.error?.includes('23505')) {
-        Alert.alert(t('common:error'), t('username.alreadyTaken'));
+        showModal({ title: t('common:error'), body: t('username.alreadyTaken') });
       } else {
-        Alert.alert(t('common:error'), result.error || t('auth.somethingWentWrong'));
+        showModal({ title: t('common:error'), body: result.error || t('auth.somethingWentWrong') });
       }
     }
   };

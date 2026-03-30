@@ -7,8 +7,8 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -45,6 +45,7 @@ export default function ChallengeFriendScreen() {
   const branding = useBranding();
   const { activeGym } = useTheme();
   const { t } = useTranslation('socialFriends');
+  const showModal = useAppModal((s) => s.showModal);
 
   const challengeTypes: { key: Friend1v1ChallengeType; label: string }[] = useMemo(
     () => [
@@ -130,11 +131,11 @@ export default function ChallengeFriendScreen() {
 
   const onCreate = useCallback(async () => {
     if (!activeGym?.id) {
-      Alert.alert(t('createFailed'), t('gymRequired'));
+      showModal({ title: t('createFailed'), body: t('gymRequired') });
       return;
     }
     if (!selectedOpponent) {
-      Alert.alert(t('createFailed'), t('opponentRequired'));
+      showModal({ title: t('createFailed'), body: t('opponentRequired') });
       return;
     }
     const rewardDrops = Math.max(0, Math.round(Number(rewardStr.replace(',', '.')) || 0));
@@ -148,18 +149,18 @@ export default function ChallengeFriendScreen() {
     });
     setCreating(false);
     if (res.unavailable) {
-      Alert.alert(t('backendUnavailableTitle'), t('challengeBackendUnavailableBody'));
+      showModal({ title: t('backendUnavailableTitle'), body: t('challengeBackendUnavailableBody') });
       return;
     }
     if (res.ok) {
-      Alert.alert(t('createSuccess'));
+      showModal({ title: t('createSuccess') });
       setSelectedOpponent(null);
       setSearchQuery('');
       setRewardStr('');
       await loadInvites();
       return;
     }
-    Alert.alert(t('createFailed'), res.message || t('loadError'));
+    showModal({ title: t('createFailed'), body: res.message || t('loadError') });
   }, [activeGym?.id, challengeType, durationDays, loadInvites, selectedOpponent, rewardStr, t]);
 
   const onRespond = useCallback(
@@ -168,15 +169,15 @@ export default function ChallengeFriendScreen() {
       const res = await respondFriend1v1Invitation(invitationId, accept);
       setRespondingId(null);
       if (res.unavailable) {
-        Alert.alert(t('backendUnavailableTitle'), t('challengeBackendUnavailableBody'));
+        showModal({ title: t('backendUnavailableTitle'), body: t('challengeBackendUnavailableBody') });
         return;
       }
       if (res.ok) {
-        Alert.alert(t('respondSuccess'));
+        showModal({ title: t('respondSuccess') });
         await loadInvites();
         return;
       }
-      Alert.alert(t('respondFailed'), res.message || t('loadError'));
+      showModal({ title: t('respondFailed'), body: res.message || t('loadError') });
     },
     [loadInvites, t],
   );
