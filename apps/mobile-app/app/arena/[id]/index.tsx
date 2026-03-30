@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Alert, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Clipboard } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -6,8 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles, getContrastColor } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, getContrastColor, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -44,16 +46,6 @@ interface ArenaResult {
     gym_name: string | null;
   }>;
 }
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 const SCORING_ICONS: Record<string, string> = {
   total_drops: '💧',
   days_visited: '📅',
@@ -101,7 +93,7 @@ export default function ArenaDetailScreen() {
       });
 
       if (error) {
-        console.error('Error loading arena:', error);
+        log.error('Error loading arena:', error);
         setArena(null);
       } else {
         const match = ((data as AvailableArena[]) || []).find((a) => a.arena_id === id);
@@ -141,7 +133,7 @@ export default function ArenaDetailScreen() {
         setLocalBalance(membershipData.local_drops_balance || 0);
       }
     } catch (err) {
-      console.error('Arena detail error:', err);
+      log.error('Arena detail error:', err);
     } finally {
       setLoading(false);
     }
@@ -161,7 +153,7 @@ export default function ArenaDetailScreen() {
         setMiniLeaderboard(data as LeaderboardEntry[]);
       }
     } catch (err) {
-      console.error('Mini leaderboard error:', err);
+      log.error('Mini leaderboard error:', err);
     }
   };
 
@@ -188,7 +180,7 @@ export default function ArenaDetailScreen() {
         }
       }
     } catch (err) {
-      console.error('Arena result error:', err);
+      log.error('Arena result error:', err);
     }
   };
 
@@ -408,7 +400,7 @@ export default function ArenaDetailScreen() {
             <BlurView intensity={50} tint="dark" style={[styles.heroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               <View style={styles.heroTop}>
                 {arena.sponsor_logo ? (
-                  <Image source={{ uri: arena.sponsor_logo }} style={styles.heroSponsorLogo} resizeMode="contain" />
+                  <Image source={arena.sponsor_logo} style={styles.heroSponsorLogo} contentFit="contain" transition={200} />
                 ) : (
                   <View style={[styles.heroSponsorPlaceholder, { backgroundColor: hexToRgba(arenaColors.primary, 0.15) }]}>
                     <Ionicons name="trophy" size={28} color={arenaColors.primary} />

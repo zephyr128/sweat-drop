@@ -19,13 +19,7 @@ import BackButton from '@/components/BackButton';
 import { useGymStore, type Gym } from '@/lib/stores/useGymStore';
 import { useGymData } from '@/hooks/useGymData';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles } from '@/lib/theme';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
-}
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 
 function parseCoord(v: unknown): number | null {
   if (v == null || v === '') return null;

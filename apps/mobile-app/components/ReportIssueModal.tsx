@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles } from '@/lib/theme';
+import { log } from '@/lib/logger';
 
 interface ReportIssueModalProps {
   visible: boolean;
@@ -53,7 +54,7 @@ export function ReportIssueModal({ visible, onClose, machineId, machineName }: R
         },
       ]);
     } catch (error: any) {
-      console.error('Error reporting issue:', error);
+      log.error('Error reporting issue:', error);
       Alert.alert('Error', `Failed to report issue: ${error.message}`);
     } finally {
       setSubmitting(false);

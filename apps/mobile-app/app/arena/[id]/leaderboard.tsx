@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -6,8 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -34,16 +36,6 @@ interface ArenaInfo {
   is_finalized: boolean;
   prizes: Array<{ rank: number; prize: string; value?: string }>;
 }
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 export default function ArenaLeaderboardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -82,7 +74,7 @@ export default function ArenaLeaderboardScreen() {
       });
 
       if (error) {
-        console.error('Error loading arena leaderboard:', error);
+        log.error('Error loading arena leaderboard:', error);
         setLeaderboard([]);
       } else if (data) {
         const entries = data as LeaderboardEntry[];
@@ -92,7 +84,7 @@ export default function ArenaLeaderboardScreen() {
         setCurrentUserEntry(userEntry || null);
       }
     } catch (err) {
-      console.error('Arena leaderboard error:', err);
+      log.error('Arena leaderboard error:', err);
     } finally {
       setLoading(false);
     }
@@ -135,7 +127,7 @@ export default function ArenaLeaderboardScreen() {
         <Animated.View entering={FadeInDown.delay(50).duration(300)}>
           <View style={styles.sponsorBanner}>
             {arenaInfo.sponsor_logo ? (
-              <Image source={{ uri: arenaInfo.sponsor_logo }} style={styles.sponsorLogo} resizeMode="contain" />
+              <Image source={arenaInfo.sponsor_logo} style={styles.sponsorLogo} contentFit="contain" transition={200} />
             ) : (
               <Ionicons name="trophy" size={16} color={branding.primary} />
             )}
@@ -182,7 +174,7 @@ export default function ArenaLeaderboardScreen() {
                           ]}
                         >
                           {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                            <Image source={{ uri: entry.avatar_url }} style={styles.podiumAvatarImg} />
+                            <Image source={entry.avatar_url} style={styles.podiumAvatarImg} transition={200} />
                           ) : entry.avatar_url ? (
                             <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
                               {entry.avatar_url}
@@ -241,7 +233,7 @@ export default function ArenaLeaderboardScreen() {
                         </View>
 
                         {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                          <Image source={{ uri: entry.avatar_url }} style={styles.listAvatar} />
+                          <Image source={entry.avatar_url} style={styles.listAvatar} transition={200} />
                         ) : entry.avatar_url ? (
                           <View style={styles.listAvatarPlaceholder}>
                             <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>

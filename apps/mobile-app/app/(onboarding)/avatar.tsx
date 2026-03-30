@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { theme, fontStyles } from '@/lib/theme';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
 import { OnboardingProgress } from '@/components/OnboardingProgress';
+import { log } from '@/lib/logger';
 
 const AVATARS = [
   '🔥', '💧', '⚡', '🦁',
@@ -61,7 +62,7 @@ export default function AvatarScreen() {
     if (result.success) {
       navigateNext();
     } else {
-      console.warn('[Avatar] Failed to save avatar:', result.error);
+      log.warn('[Avatar] Failed to save avatar:', result.error);
       navigateNext();
     }
   };

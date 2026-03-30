@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -41,14 +42,14 @@ export function useUserBadges(userId?: string) {
       });
 
       if (fetchError) {
-        console.error('Error loading badges:', fetchError);
+        log.error('Error loading badges:', fetchError);
         if (isMountedRef.current) setError(fetchError.message);
         return;
       }
 
       if (isMountedRef.current) setBadges(data || []);
     } catch (err: any) {
-      console.error('Error in loadBadges:', err);
+      log.error('Error in loadBadges:', err);
       if (isMountedRef.current) setError(err.message);
     } finally {
       if (isMountedRef.current) setLoading(false);
@@ -74,7 +75,7 @@ export function useUserBadges(userId?: string) {
           filter: `user_id=eq.${targetUserId}`,
         },
         async (payload) => {
-          console.log('New badge earned:', payload.new);
+          log.debug('New badge earned:', payload.new);
           
           // Reload badges to get full badge data (name, image, etc.)
           await loadBadges();

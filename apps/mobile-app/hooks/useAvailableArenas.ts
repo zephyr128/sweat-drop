@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 
@@ -61,7 +62,7 @@ export function useAvailableArenas() {
       });
 
       if (error) {
-        console.error('[useAvailableArenas] Error:', error);
+        log.error('[useAvailableArenas] Error:', error);
         setArenas([]);
       } else {
         const allArenas = (data as AvailableArena[]) || [];
@@ -70,7 +71,7 @@ export function useAvailableArenas() {
         setArenas(allArenas);
       }
     } catch (err) {
-      console.error('[useAvailableArenas] Exception:', err);
+      log.error('[useAvailableArenas] Exception:', err);
       setArenas([]);
     } finally {
       setLoading(false);

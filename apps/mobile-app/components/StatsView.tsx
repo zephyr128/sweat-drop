@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
+import { log } from '@/lib/logger';
 
 interface StatPeriod {
   label: 'Today' | 'This Month' | 'All Time';
@@ -99,7 +100,7 @@ export default function StatsView() {
       const { count: goalsCount, error: goalsError } = await goalsQuery;
 
       if (goalsError) {
-        console.error('Error loading goals:', goalsError);
+        log.error('Error loading goals:', goalsError);
       }
 
       setStats({
@@ -109,7 +110,7 @@ export default function StatsView() {
         dropsEarned: totalDrops,
       });
     } catch (error) {
-      console.error('Error loading stats:', error);
+      log.error('Error loading stats:', error);
     } finally {
       setLoading(false);
     }

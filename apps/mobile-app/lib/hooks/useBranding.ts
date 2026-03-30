@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { log } from '@/lib/logger';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme as baseTheme } from '@/lib/theme';
 
@@ -90,7 +91,7 @@ export const useBranding = (): BrandingColors => {
     
     // Validate hex color format - ensure primaryColor is a valid string
     if (!primaryColor || typeof primaryColor !== 'string' || !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(primaryColor)) {
-      console.warn('[useBranding] Invalid primary color format, using default:', primaryColor);
+      log.warn('[useBranding] Invalid primary color format, using default:', primaryColor);
       const defaultPrimary = baseTheme.colors.primary;
       return {
         primary: defaultPrimary,

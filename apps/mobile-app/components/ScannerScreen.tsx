@@ -37,6 +37,7 @@ import Animated, {
   interpolate,
   runOnJS,
 } from 'react-native-reanimated';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymData } from '@/hooks/useGymData';
@@ -55,10 +56,7 @@ const SCAN_AREA_SIZE = 250;
 const CORNER_LENGTH = 30;
 const CORNER_WIDTH = 4;
 
-// Development mode: Hardcoded QR UUID for testing
-// Change this to your test machine's QR UUID
-// To find your machine's QR UUID, scan the QR code once and check the console logs
-const DEV_QR_UUID = '92e1ad0d-8a2a-4993-8b19-61244ab82164'; // Replace with your test machine QR UUID
+const DEV_QR_UUID = process.env.EXPO_PUBLIC_DEV_QR_UUID || '';
 
 type DevPresetMode = Exclude<WorkoutSimulatorProfile, 'custom' | 'disconnect_mid_session'> | 'custom';
 
@@ -239,7 +237,7 @@ export function ScannerScreen() {
   const checkCameraPermission = async () => {
     try {
       const permission = await Camera.requestCameraPermission();
-      console.log('[Scanner] Camera permission status:', permission);
+      log.debug('[Scanner] Camera permission status:', permission);
 
       if (permission === 'granted') {
         setHasPermission(true);
@@ -283,7 +281,7 @@ export function ScannerScreen() {
         setHasPermission(false);
       }
     } catch (error) {
-      console.error('[Scanner] Camera permission error:', error);
+      log.error('[Scanner] Camera permission error:', error);
       Alert.alert(
         t('permissionError'),
         t('permissionErrorDesc'),
@@ -315,14 +313,14 @@ export function ScannerScreen() {
     const isNewGym = !currentHomeGymId || currentHomeGymId !== gymId;
     if (isNewGym) {
       const reason = !currentHomeGymId ? 'No home gym' : `Different gym (was ${currentHomeGymId})`;
-      console.log(`[CheckIn] ${reason} — switching to:`, gymId);
+      log.debug(`[CheckIn] ${reason} — switching to:`, gymId);
       useGymStore.getState().setHomeGymId(gymId);
       try {
         await updateHomeGymRef.current(gymId);
         const { useAuthStore } = require('@/lib/stores/authStore');
         await useAuthStore.getState().refreshProfile();
       } catch (err) {
-        console.error('[CheckIn] Error setting home gym:', err);
+        log.error('[CheckIn] Error setting home gym:', err);
       }
     }
 
@@ -360,7 +358,7 @@ export function ScannerScreen() {
       }
     } catch (locationError) {
       if ((locationError as Error)?.message !== 'expo-location-unavailable') {
-        console.warn('[CheckIn] GPS error, proceeding without location:', locationError);
+        log.warn('[CheckIn] GPS error, proceeding without location:', locationError);
       }
     }
 
@@ -393,7 +391,7 @@ export function ScannerScreen() {
           .rpc('evaluate_referral_qualification', { p_referral_id: null })
           .then(({ error: qualificationError }) => {
             if (qualificationError && __DEV__) {
-              console.warn('[CheckIn] evaluate_referral_qualification failed:', qualificationError.message);
+              log.warn('[CheckIn] evaluate_referral_qualification failed:', qualificationError.message);
             }
           });
       }
@@ -467,7 +465,7 @@ export function ScannerScreen() {
         throw new Error('Invalid QR code format');
       }
 
-      console.log('[Scanner] Scanned QR UUID:', qrUuid);
+      log.debug('[Scanner] Scanned QR UUID:', qrUuid);
 
       // Check machine status via RPC
       const { data: machineStatus, error: rpcError } = await supabase.rpc('get_machine_status', {
@@ -557,12 +555,12 @@ export function ScannerScreen() {
 
       // ── Read homeGymId directly from store to avoid stale closure ──
       const currentHomeGymId = useGymStore.getState().homeGymId;
-      console.log('[Scanner] Current homeGymId from store:', currentHomeGymId, '| Scanned gym:', machine.gym_id);
+      log.debug('[Scanner] Current homeGymId from store:', currentHomeGymId, '| Scanned gym:', machine.gym_id);
 
       // First-time user OR different gym → show gym-welcome
       if (!currentHomeGymId || machine.gym_id !== currentHomeGymId) {
         const reason = !currentHomeGymId ? 'No home gym set' : `Different gym detected (was ${currentHomeGymId})`;
-        console.log(`[Scanner] ${reason} — switching to:`, machine.gym_id);
+        log.debug(`[Scanner] ${reason} — switching to:`, machine.gym_id);
         // Set in store IMMEDIATELY (before async DB call) so it's available even if DB update is slow
         useGymStore.getState().setHomeGymId(machine.gym_id);
         try {
@@ -572,7 +570,7 @@ export function ScannerScreen() {
           const { useAuthStore } = require('@/lib/stores/authStore');
           await useAuthStore.getState().refreshProfile();
         } catch (error) {
-          console.error('[Scanner] Error setting home gym:', error);
+          log.error('[Scanner] Error setting home gym:', error);
           // Store already has the value — DB will be synced on next loadUserHomeGym
         }
         // Show gym-welcome screen
@@ -582,7 +580,7 @@ export function ScannerScreen() {
 
       proceedWithWorkout(machine);
     } catch (error: any) {
-      console.error('[Scanner] Error processing QR code:', error);
+      log.error('[Scanner] Error processing QR code:', error);
       Alert.alert(
         t('error'),
         error.message || t('errorProcessing'),
@@ -715,7 +713,7 @@ export function ScannerScreen() {
         });
       }
     } catch (error: any) {
-      console.error('[Scanner] Error proceeding with workout:', error);
+      log.error('[Scanner] Error proceeding with workout:', error);
       Alert.alert(
         t('error'),
         error.message || t('errorWorkout'),
@@ -764,12 +762,14 @@ export function ScannerScreen() {
   };
 
   const startDevelopWorkout = async (sensorIdOverride: string) => {
+    if (!DEV_QR_UUID) {
+      Alert.alert('Dev Mode', 'Set EXPO_PUBLIC_DEV_QR_UUID in .env');
+      return;
+    }
     try {
       setShowDevSimulatorModal(false);
       setIsProcessing(true);
       setIsScanning(false);
-
-      console.log('[Scanner] Development mode: Using QR UUID:', DEV_QR_UUID);
 
       // Check machine status via RPC
       const { data: machineStatus, error: rpcError } = await supabase.rpc('get_machine_status', {
@@ -837,18 +837,18 @@ export function ScannerScreen() {
 
       // ── Read homeGymId directly from store to avoid stale closure ──
       const currentDevHomeGymId = useGymStore.getState().homeGymId;
-      console.log('[Scanner][Dev] Current homeGymId from store:', currentDevHomeGymId, '| Scanned gym:', machine.gym_id);
+      log.debug('[Scanner][Dev] Current homeGymId from store:', currentDevHomeGymId, '| Scanned gym:', machine.gym_id);
 
       if (!currentDevHomeGymId || machine.gym_id !== currentDevHomeGymId) {
         const reason = !currentDevHomeGymId ? 'No home gym set' : `Different gym detected (was ${currentDevHomeGymId})`;
-        console.log(`[Scanner][Dev] ${reason} — switching to:`, machine.gym_id);
+        log.debug(`[Scanner][Dev] ${reason} — switching to:`, machine.gym_id);
         useGymStore.getState().setHomeGymId(machine.gym_id);
         try {
           await updateHomeGymRef.current(machine.gym_id);
           const { useAuthStore } = require('@/lib/stores/authStore');
           await useAuthStore.getState().refreshProfile();
         } catch (error) {
-          console.error('[Scanner][Dev] Error setting home gym:', error);
+          log.error('[Scanner][Dev] Error setting home gym:', error);
         }
         proceedWithWorkout(machine, true, sensorIdOverride);
         return;
@@ -856,7 +856,7 @@ export function ScannerScreen() {
 
       proceedWithWorkout(machine, false, sensorIdOverride);
     } catch (error: any) {
-      console.error('[Scanner] Development mode error:', error);
+      log.error('[Scanner] Development mode error:', error);
       Alert.alert(
         t('devModeError'),
         error.message || t('errorProcessing'),

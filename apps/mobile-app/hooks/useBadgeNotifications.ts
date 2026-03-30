@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 import { UserBadge } from './useUserBadges';
@@ -33,7 +34,7 @@ export function useBadgeNotifications(callbacks: BadgeNotificationCallback = {})
           filter: `user_id=eq.${session.user.id}`,
         },
         async (payload) => {
-          console.log('New badge earned!', payload.new);
+          log.debug('New badge earned!', payload.new);
 
           const newRecord = payload.new as any;
 
@@ -43,7 +44,7 @@ export function useBadgeNotifications(callbacks: BadgeNotificationCallback = {})
           });
 
           if (error) {
-            console.error('Error fetching badge details:', error);
+            log.error('Error fetching badge details:', error);
             return;
           }
 

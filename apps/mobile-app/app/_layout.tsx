@@ -38,6 +38,7 @@ import {
 import { log } from '@/lib/logger';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
 
 // Configure notification handler OUTSIDE of component (must run before any notification arrives)
 if (PUSH_NOTIFICATIONS_ENABLED) {
@@ -284,6 +285,7 @@ export default function RootLayout() {
         <GymDataInitializer />
         <StackNavigator />
         <StatusBar style="light" />
+        <OfflineBanner />
       </ThemeProvider>
     </ErrorBoundary>
   );

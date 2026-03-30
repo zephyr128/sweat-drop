@@ -1,11 +1,13 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Image, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Clipboard } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,15 +15,6 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; bgAlpha: number }> = {
   pending: { color: '#fbbf24', icon: 'time-outline', bgAlpha: 0.1 },
@@ -61,12 +54,12 @@ export default function RedemptionsScreen() {
         .limit(50);
 
       if (error) {
-        console.error('Error loading redemptions:', error);
+        log.error('Error loading redemptions:', error);
       } else {
         setRedemptions(data || []);
       }
     } catch (error) {
-      console.error('Error in loadRedemptions:', error);
+      log.error('Error in loadRedemptions:', error);
     } finally {
       setLoading(false);
     }
@@ -151,9 +144,10 @@ export default function RedemptionsScreen() {
                       {/* Image / Icon */}
                       {imageUrl ? (
                         <Image
-                          source={{ uri: imageUrl }}
+                          source={imageUrl}
                           style={[styles.itemImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
-                          resizeMode="cover"
+                          contentFit="cover"
+                          transition={200}
                         />
                       ) : (
                         <View style={[styles.itemIconBox, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>

@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useBranding } from '@/lib/hooks/useBranding';
-import { getNumberStyle, fontStyles } from '@/lib/theme';
+import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -28,15 +28,6 @@ export interface ActivityRingsProps {
   dailyCap: number;
   size?: number;
   onPress?: () => void;
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function getStreakColor(streak: number, primary: string): string {

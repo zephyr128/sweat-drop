@@ -24,19 +24,14 @@ import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from 'expo-router';
 
 import { useBranding } from '@/lib/hooks/useBranding';
-import { fontStyles, getNumberStyle, theme as appTheme } from '@/lib/theme';
+import { fontStyles, getNumberStyle, theme as appTheme, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useMyStats, StatsPeriod } from '@/hooks/useMyStats';
 import { useGymStore } from '@/lib/stores/useGymStore';
+import { useSession } from '@/hooks/useSession';
+import { supabase } from '@/lib/supabase';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
-}
-
 function formatNumber(n: number): string {
   if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`;
   if (n >= 1_000) return n.toLocaleString('en-US');
@@ -169,8 +164,20 @@ const skeletonStyles = StyleSheet.create({
 export default function StatsScreen() {
   const { t } = useTranslation('stats');
   const branding = useBranding();
+  const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
+
+  const [gymCount, setGymCount] = useState(1);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    supabase
+      .from('gym_memberships')
+      .select('gym_id', { count: 'exact', head: true })
+      .eq('user_id', session.user.id)
+      .then(({ count }) => { if (count != null) setGymCount(count); });
+  }, [session?.user?.id]);
 
   type ScopeType = 'gym' | 'global';
   const [scope, setScope] = useState<ScopeType>('gym');
@@ -207,11 +214,10 @@ export default function StatsScreen() {
 
   const isLoading = state.loading || switching;
 
-  const { periodStats, breakdown, origin, weekDays, weekActive, machines, achievements } = state;
+  const { periodStats, origin, weekDays, weekActive, machines, achievements } = state;
 
   const originTotal = origin.session + origin.challenge + origin.checkin + origin.bonus;
   const originPct = (val: number) => (originTotal > 0 ? Math.round((val / originTotal) * 100) : 0);
-  const breakdownMax = Math.max(breakdown.today, breakdown.week, breakdown.month, breakdown.all, 1);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -241,45 +247,47 @@ export default function StatsScreen() {
           />
         }
       >
-        {/* Scope Toggle: My Gym | Global */}
-        <Animated.View entering={FadeInDown.delay(25).duration(300)}>
-          <View style={[styles.scopeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.scopeToggleBlur, { backgroundColor: GLASS_BG }]}>
-              {([
-                { key: 'gym' as ScopeType, label: t('myGym'), icon: 'location' as const },
-                { key: 'global' as ScopeType, label: t('global'), icon: 'globe-outline' as const },
-              ]).map((tab) => (
-                <TouchableOpacity
-                  key={tab.key}
-                  style={[
-                    styles.scopeTab,
-                    scope === tab.key && {
-                      backgroundColor: hexToRgba(branding.primary, 0.15),
-                      borderColor: hexToRgba(branding.primary, 0.3),
-                      borderWidth: 1,
-                    },
-                  ]}
-                  onPress={() => setScope(tab.key)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={tab.icon}
-                    size={14}
-                    color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.40)'}
-                  />
-                  <Text
+        {/* Scope Toggle: My Gym | Global — only shown when user has multiple gyms */}
+        {gymCount > 1 && (
+          <Animated.View entering={FadeInDown.delay(25).duration(300)}>
+            <View style={[styles.scopeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+              <BlurView intensity={50} tint="dark" style={[styles.scopeToggleBlur, { backgroundColor: GLASS_BG }]}>
+                {([
+                  { key: 'gym' as ScopeType, label: t('myGym'), icon: 'location' as const },
+                  { key: 'global' as ScopeType, label: t('global'), icon: 'globe-outline' as const },
+                ]).map((tab) => (
+                  <TouchableOpacity
+                    key={tab.key}
                     style={[
-                      styles.scopeTabText,
-                      scope === tab.key && { color: branding.primary },
+                      styles.scopeTab,
+                      scope === tab.key && {
+                        backgroundColor: hexToRgba(branding.primary, 0.15),
+                        borderColor: hexToRgba(branding.primary, 0.3),
+                        borderWidth: 1,
+                      },
                     ]}
+                    onPress={() => setScope(tab.key)}
+                    activeOpacity={0.7}
                   >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </BlurView>
-          </View>
-        </Animated.View>
+                    <Ionicons
+                      name={tab.icon}
+                      size={14}
+                      color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.40)'}
+                    />
+                    <Text
+                      style={[
+                        styles.scopeTabText,
+                        scope === tab.key && { color: branding.primary },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
 
         {/* Period Selector */}
         <Animated.View entering={FadeInDown.delay(50).duration(300)}>
@@ -357,48 +365,6 @@ export default function StatsScreen() {
                   </BlurView>
                 </View>
               ))}
-            </Animated.View>
-
-            {/* ── Drops Breakdown ── */}
-            <Animated.View entering={FadeInDown.delay(180).duration(300)}>
-              <Text style={styles.sectionTitle}>{t('dropsBreakdown')}</Text>
-              <View style={[styles.sectionCardOuter, { borderColor: 'rgba(255,255,255,0.12)' }]}>
-                <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-                  {([
-                    { key: 'today', value: breakdown.today },
-                    { key: 'week', value: breakdown.week },
-                    { key: 'month', value: breakdown.month },
-                    { key: 'all', value: breakdown.all },
-                  ] as const).map((row, idx, arr) => (
-                    <View
-                      key={row.key}
-                      style={[
-                        styles.breakdownRow,
-                        idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
-                      ]}
-                    >
-                      <Text style={styles.breakdownLabel}>{t(`period.${row.key}`)}</Text>
-                      <View style={styles.breakdownBarOuter}>
-                        <View
-                          style={[
-                            styles.breakdownBarInner,
-                            {
-                              width: `${Math.max((row.value / breakdownMax) * 100, 2)}%`,
-                              backgroundColor: hexToRgba(branding.primary, row.key === 'all' ? 0.8 : 0.55),
-                            },
-                          ]}
-                        />
-                      </View>
-                      <View style={styles.breakdownValueRow}>
-                        <Ionicons name="water" size={10} color={hexToRgba(branding.primary, 0.7)} />
-                        <Text style={[styles.breakdownValue, getNumberStyle(13)]}>
-                          {formatNumber(row.value)}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </BlurView>
-              </View>
             </Animated.View>
 
             {/* ── Drops Origin ── */}
@@ -738,42 +704,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
     padding: 16,
-  },
-
-  // ── Breakdown ──
-  breakdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  breakdownLabel: {
-    ...fontStyles.body,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
-    width: 82,
-  },
-  breakdownBarOuter: {
-    flex: 1,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    marginHorizontal: 10,
-    overflow: 'hidden',
-  },
-  breakdownBarInner: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  breakdownValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    width: 64,
-    justifyContent: 'flex-end',
-  },
-  breakdownValue: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
   },
 
   // ── Origin ──

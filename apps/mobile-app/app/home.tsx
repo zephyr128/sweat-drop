@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, ImageBackground, Image, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Dimensions, RefreshControl } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -16,7 +17,7 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle, theme as appTheme, fontStyles } from '@/lib/theme';
+import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba} from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { LockedOverlay } from '@/components/LockedOverlay';
 import { ProgressWidget } from '@/components/ProgressWidget';
@@ -31,20 +32,11 @@ import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
+import { log } from '@/lib/logger';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 12;
 const CARD_PADDING = 16; // Horizontal padding of ScrollView
-
-// Helper function to add alpha to hex color
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 // Bottom cards row: two cards with gap between them
 const BOTTOM_CARDS_GAP = 16;
 const BOTTOM_CARD_WIDTH = (SCREEN_WIDTH - (CARD_PADDING * 2) - BOTTOM_CARDS_GAP) / 2;
@@ -67,18 +59,6 @@ export default function HomeScreen() {
   // Fade-in animation for smooth transition from splash
   const fadeOpacity = useSharedValue(0);
   const [hasAnimated, setHasAnimated] = useState(false);
-  
-  useFocusEffect(
-    useCallback(() => {
-      if (!hasAnimated) {
-        fadeOpacity.value = withTiming(1, {
-          duration: 400,
-          easing: Easing.out(Easing.ease),
-        });
-        setHasAnimated(true);
-      }
-    }, [hasAnimated, fadeOpacity])
-  );
   
   const fadeAnimatedStyle = useAnimatedStyle(() => {
     return {
@@ -124,15 +104,6 @@ export default function HomeScreen() {
   // invite-friend.tsx captures + clears the store code on mount so
   // returning here won't re-trigger.
   const pendingReferralCode = usePendingReferralStore((s) => s.pendingCode);
-  useFocusEffect(
-    useCallback(() => {
-      if (!pendingReferralCode || !session?.user) return;
-      const timer = setTimeout(() => {
-        router.push('/invite-friend');
-      }, 600);
-      return () => clearTimeout(timer);
-    }, [pendingReferralCode, session?.user]),
-  );
 
   // Check-in status
   const [checkinStatus, setCheckinStatus] = useState<{
@@ -152,10 +123,35 @@ export default function HomeScreen() {
     }
   }, [session?.user, homeGymId]);
 
+  const loadData = useCallback(async (silent = false) => {
+    if (!session?.user) return;
+
+    if (!silent && !hasLoadedOnce.current) {
+      setLoading(true);
+    }
+
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileData) {
+        setProfile(profileData);
+      }
+      hasLoadedOnce.current = true;
+    } catch (error) {
+      log.error('Error loading home data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user]);
+
   // Badge notifications with confetti
   const { newBadge, clearNewBadge } = useBadgeNotifications({
     onBadgeEarned: (badge) => {
-      console.log('Badge earned!', badge);
+      log.debug('Badge earned!', badge);
       setShowConfetti(true);
       setTimeout(() => {
         setShowConfetti(false);
@@ -171,13 +167,11 @@ export default function HomeScreen() {
   
   // Debug log
   useEffect(() => {
-    if (__DEV__) {
-      console.log('[Home] Challenges state:', {
-        activeGymId,
-        challengesLoading,
-        allChallengesCount: allChallenges.length,
-      });
-    }
+    log.debug('[Home] Challenges state:', {
+      activeGymId,
+      challengesLoading,
+      allChallengesCount: allChallenges.length,
+    });
   }, [activeGymId, challengesLoading, allChallenges]);
 
   // Glow animation for QR button
@@ -208,22 +202,61 @@ export default function HomeScreen() {
     }
   }, [session, homeGymId, previewGymId, activeGymId]);
 
-  // Refresh ALL data when screen is focused (including profile drops)
-  // CRITICAL: Use silent=true to avoid showing the full-screen loader and resetting scroll position
   useFocusEffect(
     useCallback(() => {
-      if (session?.user) {
-        loadData(true); // silent refresh — no loader, no scroll reset
-        refreshLocalDrops();
-        loadCheckinStatus();
-        if (activeGymId) {
-          refreshChallenges?.();
-          refreshStats?.();
-          refreshArenas?.();
-          userRank.refresh();
-        }
+      if (!hasAnimated) {
+        fadeOpacity.value = withTiming(1, {
+          duration: 400,
+          easing: Easing.out(Easing.ease),
+        });
+        setHasAnimated(true);
       }
-    }, [activeGymId, session?.user])
+
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      if (pendingReferralCode && session?.user) {
+        timer = setTimeout(() => {
+          router.push('/invite-friend');
+        }, 600);
+      }
+
+      if (!session?.user) {
+        return () => {
+          if (timer) clearTimeout(timer);
+        };
+      }
+
+      refreshLocalDrops();
+      void Promise.all([
+        loadData(true),
+        loadCheckinStatus(),
+        ...(activeGymId
+          ? [
+              refreshChallenges?.() ?? Promise.resolve(),
+              refreshStats?.() ?? Promise.resolve(),
+              refreshArenas?.() ?? Promise.resolve(),
+              userRank.refresh(),
+            ]
+          : []),
+      ]);
+
+      return () => {
+        if (timer) clearTimeout(timer);
+      };
+    }, [
+      hasAnimated,
+      fadeOpacity,
+      pendingReferralCode,
+      session?.user,
+      activeGymId,
+      router,
+      loadData,
+      refreshLocalDrops,
+      loadCheckinStatus,
+      refreshChallenges,
+      refreshStats,
+      refreshArenas,
+      userRank,
+    ])
   );
 
   // ── Available gyms (for empty state) ──
@@ -243,7 +276,7 @@ export default function HomeScreen() {
           .limit(10);
 
         if (error) {
-          console.warn('[Home] Gyms query failed, trying fallback:', error.message);
+          log.warn('[Home] Gyms query failed, trying fallback:', error.message);
           const { data: fallbackData } = await supabase
             .from('gyms')
             .select('id, name, city, address, owner_id')
@@ -255,7 +288,7 @@ export default function HomeScreen() {
         }
 
         if (!gymsData?.length) {
-          if (__DEV__) console.log('[Home] No available gyms found');
+          if (__DEV__) log.debug('[Home] No available gyms found');
           return;
         }
 
@@ -277,41 +310,15 @@ export default function HomeScreen() {
           logo_url: (g.owner_id && logoMap[g.owner_id]) || null,
         }));
 
-        if (__DEV__) console.log('[Home] Available gyms:', gymsWithLogos.length);
+        if (__DEV__) log.debug('[Home] Available gyms:', gymsWithLogos.length);
         setAvailableGyms(gymsWithLogos);
       } catch (e) {
-        console.warn('[Home] Unexpected error loading gyms:', e);
+        log.warn('[Home] Unexpected error loading gyms:', e);
       }
     };
 
     loadGyms();
   }, [homeGymId]);
-
-  const loadData = async (silent = false) => {
-    if (!session?.user) return;
-
-    // Only show full-screen loader on the very first load
-    if (!silent && !hasLoadedOnce.current) {
-      setLoading(true);
-    }
-
-    try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profileData) {
-        setProfile(profileData);
-      }
-      hasLoadedOnce.current = true;
-    } catch (error) {
-      console.error('Error loading home data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -329,7 +336,7 @@ export default function HomeScreen() {
         userRank.refresh();
       }
     } catch (error) {
-      console.error('Pull-to-refresh error:', error);
+      log.error('Pull-to-refresh error:', error);
     } finally {
       setRefreshing(false);
     }
@@ -391,7 +398,7 @@ export default function HomeScreen() {
             >
               <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
                 {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                  <Image source={{ uri: profile.avatar_url }} style={es.avatarImage} />
+                  <Image source={profile.avatar_url} style={es.avatarImage} transition={200} />
                 ) : (
                   <Text style={es.avatarText}>
                     {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
@@ -522,7 +529,7 @@ export default function HomeScreen() {
                         <BlurView intensity={40} tint="dark" style={es.gymCard}>
                           <View style={es.gymCardInner}>
                             {gym.logo_url ? (
-                              <Image source={{ uri: gym.logo_url }} style={es.gymLogo} resizeMode="contain" />
+                              <Image source={gym.logo_url} style={es.gymLogo} contentFit="contain" transition={200} />
                             ) : (
                               <View style={es.gymLogoPlaceholder}>
                                 <Ionicons name="fitness" size={22} color={appTheme.colors.primary} />
@@ -618,16 +625,18 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
       {/* Dynamic background */}
       {activeGym?.background_url ? (
-        <ImageBackground
-          source={{ uri: activeGym.background_url }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
-        >
+        <View style={StyleSheet.absoluteFillObject}>
+          <Image
+            source={activeGym.background_url}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            transition={200}
+          />
           <LinearGradient
             colors={['rgba(0,0,0,0.55)', 'rgba(8,8,8,0.70)', 'rgba(0,0,0,0.80)']}
             style={StyleSheet.absoluteFillObject}
           />
-        </ImageBackground>
+        </View>
       ) : (
         <LinearGradient
           colors={['#080808', '#0A0E1A', '#080808'] as any}
@@ -648,7 +657,7 @@ export default function HomeScreen() {
         >
           <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
             {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+              <Image source={profile.avatar_url} style={styles.avatarImage} transition={200} />
             ) : (
               <Text style={styles.avatarText}>
                 {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
@@ -673,7 +682,7 @@ export default function HomeScreen() {
                   ]}
                 >
                   {activeGym.logo_url ? (
-                    <Image source={{ uri: activeGym.logo_url }} style={styles.gymLogoThumb} resizeMode="contain" />
+                    <Image source={activeGym.logo_url} style={styles.gymLogoThumb} contentFit="contain" transition={200} />
                   ) : (
                     <Ionicons name="fitness" size={16} color={branding.primary} />
                   )}
@@ -1168,7 +1177,7 @@ export default function HomeScreen() {
                                 <View style={styles.challengeHeader}>
                                   <View style={styles.arenaHeaderRow}>
                                     {arena.sponsor_logo ? (
-                                      <Image source={{ uri: arena.sponsor_logo }} style={styles.arenaSponsorLogo} resizeMode="contain" />
+                                      <Image source={arena.sponsor_logo} style={styles.arenaSponsorLogo} contentFit="contain" transition={200} />
                                     ) : (
                                       <View style={[styles.arenaSponsorPlaceholder, { backgroundColor: hexToRgba(arenaPrimary, 0.15) }]}>
                                         <Ionicons name="trophy" size={14} color={arenaPrimary} />

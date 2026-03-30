@@ -1,27 +1,20 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export default function ChallengesScreen() {
   const router = useRouter();
@@ -84,7 +77,7 @@ export default function ChallengesScreen() {
       .or(`end_date.gte.${today},end_date.is.null`);
 
     if (challengesError) {
-      console.error('Error loading challenges:', challengesError);
+      log.error('Error loading challenges:', challengesError);
       setChallenges([]);
       return;
     }
@@ -103,7 +96,7 @@ export default function ChallengesScreen() {
       .in('challenge_id', challengeIds);
 
     if (progressError) {
-      console.error('Error loading challenge progress:', progressError);
+      log.error('Error loading challenge progress:', progressError);
     }
 
     // For milestone challenges, fetch actual local_drops_balance
@@ -258,6 +251,57 @@ export default function ChallengesScreen() {
     }
   };
 
+  const activeChallenges = useMemo(() => challenges.filter((c: any) => {
+    const isCompleted = progress[c.id]?.is_completed || false;
+    if (!isCompleted) return true;
+    return c.challenge_type === 'daily' || c.challenge_type === 'weekly';
+  }), [challenges, progress]);
+
+  const completedChallenges = useMemo(() => challenges.filter((c: any) => {
+    const isCompleted = progress[c.id]?.is_completed || false;
+    if (!isCompleted) return false;
+    return c.challenge_type !== 'daily' && c.challenge_type !== 'weekly';
+  }), [challenges, progress]);
+
+  const formatCompletedDate = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString(
+      i18n.language === 'sr' ? 'sr-RS' : 'en-US',
+      { month: 'short', day: 'numeric' }
+    );
+  };
+
+  type ListItem =
+    | { type: 'active_header'; id: string }
+    | { type: 'active'; id: string; challenge: any; index: number }
+    | { type: 'no_active'; id: string }
+    | { type: 'completed_header'; id: string }
+    | { type: 'completed'; id: string; challenge: any; index: number };
+
+  const listData = useMemo(() => {
+    const items: ListItem[] = [];
+
+    if (activeChallenges.length > 0) {
+      items.push({ type: 'active_header', id: 'header-active' });
+      activeChallenges.forEach((challenge: any, index: number) => {
+        items.push({ type: 'active', id: challenge.id, challenge, index });
+      });
+    }
+
+    if (activeChallenges.length === 0 && completedChallenges.length > 0) {
+      items.push({ type: 'no_active', id: 'no-active' });
+    }
+
+    if (completedChallenges.length > 0) {
+      items.push({ type: 'completed_header', id: 'header-completed' });
+      completedChallenges.forEach((challenge: any, index: number) => {
+        items.push({ type: 'completed', id: `completed-${challenge.id}`, challenge, index });
+      });
+    }
+
+    return items;
+  }, [activeChallenges, completedChallenges]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -284,246 +328,224 @@ export default function ChallengesScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {challenges.length === 0 ? (
+      <FlatList
+        data={listData}
+        keyExtractor={(item) => item.id}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="flash-outline" size={64} color={theme.colors.textSecondary} />
             <Text style={styles.emptyText}>{t('noChallenges')}</Text>
             <Text style={styles.emptySubtext}>{t('checkBackSoon')}</Text>
           </View>
-        ) : (() => {
-          const activeChallenges = challenges.filter((c: any) => {
-            const isCompleted = progress[c.id]?.is_completed || false;
-            if (!isCompleted) return true;
-            // Recurring challenges stay in active even when completed (they reset)
-            return c.challenge_type === 'daily' || c.challenge_type === 'weekly';
-          });
-          const completedChallenges = challenges.filter((c: any) => {
-            const isCompleted = progress[c.id]?.is_completed || false;
-            if (!isCompleted) return false;
-            return c.challenge_type !== 'daily' && c.challenge_type !== 'weekly';
-          });
+        }
+        renderItem={({ item }) => {
+          if (item.type === 'active_header') {
+            return <Text style={styles.sectionLabel}>{t('active')}</Text>;
+          }
 
-          const formatCompletedDate = (dateStr: string | null) => {
-            if (!dateStr) return '';
-            return new Date(dateStr).toLocaleDateString(
-              i18n.language === 'sr' ? 'sr-RS' : 'en-US',
-              { month: 'short', day: 'numeric' }
-            );
-          };
-
-          return (
-            <>
-              {/* Active Challenges */}
-              {activeChallenges.length > 0 && (
-                <Text style={styles.sectionLabel}>{t('active')}</Text>
-              )}
-              {activeChallenges.map((challenge: any, index: number) => {
-            const userProgress = progress[challenge.id];
-
-            let target = 0;
-            if (challenge.challenge_type === 'milestone') {
-              target = challenge.milestone_threshold || 0;
-            } else if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
-              target = challenge.streak_days || challenge.target_drops || 0;
-            } else {
-              target = challenge.target_drops || 0;
-            }
-
-            let current = 0;
-            if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
-              current = userProgress?.current_streak_days || 0;
-            } else {
-              current = userProgress?.current_drops || userProgress?.current_minutes || 0;
-            }
-
-            const progressPercent = target > 0
-              ? Math.min((current / target) * 100, 100)
-              : 0;
-            const isCompleted = userProgress?.is_completed || false;
-            const challengeTypeLabel = getChallengeTypeLabel(challenge.challenge_type || 'daily');
-
+          if (item.type === 'no_active') {
             return (
-              <Animated.View key={challenge.id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
+              <View style={styles.emptySection}>
+                <Text style={styles.emptySectionText}>{t('noActive')}</Text>
+              </View>
+            );
+          }
+
+          if (item.type === 'completed_header') {
+            return <Text style={[styles.sectionLabel, { marginTop: theme.spacing.lg }]}>{t('completed')}</Text>;
+          }
+
+          if (item.type === 'completed') {
+            const { challenge, index } = item;
+            const userProgress = progress[challenge.id];
+            return (
+              <Animated.View entering={FadeInDown.delay(100 + index * 80).duration(400)}>
                 <TouchableOpacity
-                  style={[
-                    styles.challengeCard,
-                    { borderColor: hexToRgba(branding.primary, isCompleted ? 0.3 : 0.15) },
-                  ]}
-                  onPress={() => {
-                    router.push({
-                      pathname: '/challenge-detail',
-                      params: { challengeId: challenge.id, gymId: challenge.gym_id },
-                    });
-                  }}
+                  style={[styles.completedCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}
+                  onPress={() => router.push({
+                    pathname: '/challenge-detail',
+                    params: { challengeId: challenge.id, gymId: challenge.gym_id },
+                  })}
                   activeOpacity={0.8}
                 >
-                  <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                    {/* Card Header */}
-                    <View style={styles.challengeHeader}>
-                      <View style={[styles.typeIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                        <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={branding.primary} />
+                  <View style={styles.completedLeft}>
+                    {challenge.badge_image_url ? (
+                      <Image source={challenge.badge_image_url} style={styles.completedBadgeImg} transition={200} />
+                    ) : (
+                      <View style={[styles.completedBadgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                        <Text style={styles.completedCheck}>✅</Text>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.challengeType, { color: branding.primary }]}>
-                          {challengeTypeLabel}
-                        </Text>
-                        <Text style={styles.challengeName}>{challenge.name}</Text>
-                        {(() => {
-                          const timeInfo = getChallengeTimeDisplay(
-                            challenge.challenge_type,
-                            challenge.end_date,
-                            isCompleted
-                          );
-                          if (!timeInfo) return null;
-                          return (
-                            <View style={[
-                              styles.timeBadge,
-                              timeInfo.style === 'completed' && styles.timeBadgeCompleted,
-                              timeInfo.style === 'permanent' && styles.timeBadgePermanent,
-                              timeInfo.style === 'recurring' && styles.timeBadgeRecurring,
-                            ]}>
-                              <Ionicons
-                                name={
-                                  timeInfo.style === 'completed' ? 'checkmark-circle' :
-                                  timeInfo.style === 'permanent' ? 'infinite' :
-                                  timeInfo.style === 'recurring' ? 'refresh' :
-                                  'time-outline'
-                                }
-                                size={12}
-                                color={
-                                  timeInfo.style === 'completed' ? '#4ade80' :
-                                  theme.colors.textSecondary
-                                }
-                              />
-                              <Text style={[
-                                styles.timeRemaining,
-                                timeInfo.style === 'completed' && { color: '#4ade80' },
-                              ]}>
-                                {timeInfo.text}
-                              </Text>
-                            </View>
-                          );
-                        })()}
-                      </View>
-                    </View>
-
-                    {challenge.description && (
-                      <Text style={styles.challengeDescription} numberOfLines={2}>
-                        {challenge.description}
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.completedName} numberOfLines={1}>{challenge.name}</Text>
+                      <Text style={styles.completedDate}>
+                        {t('completedOn', { date: formatCompletedDate(userProgress?.updated_at || challenge.updated_at) })}
                       </Text>
-                    )}
-
-                    {/* Progress Bar */}
-                    <View style={styles.progressContainer}>
-                      <View style={styles.progressBarTrack}>
-                        <LinearGradient
-                          colors={isCompleted
-                            ? [theme.colors.secondary, theme.colors.secondary]
-                            : [branding.primary, hexToRgba(branding.primary, 0.7)]
-                          }
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={[styles.progressFill, { width: `${progressPercent}%` }]}
-                        />
-                      </View>
-                      <View style={styles.progressMeta}>
-                        <Text style={styles.progressText}>
-                          <Text style={[getNumberStyle(14), { color: branding.primary }]}>{current}</Text>
-                          <Text style={styles.progressDivider}> / </Text>
-                          <Text style={[getNumberStyle(14), { color: theme.colors.textSecondary }]}>{target}</Text>
-                          <Text style={styles.progressUnit}>
-                            {' '}{(challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak')
-                              ? t('unit_days')
-                              : challenge.challenge_type === 'checkin_count'
-                                ? t('unit_checkins')
-                                : t('unit_drops')}
-                          </Text>
-                        </Text>
-                        <Text style={[styles.progressPercent, getNumberStyle(12)]}>
-                          {Math.round(progressPercent)}%
-                        </Text>
-                      </View>
                     </View>
-
-                    {/* Reward info */}
-                    {challenge.reward_drops > 0 && !isCompleted && (
-                      <View style={[styles.rewardInfo, { borderTopColor: hexToRgba(branding.primary, 0.1) }]}>
-                        <Ionicons name="water" size={14} color={branding.primary} />
-                        <Text style={[styles.rewardText, { color: branding.primary }]}>
-                          {challenge.reward_drops} drops reward
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Completed badge */}
-                    {isCompleted && (
-                      <View style={styles.completedBadge}>
-                        <Ionicons name="checkmark-circle" size={16} color={theme.colors.secondary} />
-                        <Text style={styles.completedText}>
-                          Completed! {challenge.reward_drops || 0} drops earned
-                        </Text>
-                      </View>
-                    )}
-                  </BlurView>
+                  </View>
+                  <View style={styles.completedRight}>
+                    <Text style={[styles.completedDrops, { color: branding.primary }]}>
+                      +{challenge.reward_drops || 0}
+                    </Text>
+                    <Text style={styles.completedDropsLabel}>drops</Text>
+                  </View>
                 </TouchableOpacity>
               </Animated.View>
             );
-          })}
+          }
 
-              {activeChallenges.length === 0 && completedChallenges.length > 0 && (
-                <View style={styles.emptySection}>
-                  <Text style={styles.emptySectionText}>{t('noActive')}</Text>
-                </View>
-              )}
+          const { challenge, index } = item;
+          const userProgress = progress[challenge.id];
 
-              {/* Completed Challenges */}
-              {completedChallenges.length > 0 && (
-                <>
-                  <Text style={[styles.sectionLabel, { marginTop: theme.spacing.lg }]}>{t('completed')}</Text>
-                  {completedChallenges.map((challenge: any, index: number) => {
-                    const userProgress = progress[challenge.id];
-                    return (
-                      <Animated.View key={challenge.id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
-                        <TouchableOpacity
-                          style={[styles.completedCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}
-                          onPress={() => router.push({
-                            pathname: '/challenge-detail',
-                            params: { challengeId: challenge.id, gymId: challenge.gym_id },
-                          })}
-                          activeOpacity={0.8}
-                        >
-                          <View style={styles.completedLeft}>
-                            {challenge.badge_image_url ? (
-                              <Image source={{ uri: challenge.badge_image_url }} style={styles.completedBadgeImg} />
-                            ) : (
-                              <View style={[styles.completedBadgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                                <Text style={styles.completedCheck}>✅</Text>
-                              </View>
-                            )}
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.completedName} numberOfLines={1}>{challenge.name}</Text>
-                              <Text style={styles.completedDate}>
-                                {t('completedOn', { date: formatCompletedDate(userProgress?.updated_at || challenge.updated_at) })}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.completedRight}>
-                            <Text style={[styles.completedDrops, { color: branding.primary }]}>
-                              +{challenge.reward_drops || 0}
+          let target = 0;
+          if (challenge.challenge_type === 'milestone') {
+            target = challenge.milestone_threshold || 0;
+          } else if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
+            target = challenge.streak_days || challenge.target_drops || 0;
+          } else {
+            target = challenge.target_drops || 0;
+          }
+
+          let current = 0;
+          if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
+            current = userProgress?.current_streak_days || 0;
+          } else {
+            current = userProgress?.current_drops || userProgress?.current_minutes || 0;
+          }
+
+          const progressPercent = target > 0
+            ? Math.min((current / target) * 100, 100)
+            : 0;
+          const isCompleted = userProgress?.is_completed || false;
+          const challengeTypeLabel = getChallengeTypeLabel(challenge.challenge_type || 'daily');
+
+          return (
+            <Animated.View entering={FadeInDown.delay(100 + index * 80).duration(400)}>
+              <TouchableOpacity
+                style={[
+                  styles.challengeCard,
+                  { borderColor: hexToRgba(branding.primary, isCompleted ? 0.3 : 0.15) },
+                ]}
+                onPress={() => {
+                  router.push({
+                    pathname: '/challenge-detail',
+                    params: { challengeId: challenge.id, gymId: challenge.gym_id },
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  <View style={styles.challengeHeader}>
+                    <View style={[styles.typeIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={branding.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.challengeType, { color: branding.primary }]}>
+                        {challengeTypeLabel}
+                      </Text>
+                      <Text style={styles.challengeName}>{challenge.name}</Text>
+                      {(() => {
+                        const timeInfo = getChallengeTimeDisplay(
+                          challenge.challenge_type,
+                          challenge.end_date,
+                          isCompleted
+                        );
+                        if (!timeInfo) return null;
+                        return (
+                          <View style={[
+                            styles.timeBadge,
+                            timeInfo.style === 'completed' && styles.timeBadgeCompleted,
+                            timeInfo.style === 'permanent' && styles.timeBadgePermanent,
+                            timeInfo.style === 'recurring' && styles.timeBadgeRecurring,
+                          ]}>
+                            <Ionicons
+                              name={
+                                timeInfo.style === 'completed' ? 'checkmark-circle' :
+                                timeInfo.style === 'permanent' ? 'infinite' :
+                                timeInfo.style === 'recurring' ? 'refresh' :
+                                'time-outline'
+                              }
+                              size={12}
+                              color={
+                                timeInfo.style === 'completed' ? '#4ade80' :
+                                theme.colors.textSecondary
+                              }
+                            />
+                            <Text style={[
+                              styles.timeRemaining,
+                              timeInfo.style === 'completed' && { color: '#4ade80' },
+                            ]}>
+                              {timeInfo.text}
                             </Text>
-                            <Text style={styles.completedDropsLabel}>drops</Text>
                           </View>
-                        </TouchableOpacity>
-                      </Animated.View>
-                    );
-                  })}
-                </>
-              )}
-            </>
+                        );
+                      })()}
+                    </View>
+                  </View>
+
+                  {challenge.description && (
+                    <Text style={styles.challengeDescription} numberOfLines={2}>
+                      {challenge.description}
+                    </Text>
+                  )}
+
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBarTrack}>
+                      <LinearGradient
+                        colors={isCompleted
+                          ? [theme.colors.secondary, theme.colors.secondary]
+                          : [branding.primary, hexToRgba(branding.primary, 0.7)]
+                        }
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.progressFill, { width: `${progressPercent}%` }]}
+                      />
+                    </View>
+                    <View style={styles.progressMeta}>
+                      <Text style={styles.progressText}>
+                        <Text style={[getNumberStyle(14), { color: branding.primary }]}>{current}</Text>
+                        <Text style={styles.progressDivider}> / </Text>
+                        <Text style={[getNumberStyle(14), { color: theme.colors.textSecondary }]}>{target}</Text>
+                        <Text style={styles.progressUnit}>
+                          {' '}{(challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak')
+                            ? t('unit_days')
+                            : challenge.challenge_type === 'checkin_count'
+                              ? t('unit_checkins')
+                              : t('unit_drops')}
+                        </Text>
+                      </Text>
+                      <Text style={[styles.progressPercent, getNumberStyle(12)]}>
+                        {Math.round(progressPercent)}%
+                      </Text>
+                    </View>
+                  </View>
+
+                  {challenge.reward_drops > 0 && !isCompleted && (
+                    <View style={[styles.rewardInfo, { borderTopColor: hexToRgba(branding.primary, 0.1) }]}>
+                      <Ionicons name="water" size={14} color={branding.primary} />
+                      <Text style={[styles.rewardText, { color: branding.primary }]}>
+                        {challenge.reward_drops} drops reward
+                      </Text>
+                    </View>
+                  )}
+
+                  {isCompleted && (
+                    <View style={styles.completedBadge}>
+                      <Ionicons name="checkmark-circle" size={16} color={theme.colors.secondary} />
+                      <Text style={styles.completedText}>
+                        Completed! {challenge.reward_drops || 0} drops earned
+                      </Text>
+                    </View>
+                  )}
+                </BlurView>
+              </TouchableOpacity>
+            </Animated.View>
           );
-        })()}
-      </ScrollView>
+        }}
+      />
     </SafeAreaView>
   );
 }

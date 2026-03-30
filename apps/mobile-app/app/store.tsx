@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -7,22 +8,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
+import { log } from '@/lib/logger';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 type RedemptionLimit = 'unlimited' | 'once' | 'once_per_day' | 'once_per_week' | 'once_per_month';
 
@@ -84,40 +77,46 @@ export default function StoreScreen() {
 
   const loadRewards = useCallback(async () => {
     if (!session?.user) return;
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('home_gym_id')
+        .eq('id', session.user.id)
+        .single();
 
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('home_gym_id')
-      .eq('id', session.user.id)
-      .single();
+      const gymId = profileData?.home_gym_id;
 
-    const gymId = profileData?.home_gym_id;
+      let query = supabase
+        .from('rewards')
+        .select('*')
+        .eq('is_active', true)
+        .order('price_drops');
 
-    let query = supabase
-      .from('rewards')
-      .select('*')
-      .eq('is_active', true)
-      .order('price_drops');
+      if (gymId) {
+        query = query.eq('gym_id', gymId);
+      }
 
-    if (gymId) {
-      query = query.eq('gym_id', gymId);
+      const { data } = await query;
+      if (data) setRewards(data);
+    } catch (err) {
+      log.error('[Store] Error loading rewards:', err);
     }
-
-    const { data } = await query;
-    if (data) setRewards(data);
   }, [session?.user]);
 
   const loadRedemptions = useCallback(async () => {
     if (!session?.user || !activeGymId) return;
+    try {
+      const { data } = await supabase
+        .from('redemptions')
+        .select('reward_id, created_at, status')
+        .eq('user_id', session.user.id)
+        .eq('gym_id', activeGymId)
+        .in('status', ['pending', 'confirmed']);
 
-    const { data } = await supabase
-      .from('redemptions')
-      .select('reward_id, created_at, status')
-      .eq('user_id', session.user.id)
-      .eq('gym_id', activeGymId)
-      .in('status', ['pending', 'confirmed']);
-
-    if (data) setRedemptions(data);
+      if (data) setRedemptions(data);
+    } catch (err) {
+      log.error('[Store] Error loading redemptions:', err);
+    }
   }, [session?.user, activeGymId]);
 
   useFocusEffect(
@@ -200,120 +199,123 @@ export default function StoreScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Balance Card */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-          <View style={[styles.balanceCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.balanceBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-              <Ionicons name="water" size={22} color={branding.primary} />
-              <Text style={[styles.balanceText, getNumberStyle(18), { color: branding.primary }]}>
-                {localDrops} drops
-              </Text>
-              <Text style={styles.balanceLabel}>{t('availableAtGym')}</Text>
-            </BlurView>
-          </View>
-        </Animated.View>
-
-        {rewards.length === 0 ? (
+      <FlatList
+        data={rewards}
+        keyExtractor={(item) => item.id}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+            <View style={[styles.balanceCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+              <BlurView intensity={50} tint="dark" style={[styles.balanceBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <Ionicons name="water" size={22} color={branding.primary} />
+                <Text style={[styles.balanceText, getNumberStyle(18), { color: branding.primary }]}>
+                  {localDrops} drops
+                </Text>
+                <Text style={styles.balanceLabel}>{t('availableAtGym')}</Text>
+              </BlurView>
+            </View>
+          </Animated.View>
+        }
+        ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="gift-outline" size={64} color={theme.colors.textSecondary} />
             <Text style={styles.emptyText}>{t('noRewards')}</Text>
             <Text style={styles.emptySubtext}>{t('checkBackSoon')}</Text>
           </View>
-        ) : (
-          rewards.map((reward, index) => {
-            const affordable = canAfford(reward.price_drops);
-            const limit: RedemptionLimit = reward.redemption_limit || 'unlimited';
-            const claimStatus = getClaimStatus(reward.id, limit, redemptions);
-            const outOfStock = reward.stock !== null && reward.stock <= 0;
-            const limitLabel = getLimitLabel(limit);
-            const disabled = !affordable || !!claimStatus || outOfStock;
+        }
+        renderItem={({ item: reward, index }) => {
+          const affordable = canAfford(reward.price_drops);
+          const limit: RedemptionLimit = reward.redemption_limit || 'unlimited';
+          const claimStatus = getClaimStatus(reward.id, limit, redemptions);
+          const outOfStock = reward.stock !== null && reward.stock <= 0;
+          const limitLabel = getLimitLabel(limit);
+          const disabled = !affordable || !!claimStatus || outOfStock;
 
-            return (
-              <Animated.View key={reward.id} entering={FadeInDown.delay(200 + index * 80).duration(400)}>
-                <TouchableOpacity
-                  style={[
-                    styles.rewardCard,
-                    { borderColor: hexToRgba(branding.primary, disabled ? 0.06 : 0.18) },
-                    disabled && styles.rewardCardDisabled,
-                  ]}
-                  onPress={() => router.push({ pathname: '/reward-detail', params: { rewardId: reward.id, gymId: activeGymId || '' } })}
-                  activeOpacity={0.8}
-                >
-                  <BlurView intensity={50} tint="dark" style={[styles.rewardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                    {/* Large image at top of card */}
-                    {reward.image_url ? (
-                      <Image
-                        source={{ uri: reward.image_url }}
-                        style={[styles.rewardImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
-                        resizeMode="cover"
+          return (
+            <Animated.View entering={FadeInDown.delay(200 + index * 80).duration(400)}>
+              <TouchableOpacity
+                style={[
+                  styles.rewardCard,
+                  { borderColor: hexToRgba(branding.primary, disabled ? 0.06 : 0.18) },
+                  disabled && styles.rewardCardDisabled,
+                ]}
+                onPress={() => router.push({ pathname: '/reward-detail', params: { rewardId: reward.id, gymId: activeGymId || '' } })}
+                activeOpacity={0.8}
+              >
+                <BlurView intensity={50} tint="dark" style={[styles.rewardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  {reward.image_url ? (
+                    <Image
+                      source={reward.image_url}
+                      style={[styles.rewardImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  ) : (
+                    <View style={[styles.rewardIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                      <Ionicons
+                        name={getRewardIcon(reward.reward_type)}
+                        size={40}
+                        color={disabled ? theme.colors.textSecondary : branding.primary}
                       />
-                    ) : (
-                      <View style={[styles.rewardIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                        <Ionicons
-                          name={getRewardIcon(reward.reward_type)}
-                          size={40}
-                          color={disabled ? theme.colors.textSecondary : branding.primary}
-                        />
-                      </View>
+                    </View>
+                  )}
+
+                  <View style={styles.rewardInfo}>
+                    <Text style={styles.rewardName} numberOfLines={1}>{reward.name}</Text>
+                    {reward.description && (
+                      <Text style={styles.rewardDescription} numberOfLines={2}>
+                        {reward.description}
+                      </Text>
                     )}
 
-                    <View style={styles.rewardInfo}>
-                      <Text style={styles.rewardName} numberOfLines={1}>{reward.name}</Text>
-                      {reward.description && (
-                        <Text style={styles.rewardDescription} numberOfLines={2}>
-                          {reward.description}
+                    <View style={styles.rewardFooter}>
+                      <View style={styles.priceContainer}>
+                        <Ionicons name="water" size={16} color={disabled ? theme.colors.textSecondary : branding.primary} />
+                        <Text style={[
+                          styles.rewardPrice,
+                          getNumberStyle(18),
+                          { color: disabled ? theme.colors.textSecondary : branding.primary },
+                        ]}>
+                          {reward.price_drops}
                         </Text>
-                      )}
+                      </View>
 
-                      <View style={styles.rewardFooter}>
-                        <View style={styles.priceContainer}>
-                          <Ionicons name="water" size={16} color={disabled ? theme.colors.textSecondary : branding.primary} />
-                          <Text style={[
-                            styles.rewardPrice,
-                            getNumberStyle(18),
-                            { color: disabled ? theme.colors.textSecondary : branding.primary },
-                          ]}>
-                            {reward.price_drops}
+                      {claimStatus === 'confirmed' ? (
+                        <View style={[styles.limitBadge, { backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}>
+                          <Ionicons name="checkmark-circle" size={12} color="#4ade80" />
+                          <Text style={[styles.limitBadgeText, { color: '#4ade80' }]}>
+                            {getClaimedLabel(limit)}
                           </Text>
                         </View>
-
-                        {/* Badges inline with price */}
-                        {claimStatus === 'confirmed' ? (
-                          <View style={[styles.limitBadge, { backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}>
-                            <Ionicons name="checkmark-circle" size={12} color="#4ade80" />
-                            <Text style={[styles.limitBadgeText, { color: '#4ade80' }]}>
-                              {getClaimedLabel(limit)}
-                            </Text>
-                          </View>
-                        ) : claimStatus === 'pending' ? (
-                          <View style={[styles.limitBadge, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
-                            <Ionicons name="time-outline" size={12} color="#fbbf24" />
-                            <Text style={[styles.limitBadgeText, { color: '#fbbf24' }]}>
-                              {t('pendingPickup')}
-                            </Text>
-                          </View>
-                        ) : limitLabel ? (
-                          <View style={[styles.limitBadge, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="time-outline" size={12} color={branding.primary} />
-                            <Text style={[styles.limitBadgeText, { color: branding.primary }]}>
-                              {limitLabel}
-                            </Text>
-                          </View>
-                        ) : reward.stock !== null ? (
-                          <Text style={styles.rewardStock}>
-                            {reward.stock} {t('left')}
+                      ) : claimStatus === 'pending' ? (
+                        <View style={[styles.limitBadge, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
+                          <Ionicons name="time-outline" size={12} color="#fbbf24" />
+                          <Text style={[styles.limitBadgeText, { color: '#fbbf24' }]}>
+                            {t('pendingPickup')}
                           </Text>
-                        ) : null}
-                      </View>
+                        </View>
+                      ) : limitLabel ? (
+                        <View style={[styles.limitBadge, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
+                          <Ionicons name="time-outline" size={12} color={branding.primary} />
+                          <Text style={[styles.limitBadgeText, { color: branding.primary }]}>
+                            {limitLabel}
+                          </Text>
+                        </View>
+                      ) : reward.stock !== null ? (
+                        <Text style={styles.rewardStock}>
+                          {reward.stock} {t('left')}
+                        </Text>
+                      ) : null}
                     </View>
-                  </BlurView>
-                </TouchableOpacity>
-              </Animated.View>
-            );
-          })
-        )}
-      </ScrollView>
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+            </Animated.View>
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }

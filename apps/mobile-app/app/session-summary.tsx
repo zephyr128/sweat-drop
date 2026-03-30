@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,8 +15,9 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect, useMemo } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
+import { log } from '@/lib/logger';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   FadeInDown,
@@ -34,16 +36,6 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function deriveSecondaryColor(hex: string): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return '#33EBFF';
@@ -207,19 +199,24 @@ export default function SessionSummaryScreen() {
       return;
     }
 
-    const { data } = await supabase
-      .from('sessions')
-      .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
-      .eq('id', sessionId)
-      .single();
+    try {
+      const { data } = await supabase
+        .from('sessions')
+        .select('*, machine:machine_id(*), equipment:equipment_id(*), gym:gym_id(*)')
+        .eq('id', sessionId)
+        .single();
 
-    if (data) {
-      setSession(data);
-      if (data.gym?.name) {
-        setGymName(data.gym.name);
+      if (data) {
+        setSession(data);
+        if (data.gym?.name) {
+          setGymName(data.gym.name);
+        }
       }
+    } catch (err) {
+      log.error('[SessionSummary] Error in loadSession:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const loadLeaderboardRank = async () => {
@@ -233,7 +230,7 @@ export default function SessionSummaryScreen() {
       });
 
       if (error) {
-        console.error('Error loading leaderboard rank:', error);
+        log.error('Error loading leaderboard rank:', error);
         return;
       }
 
@@ -244,7 +241,7 @@ export default function SessionSummaryScreen() {
         }
       }
     } catch (err) {
-      console.error('Error in loadLeaderboardRank:', err);
+      log.error('Error in loadLeaderboardRank:', err);
     }
   };
 
@@ -300,7 +297,7 @@ export default function SessionSummaryScreen() {
       setCompletedChallenges(justCompleted);
       setChallengeProgress(inProgress);
     } catch (err) {
-      console.error('Error in loadChallengeProgress:', err);
+      log.error('Error in loadChallengeProgress:', err);
     }
   };
 
@@ -318,32 +315,36 @@ export default function SessionSummaryScreen() {
         setStreakDays(data.streak_days || 0);
       }
     } catch (err) {
-      console.error('Error in loadStreakDays:', err);
+      log.error('Error in loadStreakDays:', err);
     }
   };
 
   const calculatePercentile = async () => {
     if (!authSession?.user || !drops || !session) return;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    const { data: allSessions } = await supabase
-      .from('sessions')
-      .select('drops_earned')
-      .eq('gym_id', session.gym_id)
-      .gte('started_at', today.toISOString())
-      .not('drops_earned', 'is', null);
+      const { data: allSessions } = await supabase
+        .from('sessions')
+        .select('drops_earned')
+        .eq('gym_id', session.gym_id)
+        .gte('started_at', today.toISOString())
+        .not('drops_earned', 'is', null);
 
-    if (allSessions && allSessions.length > 0) {
-      const dropsValue = parseInt(drops);
-      const betterSessions = allSessions.filter(
-        (s) => (s.drops_earned || 0) < dropsValue
-      ).length;
-      const calculatedPercentile = Math.round(
-        (betterSessions / allSessions.length) * 100
-      );
-      setPercentile(calculatedPercentile);
+      if (allSessions && allSessions.length > 0) {
+        const dropsValue = parseInt(drops);
+        const betterSessions = allSessions.filter(
+          (s) => (s.drops_earned || 0) < dropsValue
+        ).length;
+        const calculatedPercentile = Math.round(
+          (betterSessions / allSessions.length) * 100
+        );
+        setPercentile(calculatedPercentile);
+      }
+    } catch (err) {
+      log.error('[SessionSummary] Error in calculatePercentile:', err);
     }
   };
 
@@ -366,7 +367,7 @@ export default function SessionSummaryScreen() {
       });
 
       if (error) {
-        console.error('Error loading badges:', error);
+        log.error('Error loading badges:', error);
         return;
       }
 
@@ -377,7 +378,7 @@ export default function SessionSummaryScreen() {
 
       setEarnedBadges(newlyEarned);
     } catch (err) {
-      console.error('Error in loadEarnedBadges:', err);
+      log.error('Error in loadEarnedBadges:', err);
     }
   };
 
@@ -408,16 +409,18 @@ export default function SessionSummaryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {activeGym?.background_url ? (
-        <ImageBackground
-          source={{ uri: activeGym.background_url }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
-        >
+        <View style={StyleSheet.absoluteFillObject}>
+          <Image
+            source={activeGym.background_url}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            transition={200}
+          />
           <LinearGradient
             colors={['rgba(0,0,0,0.60)', 'rgba(8,8,8,0.75)', 'rgba(0,0,0,0.85)']}
             style={StyleSheet.absoluteFillObject}
           />
-        </ImageBackground>
+        </View>
       ) : (
         <LinearGradient
           colors={['#000000', '#0A0E1A', '#000000']}
@@ -750,9 +753,10 @@ export default function SessionSummaryScreen() {
                     <View style={[styles.badgeCard, { borderColor: hexToRgba('#FFD700', 0.25) }]}>
                       {badge.badge_image_url ? (
                         <Image
-                          source={{ uri: badge.badge_image_url }}
+                          source={badge.badge_image_url}
                           style={styles.badgeImage}
-                          resizeMode="contain"
+                          contentFit="contain"
+                          transition={200}
                         />
                       ) : (
                         <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
@@ -862,7 +866,7 @@ export default function SessionSummaryScreen() {
 
                 // If user still has no home gym (first workout), use the session's gym
                 if (!currentHomeGymId && gymId) {
-                  console.log('[SessionSummary] No home gym in store — setting from session:', gymId);
+                  log.debug('[SessionSummary] No home gym in store — setting from session:', gymId);
                   useGymStore.getState().setHomeGymId(gymId);
                   try {
                     const { data: { session: authSession } } = await supabase.auth.getSession();
@@ -873,7 +877,7 @@ export default function SessionSummaryScreen() {
                         .eq('id', authSession.user.id);
                     }
                   } catch (dbErr) {
-                    console.warn('[SessionSummary] Failed to persist home gym to DB:', dbErr);
+                    log.warn('[SessionSummary] Failed to persist home gym to DB:', dbErr);
                   }
                 }
 
@@ -884,7 +888,7 @@ export default function SessionSummaryScreen() {
                   useGymStore.getState().setHomeGymId(latestProfile.home_gym_id);
                 }
               } catch (e) {
-                console.warn('[SessionSummary] Failed to sync state:', e);
+                log.warn('[SessionSummary] Failed to sync state:', e);
               }
 
               if (router.canDismiss()) {

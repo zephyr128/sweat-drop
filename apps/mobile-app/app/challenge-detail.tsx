@@ -7,21 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export default function ChallengeDetailScreen() {
   const { t } = useTranslation('challenges');
@@ -57,7 +49,7 @@ export default function ChallengeDetailScreen() {
         .single();
 
       if (challengeError) {
-        console.error('Error loading challenge:', challengeError);
+        log.error('Error loading challenge:', challengeError);
         setLoading(false);
         return;
       }
@@ -72,12 +64,12 @@ export default function ChallengeDetailScreen() {
         .single();
 
       if (progressError && progressError.code !== 'PGRST116') {
-        console.error('Error loading progress:', progressError);
+        log.error('Error loading progress:', progressError);
       } else if (progressData) {
         setProgress(progressData);
       }
     } catch (error) {
-      console.error('Error in loadChallenge:', error);
+      log.error('Error in loadChallenge:', error);
     } finally {
       setLoading(false);
     }

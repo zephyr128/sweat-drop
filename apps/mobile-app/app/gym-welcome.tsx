@@ -20,19 +20,11 @@ import Animated, {
   FadeInDown,
   Easing,
 } from 'react-native-reanimated';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useTranslation } from 'react-i18next';
 
-// Helper: derive branding from primary color
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 function adjustBrightness(hex: string, pct: number): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return hex;
@@ -167,7 +159,7 @@ export default function GymWelcomeScreen() {
           .single();
 
         if (gymErr || !gymData?.owner_id) {
-          console.warn('[GymWelcome] No owner_id for gym:', gymId, gymErr);
+          log.warn('[GymWelcome] No owner_id for gym:', gymId, gymErr);
           return;
         }
 
@@ -179,16 +171,16 @@ export default function GymWelcomeScreen() {
           .single();
 
         if (brandErr) {
-          console.warn('[GymWelcome] owner_branding query error:', brandErr);
+          log.warn('[GymWelcome] owner_branding query error:', brandErr);
           return;
         }
 
         if (branding?.primary_color) {
-          console.log('[GymWelcome] Branding color for gym:', branding.primary_color);
+          log.debug('[GymWelcome] Branding color for gym:', branding.primary_color);
           setGymColor(branding.primary_color);
         }
       } catch (e) {
-        console.warn('[GymWelcome] Could not fetch gym color:', e);
+        log.warn('[GymWelcome] Could not fetch gym color:', e);
       }
     })();
   }, [gymId]);

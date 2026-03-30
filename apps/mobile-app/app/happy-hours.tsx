@@ -7,22 +7,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
+import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useUpcomingHappyHours, type HappyHourWindow } from '@/hooks/useUpcomingHappyHours';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { log } from '@/lib/logger';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 function formatTimeShort(iso: string): string {
   try {

@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import BackButton from '@/components/BackButton';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useSession } from '@/hooks/useSession';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import {
   createFriend1v1Challenge,
@@ -30,15 +30,6 @@ import {
   type Friend1v1Invitation,
   type GymMemberSearchResult,
 } from '@/lib/friendSocialApi';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const DURATIONS = [3, 7, 14] as const;
 

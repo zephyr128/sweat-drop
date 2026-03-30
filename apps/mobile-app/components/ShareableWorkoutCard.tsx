@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.8)
 // Shareable workout card component — Instagram Stories format (9:16 ratio).
@@ -14,15 +14,6 @@ import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // 24px padding on each side
 const CARD_HEIGHT = CARD_WIDTH * (16 / 9); // 9:16 ratio (portrait)
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export interface ShareableWorkoutData {
   dropsEarned: number;

@@ -9,9 +9,16 @@ interface UserRankState {
 
 const DEFAULTS: UserRankState = { rank: 0, totalMembers: 0 };
 
+function extractRank(entries: any[], userId: string): UserRankState | null {
+  if (!entries || entries.length === 0) return null;
+  const idx = entries.findIndex((e) => e.user_id === userId);
+  if (idx < 0) return null;
+  return { rank: idx + 1, totalMembers: entries.length };
+}
+
 /**
- * Lightweight hook that fetches just the current user's weekly leaderboard
- * rank and total member count for the given gym.
+ * Fetches the current user's leaderboard rank for the given gym.
+ * Tries weekly first, falls back to monthly, then returns 0/0 if not ranked.
  */
 export function useUserRank(gymId: string | null | undefined): UserRankState & { refresh: () => void } {
   const { session } = useSession();
@@ -22,38 +29,32 @@ export function useUserRank(gymId: string | null | undefined): UserRankState & {
     const userId = session.user.id;
 
     try {
-      const { data, error } = await supabase.rpc('get_leaderboard', {
-        p_type: 'gym',
-        p_scope_id: gymId,
+      for (const period of ['weekly', 'monthly'] as const) {
+        const { data } = await supabase.rpc('get_leaderboard', {
+          p_type: 'gym',
+          p_scope_id: gymId,
+          p_period: period,
+          p_limit: 200,
+          p_newcomer_only: false,
+        });
+
+        const ranked = extractRank(data as any[] ?? [], userId);
+        if (ranked) {
+          setState(ranked);
+          return;
+        }
+      }
+
+      // Fallback: try local leaderboard (weekly)
+      const { data: fallback } = await supabase.rpc('get_local_leaderboard', {
+        p_gym_id: gymId,
         p_period: 'weekly',
         p_limit: 200,
         p_newcomer_only: false,
       });
 
-      if (error || !data) {
-        const { data: fallback } = await supabase.rpc('get_local_leaderboard', {
-          p_gym_id: gymId,
-          p_period: 'weekly',
-          p_limit: 200,
-          p_newcomer_only: false,
-        });
-
-        if (fallback && Array.isArray(fallback)) {
-          const idx = fallback.findIndex((e: any) => e.user_id === userId);
-          setState({
-            rank: idx >= 0 ? idx + 1 : fallback.length + 1,
-            totalMembers: Math.max(fallback.length, 1),
-          });
-        }
-        return;
-      }
-
-      const entries = data as any[];
-      const idx = entries.findIndex((e) => e.user_id === userId);
-      setState({
-        rank: idx >= 0 ? idx + 1 : entries.length + 1,
-        totalMembers: Math.max(entries.length, 1),
-      });
+      const ranked = extractRank(fallback as any[] ?? [], userId);
+      setState(ranked ?? DEFAULTS);
     } catch {
       // Non-critical
     }

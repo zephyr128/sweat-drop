@@ -1,26 +1,18 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
+import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useAvailableArenas, AvailableArena } from '@/hooks/useAvailableArenas';
 import { useSession } from '@/hooks/useSession';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const SCORING_ICONS: Record<string, string> = {
   total_drops: '💧',
@@ -150,7 +142,7 @@ export default function ArenasScreen() {
           {/* Top row: sponsor + name + scoring */}
           <View style={styles.arenaCardTop}>
             {arena.sponsor_logo ? (
-              <Image source={{ uri: arena.sponsor_logo }} style={styles.sponsorLogo} resizeMode="contain" />
+              <Image source={arena.sponsor_logo} style={styles.sponsorLogo} contentFit="contain" transition={200} />
             ) : (
               <View style={[styles.sponsorLogoPlaceholder, { backgroundColor: hexToRgba(colors.primary, 0.15) }]}>
                 <Ionicons name="trophy" size={20} color={colors.primary} />
@@ -265,7 +257,7 @@ export default function ArenasScreen() {
               {/* Top row: sponsor + name + scoring */}
               <View style={styles.arenaCardTop}>
                 {arena.sponsor_logo ? (
-                  <Image source={{ uri: arena.sponsor_logo }} style={[styles.sponsorLogo, { opacity: 0.7 }]} resizeMode="contain" />
+                  <Image source={arena.sponsor_logo} style={[styles.sponsorLogo, { opacity: 0.7 }]} contentFit="contain" transition={200} />
                 ) : (
                   <View style={[styles.sponsorLogoPlaceholder, { backgroundColor: hexToRgba(colors.primary, 0.08) }]}>
                     <Ionicons name="trophy" size={20} color={hexToRgba(colors.primary, 0.5)} />

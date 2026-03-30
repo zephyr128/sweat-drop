@@ -24,11 +24,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
+import { theme, fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
 import { UserBadge } from '@/hooks/useUserBadges';
 import { useSession } from '@/hooks/useSession';
 import { supabase } from '@/lib/supabase';
 import { ShareableBadgeCard, ShareableBadgeData } from './ShareableBadgeCard';
+import { log } from '@/lib/logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -38,15 +39,6 @@ interface BadgeDetailModalProps {
   onClose: () => void;
   isLocked?: boolean;
   progress?: number; // 0-100 for locked badges
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function getBadgeCategoryColor(badgeName: string, brandPrimary: string): string {
@@ -172,7 +164,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
       }
     } catch (error: any) {
       if (error.message !== 'User did not share') {
-        console.error('Error sharing badge:', error);
+        log.error('Error sharing badge:', error);
       }
     } finally {
       setIsSharing(false);

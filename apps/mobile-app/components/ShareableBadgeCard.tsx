@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 
 // AGENT NOTE: [2026-03-03] - mobile-coder
 // Shareable badge card for social sharing — 1:1 square format.
@@ -11,15 +11,6 @@ import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 // Used from BadgeDetailModal when the user taps "Share to Social".
 
 const CARD_SIZE = Dimensions.get('window').width - 48;
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export interface ShareableBadgeData {
   badgeName: string;

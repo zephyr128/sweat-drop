@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
@@ -11,17 +12,8 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 interface PublicProfile {
   id: string;
@@ -108,7 +100,7 @@ export default function UserProfileScreen() {
 
   const renderAvatar = () => {
     if (profile.avatar_url && profile.avatar_url.startsWith('http')) {
-      return <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />;
+      return <Image source={profile.avatar_url} style={styles.avatarImage} transition={200} />;
     }
     if (profile.avatar_url) {
       return <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>;
@@ -225,7 +217,7 @@ export default function UserProfileScreen() {
                   {badges.map((badge: UserBadge) => (
                     <View key={badge.badge_id} style={styles.badgeItem}>
                       {badge.badge_image_url ? (
-                        <Image source={{ uri: badge.badge_image_url }} style={styles.badgeImage} />
+                        <Image source={badge.badge_image_url} style={styles.badgeImage} transition={200} />
                       ) : (
                         <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                           <Ionicons name="ribbon" size={20} color={branding.primary} />

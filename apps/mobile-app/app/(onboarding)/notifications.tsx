@@ -20,6 +20,7 @@ import {
 } from '@/lib/notifications';
 import { theme, fontStyles } from '@/lib/theme';
 import { OnboardingProgress } from '@/components/OnboardingProgress';
+import { log } from '@/lib/logger';
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -45,7 +46,7 @@ export default function NotificationsScreen() {
         }
       }
     } catch (error) {
-      console.warn('[Notifications] Failed to register:', error);
+      log.warn('[Notifications] Failed to register:', error);
     } finally {
       setLoading(false);
       await completeOnboarding();

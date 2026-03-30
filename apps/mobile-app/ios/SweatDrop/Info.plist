@@ -7,7 +7,7 @@
     <key>CFBundleAllowMixedLocalizations</key>
     <true/>
     <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <string>en</string>
     <key>CFBundleDisplayName</key>
     <string>SweatDrop</string>
     <key>CFBundleExecutable</key>
@@ -16,6 +16,11 @@
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+      <string>en</string>
+      <string>sr</string>
+    </array>
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
@@ -60,11 +65,11 @@
       <true/>
     </dict>
     <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.</string>
+    <string>SweatDrop uses Bluetooth to communicate with Magene fitness sensors during workouts.</string>
     <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>SweatDrop koristi Bluetooth za komunikaciju sa Magene fitnes senzorima tokom treninga.</string>
+    <string>SweatDrop uses Bluetooth to communicate with Magene fitness sensors during workouts.</string>
     <key>NSCameraUsageDescription</key>
-    <string>SweatDrop koristi kameru za skeniranje QR kodova na fitnes spravama.</string>
+    <string>SweatDrop uses the camera to scan QR codes on fitness equipment.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your location</string>
     <key>NSLocationAlwaysUsageDescription</key>

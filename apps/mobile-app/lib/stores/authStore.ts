@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
 import { setUser as setSentryUser } from '@/lib/sentry';
@@ -172,7 +173,7 @@ export const useAuthStore = create<AuthState>()(
           data: { subscription },
         } = supabase.auth.onAuthStateChange(
           async (event: AuthChangeEvent, session: Session | null) => {
-            console.log('[AuthStore] onAuthStateChange:', event);
+            log.debug('[AuthStore] onAuthStateChange:', event);
             set({ session, user: session?.user ?? null });
 
             if (event === 'SIGNED_IN' && session?.user) {
@@ -223,7 +224,7 @@ export const useAuthStore = create<AuthState>()(
             .single();
 
           if (error) {
-            console.error('[AuthStore] Error fetching profile:', error.message);
+            log.error('[AuthStore] Error fetching profile:', error.message);
             set({ isLoading: false });
             return;
           }
@@ -232,7 +233,7 @@ export const useAuthStore = create<AuthState>()(
           const step = computeOnboardingStep(profile, get().onboardingStep);
           set({ profile, onboardingStep: step, isLoading: false });
         } catch (err) {
-          console.error('[AuthStore] fetchProfile exception:', err);
+          log.error('[AuthStore] fetchProfile exception:', err);
           set({ isLoading: false });
         }
       },
@@ -287,7 +288,7 @@ export const useAuthStore = create<AuthState>()(
           await get().fetchProfile();
           return { success: true };
         } catch (err: any) {
-          console.error('[AuthStore] updateProfile error:', err);
+          log.error('[AuthStore] updateProfile error:', err);
           return { success: false, error: err.message || 'Unknown error' };
         }
       },
@@ -320,7 +321,7 @@ export const useAuthStore = create<AuthState>()(
           await supabase.auth.signOut();
           get().reset();
         } catch (err) {
-          console.error('[AuthStore] signOut error:', err);
+          log.error('[AuthStore] signOut error:', err);
           // Force reset even on error
           get().reset();
         }

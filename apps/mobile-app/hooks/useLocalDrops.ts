@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -32,7 +33,7 @@ export function useLocalDrops(gymId: string | null) {
 
       if (error && error.code !== 'PGRST116') {
         // PGRST116 = no rows returned, which is fine (user hasn't earned drops in this gym yet)
-        console.error('Error loading local drops:', error);
+        log.error('Error loading local drops:', error);
       }
 
       if (data) {
@@ -45,7 +46,7 @@ export function useLocalDrops(gymId: string | null) {
         setLocalDrops({ local_drops_balance: 0, membership_id: null });
       }
     } catch (error) {
-      console.error('Error loading local drops:', error);
+      log.error('Error loading local drops:', error);
       setLocalDrops({ local_drops_balance: 0, membership_id: null });
     } finally {
       setLoading(false);

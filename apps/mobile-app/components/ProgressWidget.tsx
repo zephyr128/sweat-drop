@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,13 +15,7 @@ import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { fontStyles } from '@/lib/theme';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
-}
+import { fontStyles, hexToRgba } from '@/lib/theme';
 
 export const ProgressWidget: React.FC = () => {
   const { t } = useTranslation('home');
@@ -99,9 +94,10 @@ export const ProgressWidget: React.FC = () => {
           <View style={styles.imageWrap}>
             {nextBadge.badge_image_url ? (
               <Image
-                source={{ uri: nextBadge.badge_image_url }}
+                source={nextBadge.badge_image_url}
                 style={styles.badgeImage}
-                resizeMode="cover"
+                contentFit="cover"
+                transition={200}
               />
             ) : (
               <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.18) }]}>

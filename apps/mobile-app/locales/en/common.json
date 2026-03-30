@@ -30,5 +30,6 @@
   "participants": "participants",
   "daysLeft_one": "{{count}} day left",
   "daysLeft_other": "{{count}} days left",
-  "user": "User"
+  "user": "User",
+  "noInternet": "No internet connection"
 }

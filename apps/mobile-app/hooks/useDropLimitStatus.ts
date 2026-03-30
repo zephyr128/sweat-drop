@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 
@@ -153,7 +154,7 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
         loading: false,
       });
     } catch (err) {
-      console.warn('[useDropLimitStatus] Failed to load:', err);
+      log.warn('[useDropLimitStatus] Failed to load:', err);
       setStatus((prev) => ({ ...prev, loading: false }));
     }
   }, [authSession?.user, gymId]);

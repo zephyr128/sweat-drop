@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -217,7 +218,7 @@ export function useUserProgress(userId?: string) {
       // Merge global + gym challenge progress
       if (isMountedRef.current) setProgress([...progressItems, ...challengeItems]);
     } catch (err: any) {
-      console.error('Error in loadProgress:', err);
+      log.error('Error in loadProgress:', err);
       if (isMountedRef.current) setError(err.message);
     } finally {
       if (isMountedRef.current) setLoading(false);

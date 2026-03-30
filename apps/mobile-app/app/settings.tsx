@@ -22,19 +22,14 @@ import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useAuthStore } from '@/lib/stores/authStore';
-import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
+import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { getPrivacyUrl, getTermsUrl, openLegalUrl } from '@/lib/legalUrls';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
-}
 
 interface ProfileData {
   id: string;
@@ -89,12 +84,12 @@ export default function SettingsScreen() {
         .single();
 
       if (error) {
-        console.error('[Settings] Error loading profile:', error);
+        log.error('[Settings] Error loading profile:', error);
         return;
       }
       setProfile(data as ProfileData);
     } catch (err) {
-      console.error('[Settings] Error:', err);
+      log.error('[Settings] Error:', err);
     } finally {
       setLoading(false);
     }

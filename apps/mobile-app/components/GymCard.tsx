@@ -4,9 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
-  ImageBackground,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -43,12 +42,13 @@ export const GymCard: React.FC<GymCardProps> = ({
   return (
     <View style={styles.cardOuter}>
       {gym.background_url ? (
-        <ImageBackground
-          source={{ uri: gym.background_url }}
-          style={styles.cardBackground}
-          imageStyle={styles.cardBackgroundImage}
-          resizeMode="cover"
-        >
+        <View style={styles.cardBackground}>
+          <Image
+            source={gym.background_url}
+            style={[StyleSheet.absoluteFillObject, styles.cardBackgroundImage]}
+            contentFit="cover"
+            transition={200}
+          />
           <LinearGradient
             colors={['rgba(0,0,0,0.55)', 'rgba(10,10,20,0.92)', 'rgba(0,0,0,0.97)']}
             style={StyleSheet.absoluteFillObject}
@@ -64,7 +64,7 @@ export const GymCard: React.FC<GymCardProps> = ({
             onDetails={onDetails}
             variant={variant}
           />
-        </ImageBackground>
+        </View>
       ) : (
         <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
           <CardContent
@@ -107,9 +107,10 @@ const CardContent: React.FC<CardContentProps> = ({
       <View style={styles.headerRow}>
         {gym.logo_url ? (
           <Image
-            source={{ uri: gym.logo_url }}
+            source={gym.logo_url}
             style={styles.logo}
-            resizeMode="contain"
+            contentFit="contain"
+            transition={200}
           />
         ) : (
           <View style={[styles.logoPlaceholder, { backgroundColor: brandColor + '25' }]}>

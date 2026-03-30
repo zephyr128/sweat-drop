@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import type { UserBadge } from '@/hooks/useUserBadges';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -18,15 +18,6 @@ const BADGE_SIZE = Math.floor(
 const CIRCLE_SIZE = BADGE_SIZE - 12;
 /** Badge artwork fills most of the coin (was 0.5 — too small on phones). */
 const ICON_SIZE = CIRCLE_SIZE * 0.72;
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 interface BadgeCardProps {
   badge: UserBadge;

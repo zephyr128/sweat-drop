@@ -11,6 +11,7 @@ import { theme, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
 import { GymCard } from '@/components/GymCard';
+import { log } from '@/lib/logger';
 
 export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -66,7 +67,7 @@ export default function HomeGymScreen() {
 
       setGyms(gymsWithBranding);
     } catch (error) {
-      console.error('Error loading gyms:', error);
+      log.error('Error loading gyms:', error);
     } finally {
       setLoading(false);
     }

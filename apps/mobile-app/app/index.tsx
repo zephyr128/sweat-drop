@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+import { log } from '@/lib/logger';
 
 // Keep splash screen visible while we determine the initial route
 SplashScreen.preventAutoHideAsync();
@@ -87,7 +88,7 @@ export default function Index() {
 
         setHasNavigated(true);
       } catch (e) {
-        console.warn('[Index] Error during navigation:', e);
+        log.warn('[Index] Error during navigation:', e);
         setHasNavigated(true);
         await SplashScreen.hideAsync();
       }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -246,7 +247,7 @@ export function useHomeStats(gymId: string | null) {
         activeDaysThisWeek,
       });
     } catch (error) {
-      console.error('[useHomeStats] Error loading stats:', error);
+      log.error('[useHomeStats] Error loading stats:', error);
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -349,7 +350,7 @@ export function useMyStats(gymId: string | null | undefined) {
         loading: false,
       });
     } catch (err) {
-      console.error('[useMyStats] Error:', err);
+      log.error('[useMyStats] Error:', err);
       setState((prev) => ({ ...prev, loading: false }));
     }
   }, [session?.user?.id, gymId]);

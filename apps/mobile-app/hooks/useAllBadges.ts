@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -63,14 +64,14 @@ export function useAllBadges() {
         .order('display_order', { ascending: true });
 
       if (fetchError) {
-        console.error('Error loading global achievements:', fetchError);
+        log.error('Error loading global achievements:', fetchError);
         if (isMountedRef.current) setError(fetchError.message);
         return;
       }
 
       if (isMountedRef.current) setGlobalAchievements(data || []);
     } catch (err: any) {
-      console.error('Error in loadGlobalAchievements:', err);
+      log.error('Error in loadGlobalAchievements:', err);
       if (isMountedRef.current) setError(err.message);
     }
   }, []);
@@ -91,7 +92,7 @@ export function useAllBadges() {
         .order('created_at', { ascending: false });
 
       if (fetchError) {
-        console.error('Error loading gym challenges:', fetchError);
+        log.error('Error loading gym challenges:', fetchError);
         if (isMountedRef.current) setError(fetchError.message);
         return;
       }
@@ -113,7 +114,7 @@ export function useAllBadges() {
 
       if (isMountedRef.current) setGymChallenges(challenges);
     } catch (err: any) {
-      console.error('Error in loadGymChallenges:', err);
+      log.error('Error in loadGymChallenges:', err);
       if (isMountedRef.current) setError(err.message);
     }
   }, [activeGymId]);

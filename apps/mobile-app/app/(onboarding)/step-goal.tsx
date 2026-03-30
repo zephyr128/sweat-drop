@@ -1,20 +1,11 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard, type FitnessGoal } from '@/hooks/useOnboardingWizard';
 import { useAuthStore } from '@/lib/stores/authStore';
 import OnboardingStepLayout from '@/components/OnboardingStep';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const GOALS: { value: FitnessGoal; emoji: string; labelKey: string; descKey: string }[] = [
   { value: 'weight_loss', emoji: '🔥', labelKey: 'profileSetup.goal.weight_loss', descKey: 'profileSetup.goal.weight_loss_desc' },

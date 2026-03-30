@@ -5,14 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
-  ImageBackground,
   Linking,
   Alert,
   ActivityIndicator,
   Platform,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,25 +19,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useGymStore, Gym, GymWorkingHours } from '@/lib/stores/useGymStore';
 import { useGymData } from '@/hooks/useGymData';
 import { useSession } from '@/hooks/useSession';
 import { useTranslation } from 'react-i18next';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import BackButton from '@/components/BackButton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 260;
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 
 function getTodayKey(): string {
@@ -122,7 +112,7 @@ export default function GymDetailScreen() {
         background_url: branding.background_url,
       });
     } catch (error) {
-      console.error('Error loading gym details:', error);
+      log.error('Error loading gym details:', error);
     } finally {
       setLoading(false);
     }
@@ -140,7 +130,7 @@ export default function GymDetailScreen() {
 
       if (data) setRewards(data);
     } catch (error) {
-      console.error('Error loading rewards preview:', error);
+      log.error('Error loading rewards preview:', error);
     }
   };
 
@@ -238,17 +228,19 @@ export default function GymDetailScreen() {
         {/* Hero Section */}
         <View style={styles.heroContainer}>
           {gym.background_url ? (
-            <ImageBackground
-              source={{ uri: gym.background_url }}
-              style={styles.heroImage}
-              resizeMode="cover"
-            >
+            <View style={styles.heroImage}>
+              <Image
+                source={gym.background_url}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                transition={200}
+              />
               <LinearGradient
                 colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.95)']}
                 style={StyleSheet.absoluteFillObject}
               />
               <HeroContent gym={gym} brandColor={brandColor} isHome={isHome} />
-            </ImageBackground>
+            </View>
           ) : (
             <LinearGradient
               colors={[hexToRgba(brandColor, 0.15), 'rgba(10,14,26,1)']}
@@ -456,7 +448,7 @@ const HeroContent: React.FC<HeroContentProps> = ({ gym, brandColor, isHome }) =>
   return (
     <View style={styles.heroContent}>
       {gym.logo_url ? (
-        <Image source={{ uri: gym.logo_url }} style={styles.heroLogo} resizeMode="contain" />
+        <Image source={gym.logo_url} style={styles.heroLogo} contentFit="contain" transition={200} />
       ) : (
         <View style={[styles.heroLogoPlaceholder, { backgroundColor: brandColor + '25' }]}>
           <Ionicons name="fitness" size={40} color={brandColor} />

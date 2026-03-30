@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { getNumberStyle, fontStyles } from '@/lib/theme';
+import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 
 /* ── Types ────────────────────────────────────────── */
@@ -16,13 +16,6 @@ interface ClosestRewardBannerProps {
   };
   brandPrimary: string;
   onPress: () => void;
-}
-
-/* ── Helpers ──────────────────────────────────────── */
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
 }
 
 function getRewardIcon(type: string): keyof typeof Ionicons.glyphMap {

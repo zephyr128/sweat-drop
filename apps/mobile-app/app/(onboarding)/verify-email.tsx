@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { theme, fontStyles } from '@/lib/theme';
+import { log } from '@/lib/logger';
 import { useRouter } from 'expo-router';
 
 export default function VerifyEmailScreen() {
@@ -116,7 +117,7 @@ export default function VerifyEmailScreen() {
       Alert.alert(t('auth.checkEmail'), t('auth.verifyResendDone'));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('auth.verifyResendFailed');
-      console.warn('[VerifyEmail] resend:', message);
+      log.warn('[VerifyEmail] resend:', message);
       Alert.alert(t('common:error'), message);
     } finally {
       setResendLoading(false);

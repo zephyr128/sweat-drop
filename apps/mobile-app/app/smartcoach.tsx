@@ -1,26 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 interface GymWithPlans {
   id: string;
@@ -69,7 +62,7 @@ export default function SmartCoachScreen() {
         .eq('is_active', true);
 
       if (plansError) {
-        console.error('Error loading plans:', plansError);
+        log.error('Error loading plans:', plansError);
         setLoading(false);
         return;
       }
@@ -88,7 +81,7 @@ export default function SmartCoachScreen() {
         .in('id', uniqueGymIds);
 
       if (gymsError) {
-        console.error('Error loading gyms:', gymsError);
+        log.error('Error loading gyms:', gymsError);
         setLoading(false);
         return;
       }
@@ -155,7 +148,7 @@ export default function SmartCoachScreen() {
 
       setGyms(gymsList);
     } catch (error) {
-      console.error('Error loading gyms with plans:', error);
+      log.error('Error loading gyms with plans:', error);
     } finally {
       setLoading(false);
     }
@@ -234,9 +227,10 @@ export default function SmartCoachScreen() {
                     <View style={styles.gymCardContent}>
                       {gym.logo_url ? (
                         <Image
-                          source={{ uri: gym.logo_url }}
+                          source={gym.logo_url}
                           style={[styles.gymLogo, { borderColor: hexToRgba(gym.primary_color || branding.primary, 0.15) }]}
-                          resizeMode="contain"
+                          contentFit="contain"
+                          transition={200}
                         />
                       ) : (
                         <View style={[styles.gymLogoPlaceholder, { backgroundColor: hexToRgba(gym.primary_color || branding.primary, 0.1) }]}>

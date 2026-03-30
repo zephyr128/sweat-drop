@@ -11,7 +11,7 @@ import { useAllBadges, BadgeWithProgress } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import BackButton from './BackButton';
 import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
@@ -23,15 +23,6 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 // - Earned badges at the top, locked badges below
 // - Minimal chrome, focus on the badges themselves
 // - Category color-coding like Apple Fitness rings
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

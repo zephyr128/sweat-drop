@@ -2,13 +2,13 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +26,7 @@ import {
 import BackButton from '@/components/BackButton';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
+import { log } from '@/lib/logger';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -108,66 +109,74 @@ export default function WalletScreen() {
 
   const loadGyms = useCallback(async () => {
     if (!session?.user) return;
-    const [{ data: memberships }, { data: profile }] = await Promise.all([
-      supabase
-        .from('gym_memberships')
-        .select('gym_id, local_drops_balance, gyms(id, name)')
-        .eq('user_id', session.user.id),
-      supabase
-        .from('profiles')
-        .select('total_drops')
-        .eq('id', session.user.id)
-        .single(),
-    ]);
-    setTotalDrops(profile?.total_drops ?? 0);
-    setUserGyms(
-      (memberships ?? [])
-        .filter((m: any) => m.gyms)
-        .map((m: any) => ({
-          id: m.gym_id,
-          name: (m.gyms as any).name,
-          local_drops: m.local_drops_balance ?? 0,
-        })),
-    );
+    try {
+      const [{ data: memberships }, { data: profile }] = await Promise.all([
+        supabase
+          .from('gym_memberships')
+          .select('gym_id, local_drops_balance, gyms(id, name)')
+          .eq('user_id', session.user.id),
+        supabase
+          .from('profiles')
+          .select('total_drops')
+          .eq('id', session.user.id)
+          .single(),
+      ]);
+      setTotalDrops(profile?.total_drops ?? 0);
+      setUserGyms(
+        (memberships ?? [])
+          .filter((m: any) => m.gyms)
+          .map((m: any) => ({
+            id: m.gym_id,
+            name: (m.gyms as any).name,
+            local_drops: m.local_drops_balance ?? 0,
+          })),
+      );
+    } catch (err) {
+      log.error('[Wallet] Error loading gyms:', err);
+    }
   }, [session?.user]);
 
   const loadEarned = useCallback(async () => {
     if (!session?.user || !activeGymId) return;
-    const userId = session.user.id;
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dayOfWeek = now.getDay();
-    const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    try {
+      const userId = session.user.id;
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dayOfWeek = now.getDay();
+      const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const EARN_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak'];
+      const EARN_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak'];
 
-    let query = supabase
-      .from('drops_transactions')
-      .select('amount, created_at')
-      .eq('user_id', userId)
-      .gt('amount', 0)
-      .in('transaction_type', EARN_TYPES)
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (selectedGymId) query = query.eq('gym_id', selectedGymId);
+      let query = supabase
+        .from('drops_transactions')
+        .select('amount, created_at')
+        .eq('user_id', userId)
+        .gt('amount', 0)
+        .in('transaction_type', EARN_TYPES)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (selectedGymId) query = query.eq('gym_id', selectedGymId);
 
-    const { data: txRows } = await query;
+      const { data: txRows } = await query;
 
-    let today = 0;
-    let week = 0;
-    let month = 0;
-    let allTime = 0;
-    for (const row of txRows ?? []) {
-      const a = row.amount ?? 0;
-      const d = new Date(row.created_at);
-      allTime += a;
-      if (d >= monthStart) month += a;
-      if (d >= weekStart) week += a;
-      if (d >= todayStart) today += a;
+      let today = 0;
+      let week = 0;
+      let month = 0;
+      let allTime = 0;
+      for (const row of txRows ?? []) {
+        const a = row.amount ?? 0;
+        const d = new Date(row.created_at);
+        allTime += a;
+        if (d >= monthStart) month += a;
+        if (d >= weekStart) week += a;
+        if (d >= todayStart) today += a;
+      }
+      setEarned({ today, week, month, allTime });
+    } catch (err) {
+      log.error('[Wallet] Error loading earned:', err);
     }
-    setEarned({ today, week, month, allTime });
   }, [session?.user, activeGymId, scope]);
 
   const loadExpiry = useCallback(async () => {
@@ -210,34 +219,38 @@ export default function WalletScreen() {
 
   const loadTransactions = useCallback(async (page: number) => {
     if (!session?.user) return;
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE;
+    try {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE;
 
-    let query = supabase
-      .from('drops_transactions')
-      .select('id, amount, transaction_type, created_at, metadata')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: false })
-      .range(from, to);
-    if (selectedGymId) query = query.eq('gym_id', selectedGymId);
+      let query = supabase
+        .from('drops_transactions')
+        .select('id, amount, transaction_type, created_at, metadata')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      if (selectedGymId) query = query.eq('gym_id', selectedGymId);
 
-    const { data } = await query;
+      const { data } = await query;
 
-    const rows: Transaction[] = (data ?? []).map((r) => ({
-      id: r.id,
-      type: r.transaction_type,
-      amount: r.amount ?? 0,
-      created_at: r.created_at,
-      metadata: r.metadata as Record<string, any> | undefined,
-    }));
+      const rows: Transaction[] = (data ?? []).map((r) => ({
+        id: r.id,
+        type: r.transaction_type,
+        amount: r.amount ?? 0,
+        created_at: r.created_at,
+        metadata: r.metadata as Record<string, any> | undefined,
+      }));
 
-    if (page === 0) {
-      setTransactions(rows);
-    } else {
-      setTransactions((prev) => [...prev, ...rows]);
+      if (page === 0) {
+        setTransactions(rows);
+      } else {
+        setTransactions((prev) => [...prev, ...rows]);
+      }
+      setHasMoreTx(rows.length > PAGE_SIZE);
+      setTxLoading(false);
+    } catch (err) {
+      log.error('[Wallet] Error loading transactions:', err);
     }
-    setHasMoreTx(rows.length > PAGE_SIZE);
-    setTxLoading(false);
   }, [session?.user, scope]);
 
   const refreshAll = useCallback(async () => {
@@ -336,35 +349,36 @@ export default function WalletScreen() {
   //  UI
   // ────────────────────────────────────────────────────
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <LinearGradient
-        colors={['#000000', '#080A14', '#000000']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={{ width: 40 }} />
+  const renderTransaction = useCallback(({ item: tx, index }: { item: Transaction; index: number }) => (
+    <View style={[styles.txRow, index < transactions.length - 1 && styles.txRowBorder]}>
+      <View style={[styles.txIconWrap, { backgroundColor: hexToRgba(tx.amount >= 0 ? branding.primary : '#FF3B30', 0.08) }]}>
+        <Ionicons
+          name={getTxIcon(tx.type)}
+          size={18}
+          color={tx.amount >= 0 ? branding.primary : '#FF3B30'}
+        />
       </View>
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={branding.primary}
-          />
-        }
+      <View style={styles.txInfo}>
+        <Text style={styles.txLabel} numberOfLines={1}>
+          {getTxLabel(tx)}
+        </Text>
+        <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
+      </View>
+      <Text
+        style={[
+          styles.txAmount,
+          getNumberStyle(16),
+          { color: tx.amount >= 0 ? branding.primary : '#FF3B30' },
+        ]}
       >
-        {/* ═══════════ SCOPE TOGGLE: My Gym | Global ═══════════ */}
+        {tx.amount >= 0 ? '+' : ''}{tx.amount} 💧
+      </Text>
+    </View>
+  ), [transactions.length, branding.primary]);
+
+  const walletListHeader = useMemo(() => (
+    <>
+      {userGyms.length > 1 && (
         <Animated.View entering={FadeInDown.delay(40).duration(400)}>
           <View style={[styles.scopeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
             <BlurView intensity={glassCard.blur} tint="dark" style={[styles.scopeToggleBlur, { backgroundColor: glassCard.bg }]}>
@@ -406,240 +420,246 @@ export default function WalletScreen() {
             </BlurView>
           </View>
         </Animated.View>
+      )}
 
-        {/* ═══════════ HERO CARD ═══════════ */}
-        <Animated.View entering={FadeInDown.delay(80).duration(500)}>
-          <View style={[styles.heroOuter, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
-            <BlurView intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
-              <LinearGradient
-                colors={[
-                  hexToRgba(branding.primary, 0.14),
-                  'rgba(12, 12, 22, 0.92)',
-                  hexToRgba(branding.primary, 0.06),
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.heroGradient}
-              >
-                <Text style={styles.heroLabel}>{heroLabel}</Text>
+      <Animated.View entering={FadeInDown.delay(80).duration(500)}>
+        <View style={[styles.heroOuter, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
+          <BlurView intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
+            <LinearGradient
+              colors={[
+                hexToRgba(branding.primary, 0.14),
+                'rgba(12, 12, 22, 0.92)',
+                hexToRgba(branding.primary, 0.06),
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroGradient}
+            >
+              <Text style={styles.heroLabel}>{heroLabel}</Text>
 
-                <View style={styles.heroRow}>
-                  <Ionicons name="water" size={36} color={branding.primary} />
-                  <Animated.Text
-                    key={`hero-${scope}`}
-                    entering={FadeInDown.duration(300)}
-                    style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}
-                  >
-                    {heroBalance.toLocaleString()}
-                  </Animated.Text>
-                </View>
-
-                <Text style={[styles.heroSub, { color: hexToRgba(branding.primary, 0.5) }]}>
-                  {scope === 'gym' ? `${activeGym?.name ?? ''} ` : ''}{t('drops')}
-                </Text>
-
-                {scope === 'gym' && (
-                  <TouchableOpacity
-                    style={[styles.heroCTA, { backgroundColor: branding.primary }]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push('/store');
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.heroCTAText, { color: branding.onPrimary }]}>
-                      {t('goToStore')} →
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </LinearGradient>
-            </BlurView>
-          </View>
-        </Animated.View>
-
-        {/* ═══════════ EARNED SECTION ═══════════ */}
-        <Animated.View entering={FadeInDown.delay(180).duration(500)}>
-          <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-            <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
-              <Text style={styles.sectionTitle}>{t('earned')}</Text>
-
-              <EarnedRow
-                icon="today-outline"
-                label={t('today')}
-                value={earned.today}
-                color={branding.primary}
-                last={false}
-              />
-              <EarnedRow
-                icon="calendar-outline"
-                label={t('thisWeek')}
-                value={earned.week}
-                color={branding.primary}
-                last={false}
-                progressFill={weeklyProgress}
-                progressLabel={t('weeklyTarget', { target: weeklyTarget.toLocaleString() })}
-              />
-              <EarnedRow
-                icon="stats-chart-outline"
-                label={t('thisMonth')}
-                value={earned.month}
-                color={branding.primary}
-                last={false}
-              />
-              <EarnedRow
-                icon="trophy-outline"
-                label={t('allTime')}
-                value={earned.allTime}
-                color={branding.primary}
-                last
-              />
-            </BlurView>
-          </View>
-        </Animated.View>
-
-        {/* ═══════════ PER-GYM BREAKDOWN ═══════════ */}
-        {scope === 'global' && userGyms.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(240).duration(500)}>
-            <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
-                <Text style={styles.sectionTitle}>{t('balanceByGym')}</Text>
-                {(() => {
-                  const maxDrops = Math.max(...userGyms.map((g) => g.local_drops), 1);
-                  return userGyms.map((gym, idx) => (
-                    <Animated.View
-                      key={gym.id}
-                      entering={FadeInDown.delay(260 + idx * 60).duration(350)}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.gymBreakdownRow,
-                          idx < userGyms.length - 1 && styles.gymBreakdownRowBorder,
-                        ]}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setScope('gym');
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.gymBreakdownTop}>
-                          <Text style={styles.gymBreakdownName} numberOfLines={1}>
-                            {gym.name}
-                          </Text>
-                          <View style={styles.gymBreakdownDropsRow}>
-                            <Ionicons name="water" size={14} color={branding.primary} />
-                            <Text
-                              style={[
-                                styles.gymBreakdownDrops,
-                                getNumberStyle(15),
-                                { color: branding.primary },
-                              ]}
-                            >
-                              {gym.local_drops.toLocaleString()}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.gymBreakdownBarTrack}>
-                          <Animated.View
-                            style={[
-                              styles.gymBreakdownBarFill,
-                              {
-                                width: `${Math.round((gym.local_drops / maxDrops) * 100)}%`,
-                                backgroundColor: branding.primary,
-                              },
-                            ]}
-                          />
-                        </View>
-                      </TouchableOpacity>
-                    </Animated.View>
-                  ));
-                })()}
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* ═══════════ EXPIRY SECTION ═══════════ */}
-        {expiry && (
-          <Animated.View entering={FadeInDown.delay(280).duration(500)}>
-            <ExpiryCard
-              state={expiryState}
-              dropsAtRisk={dropsAtRisk}
-              daysUntilExpiry={daysUntilExpiry}
-              primary={branding.primary}
-              t={t}
-              onSpend={() => router.push('/store')}
-            />
-          </Animated.View>
-        )}
-
-        {/* ═══════════ TRANSACTIONS ═══════════ */}
-        <Animated.View entering={FadeInDown.delay(380).duration(500)}>
-          <Text style={styles.sectionTitle}>{t('activity')}</Text>
-
-          {txLoading ? (
-            <ActivityIndicator
-              color={branding.primary}
-              style={{ marginTop: theme.spacing.lg }}
-            />
-          ) : transactions.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="water-outline" size={48} color={theme.colors.textTertiary} />
-              <Text style={styles.emptyTitle}>{t('noActivity')}</Text>
-              <Text style={styles.emptySub}>{t('noActivityDesc')}</Text>
-              <TouchableOpacity
-                style={[styles.emptyCTA, { borderColor: hexToRgba(branding.primary, 0.3) }]}
-                onPress={() => router.push('/scan')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.emptyCTAText, { color: branding.primary }]}>
-                  {t('startWorkout')} →
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              {transactions.map((tx, idx) => (
-                <Animated.View
-                  key={tx.id}
-                  entering={FadeInDown.delay(400 + idx * 40).duration(350)}
+              <View style={styles.heroRow}>
+                <Ionicons name="water" size={36} color={branding.primary} />
+                <Animated.Text
+                  key={`hero-${scope}`}
+                  entering={FadeInDown.duration(300)}
+                  style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}
                 >
-                  <View style={[styles.txRow, idx < transactions.length - 1 && styles.txRowBorder]}>
-                    <View style={[styles.txIconWrap, { backgroundColor: hexToRgba(tx.amount >= 0 ? branding.primary : '#FF3B30', 0.08) }]}>
-                      <Ionicons
-                        name={getTxIcon(tx.type)}
-                        size={18}
-                        color={tx.amount >= 0 ? branding.primary : '#FF3B30'}
-                      />
-                    </View>
-                    <View style={styles.txInfo}>
-                      <Text style={styles.txLabel} numberOfLines={1}>
-                        {getTxLabel(tx)}
-                      </Text>
-                      <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.txAmount,
-                        getNumberStyle(16),
-                        { color: tx.amount >= 0 ? branding.primary : '#FF3B30' },
-                      ]}
-                    >
-                      {tx.amount >= 0 ? '+' : ''}{tx.amount} 💧
-                    </Text>
-                  </View>
-                </Animated.View>
-              ))}
-              {hasMoreTx && (
-                <TouchableOpacity style={styles.loadMore} onPress={loadMoreTx} activeOpacity={0.7}>
-                  <Text style={[styles.loadMoreText, { color: branding.primary }]}>
-                    {t('loadMore')}
+                  {heroBalance.toLocaleString()}
+                </Animated.Text>
+              </View>
+
+              <Text style={[styles.heroSub, { color: hexToRgba(branding.primary, 0.5) }]}>
+                {scope === 'gym' ? `${activeGym?.name ?? ''} ` : ''}{t('drops')}
+              </Text>
+
+              {scope === 'gym' && (
+                <TouchableOpacity
+                  style={[styles.heroCTA, { backgroundColor: branding.primary }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push('/store');
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.heroCTAText, { color: branding.onPrimary }]}>
+                    {t('goToStore')} →
                   </Text>
                 </TouchableOpacity>
               )}
-            </>
-          )}
+            </LinearGradient>
+          </BlurView>
+        </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(180).duration(500)}>
+        <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+          <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+            <Text style={styles.sectionTitle}>{t('earned')}</Text>
+
+            <EarnedRow
+              icon="today-outline"
+              label={t('today')}
+              value={earned.today}
+              color={branding.primary}
+              last={false}
+            />
+            <EarnedRow
+              icon="calendar-outline"
+              label={t('thisWeek')}
+              value={earned.week}
+              color={branding.primary}
+              last={false}
+              progressFill={weeklyProgress}
+              progressLabel={t('weeklyTarget', { target: weeklyTarget.toLocaleString() })}
+            />
+            <EarnedRow
+              icon="stats-chart-outline"
+              label={t('thisMonth')}
+              value={earned.month}
+              color={branding.primary}
+              last={false}
+            />
+            <EarnedRow
+              icon="trophy-outline"
+              label={t('allTime')}
+              value={earned.allTime}
+              color={branding.primary}
+              last
+            />
+          </BlurView>
+        </View>
+      </Animated.View>
+
+      {scope === 'global' && userGyms.length > 0 && (
+        <Animated.View entering={FadeInDown.delay(240).duration(500)}>
+          <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+            <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+              <Text style={styles.sectionTitle}>{t('balanceByGym')}</Text>
+              {(() => {
+                const maxDrops = Math.max(...userGyms.map((g) => g.local_drops), 1);
+                return userGyms.map((gym, idx) => (
+                  <Animated.View
+                    key={gym.id}
+                    entering={FadeInDown.delay(260 + idx * 60).duration(350)}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.gymBreakdownRow,
+                        idx < userGyms.length - 1 && styles.gymBreakdownRowBorder,
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setScope('gym');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.gymBreakdownTop}>
+                        <Text style={styles.gymBreakdownName} numberOfLines={1}>
+                          {gym.name}
+                        </Text>
+                        <View style={styles.gymBreakdownDropsRow}>
+                          <Ionicons name="water" size={14} color={branding.primary} />
+                          <Text
+                            style={[
+                              styles.gymBreakdownDrops,
+                              getNumberStyle(15),
+                              { color: branding.primary },
+                            ]}
+                          >
+                            {gym.local_drops.toLocaleString()}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.gymBreakdownBarTrack}>
+                        <Animated.View
+                          style={[
+                            styles.gymBreakdownBarFill,
+                            {
+                              width: `${Math.round((gym.local_drops / maxDrops) * 100)}%`,
+                              backgroundColor: branding.primary,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ));
+              })()}
+            </BlurView>
+          </View>
         </Animated.View>
-      </ScrollView>
+      )}
+
+      {expiry && (
+        <Animated.View entering={FadeInDown.delay(280).duration(500)}>
+          <ExpiryCard
+            state={expiryState}
+            dropsAtRisk={dropsAtRisk}
+            daysUntilExpiry={daysUntilExpiry}
+            primary={branding.primary}
+            t={t}
+            onSpend={() => router.push('/store')}
+          />
+        </Animated.View>
+      )}
+
+      <Text style={styles.sectionTitle}>{t('activity')}</Text>
+
+      {txLoading && (
+        <ActivityIndicator
+          color={branding.primary}
+          style={{ marginTop: theme.spacing.lg }}
+        />
+      )}
+    </>
+  ), [scope, branding, heroBalance, heroLabel, earned, weeklyProgress, weeklyTarget, userGyms, expiry, expiryState, dropsAtRisk, daysUntilExpiry, txLoading, activeGymId]);
+
+  const walletListEmpty = useMemo(() => {
+    if (txLoading) return null;
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="water-outline" size={48} color={theme.colors.textTertiary} />
+        <Text style={styles.emptyTitle}>{t('noActivity')}</Text>
+        <Text style={styles.emptySub}>{t('noActivityDesc')}</Text>
+        <TouchableOpacity
+          style={[styles.emptyCTA, { borderColor: hexToRgba(branding.primary, 0.3) }]}
+          onPress={() => router.push('/scan')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.emptyCTAText, { color: branding.primary }]}>
+            {t('startWorkout')} →
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [txLoading, branding.primary]);
+
+  const walletListFooter = useMemo(() => {
+    if (!hasMoreTx) return null;
+    return (
+      <TouchableOpacity style={styles.loadMore} onPress={loadMoreTx} activeOpacity={0.7}>
+        <Text style={[styles.loadMoreText, { color: branding.primary }]}>
+          {t('loadMore')}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, [hasMoreTx, branding.primary, loadMoreTx]);
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <LinearGradient
+        colors={['#000000', '#080A14', '#000000']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.headerTitle}>{t('title')}</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <FlatList
+        data={txLoading ? [] : transactions}
+        renderItem={renderTransaction}
+        keyExtractor={(item) => item.id}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={branding.primary}
+          />
+        }
+        ListHeaderComponent={walletListHeader}
+        ListEmptyComponent={walletListEmpty}
+        ListFooterComponent={walletListFooter}
+        onEndReached={hasMoreTx ? loadMoreTx : undefined}
+        onEndReachedThreshold={0.3}
+      />
     </SafeAreaView>
   );
 }

@@ -314,7 +314,7 @@ export default function AuthScreen() {
         return;
       }
 
-      if (__DEV__) console.error('[Auth] Apple sign-in error:', { code, message: error?.message });
+      if (__DEV__) log.error('[Auth] Apple sign-in error:', { code, message: error?.message });
 
       if (code === 'ERR_INVALID_RESPONSE' || code === 'ERR_REQUEST_FAILED') {
         Alert.alert(t('common:error'), t('auth.appleNetworkError'));
@@ -448,7 +448,7 @@ export default function AuthScreen() {
         Alert.alert(t('common:error'), signInError.message);
       }
     } catch (err: unknown) {
-      if (__DEV__) console.error('[Auth] Email auth error:', err);
+      if (__DEV__) log.error('[Auth] Email auth error:', err);
       const msg = err instanceof Error ? err.message.toLowerCase() : '';
       if (
         msg.includes('invalid refresh') ||

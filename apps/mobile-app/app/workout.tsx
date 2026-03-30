@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator, AppState, AppStateStatus, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -3419,10 +3420,11 @@ export default function WorkoutScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Gym background image */}
       {activeGym?.background_url && (
-        <ImageBackground
-          source={{ uri: activeGym.background_url }}
+        <Image
+          source={activeGym.background_url}
           style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
+          contentFit="cover"
+          transition={200}
         />
       )}
       {/* Blurred dark overlay for contrast */}

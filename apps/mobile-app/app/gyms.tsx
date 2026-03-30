@@ -17,21 +17,12 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useGymStore, Gym } from '@/lib/stores/useGymStore';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useAuthStore } from '@/lib/stores/authStore';
-import { theme as baseTheme, fontStyles } from '@/lib/theme';
+import { theme as baseTheme, fontStyles, hexToRgba} from '@/lib/theme';
 import { shouldRetryGymsWithoutColumnFilter } from '@/lib/mobileGymListing';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 // ── GymCard Component ──────────────────────────────
 function GymCard({
   gym,
@@ -156,7 +147,7 @@ export default function GymsScreen() {
         gymsData = rpcData as Gym[];
       } else {
         if (__DEV__ && rpcError) {
-          console.warn('[Gyms] get_public_gyms_for_mobile:', rpcError.message);
+          log.warn('[Gyms] get_public_gyms_for_mobile:', rpcError.message);
         }
         const filtered = await supabase
           .from('gyms')
@@ -219,7 +210,7 @@ export default function GymsScreen() {
 
       setGyms(gymsWithBranding);
     } catch (error) {
-      console.error('Error loading gyms:', error);
+      log.error('Error loading gyms:', error);
       const message =
         error instanceof Error ? error.message : t('load_failed');
       setLoadError(message);
@@ -273,7 +264,7 @@ export default function GymsScreen() {
                   await useAuthStore.getState().refreshProfile();
                 }
               } catch (e) {
-                console.error('Failed to set home gym:', e);
+                log.error('Failed to set home gym:', e);
               }
             },
           },

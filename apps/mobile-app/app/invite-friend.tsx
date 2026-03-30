@@ -22,7 +22,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useSession } from '@/hooks/useSession';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import {
   applyFriendInviteCode,
   fetchFriendInviteStatusList,
@@ -33,15 +33,6 @@ import {
 } from '@/lib/friendSocialApi';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { log } from '@/lib/logger';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 function SafeBackButton() {
   const router = useRouter();

@@ -32,5 +32,6 @@
   "daysLeft_one": "{{count}} dan preostalo",
   "daysLeft_few": "{{count}} dana preostalo",
   "daysLeft_other": "{{count}} dana preostalo",
-  "user": "Korisnik"
+  "user": "Korisnik",
+  "noInternet": "Nema internet konekcije"
 }

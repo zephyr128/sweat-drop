@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useGymStore } from '@/lib/stores/useGymStore';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import Animated, {
   FadeInDown,
@@ -23,12 +24,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { log } from '@/lib/logger';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
-}
 
 function SectionLabel({ label }: { label: string }) {
   return <Text style={styles.sectionLabel}>{label}</Text>;
@@ -275,7 +270,7 @@ export default function ProfileScreen() {
                   <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
                     <View style={[styles.avatarContainer, { borderColor: branding.primary }]}>
                       {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                        <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+                        <Image source={profile.avatar_url} style={styles.avatar} transition={200} />
                       ) : profile?.avatar_url ? (
                         <LinearGradient colors={[branding.primary, branding.primaryDark]} style={styles.avatarPlaceholder}>
                           <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>
@@ -297,7 +292,7 @@ export default function ProfileScreen() {
                   <Animated.View style={[styles.flipCardFace, styles.flipCardBack, backAnimatedStyle]}>
                     <View style={[styles.avatarContainer, { borderColor: '#FFD700', borderWidth: 2.5 }]}>
                       {highestBadge?.badge_image_url ? (
-                        <Image source={{ uri: highestBadge.badge_image_url }} style={styles.avatar} />
+                        <Image source={highestBadge.badge_image_url} style={styles.avatar} transition={200} />
                       ) : (
                         <LinearGradient colors={['#2A1F00', '#1A1200']} style={styles.avatarPlaceholder}>
                           <Ionicons name="trophy" size={36} color="#FFD700" />
@@ -385,8 +380,8 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* MY GYMS */}
-        {userGyms.length > 0 && (
+        {/* MY GYMS — only shown when user belongs to more than one gym */}
+        {userGyms.length > 1 && (
           <Animated.View entering={FadeInDown.delay(280).duration(400)}>
             <SectionLabel label={t('myGyms')} />
             <View style={styles.gymsGrid}>
@@ -399,7 +394,7 @@ export default function ProfileScreen() {
                 >
                   <BlurView intensity={30} tint="dark" style={[styles.gymCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
                     {gym.logo_url ? (
-                      <Image source={{ uri: gym.logo_url }} style={styles.gymLogo} />
+                      <Image source={gym.logo_url} style={styles.gymLogo} transition={200} />
                     ) : (
                       <View style={[styles.gymLogoPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
                         <Ionicons name="fitness" size={20} color={branding.primary} />
@@ -434,7 +429,7 @@ export default function ProfileScreen() {
                   {badges.slice(0, 4).map((badge, i) => (
                     <View key={badge.badge_id || i} style={styles.achieveBadge}>
                       {badge.badge_image_url ? (
-                        <Image source={{ uri: badge.badge_image_url }} style={styles.achieveBadgeImg} />
+                        <Image source={badge.badge_image_url} style={styles.achieveBadgeImg} transition={200} />
                       ) : (
                         <View style={[styles.achieveBadgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
                           <Ionicons name="trophy" size={18} color="#FFD700" />

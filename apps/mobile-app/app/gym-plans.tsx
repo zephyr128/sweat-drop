@@ -1,26 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 interface WorkoutPlan {
   id: string;
@@ -72,7 +65,7 @@ export default function GymPlansScreen() {
         .order('created_at', { ascending: false });
 
       if (plansError) {
-        console.error('[GymPlans] Error loading plans:', plansError);
+        log.error('[GymPlans] Error loading plans:', plansError);
         setLoading(false);
         return;
       }
@@ -90,7 +83,7 @@ export default function GymPlansScreen() {
 
       setPlans(transformedPlans);
     } catch (error) {
-      console.error('Error loading gym and plans:', error);
+      log.error('Error loading gym and plans:', error);
     } finally {
       setLoading(false);
     }
@@ -182,9 +175,10 @@ export default function GymPlansScreen() {
                       </View>
                       {plan.thumbnail_url && (
                         <Image
-                          source={{ uri: plan.thumbnail_url }}
+                          source={plan.thumbnail_url}
                           style={[styles.planThumbnail, { borderColor: hexToRgba(branding.primary, 0.15) }]}
-                          resizeMode="cover"
+                          contentFit="cover"
+                          transition={200}
                         />
                       )}
                     </View>

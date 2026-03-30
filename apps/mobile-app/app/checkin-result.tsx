@@ -9,16 +9,7 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown, ZoomIn, useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 
 const formatDistance = (m: number) => (m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`);
 

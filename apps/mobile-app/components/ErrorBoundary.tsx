@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { log } from '@/lib/logger';
 
 interface Props {
   children: React.ReactNode;
@@ -29,7 +30,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     } catch {
       // Sentry not available — fall through to console
     }
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+    log.error('[ErrorBoundary] Caught error:', error, errorInfo);
   }
 
   handleReset = () => {

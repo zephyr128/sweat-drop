@@ -90,7 +90,14 @@ module.exports = {
             ],
           ]
         : []),
-      '@sentry/react-native',
+      [
+        '@sentry/react-native',
+        {
+          organization: process.env.SENTRY_ORG || '',
+          project: process.env.SENTRY_PROJECT || '',
+          url: 'https://sentry.io/',
+        },
+      ],
     ],
     scheme: 'sweatdrop',
     extra: {

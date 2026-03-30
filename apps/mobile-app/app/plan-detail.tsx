@@ -6,21 +6,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import BackButton from '@/components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 interface WorkoutPlan {
   id: string;
@@ -84,7 +76,7 @@ export default function PlanDetailScreen() {
         .single();
 
       if (planError) {
-        console.error('[PlanDetail] Error loading plan:', planError);
+        log.error('[PlanDetail] Error loading plan:', planError);
         setLoading(false);
         return;
       }
@@ -100,7 +92,7 @@ export default function PlanDetailScreen() {
 
       setPlan({ ...planData, items: sortedItems });
     } catch (error) {
-      console.error('Error loading plan details:', error);
+      log.error('Error loading plan details:', error);
     } finally {
       setLoading(false);
     }
@@ -136,7 +128,7 @@ export default function PlanDetailScreen() {
           .single();
 
         if (subscribeError) {
-          console.error('Error subscribing to plan:', subscribeError);
+          log.error('Error subscribing to plan:', subscribeError);
           return;
         }
 
@@ -147,7 +139,7 @@ export default function PlanDetailScreen() {
       const currentPlanItem = plan?.items?.find((item) => item.order_index === currentExerciseIndex);
 
       if (!currentPlanItem) {
-        console.error('Current plan item not found for index:', currentExerciseIndex);
+        log.error('Current plan item not found for index:', currentExerciseIndex);
         return;
       }
 
@@ -161,7 +153,7 @@ export default function PlanDetailScreen() {
         },
       });
     } catch (error) {
-      console.error('Error subscribing:', error);
+      log.error('Error subscribing:', error);
     } finally {
       setSubscribing(false);
     }

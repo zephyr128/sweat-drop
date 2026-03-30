@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -73,7 +74,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         .or(`end_date.gte.${today},end_date.is.null`);
 
       if (challengesError) {
-        console.error('Error loading challenges:', challengesError);
+        log.error('Error loading challenges:', challengesError);
         if (isMountedRef.current) setError(challengesError.message);
         return;
       }
@@ -93,7 +94,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         .in('challenge_id', challengeIds);
 
       if (progressError) {
-        console.error('Error loading challenge progress:', progressError);
+        log.error('Error loading challenge progress:', progressError);
         if (isMountedRef.current) setError(progressError.message);
         return;
       }
@@ -175,7 +176,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         hasLoadedRef.current = true;
       }
     } catch (err: any) {
-      console.error('Error in loadChallenges:', err);
+      log.error('Error in loadChallenges:', err);
       if (isMountedRef.current) setError(err.message);
     } finally {
       if (isMountedRef.current) setLoading(false);
@@ -189,7 +190,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
     async (minutes: number) => {
       // Challenge progress is now automatically updated via award_drops() function
       // when drops are earned. This function is deprecated but kept for compatibility.
-      console.log('[useChallengeProgress] updateProgress called but challenge progress is now automatic via award_drops()');
+      log.debug('[useChallengeProgress] updateProgress called but challenge progress is now automatic via award_drops()');
       
       // Reload challenges to get updated progress
       await loadChallenges();

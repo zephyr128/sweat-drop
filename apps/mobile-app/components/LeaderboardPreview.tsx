@@ -6,8 +6,9 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
+import { log } from '@/lib/logger';
 
 interface LeaderboardEntry {
   user_id: string;
@@ -19,16 +20,6 @@ interface LeaderboardEntry {
 interface LeaderboardPreviewProps {
   gymId: string | null;
   isUnlocked: boolean;
-}
-
-// Helper function to add alpha to hex color
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(0, 229, 255, ${alpha})`;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 const RANK_ICONS = ['🥇', '🥈', '🥉'];
@@ -147,7 +138,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         setHasPrizes(!!count && count > 0);
       }
     } catch (err) {
-      console.error('[LeaderboardPreview] Error:', err);
+      log.error('[LeaderboardPreview] Error:', err);
     } finally {
       setLoading(false);
     }
