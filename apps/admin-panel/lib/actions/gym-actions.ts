@@ -890,3 +890,50 @@ async function sendOwnerInvitationEmail(invitation: Record<string, unknown>, gym
     logger.error('Error sending owner invitation email', { error, invitationId: invitation.id });
   }
 }
+
+// ── Working Hours ───────────────────────────────────────────────
+
+export type DayHours = { open: string; close: string };
+export type GymWorkingHours = {
+  mon?: DayHours | null;
+  tue?: DayHours | null;
+  wed?: DayHours | null;
+  thu?: DayHours | null;
+  fri?: DayHours | null;
+  sat?: DayHours | null;
+  sun?: DayHours | null;
+};
+
+export async function updateGymWorkingHours(
+  gymId: string,
+  workingHours: GymWorkingHours,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { success: false, error: 'Not authenticated' };
+    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    const { error } = await (supabaseAdmin.from('gyms') as any)
+      .update({
+        working_hours: workingHours,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', gymId);
+
+    if (error) throw error;
+
+    revalidatePath(`/dashboard/gym/${gymId}/settings`);
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to save working hours';
+    logger.error('updateGymWorkingHours failed', { gymId, error: msg });
+    return { success: false, error: msg };
+  }
+}

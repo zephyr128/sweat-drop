@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase-server';
 import { requireGymAccess } from '@/lib/auth-guard';
 import { getEconomyConfig } from '@/lib/actions/economy-actions';
 import { GymSetupTabs } from './GymSetupTabs';
+import type { GymWorkingHours } from '@/lib/actions/gym-actions';
 
 interface SettingsPageProps {
   params: Promise<{ id: string }>;
@@ -22,6 +23,7 @@ interface GymRow {
   lat: number | null;
   lng: number | null;
   gps_radius_m: number | null;
+  working_hours?: GymWorkingHours | null;
   [key: string]: unknown;
 }
 
@@ -95,6 +97,7 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
           gymRowCheckinDrops: typeof gym.checkin_drops === 'number' ? gym.checkin_drops : null,
         }}
         brandingData={brandingData}
+        workingHours={(gym.working_hours as GymWorkingHours) ?? null}
       />
     </div>
   );

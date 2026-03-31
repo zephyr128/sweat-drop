@@ -27,9 +27,11 @@ import {
   ShieldCheck,
   ScrollText,
   Megaphone,
+  ListTodo,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 import { getPendingRedemptionCount } from '@/lib/actions/redemption-actions';
+import { getPendingWaitlistCount } from '@/lib/actions/waitlist-actions';
 
 interface SidebarProps {
   role: UserRole;
@@ -44,6 +46,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
   const [gymIdFromStorage, setGymIdFromStorage] = useState<string | null>(null);
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [pendingRedemptionCount, setPendingRedemptionCount] = useState(0);
+  const [pendingWaitlistCount, setPendingWaitlistCount] = useState(0);
   
   const gymIdFromUrl = useMemo(() => {
     const match = pathname?.match(/^\/dashboard\/gym\/([^/]+)/);
@@ -72,6 +75,9 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     if (effectiveGymId && role === 'receptionist') {
       getPendingRedemptionCount(effectiveGymId).then(setPendingRedemptionCount);
     }
+    if (role === 'superadmin') {
+      getPendingWaitlistCount().then(setPendingWaitlistCount);
+    }
   }, [effectiveGymId, role]);
 
   const isActive = (path: string) => {
@@ -98,10 +104,15 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
     />
   );
 
+  // ── Nav types ────────────────────────────────────────────────────
+  type NavLink = { href: string; label: string; icon: LucideIcon; badge?: number; badgeColor?: 'cyan' | 'amber' };
+  type NavGroup = { title: string; items: NavLink[] };
+
   // ── SuperAdmin ──────────────────────────────────────────────────
-  const superadminLinks = [
+  const superadminLinks: NavLink[] = [
     { href: '/dashboard/super', label: 'Gyms', icon: Building2 },
     { href: '/dashboard/super/owners', label: 'Owners', icon: Users },
+    { href: '/dashboard/super/waitlist', label: 'Waitlist', icon: ListTodo, badge: pendingWaitlistCount, badgeColor: 'amber' },
     { href: '/dashboard/super/machines', label: 'Global Machines', icon: Cpu },
     { href: '/dashboard/super/achievements', label: 'Achievements', icon: Award },
     { href: '/dashboard/arenas', label: 'Arenas', icon: Swords },
@@ -111,9 +122,6 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
   ];
 
   // ── Gym Owner / Gym Admin (new IA) ──────────────────────────────
-  type NavLink = { href: string; label: string; icon: LucideIcon; badge?: number; badgeColor?: 'cyan' | 'amber' };
-  type NavGroup = { title: string; items: NavLink[] };
-
   const gymNavGroups = (gymId?: string | null): NavGroup[] => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [

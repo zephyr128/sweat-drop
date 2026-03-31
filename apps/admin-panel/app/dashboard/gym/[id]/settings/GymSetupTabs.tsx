@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Building2, MapPin, Palette } from 'lucide-react';
+import { Building2, MapPin, Palette, Clock, Camera } from 'lucide-react';
 import { GymGeneralForm } from '@/components/modules/GymGeneralForm';
 import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
 import { BrandingModule } from '@/components/modules/BrandingModule';
+import { WorkingHoursForm } from '@/components/forms/WorkingHoursForm';
+import { GymGalleryManager } from '@/components/modules/GymGalleryManager';
+import type { GymWorkingHours } from '@/lib/actions/gym-actions';
 
 interface GymSetupTabsProps {
   gymId: string;
@@ -33,15 +36,18 @@ interface GymSetupTabsProps {
     logo_url: string | null;
     background_url: string | null;
   } | null;
+  workingHours: GymWorkingHours | null;
 }
 
-const TABS = [
+const ALL_TABS = [
   { key: 'general', label: 'General', icon: Building2 },
+  { key: 'hours', label: 'Hours', icon: Clock },
+  { key: 'gallery', label: 'Gallery', icon: Camera },
   { key: 'location', label: 'Location & Check-in', icon: MapPin },
   { key: 'branding', label: 'Branding', icon: Palette },
 ] as const;
 
-type TabKey = (typeof TABS)[number]['key'];
+type TabKey = (typeof ALL_TABS)[number]['key'];
 
 export function GymSetupTabs({
   gymId,
@@ -50,22 +56,28 @@ export function GymSetupTabs({
   gymData,
   checkinData,
   brandingData,
+  workingHours,
 }: GymSetupTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
+  const showBranding = role === 'gym_owner' && brandingData !== null;
+  const visibleTabs = showBranding
+    ? ALL_TABS
+    : ALL_TABS.filter((t) => t.key !== 'branding');
+
   const initialTab = (searchParams.get('tab') as TabKey) || 'general';
   const [activeTab, setActiveTab] = useState<TabKey>(
-    TABS.some((t) => t.key === initialTab) ? initialTab : 'general'
+    visibleTabs.some((t) => t.key === initialTab) ? initialTab : 'general',
   );
 
   useEffect(() => {
     const tabParam = searchParams.get('tab') as TabKey;
-    if (tabParam && TABS.some((t) => t.key === tabParam)) {
+    if (tabParam && visibleTabs.some((t) => t.key === tabParam)) {
       setActiveTab(tabParam);
     }
-  }, [searchParams]);
+  }, [searchParams, visibleTabs]);
 
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
@@ -75,13 +87,10 @@ export function GymSetupTabs({
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  const showBranding = role === 'gym_owner' && brandingData !== null;
-  const visibleTabs = showBranding ? TABS : TABS.filter((t) => t.key !== 'branding');
-
   return (
     <div className="space-y-5">
       {/* Tab bar */}
-      <div className="flex gap-1 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-1">
+      <div className="flex gap-1 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-1 overflow-x-auto">
         {visibleTabs.map((tab) => {
           const active = activeTab === tab.key;
           const TabIcon = tab.icon;
@@ -89,7 +98,7 @@ export function GymSetupTabs({
             <button
               key={tab.key}
               onClick={() => handleTabChange(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex-1 justify-center whitespace-nowrap ${
                 active
                   ? 'bg-[#1A1A1A] text-white shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -105,6 +114,14 @@ export function GymSetupTabs({
       {/* Tab content */}
       {activeTab === 'general' && (
         <GymGeneralForm gymId={gymId} initialData={gymData} />
+      )}
+
+      {activeTab === 'hours' && (
+        <WorkingHoursForm gymId={gymId} initialData={workingHours} />
+      )}
+
+      {activeTab === 'gallery' && (
+        <GymGalleryManager gymId={gymId} />
       )}
 
       {activeTab === 'location' && (

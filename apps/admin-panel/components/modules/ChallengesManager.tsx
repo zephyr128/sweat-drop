@@ -157,7 +157,7 @@ export function ChallengesManager({ gymId, initialChallenges }: ChallengesManage
 
   const lifecycleInfo: Record<string, { text: string; icon: string }> = {
     daily: { text: 'Progress resets every day at midnight. Users can earn rewards repeatedly across the campaign window.', icon: '🔄' },
-    weekly: { text: 'Progress resets every Sunday. Users can earn rewards each week across the campaign window.', icon: '📅' },
+    weekly: { text: 'Progress resets every Monday at 00:00 (Belgrade). Users can earn rewards each week across the campaign window.', icon: '📅' },
     monthly: { text: 'One chance to complete within the month. Does not reset.', icon: '📆' },
     streak: { text: 'User must train on consecutive days within the time window. Streak resets if a day is missed.', icon: '🔥' },
     checkin_streak: { text: 'User must check in on consecutive days within the time window. Streak resets if a day is missed.', icon: '📍' },
