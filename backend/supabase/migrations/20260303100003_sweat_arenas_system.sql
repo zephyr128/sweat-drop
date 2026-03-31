@@ -120,21 +120,7 @@ CREATE POLICY "Gym owner can create local arenas"
     )
   );
 
--- Authenticated: can read active arenas for their gyms
-CREATE POLICY "Users can view active arenas for their gyms"
-  ON public.sweat_arenas FOR SELECT
-  USING (
-    is_active = true AND
-    (
-      arena_scope = 'network' OR
-      EXISTS (
-        SELECT 1 FROM public.arena_gyms ag
-        JOIN public.gym_memberships gm ON gm.gym_id = ag.gym_id
-        WHERE ag.arena_id = sweat_arenas.id
-          AND gm.user_id = auth.uid()
-      )
-    )
-  );
+-- NOTE: "Users can view active arenas" policy moved below arena_gyms creation (references it)
 
 -- ============================================================
 -- 2. arena_gyms TABLE (participating gyms)
@@ -151,6 +137,22 @@ CREATE TABLE IF NOT EXISTS public.arena_gyms (
 
 CREATE INDEX IF NOT EXISTS idx_arena_gyms_arena_id ON public.arena_gyms(arena_id);
 CREATE INDEX IF NOT EXISTS idx_arena_gyms_gym_id ON public.arena_gyms(gym_id);
+
+-- Deferred policy (was above, moved here because it references arena_gyms)
+CREATE POLICY "Users can view active arenas for their gyms"
+  ON public.sweat_arenas FOR SELECT
+  USING (
+    is_active = true AND
+    (
+      arena_scope = 'network' OR
+      EXISTS (
+        SELECT 1 FROM public.arena_gyms ag
+        JOIN public.gym_memberships gm ON gm.gym_id = ag.gym_id
+        WHERE ag.arena_id = sweat_arenas.id
+          AND gm.user_id = auth.uid()
+      )
+    )
+  );
 
 COMMENT ON TABLE public.arena_gyms IS
   'Participating gyms for each arena. Links arenas to gyms.';

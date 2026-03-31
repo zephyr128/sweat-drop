@@ -162,6 +162,8 @@ COMMENT ON COLUMN public.redemptions.source_type IS
 -- Must use LEFT JOIN so arena prizes (reward_id = NULL) still return data.
 -- Returns source_type and description for all redemption types.
 
+DROP FUNCTION IF EXISTS public.find_redemption_by_code(TEXT);
+
 CREATE OR REPLACE FUNCTION public.find_redemption_by_code(p_code TEXT)
 RETURNS TABLE(
   redemption_id UUID,

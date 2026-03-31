@@ -77,8 +77,7 @@ CREATE POLICY "Superadmin can delete global badges"
     )
   );
 
--- Comments
-COMMENT ON TABLE storage.buckets IS 'Storage buckets for Supabase Storage. global-achievement-badges bucket stores badge images for global achievements.';
+-- Note: COMMENT ON storage.buckets removed — requires table ownership not available on hosted Supabase
 
 -- Note: Public URL format:
 -- https://{supabase_project_id}.supabase.co/storage/v1/object/public/global-achievement-badges/{achievement_code}-badge.png
