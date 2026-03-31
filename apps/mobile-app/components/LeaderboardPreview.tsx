@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { PressableCard } from '@/components/PressableCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +25,7 @@ interface LeaderboardPreviewProps {
 }
 
 const RANK_ICONS = ['🥇', '🥈', '🥉'];
+const SHIMMER: [string, string] = ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)'];
 
 export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, isUnlocked }) => {
   const router = useRouter();
@@ -155,8 +158,9 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
-        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.28) }]}>
+        <View style={styles.card}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+            <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <View style={styles.row}>
               <Text style={[styles.username, { color: theme.colors.textSecondary }]}>Loading...</Text>
             </View>
@@ -172,8 +176,9 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
-        <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.28) }]}>
+        <View style={styles.card}>
           <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+            <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <View style={styles.row}>
               <Text style={[styles.username, { color: theme.colors.textSecondary }]}>{t('noLeaderboardData')}</Text>
             </View>
@@ -216,8 +221,13 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
       </View>
 
       {/* Leaderboard Card */}
-      <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.28) }]}>
+      <PressableCard
+        style={styles.card}
+        onPress={() => { if (isUnlocked) router.push('/leaderboard'); }}
+        disabled={!isUnlocked}
+      >
         <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+          <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           {topUsers.map((entry, index) => {
             const isMe = isCurrentUser(entry.user_id);
             return (
@@ -287,7 +297,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
             </>
           )}
         </BlurView>
-      </View>
+      </PressableCard>
 
       {/* Prize hint */}
       {hasPrizes && (
@@ -340,12 +350,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
   blurContainer: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
+    backgroundColor: 'rgba(12, 12, 22, 0.38)',
   },
   row: {
     flexDirection: 'row',

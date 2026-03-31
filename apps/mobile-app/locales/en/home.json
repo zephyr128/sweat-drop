@@ -122,7 +122,9 @@
     "streak_week": "Perfect week",
     "streak_fire": "On fire",
     "streak_unstoppable": "Unstoppable",
-    "streak_legend": "Legend"
+    "streak_legend": "Legend",
+    "drops": "DROPS",
+    "week": "This week"
   },
   "cards": {
     "checkedIn": "Checked in",

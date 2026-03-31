@@ -61,5 +61,15 @@
   "myGyms": "MY GYMS",
   "homeGymBadge": "HOME",
   "achievements": "ACHIEVEMENTS",
-  "viewTrophyRoom": "View Trophy Room →"
+  "viewTrophyRoom": "View Trophy Room →",
+  "notVerified": "Not verified",
+  "verifiedBadge": "Verified",
+  "verification": {
+    "title": "Identity Verification",
+    "subtitle": "Verify your membership at the front desk to unlock reward redemptions.",
+    "step1": "Visit the reception desk at your gym",
+    "step2": "Show your member ID or introduce yourself",
+    "step3": "Staff will verify your profile — takes under a minute",
+    "oneTimeNote": "One-time per gym. You'll never need to do this again."
+  }
 }

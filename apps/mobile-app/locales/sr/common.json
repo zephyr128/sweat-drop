@@ -33,5 +33,6 @@
   "daysLeft_few": "{{count}} dana preostalo",
   "daysLeft_other": "{{count}} dana preostalo",
   "user": "Korisnik",
-  "noInternet": "Nema internet konekcije"
+  "noInternet": "Nema internet konekcije",
+  "gotIt": "Važi"
 }

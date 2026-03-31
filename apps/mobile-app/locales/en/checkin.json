@@ -19,5 +19,6 @@
   "homeCardDone": "Checked in today",
   "homeCardDrops": "+{{drops}} drops",
   "welcomeTo": "Welcome to",
-  "gymSetAsHome": "This gym is now your home gym"
+  "gymSetAsHome": "This gym is now your home gym",
+  "startingWorkout": "Starting workout..."
 }

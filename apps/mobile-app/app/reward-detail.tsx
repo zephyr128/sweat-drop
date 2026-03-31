@@ -57,6 +57,7 @@ export default function RewardDetailScreen() {
   const [claimed, setClaimed] = useState(false);
   const [redemptionStatus, setRedemptionStatus] = useState<'pending' | 'confirmed' | null>(null);
   const [lastCode, setLastCode] = useState<string | null>(null);
+  const [isVerified, setIsVerified] = useState<boolean | null>(null);
 
   const loadReward = useCallback(async () => {
     if (!rewardId) return;
@@ -116,9 +117,21 @@ export default function RewardDetailScreen() {
     }
   }, [session?.user, rewardId, activeGymId, reward]);
 
+  const checkVerification = useCallback(async () => {
+    if (!session?.user || !activeGymId) return;
+    const { data } = await supabase
+      .from('gym_member_identities')
+      .select('is_verified')
+      .eq('user_id', session.user.id)
+      .eq('gym_id', activeGymId)
+      .maybeSingle();
+    setIsVerified(data?.is_verified === true);
+  }, [session?.user?.id, activeGymId]);
+
   useEffect(() => {
     loadReward();
     refreshLocalDrops();
+    checkVerification();
   }, [rewardId]);
 
   useEffect(() => {
@@ -182,6 +195,8 @@ export default function RewardDetailScreen() {
           showModal({ title: t('common:error'), body: t('fraudBlocked') });
         } else if (kind === 'rate_limited') {
           showModal({ title: t('common:error'), body: t('rateLimited') });
+        } else if (kind === 'verification_required') {
+          showModal({ title: t('verificationRequired'), body: t('verificationRequiredBody'), buttons: [{ label: t('common:gotIt'), style: 'cancel' as const }] });
         } else {
           showModal({ title: t('common:error'), body: error.message });
         }
@@ -199,6 +214,7 @@ export default function RewardDetailScreen() {
           kind === 'temporarily_unavailable' ? t('temporarilyUnavailable') :
           kind === 'fraud_blocked' ? t('fraudBlocked') :
           kind === 'rate_limited' ? t('rateLimited') :
+          kind === 'verification_required' ? t('verificationRequiredBody') :
           (data?.[0]?.error_message || t('redemptionFailed'));
         showModal({ title: t('redemptionFailed'), body: errorBody });
         setClaiming(false);
@@ -219,6 +235,14 @@ export default function RewardDetailScreen() {
 
   const confirmRedeem = () => {
     if (!reward) return;
+    if (isVerified === false) {
+      showModal({
+        title: t('verificationRequired'),
+        body: t('verificationRequiredBody'),
+        buttons: [{ label: t('common:gotIt'), style: 'cancel' as const }],
+      });
+      return;
+    }
     showModal({
       title: t('redeemReward'),
       body: t('redeemConfirm', { name: reward.name, price: reward.price_drops }),
@@ -390,6 +414,23 @@ export default function RewardDetailScreen() {
                     <Text style={[styles.infoValue, { color: branding.primary }]}>
                       {limitLabel}
                     </Text>
+                  </View>
+                </>
+              )}
+
+              {/* Verification status — only shown when not verified */}
+              {isVerified === false && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoLabel}>
+                      <Ionicons name="shield-outline" size={18} color="#fbbf24" />
+                      <Text style={styles.infoLabelText}>{t('verificationStatus')}</Text>
+                    </View>
+                    <View style={styles.verificationBadge}>
+                      <Ionicons name="alert-circle" size={13} color="#fbbf24" />
+                      <Text style={styles.verificationBadgeText}>{t('notVerified')}</Text>
+                    </View>
                   </View>
                 </>
               )}
@@ -641,6 +682,21 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.06)',
     marginVertical: 10,
+  },
+  verificationBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(251, 191, 36, 0.10)',
+  },
+  verificationBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    color: '#fbbf24',
+    letterSpacing: 0.2,
   },
   needMoreBanner: {
     flexDirection: 'row',

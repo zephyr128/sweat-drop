@@ -88,38 +88,51 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
         }
       }
 
-      // Fetch today's/week's rewarded session history
+      // Fetch today's/week's rewarded session history (for session-count cap)
       const todayStr = getBelgradeDateString(new Date());
       const weekStart = new Date();
       const dayOfWeek = weekStart.getDay();
       const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       weekStart.setDate(weekStart.getDate() - weekOffset);
+      weekStart.setHours(0, 0, 0, 0);
       const weekStartStr = weekStart.toISOString().slice(0, 10);
 
-      const { data: sessions } = await supabase
+      // Session count (for per-session cap) — still from sessions table
+      const { data: sessionRows } = await supabase
         .from('sessions')
-        .select('started_at, drops_earned')
+        .select('started_at')
         .eq('user_id', authSession.user.id)
         .eq('is_active', false)
         .gt('drops_earned', 0)
-        .gte('started_at', `${weekStartStr}T00:00:00Z`)
+        .gte('started_at', weekStart.toISOString())
         .order('started_at', { ascending: false })
         .limit(50);
 
       let rewardedToday = 0;
+      for (const row of sessionRows ?? []) {
+        const dateStr = getBelgradeDateString(new Date(row.started_at));
+        if (dateStr === todayStr) rewardedToday += 1;
+      }
+
+      // Drop totals — from drops_transactions so all sources are included
+      const EARNED_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data: txRows } = await supabase
+        .from('drops_transactions')
+        .select('created_at, amount')
+        .eq('user_id', authSession.user.id)
+        .in('transaction_type', EARNED_TYPES)
+        .gt('amount', 0)
+        .gte('created_at', weekStart.toISOString());
+
       let dropsToday = 0;
       let dropsWeek = 0;
-
-      for (const row of sessions ?? []) {
-        const dateStr = getBelgradeDateString(new Date(row.started_at));
-        const earned = row.drops_earned ?? 0;
-        if (dateStr === todayStr) {
-          rewardedToday += 1;
-          dropsToday += earned;
-        }
-        if (dateStr >= weekStartStr) {
-          dropsWeek += earned;
-        }
+      for (const row of txRows ?? []) {
+        const a = row.amount ?? 0;
+        dropsWeek += a;
+        if (new Date(row.created_at) >= todayStart) dropsToday += a;
       }
 
       const sessionsRemaining = Math.max(0, maxSession - rewardedToday);

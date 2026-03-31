@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { fontStyles, hexToRgba } from '@/lib/theme';
+import { PressableCard } from '@/components/PressableCard';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -79,8 +81,15 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
 }) => {
   const maxDrops = Math.max(...data.map((d) => d.drops), 1);
 
-  const content = (
-    <>
+  const inner = (
+    <BlurView intensity={50} tint="dark" style={styles.blur}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       {/* Header */}
       <View style={styles.headerRow}>
         <Text style={styles.title}>This Week</Text>
@@ -89,53 +98,45 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
         </Text>
       </View>
 
-        {/* Bars */}
-        <View style={styles.chartRow}>
-          {data.map((d, i) => {
-            const pct = d.drops > 0 ? Math.max((d.drops / maxDrops) * 100, 8) : 0;
-            return (
-              <View key={d.day} style={styles.barCol}>
-                <View style={styles.barContainer}>
-                  <AnimatedBar
-                    heightPercent={pct}
-                    isActive={d.drops > 0}
-                    isToday={d.isToday}
-                    brandPrimary={brandPrimary}
-                    delay={i * 60}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.dayLabel,
-                    d.isToday && { color: brandPrimary, ...fontStyles.bodySemiBold },
-                  ]}
-                >
-                  {d.day}
-                </Text>
+      {/* Bars */}
+      <View style={styles.chartRow}>
+        {data.map((d, i) => {
+          const pct = d.drops > 0 ? Math.max((d.drops / maxDrops) * 100, 8) : 0;
+          return (
+            <View key={d.day} style={styles.barCol}>
+              <View style={styles.barContainer}>
+                <AnimatedBar
+                  heightPercent={pct}
+                  isActive={d.drops > 0}
+                  isToday={d.isToday}
+                  brandPrimary={brandPrimary}
+                  delay={i * 60}
+                />
               </View>
-            );
-          })}
-        </View>
-    </>
+              <Text
+                style={[
+                  styles.dayLabel,
+                  d.isToday && { color: brandPrimary, ...fontStyles.bodySemiBold },
+                ]}
+              >
+                {d.day}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </BlurView>
   );
 
   if (onPress) {
     return (
-      <TouchableOpacity style={styles.wrapper} onPress={onPress} activeOpacity={0.8}>
-        <BlurView intensity={50} tint="dark" style={styles.blur}>
-          {content}
-        </BlurView>
-      </TouchableOpacity>
+      <PressableCard style={styles.wrapper} onPress={onPress}>
+        {inner}
+      </PressableCard>
     );
   }
 
-  return (
-    <View style={styles.wrapper}>
-      <BlurView intensity={50} tint="dark" style={styles.blur}>
-        {content}
-      </BlurView>
-    </View>
-  );
+  return <View style={styles.wrapper}>{inner}</View>;
 };
 
 /* ── Styles ───────────────────────────────────────── */
@@ -143,13 +144,16 @@ const styles = StyleSheet.create({
   wrapper: {
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: 'rgba(12, 12, 22, 0.38)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
     marginBottom: 24,
   },
   blur: {
     padding: 16,
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   headerRow: {
     flexDirection: 'row',

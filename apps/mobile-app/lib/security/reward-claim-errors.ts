@@ -6,11 +6,13 @@ export type RewardClaimErrorKind =
   | 'fraud_blocked'
   | 'rate_limited'
   | 'temporarily_unavailable'
+  | 'verification_required'
   | 'unknown';
 
 export function classifyRewardClaimError(message?: string | null): RewardClaimErrorKind {
   const msg = (message || '').toLowerCase();
   if (!msg) return 'unknown';
+  if (msg.includes('verification_required') || msg.includes('verification required')) return 'verification_required';
   if (msg.includes('already claimed') || msg.includes('once')) return 'limit_once';
   if (msg.includes('daily')) return 'limit_daily';
   if (msg.includes('weekly')) return 'limit_weekly';

@@ -56,5 +56,10 @@
   "limitMonthlyReached": "Monthly reward limit reached. Try next month.",
   "fraudBlocked": "Claim blocked by anti-abuse protection.",
   "rateLimited": "Too many claim attempts. Please wait and try again.",
-  "temporarilyUnavailable": "This reward is temporarily unavailable. Please contact gym staff."
+  "temporarilyUnavailable": "This reward is temporarily unavailable. Please contact gym staff.",
+  "verificationRequired": "Verification Required",
+  "verificationRequiredBody": "Please visit the reception desk to verify your identity. This is a one-time step required before claiming rewards.",
+  "notVerified": "Not verified",
+  "verified": "Verified",
+  "verificationStatus": "Verification"
 }

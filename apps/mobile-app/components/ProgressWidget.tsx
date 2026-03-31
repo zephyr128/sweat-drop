@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { PressableCard } from '@/components/PressableCard';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -93,16 +94,15 @@ export const ProgressWidget: React.FC = () => {
   const pct = Math.round(progressPercent);
 
   return (
-    <TouchableOpacity
+    <PressableCard
       style={styles.outer}
       onPress={() => router.push('/trophy-room')}
-      activeOpacity={0.85}
     >
       <BlurView intensity={50} tint="dark" style={styles.blur}>
         <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']}
+          colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          end={{ x: 0, y: 1 }}
           style={styles.gradient}
         >
           {/* Circular badge */}
@@ -151,7 +151,7 @@ export const ProgressWidget: React.FC = () => {
           <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.25)" style={styles.chevron} />
         </LinearGradient>
       </BlurView>
-    </TouchableOpacity>
+    </PressableCard>
   );
 };
 
@@ -161,7 +161,10 @@ const styles = StyleSheet.create({
   outer: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
     overflow: 'hidden',
     marginBottom: 24,
   },
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
+    backgroundColor: 'rgba(12, 12, 22, 0.38)',
   },
   gradient: {
     flex: 1,

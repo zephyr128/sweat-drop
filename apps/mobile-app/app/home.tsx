@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
@@ -22,6 +22,7 @@ import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba} from '@/lib/t
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { LockedOverlay } from '@/components/LockedOverlay';
 import { ProgressWidget } from '@/components/ProgressWidget';
+import { PressableCard } from '@/components/PressableCard';
 import { ActivityRings } from '@/components/ActivityRings';
 import { StatsCards } from '@/components/StatsCards';
 import { LeaderboardPreview } from '@/components/LeaderboardPreview';
@@ -57,7 +58,7 @@ export default function HomeScreen() {
   const { getActiveGymId, homeGymId, previewGymId } = useGymStore();
   const { updateHomeGym, loadActiveGym } = useGymData();
   const activeGymId = getActiveGymId();
-  const { refreshLocalDrops } = useLocalDrops(activeGymId);
+  const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   
   // Fade-in animation for smooth transition from splash
   const fadeOpacity = useSharedValue(0);
@@ -75,12 +76,16 @@ export default function HomeScreen() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showWaitlist, setShowWaitlist] = useState(false);
+  const [ringFocusKey, setRingFocusKey] = useState(0);
+  // Stable ref to the setter so the useFocusEffect below has an empty dep array
+  const setRingFocusKeyRef = useRef(setRingFocusKey);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);
 
   // Available arenas
   const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
+  const activeArenas = availableArenas ? availableArenas.filter(a => a.arena_status !== 'ended') : [];
 
   // Happy Hour — upcoming windows card
   const upcomingHH = useUpcomingHappyHours(activeGymId);
@@ -252,6 +257,14 @@ export default function HomeScreen() {
       refreshArenas,
       userRank,
     ])
+  );
+
+  // Separate useFocusEffect with empty deps so incrementing ringFocusKey
+  // never causes the main useFocusEffect above to re-run (infinite loop fix).
+  useFocusEffect(
+    useCallback(() => {
+      setRingFocusKeyRef.current((k) => k + 1);
+    }, [])
   );
 
   // ── Available gyms (for empty state) ──
@@ -672,36 +685,12 @@ export default function HomeScreen() {
           <Text style={styles.username}>{profile?.username || t('common:user')}</Text>
         </TouchableOpacity>
 
-        <View style={styles.headerRight}>
-          {activeGym && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: activeGymId } })}
-              style={styles.gymHeaderChip}
-            >
-              <Animated.View entering={FadeIn.duration(400)} style={styles.gymHeaderChipInner}>
-                <View
-                  style={[
-                    styles.gymLogoRing,
-                    { borderColor: branding.primary, backgroundColor: hexToRgba(branding.primary, 0.08) },
-                  ]}
-                >
-                  {activeGym.logo_url ? (
-                    <Image source={activeGym.logo_url} style={styles.gymLogoThumb} contentFit="contain" transition={200} />
-                  ) : (
-                    <Ionicons name="fitness" size={16} color={branding.primary} />
-                  )}
-                </View>
-                <Text style={styles.gymNameText} numberOfLines={1}>
-                  {activeGym.name}
-                </Text>
-                {(activeGym as any).is_founding_partner && (
-                  <View style={styles.foundingChip}>
-                    <Ionicons name="star" size={8} color="#FFD700" />
-                  </View>
-                )}
-              </Animated.View>
-            </TouchableOpacity>
+        {/* Gym logo — top right */}
+        <View style={[styles.gymLogoContainer, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
+          {activeGym?.logo_url ? (
+            <Image source={activeGym.logo_url} style={styles.gymLogoImage} contentFit="contain" transition={200} />
+          ) : (
+            <Ionicons name="fitness" size={20} color={hexToRgba(branding.primary, 0.7)} />
           )}
         </View>
       </View>
@@ -725,29 +714,39 @@ export default function HomeScreen() {
         {/* ═══════════════════════════════════════════ */}
         <View style={styles.heroSection}>
           <ActivityRings
-            currentRank={userRank.rank}
-            totalMembers={userRank.totalMembers}
             streakDays={homeStats.streak}
             todayDrops={homeStats.todayDrops}
             todayBonusDrops={homeStats.todayBonusDrops}
             dailyCap={dropLimits.maxDropsPerDay}
-            size={240}
-            onPress={() => router.push('/stats')}
+            weeklyDrops={dropLimits.mintedWeek}
+            weeklyCap={dropLimits.maxDropsPerWeek}
+            totalGymDrops={localDrops}
+            size={290}
+            focusKey={ringFocusKey}
+            onPress={() => router.push('/wallet')}
           />
-          <Text style={[styles.heroGymName, { color: hexToRgba(branding.primary, 0.6) }]}>
-            {activeGym?.name || ''}
-          </Text>
+          {activeGym && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: activeGymId } })}
+            >
+              <Text style={[styles.heroGymName, { color: hexToRgba(branding.primary, 0.6) }]}>
+                {activeGym.name}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ═══════════════════════════════════════════ */}
         {/* STATS CARDS + REWARD + HAPPY HOUR            */}
         {/* ═══════════════════════════════════════════ */}
         <StatsCards
-          currentRank={userRank.rank}
           streakDays={homeStats.streak}
           todayDrops={homeStats.todayDrops}
           todayBonusDrops={homeStats.todayBonusDrops}
           dailyCap={dropLimits.maxDropsPerDay}
+          weeklyDrops={dropLimits.mintedWeek}
+          weeklyCap={dropLimits.maxDropsPerWeek}
           primaryColor={branding.primary}
           isCheckedIn={checkinStatus?.already_checked_in ?? false}
           gymName={activeGym?.name ?? ''}
@@ -773,9 +772,9 @@ export default function HomeScreen() {
           })()}
           isHappyHourActive={!!upcomingHH.liveWindow}
           onHappyHourPress={() => router.push('/happy-hours' as any)}
-          onRankPress={() => router.push('/leaderboard')}
           onStreakPress={() => router.push('/workout-history')}
-          onDropsPress={() => router.push('/wallet')}
+          onTodayPress={() => router.push('/stats?period=today' as any)}
+          onWeeklyPress={() => router.push('/stats?period=week' as any)}
         />
 
         {/* ═══════════════════════════════════════════ */}
@@ -813,24 +812,30 @@ export default function HomeScreen() {
           {/* INVITE FRIEND CTA                            */}
           {/* ═══════════════════════════════════════════ */}
           {session?.user && isUnlocked && (
-            <TouchableOpacity
-              style={[styles.inviteCta, { borderColor: hexToRgba(branding.primary, 0.28) }]}
+            <PressableCard
+              style={styles.inviteCta}
               onPress={() => router.push('/invite-friend')}
-              activeOpacity={0.8}
             >
               <BlurView intensity={50} tint="dark" style={styles.inviteCtaBlur}>
-                <View style={[styles.inviteCtaIcon, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="person-add" size={20} color={branding.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.inviteCtaTitle}>{t('friendsQuick.inviteTitle')}</Text>
-                  <Text style={[styles.inviteCtaSub, { color: branding.primary }]}>
-                    {t('friendsQuick.inviteReward')}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.inviteCtaGradient}
+                >
+                  <View style={[styles.inviteCtaIcon, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                    <Ionicons name="person-add" size={20} color={branding.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.inviteCtaTitle}>{t('friendsQuick.inviteTitle')}</Text>
+                    <Text style={[styles.inviteCtaSub, { color: branding.primary }]}>
+                      {t('friendsQuick.inviteReward')}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
+                </LinearGradient>
               </BlurView>
-            </TouchableOpacity>
+            </PressableCard>
           )}
 
           {/* ═══════════════════════════════════════════ */}
@@ -853,11 +858,16 @@ export default function HomeScreen() {
                     key={`skeleton-${index}`}
                     style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
                   >
-                    <View style={[styles.challengeCardSkeleton, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
+                    <View style={[styles.challengeCardSkeleton, {
+                      borderTopColor: hexToRgba(branding.primary, 0.22),
+                      borderLeftColor: hexToRgba(branding.primary, 0.10),
+                      borderRightColor: hexToRgba(branding.primary, 0.06),
+                      borderBottomColor: hexToRgba(branding.primary, 0.04),
+                    }]}>
                       <LinearGradient
-                        colors={[hexToRgba(branding.primary, 0.04), hexToRgba(branding.primary, 0.02), 'rgba(15, 15, 30, 1)']}
+                        colors={['rgba(255,255,255,0.08)', hexToRgba(branding.primary, 0.05), 'rgba(12,12,22,0.0)']}
                         start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                        end={{ x: 0, y: 1 }}
                         style={styles.challengeGradient}
                       >
                         <View style={styles.challengeContent}>
@@ -1000,8 +1010,16 @@ export default function HomeScreen() {
                       key={challenge.challenge_id}
                       style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
                     >
-                      <TouchableOpacity
-                        style={[styles.challengeCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                      <PressableCard
+                        style={[
+                          styles.challengeCard,
+                          {
+                            borderTopColor: hexToRgba(branding.primary, 0.30),
+                            borderLeftColor: hexToRgba(branding.primary, 0.14),
+                            borderRightColor: hexToRgba(branding.primary, 0.08),
+                            borderBottomColor: hexToRgba(branding.primary, 0.06),
+                          },
+                        ]}
                         onPress={() => {
                           if (!isUnlocked) return;
                           router.push({
@@ -1009,14 +1027,13 @@ export default function HomeScreen() {
                             params: { challengeId: challenge.challenge_id, gymId: activeGymId || '' },
                           });
                         }}
-                        activeOpacity={isUnlocked ? 0.9 : 1}
                         disabled={!isUnlocked}
                       >
-                        <BlurView intensity={50} tint="dark" style={styles.challengeBlur}>
+                        <BlurView intensity={40} tint="dark" style={styles.challengeBlur}>
                           <LinearGradient
-                            colors={[hexToRgba(branding.primary, 0.06), 'rgba(20, 20, 35, 0.9)', hexToRgba(branding.primary, 0.03)]}
+                            colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.07), 'rgba(12,12,22,0.0)']}
                             start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
+                            end={{ x: 0, y: 1 }}
                             style={styles.challengeGradient}
                           >
                             <View style={styles.challengeContent}>
@@ -1099,7 +1116,7 @@ export default function HomeScreen() {
                             </View>
                           </LinearGradient>
                         </BlurView>
-                      </TouchableOpacity>
+                      </PressableCard>
                     </View>
                   );
                 })}
@@ -1127,13 +1144,13 @@ export default function HomeScreen() {
             <View style={styles.challengesSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>{t('arenas')}</Text>
-                {availableArenas && availableArenas.length > 0 && (
+                {activeArenas.length > 0 && (
                   <TouchableOpacity onPress={() => router.push('/arenas')} activeOpacity={0.7}>
                     <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('viewAll')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
-              {availableArenas && availableArenas.length > 0 ? (
+              {activeArenas.length > 0 ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -1143,7 +1160,7 @@ export default function HomeScreen() {
                   snapToAlignment="start"
                   decelerationRate="fast"
                 >
-                  {availableArenas.slice(0, 5).map((arena) => {
+                  {activeArenas.slice(0, 5).map((arena) => {
                     const isUpcoming = arena.arena_status === 'upcoming';
                     const targetDate = isUpcoming ? new Date(arena.start_date) : new Date(arena.end_date);
                     const daysLeft = Math.max(0, Math.ceil((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
@@ -1157,16 +1174,23 @@ export default function HomeScreen() {
 
                     return (
                       <View key={arena.arena_id} style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-                        <TouchableOpacity
-                          style={[styles.challengeCard, { borderColor: hexToRgba(arenaPrimary, isUpcoming ? 0.25 : 0.15) }]}
+                        <PressableCard
+                          style={[
+                            styles.challengeCard,
+                            {
+                              borderTopColor: hexToRgba(arenaPrimary, isUpcoming ? 0.38 : 0.28),
+                              borderLeftColor: hexToRgba(arenaPrimary, 0.14),
+                              borderRightColor: hexToRgba(arenaPrimary, 0.08),
+                              borderBottomColor: hexToRgba(arenaPrimary, 0.06),
+                            },
+                          ]}
                           onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
-                          activeOpacity={0.9}
                         >
-                          <BlurView intensity={50} tint="dark" style={styles.challengeBlur}>
+                          <BlurView intensity={40} tint="dark" style={styles.challengeBlur}>
                             <LinearGradient
-                              colors={[hexToRgba(arenaPrimary, 0.08), arenaGradientEnd, hexToRgba(arenaPrimary, 0.04)]}
+                              colors={['rgba(255,255,255,0.10)', hexToRgba(arenaPrimary, 0.10), arenaGradientEnd]}
                               start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 1 }}
+                              end={{ x: 0, y: 1 }}
                               style={styles.challengeGradient}
                             >
                               <View style={styles.challengeContent}>
@@ -1231,18 +1255,32 @@ export default function HomeScreen() {
                               </View>
                             </LinearGradient>
                           </BlurView>
-                        </TouchableOpacity>
+                        </PressableCard>
                       </View>
                     );
                   })}
                 </ScrollView>
               ) : (
-                <TouchableOpacity
-                  style={[styles.arenaEmptyState, { borderColor: hexToRgba(branding.primary, 0.28) }]}
+                <PressableCard
+                  style={[
+                    styles.arenaEmptyState,
+                    {
+                      borderTopColor: hexToRgba(branding.primary, 0.30),
+                      borderLeftColor: hexToRgba(branding.primary, 0.12),
+                      borderRightColor: hexToRgba(branding.primary, 0.08),
+                      borderBottomColor: hexToRgba(branding.primary, 0.06),
+                    },
+                  ]}
                   onPress={() => router.push('/arenas')}
-                  activeOpacity={0.8}
                 >
-                  <BlurView intensity={50} tint="dark" style={styles.arenaEmptyBlur}>
+                  <BlurView intensity={40} tint="dark" style={styles.arenaEmptyBlur}>
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.07), 'rgba(12,12,22,0.0)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
                     <View style={[styles.arenaEmptyIcon, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
                       <Ionicons name="trophy-outline" size={28} color={branding.primary} />
                     </View>
@@ -1254,7 +1292,7 @@ export default function HomeScreen() {
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
                   </BlurView>
-                </TouchableOpacity>
+                </PressableCard>
               )}
             </View>
           )}
@@ -1317,16 +1355,18 @@ export default function HomeScreen() {
           <View style={styles.bottomCardsRow}>
             {/* Rewards Store Card */}
             <View style={styles.featureCardWrapper}>
-              <TouchableOpacity
-                style={[styles.featureCard, { borderColor: hexToRgba(branding.primary, 0.28) }]}
-                onPress={() => {
-                  if (!isUnlocked) return;
-                  router.push('/store');
-                }}
-                activeOpacity={isUnlocked ? 0.9 : 1}
+              <PressableCard
+                style={styles.featureCard}
+                onPress={() => router.push('/store')}
                 disabled={!isUnlocked}
               >
                 <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
+                  />
                   <View style={styles.cardHeader}>
                     <Ionicons name="gift-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
                     <Text style={styles.cardTitle}>{t('rewardsStore')}</Text>
@@ -1344,21 +1384,23 @@ export default function HomeScreen() {
                     <Ionicons name="arrow-forward" size={16} color={branding.primary} />
                   </View>
                 </BlurView>
-              </TouchableOpacity>
+              </PressableCard>
             </View>
 
             {/* Trophy Room Card */}
             <View style={styles.featureCardWrapper}>
-              <TouchableOpacity
-                style={[styles.featureCard, { borderColor: hexToRgba(branding.primary, 0.28) }]}
-                onPress={() => {
-                  if (!isUnlocked) return;
-                  router.push('/trophy-room');
-                }}
-                activeOpacity={isUnlocked ? 0.9 : 1}
+              <PressableCard
+                style={styles.featureCard}
+                onPress={() => router.push('/trophy-room')}
                 disabled={!isUnlocked}
               >
                 <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
+                  />
                   <View style={styles.cardHeader}>
                     <Ionicons name="trophy-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
                     <Text style={styles.cardTitle}>{t('trophyRoom')}</Text>
@@ -1376,7 +1418,7 @@ export default function HomeScreen() {
                     <Ionicons name="arrow-forward" size={16} color={branding.primary} />
                   </View>
                 </BlurView>
-              </TouchableOpacity>
+              </PressableCard>
             </View>
           </View>
         </View>
@@ -1436,17 +1478,23 @@ const styles = StyleSheet.create({
     paddingBottom: 140,
   },
   inviteCta: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
     overflow: 'hidden' as const,
     marginBottom: 24,
   },
   inviteCtaBlur: {
+    backgroundColor: 'rgba(12, 12, 22, 0.38)',
+  },
+  inviteCtaGradient: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     padding: 14,
     gap: 12,
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   inviteCtaIcon: {
     width: 40,
@@ -1490,12 +1538,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
   avatarContainer: {
     width: 40,
     height: 40,
@@ -1516,57 +1558,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   username: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
+    ...fontStyles.heading,
+    fontSize: 17,
     color: '#FFFFFF',
     letterSpacing: 0.3,
     flexShrink: 1,
     flexWrap: 'wrap',
   },
-  gymHeaderChip: {
-    maxWidth: 200,
-  },
-  gymHeaderChipInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  gymLogoContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 22,
-    paddingLeft: 5,
-    paddingRight: 12,
-    paddingVertical: 4,
-  },
-  gymLogoRing: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     overflow: 'hidden',
+    flexShrink: 0,
   },
-  gymLogoThumb: {
-    width: 28,
-    height: 28,
-  },
-  gymNameText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 13,
-    color: appTheme.colors.textSecondary,
-    letterSpacing: 0.3,
-    flexShrink: 1,
-    maxWidth: 132,
-  },
-  foundingChip: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 2,
+  gymLogoImage: {
+    width: '100%',
+    height: '100%',
   },
   /* ─── Hero Section ──────────────────────── */
   heroSection: {
@@ -1635,13 +1647,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: '100%',
     width: '100%',
+    backgroundColor: 'rgba(12, 12, 22, 0.42)',
   },
   challengeBlur: {
     borderRadius: 16,
     overflow: 'hidden',
     height: '100%',
     width: '100%',
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   challengeCardSkeleton: {
     width: '100%',
@@ -1650,6 +1662,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     opacity: 0.6,
     borderWidth: 1,
+    backgroundColor: 'rgba(12, 12, 22, 0.42)',
   },
   challengeGradient: {
     borderRadius: 16,
@@ -1812,9 +1825,9 @@ const styles = StyleSheet.create({
   },
   arenaEmptyState: {
     borderRadius: 16,
-    borderWidth: 1,
     overflow: 'hidden',
-    marginHorizontal: 0,
+    borderWidth: 1,
+    backgroundColor: 'rgba(12, 12, 22, 0.42)',
   },
   arenaEmptyBlur: {
     flexDirection: 'row',
@@ -1822,7 +1835,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 18,
     gap: 12,
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
   arenaEmptyIcon: {
     width: 44,
@@ -1946,7 +1958,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    backgroundColor: 'transparent',
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
     height: '100%',
   },
   featureCardBlur: {
@@ -1956,7 +1971,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     height: '100%',
     overflow: 'hidden',
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
+    backgroundColor: 'rgba(12, 12, 22, 0.38)',
   },
   cardHeader: {
     marginBottom: 8,
@@ -2060,9 +2075,11 @@ const es = StyleSheet.create({
     fontSize: 20,
   },
   username: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
-    color: '#FFFFFF',
+    ...fontStyles.number,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
 
   /* ── Drops Hero (dimmed preview) ── */

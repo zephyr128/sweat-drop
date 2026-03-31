@@ -197,7 +197,7 @@ export function useHomeStats(gymId: string | null) {
         }
       }
 
-      // ── 5. Weekly activity (last 7 days) ──────────
+      // ── 5. Weekly activity (all drop sources, Mon–Sun) ──────────
       const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
       // Calculate Monday of this week
@@ -206,23 +206,23 @@ export function useHomeStats(gymId: string | null) {
       monday.setDate(now.getDate() + diffToMonday);
       monday.setHours(0, 0, 0, 0);
 
-      const { data: weekSessions } = await supabase
-        .from('sessions')
-        .select('started_at, drops_earned')
+      const { data: weekTx } = await supabase
+        .from('drops_transactions')
+        .select('created_at, amount')
         .eq('user_id', userId)
-        .eq('is_active', false)
-        .gte('started_at', monday.toISOString())
-        .order('started_at', { ascending: true });
+        .gt('amount', 0)
+        .gte('created_at', monday.toISOString())
+        .in('transaction_type', ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward']);
 
       // Group by day index (0=Mon, 6=Sun)
       const dailyDrops: number[] = [0, 0, 0, 0, 0, 0, 0];
-      if (weekSessions) {
-        for (const s of weekSessions) {
-          if (s.started_at) {
-            const d = new Date(s.started_at);
+      if (weekTx) {
+        for (const tx of weekTx) {
+          if (tx.created_at) {
+            const d = new Date(tx.created_at);
             let idx = d.getDay() - 1; // Mon=0 .. Sat=5
             if (idx < 0) idx = 6; // Sun=6
-            dailyDrops[idx] += s.drops_earned || 0;
+            dailyDrops[idx] += tx.amount || 0;
           }
         }
       }

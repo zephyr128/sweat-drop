@@ -39,6 +39,7 @@ export default function CheckinResultScreen() {
     distanceM?: string;
     radiusM?: string;
     isNewGym?: string;
+    pendingWorkout?: string;
   }>();
 
   const status = (params.status || 'error') as CheckinStatus;
@@ -50,6 +51,17 @@ export default function CheckinResultScreen() {
   const distanceM = parseInt(params.distanceM || '0', 10);
   const radiusM = parseInt(params.radiusM || '0', 10);
   const isNewGym = params.isNewGym === '1';
+
+  // pendingWorkout is a JSON-encoded { pathname, params } destination set by the
+  // scanner when it auto-checked the user in before starting a workout. When
+  // present, dismiss navigates *forward* to the workout instead of going back.
+  const pendingWorkout: { pathname: string; params: Record<string, string> } | null = (() => {
+    try {
+      return params.pendingWorkout ? JSON.parse(params.pendingWorkout) : null;
+    } catch {
+      return null;
+    }
+  })();
 
   const [displayDrops, setDisplayDrops] = useState(0);
   const progressWidth = useSharedValue(0);
@@ -90,19 +102,27 @@ export default function CheckinResultScreen() {
     }, interval);
   };
 
+  const navigate = (ms?: number) => {
+    if (pendingWorkout) {
+      router.replace(pendingWorkout as Parameters<typeof router.replace>[0]);
+    } else {
+      router.back();
+    }
+  };
+
   const startAutoClose = (ms: number) => {
     progressWidth.value = withTiming(100, {
       duration: ms,
       easing: Easing.linear,
     });
     autoCloseRef.current = setTimeout(() => {
-      router.back();
+      navigate();
     }, ms);
   };
 
   const handleClose = () => {
     if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
-    router.back();
+    navigate();
   };
 
   const renderSuccess = () => (
@@ -146,6 +166,13 @@ export default function CheckinResultScreen() {
       {!isNewGym && gymName ? (
         <Animated.View entering={FadeInDown.delay(700).duration(400)}>
           <Text style={styles.gymName}>{gymName}</Text>
+        </Animated.View>
+      ) : null}
+
+      {pendingWorkout ? (
+        <Animated.View entering={FadeInDown.delay(isNewGym ? 1100 : 700).duration(400)} style={styles.workoutHintRow}>
+          <Ionicons name="barbell-outline" size={16} color={branding.primary} />
+          <Text style={[styles.workoutHintText, { color: branding.primary }]}>{t('startingWorkout')}</Text>
         </Animated.View>
       ) : null}
 
@@ -341,6 +368,18 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     textAlign: 'center',
     marginTop: 12,
+  },
+  workoutHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    opacity: 0.85,
+  },
+  workoutHintText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   progressBarContainer: {
     width: '100%',

@@ -62,5 +62,15 @@
   "myGyms": "MOJE TERETANE",
   "homeGymBadge": "MATIČNA",
   "achievements": "DOSTIGNUĆA",
-  "viewTrophyRoom": "Pogledaj trofejnu sobu →"
+  "viewTrophyRoom": "Pogledaj trofejnu sobu →",
+  "notVerified": "Nije verifikovan/a",
+  "verifiedBadge": "Verifikovan/a",
+  "verification": {
+    "title": "Verifikacija identiteta",
+    "subtitle": "Verifikuj svoje članstvo na recepciji da bi mogao/la da preuzemaš nagrade.",
+    "step1": "Poseti recepciju u teretani",
+    "step2": "Pokaži članski ID ili se predstavi",
+    "step3": "Osoblje će verifikovati tvoj profil — traje manje od minut",
+    "oneTimeNote": "Jednokratno po teretani. Više nećeš morati to da radiš."
+  }
 }

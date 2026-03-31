@@ -31,5 +31,6 @@
   "daysLeft_one": "{{count}} day left",
   "daysLeft_other": "{{count}} days left",
   "user": "User",
-  "noInternet": "No internet connection"
+  "noInternet": "No internet connection",
+  "gotIt": "Got it"
 }

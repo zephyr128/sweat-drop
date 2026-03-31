@@ -56,5 +56,10 @@
   "limitMonthlyReached": "Mesečni limit za nagradu je dostignut. Pokušaj sledećeg meseca.",
   "fraudBlocked": "Preuzimanje je blokirano anti-abuse zaštitom.",
   "rateLimited": "Previše pokušaja preuzimanja. Sačekaj pa pokušaj ponovo.",
-  "temporarilyUnavailable": "Ova nagrada je trenutno nedostupna. Obrati se osoblju teretane."
+  "temporarilyUnavailable": "Ova nagrada je trenutno nedostupna. Obrati se osoblju teretane.",
+  "verificationRequired": "Potrebna verifikacija",
+  "verificationRequiredBody": "Poseti recepciju da potvrdiš svoj identitet. Ovo je jednokratni korak pre preuzimanja nagrada.",
+  "notVerified": "Nije verifikovan/a",
+  "verified": "Verifikovan/a",
+  "verificationStatus": "Verifikacija"
 }

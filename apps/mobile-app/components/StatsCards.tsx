@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { fontStyles, hexToRgba } from '@/lib/theme';
+import { fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
+import { PressableCard } from '@/components/PressableCard';
 
 function getStreakColor(streak: number, primary: string): string {
   if (streak >= 60) return '#FFD700';
@@ -40,11 +41,12 @@ export interface HappyHourSlot {
 }
 
 export interface StatsCardsProps {
-  currentRank: number;
   streakDays: number;
   todayDrops: number;
   todayBonusDrops?: number;
   dailyCap: number;
+  weeklyDrops: number;
+  weeklyCap: number;
   primaryColor: string;
   isCheckedIn: boolean;
   gymName: string;
@@ -55,23 +57,22 @@ export interface StatsCardsProps {
   nextHappyHour: HappyHourSlot | null;
   isHappyHourActive: boolean;
   onHappyHourPress: () => void;
-  onRankPress: () => void;
   onStreakPress: () => void;
-  onDropsPress: () => void;
+  onTodayPress: () => void;
+  onWeeklyPress: () => void;
 }
 
-// Shared glass surface background — matches challenge cards, invite CTA, etc.
-const GLASS_BG = 'rgba(18, 18, 28, 0.80)';
 const TODAY_COLOR = '#E8E8E8';
-const GOLD = '#FFD700';
 const GREEN = '#4CD964';
+const GOLD = '#FFD700';
 
 export const StatsCards: React.FC<StatsCardsProps> = ({
-  currentRank,
   streakDays,
   todayDrops,
   todayBonusDrops = 0,
   dailyCap,
+  weeklyDrops,
+  weeklyCap,
   primaryColor,
   isCheckedIn,
   gymName,
@@ -82,9 +83,9 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   nextHappyHour,
   isHappyHourActive,
   onHappyHourPress,
-  onRankPress,
   onStreakPress,
-  onDropsPress,
+  onTodayPress,
+  onWeeklyPress,
 }) => {
   const { t } = useTranslation('home');
 
@@ -94,76 +95,30 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   const capReached = dailyCap > 0 && todayDrops >= dailyCap;
   const overCap = dailyCap > 0 && todayDrops > dailyCap && todayBonusDrops > 0;
 
+  const formatCompact = (n: number): string => {
+    if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+    return String(n);
+  };
+
   return (
     <View style={styles.wrapper}>
 
-      {/* ── Row 1: Rank / Streak / Today ── */}
+      {/* Row 1: Today / Streak / Week */}
       <View style={styles.row}>
 
-        {/* Rank → Leaderboard */}
-        <TouchableOpacity
-          style={[styles.statCardOuter, { borderColor: hexToRgba(primaryColor, 0.28) }]}
-          onPress={onRankPress}
-          activeOpacity={0.7}
-        >
-          <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
+        {/* Today drops */}
+        <PressableCard style={styles.statPill} onPress={onTodayPress}>
+          <BlurView intensity={50} tint="dark" style={styles.statPillBlur}>
             <LinearGradient
-              colors={[hexToRgba(primaryColor, 0.14), hexToRgba(primaryColor, 0.06)]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.statCardGradient}
-            >
-              <Ionicons name="podium-outline" size={17} color={primaryColor} />
-              <Text style={[styles.statValue, { color: primaryColor }]}>
-                #{currentRank > 0 ? currentRank : '—'}
-              </Text>
-              <Text style={styles.statLabel}>{t('rings.rank')}</Text>
-            </LinearGradient>
-          </BlurView>
-        </TouchableOpacity>
-
-        {/* Streak → Workout history */}
-        <TouchableOpacity
-          style={[styles.statCardOuter, { borderColor: hexToRgba(streakColor, 0.28) }]}
-          onPress={onStreakPress}
-          activeOpacity={0.7}
-        >
-          <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-            <LinearGradient
-              colors={[hexToRgba(streakColor, 0.14), hexToRgba(streakColor, 0.06)]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.statCardGradient}
-            >
-              <Ionicons name={streakIcon} size={17} color={streakColor} />
-              <Text style={[styles.statValue, { color: streakColor }]}>{streakDays}d</Text>
-              <Text style={styles.statLabel} numberOfLines={1}>{streakLabel}</Text>
-            </LinearGradient>
-          </BlurView>
-        </TouchableOpacity>
-
-        {/* Today drops → Wallet */}
-        <TouchableOpacity
-          style={[
-            styles.statCardOuter,
-            capReached
-              ? { borderColor: 'rgba(76,217,100,0.35)' }
-              : { borderColor: 'rgba(232,232,232,0.18)' },
-          ]}
-          onPress={onDropsPress}
-          activeOpacity={0.7}
-        >
-          <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-            <LinearGradient
-              colors={
-                capReached
-                  ? ['rgba(76,217,100,0.14)', 'rgba(76,217,100,0.06)']
-                  : ['rgba(232,232,232,0.08)', 'rgba(232,232,232,0.03)']
-              }
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.statCardGradient}
+              colors={SHIMMER}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statPillGradient}
             >
               <Ionicons
                 name={capReached ? 'checkmark-circle' : 'water-outline'}
-                size={17}
+                size={16}
                 color={capReached ? GREEN : TODAY_COLOR}
               />
               <Text style={[styles.statValue, capReached && { color: GREEN }]}>
@@ -179,47 +134,72 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
               )}
             </LinearGradient>
           </BlurView>
-        </TouchableOpacity>
+        </PressableCard>
+
+        {/* Streak */}
+        <PressableCard style={styles.statPill} onPress={onStreakPress}>
+          <BlurView intensity={50} tint="dark" style={styles.statPillBlur}>
+            <LinearGradient
+              colors={SHIMMER}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statPillGradient}
+            >
+              <Ionicons name={streakIcon} size={16} color={streakColor} />
+              <Text style={[styles.statValue, { color: streakColor }]}>{streakDays}d</Text>
+              <Text style={styles.statLabel} numberOfLines={1}>{streakLabel}</Text>
+            </LinearGradient>
+          </BlurView>
+        </PressableCard>
+
+        {/* Weekly drops */}
+        <PressableCard style={styles.statPill} onPress={onWeeklyPress}>
+          <BlurView intensity={50} tint="dark" style={styles.statPillBlur}>
+            <LinearGradient
+              colors={SHIMMER}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statPillGradient}
+            >
+              <Ionicons name="stats-chart-outline" size={16} color={primaryColor} />
+              <Text style={[styles.statValue, { color: primaryColor }]}>
+                {weeklyCap > 0 ? `${formatCompact(weeklyDrops)}/${formatCompact(weeklyCap)}` : formatCompact(weeklyDrops)}
+              </Text>
+              <Text style={styles.statLabel}>{t('rings.week')}</Text>
+            </LinearGradient>
+          </BlurView>
+        </PressableCard>
       </View>
 
-      {/* ── Row 2: Check-in + Happy Hour ── */}
+      {/* Row 2: Check-in + Happy Hour */}
       <View style={styles.row}>
 
-        {/* Check-in — disabled + green when already checked in */}
-        <TouchableOpacity
-          style={[
-            styles.halfCardOuter,
-            isCheckedIn
-              ? { borderColor: 'rgba(76,217,100,0.35)' }
-              : { borderColor: 'rgba(255,255,255,0.12)' },
-          ]}
+        {/* Check-in */}
+        <PressableCard
+          style={styles.actionCard}
           onPress={isCheckedIn ? undefined : onCheckinPress}
-          activeOpacity={isCheckedIn ? 1 : 0.75}
           disabled={isCheckedIn}
         >
-          <BlurView intensity={50} tint="dark" style={styles.halfCardBlur}>
+          <BlurView intensity={50} tint="dark" style={styles.actionCardBlur}>
             <LinearGradient
-              colors={
-                isCheckedIn
-                  ? ['rgba(76,217,100,0.16)', 'rgba(76,217,100,0.06)']
-                  : ['rgba(255,255,255,0.06)', 'rgba(18,18,28,0.80)']
-              }
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.halfCardGradient}
+              colors={SHIMMER}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.actionCardGradient}
             >
               <Ionicons
                 name={isCheckedIn ? 'checkmark-circle' : 'qr-code-outline'}
                 size={20}
                 color={isCheckedIn ? GREEN : 'rgba(255,255,255,0.65)'}
               />
-              <View style={styles.halfCardInfo}>
+              <View style={styles.actionCardInfo}>
                 <Text
-                  style={[styles.halfCardTitle, isCheckedIn && { color: GREEN }]}
+                  style={[styles.actionCardTitle, isCheckedIn && { color: GREEN }]}
                   numberOfLines={1}
                 >
                   {isCheckedIn ? gymName || t('cards.checkedIn') : t('cards.checkIn')}
                 </Text>
-                <Text style={styles.halfCardSub}>
+                <Text style={styles.actionCardSub}>
                   {isCheckedIn ? t('cards.checkedIn') : t('cards.checkInDrops')}
                 </Text>
               </View>
@@ -228,54 +208,41 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
               )}
             </LinearGradient>
           </BlurView>
-        </TouchableOpacity>
+        </PressableCard>
 
         {/* Happy Hour */}
-        <TouchableOpacity
-          style={[
-            styles.halfCardOuter,
-            isHappyHourActive
-              ? { borderColor: 'rgba(255,214,0,0.40)' }
-              : nextHappyHour
-                ? { borderColor: 'rgba(255,214,0,0.18)' }
-                : { borderColor: 'rgba(255,255,255,0.08)' },
-          ]}
+        <PressableCard
+          style={styles.actionCard}
           onPress={onHappyHourPress}
-          activeOpacity={0.75}
         >
-          <BlurView intensity={50} tint="dark" style={styles.halfCardBlur}>
+          <BlurView intensity={50} tint="dark" style={styles.actionCardBlur}>
             <LinearGradient
-              colors={
-                isHappyHourActive
-                  ? ['rgba(255,214,0,0.16)', 'rgba(255,214,0,0.06)']
-                  : nextHappyHour
-                    ? ['rgba(255,214,0,0.08)', 'rgba(18,18,28,0.80)']
-                    : ['rgba(255,255,255,0.04)', 'rgba(18,18,28,0.80)']
-              }
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.halfCardGradient}
+              colors={SHIMMER}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.actionCardGradient}
             >
               <Ionicons
                 name={isHappyHourActive ? 'flash' : 'flash-outline'}
                 size={20}
                 color={isHappyHourActive ? GOLD : nextHappyHour ? GOLD : 'rgba(255,255,255,0.3)'}
               />
-              <View style={styles.halfCardInfo}>
+              <View style={styles.actionCardInfo}>
                 {isHappyHourActive && nextHappyHour ? (
                   <>
-                    <Text style={[styles.halfCardTitle, { color: GOLD }]}>
+                    <Text style={[styles.actionCardTitle, { color: GOLD }]}>
                       x{nextHappyHour.multiplier} {t('happyHour.live')}
                     </Text>
-                    <Text style={styles.halfCardSub}>
+                    <Text style={styles.actionCardSub}>
                       {t('cards.endsAt', { time: nextHappyHour.endTime })}
                     </Text>
                   </>
                 ) : nextHappyHour ? (
                   <>
-                    <Text style={[styles.halfCardTitle, { color: GOLD }]}>
+                    <Text style={[styles.actionCardTitle, { color: GOLD }]}>
                       x{nextHappyHour.multiplier}
                     </Text>
-                    <Text style={styles.halfCardSub} numberOfLines={1}>
+                    <Text style={styles.actionCardSub} numberOfLines={1}>
                       {nextHappyHour.isToday
                         ? `${t('cards.hhToday')} ${nextHappyHour.time}`
                         : `${t('cards.hhTomorrow')} ${nextHappyHour.time}`}
@@ -283,35 +250,32 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
                   </>
                 ) : (
                   <>
-                    <Text style={[styles.halfCardTitle, { color: 'rgba(255,255,255,0.3)' }]}>—</Text>
-                    <Text style={styles.halfCardSub}>{t('cards.noHappyHour')}</Text>
+                    <Text style={[styles.actionCardTitle, { color: 'rgba(255,255,255,0.3)' }]}>—</Text>
+                    <Text style={styles.actionCardSub}>{t('cards.noHappyHour')}</Text>
                   </>
                 )}
               </View>
             </LinearGradient>
           </BlurView>
-        </TouchableOpacity>
+        </PressableCard>
       </View>
 
-      {/* ── Full-width: Next reward card (always visible when available) ── */}
+      {/* Full-width: Next reward card */}
       {nextRewardName && dropsToNextReward > 0 ? (
-        <TouchableOpacity
-          style={[styles.fullCardOuter, { borderColor: hexToRgba(primaryColor, 0.28) }]}
-          onPress={onRewardPress}
-          activeOpacity={0.8}
-        >
-          <BlurView intensity={50} tint="dark" style={styles.fullCardBlur}>
+        <PressableCard style={styles.rewardCard} onPress={onRewardPress}>
+          <BlurView intensity={50} tint="dark" style={styles.rewardCardBlur}>
             <LinearGradient
-              colors={[hexToRgba(primaryColor, 0.14), hexToRgba(primaryColor, 0.05)]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.fullCardGradient}
+              colors={SHIMMER}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.rewardCardGradient}
             >
               <Ionicons name="gift-outline" size={18} color={primaryColor} />
-              <View style={styles.fullCardInfo}>
-                <Text style={styles.fullCardTitle} numberOfLines={1}>{nextRewardName}</Text>
-                <View style={styles.fullCardSubRow}>
+              <View style={styles.rewardCardInfo}>
+                <Text style={styles.rewardCardTitle} numberOfLines={1}>{nextRewardName}</Text>
+                <View style={styles.rewardCardSubRow}>
                   <Ionicons name="water" size={11} color={hexToRgba(primaryColor, 0.75)} />
-                  <Text style={[styles.fullCardSub, { color: hexToRgba(primaryColor, 0.85) }]}>
+                  <Text style={[styles.rewardCardSub, { color: hexToRgba(primaryColor, 0.85) }]}>
                     {dropsToNextReward} {t('rings.toUnlock')}
                   </Text>
                 </View>
@@ -319,11 +283,15 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
               <Ionicons name="chevron-forward" size={16} color={hexToRgba(primaryColor, 0.45)} />
             </LinearGradient>
           </BlurView>
-        </TouchableOpacity>
+        </PressableCard>
       ) : null}
     </View>
   );
 };
+
+// Apple visionOS glass: very transparent dark base + crisp specular top edge
+const GLASS_BG = 'rgba(12, 12, 22, 0.38)';
+const SHIMMER: [string, string] = ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)'];
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -335,29 +303,32 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  /* ── Stat cards (3-column) ── */
-  statCardOuter: {
+  /* Stat pills — glass */
+  statPill: {
     flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  statCardBlur: {
-    flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
+    borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
-  statCardGradient: {
+  statPillBlur: {
     flex: 1,
-    paddingVertical: 13,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  statPillGradient: {
+    flex: 1,
+    paddingVertical: 14,
     paddingHorizontal: 8,
     alignItems: 'center',
     gap: 4,
   },
   statValue: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
+    ...getNumberStyle(16),
     color: '#FFFFFF',
     lineHeight: 20,
   },
@@ -380,76 +351,84 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  /* ── Half-width cards ── */
-  halfCardOuter: {
+  /* Action cards — glass */
+  actionCard: {
     flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  halfCardBlur: {
-    flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
+    borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
-  halfCardGradient: {
+  actionCardBlur: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  actionCardGradient: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 13,
+    padding: 14,
     gap: 10,
   },
-  halfCardInfo: {
+  actionCardInfo: {
     flex: 1,
     minWidth: 0,
   },
-  halfCardTitle: {
+  actionCardTitle: {
     ...fontStyles.bodySemiBold,
     fontSize: 14,
     color: '#FFFFFF',
   },
-  halfCardSub: {
+  actionCardSub: {
     ...fontStyles.body,
     fontSize: 11,
     color: 'rgba(255,255,255,0.45)',
     marginTop: 2,
   },
 
-  /* ── Full-width card ── */
-  fullCardOuter: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  fullCardBlur: {
-    flex: 1,
-    borderRadius: 14,
+  /* Reward card — glass */
+  rewardCard: {
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
+    borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: 'rgba(255,255,255,0.10)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
-  fullCardGradient: {
+  rewardCardBlur: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  rewardCardGradient: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     gap: 12,
   },
-  fullCardInfo: {
+  rewardCardInfo: {
     flex: 1,
   },
-  fullCardTitle: {
+  rewardCardTitle: {
     ...fontStyles.bodySemiBold,
     fontSize: 14,
     color: '#FFFFFF',
   },
-  fullCardSubRow: {
+  rewardCardSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginTop: 3,
   },
-  fullCardSub: {
+  rewardCardSub: {
     ...fontStyles.body,
     fontSize: 12,
     color: 'rgba(255,255,255,0.5)',

@@ -489,7 +489,8 @@ export function ScannerScreen() {
       log.debug('[Scanner] Current homeGymId from store:', currentHomeGymId, '| Scanned gym:', machine.gym_id);
 
       // First-time user OR different gym → show gym-welcome
-      if (!currentHomeGymId || machine.gym_id !== currentHomeGymId) {
+      const isFirstGym = !currentHomeGymId || machine.gym_id !== currentHomeGymId;
+      if (isFirstGym) {
         const reason = !currentHomeGymId ? 'No home gym set' : `Different gym detected (was ${currentHomeGymId})`;
         log.debug(`[Scanner] ${reason} — switching to:`, machine.gym_id);
         // Set in store IMMEDIATELY (before async DB call) so it's available even if DB update is slow
@@ -504,15 +505,170 @@ export function ScannerScreen() {
           log.error('[Scanner] Error setting home gym:', error);
           // Store already has the value — DB will be synced on next loadUserHomeGym
         }
-        // Show gym-welcome screen
-        proceedWithWorkout(machine, true);
-        return;
       }
 
-      proceedWithWorkout(machine);
+      // ── Auto-checkin gate ─────────────────────────────────────────────────────
+      // If the user hasn't checked in today at this gym, perform checkin first,
+      // show the checkin result screen, then automatically continue to the workout.
+      const { data: checkinStatusData } = await supabase.rpc('get_checkin_status', {
+        p_gym_id: machine.gym_id,
+      });
+      const checkinStatusRow = Array.isArray(checkinStatusData) ? checkinStatusData[0] : checkinStatusData;
+      const alreadyCheckedIn = checkinStatusRow?.already_checked_in === true;
+
+      if (!alreadyCheckedIn) {
+        log.debug('[Scanner] User not checked in — performing auto-checkin before workout');
+
+        // Gather GPS (best-effort, same as handleCheckin)
+        let lat: number | null = null;
+        let lng: number | null = null;
+        try {
+          const Location = await import('expo-location').catch(() => null);
+          if (Location) {
+            const { status } = await Location.getForegroundPermissionsAsync();
+            if (status === 'granted') {
+              const loc = await Promise.race([
+                Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+              ]);
+              if (loc && typeof loc === 'object' && 'coords' in loc) {
+                lat = loc.coords.latitude;
+                lng = loc.coords.longitude;
+              }
+            }
+          }
+        } catch { /* GPS unavailable — proceed without coords */ }
+
+        const { data: ciData, error: ciError } = await supabase.rpc('perform_checkin', {
+          p_gym_id: machine.gym_id,
+          p_lat: lat,
+          p_lng: lng,
+        });
+
+        if (!ciError) {
+          const ciResult = ciData as Record<string, unknown>;
+          const ciStatus = ciResult?.success ? 'success' : String(ciResult?.error || 'error');
+          if (ciStatus === 'success') {
+            void supabase.rpc('evaluate_referral_qualification', { p_referral_id: null });
+          }
+
+          // Encode the pending workout so checkin-result can forward to it
+          // after the success animation. The workout itself is started here
+          // so checkin-result only needs to navigate (no RPC needed there).
+          await autoCheckinThenStartWorkout(machine, isFirstGym, ciResult, ciStatus);
+          return;
+        }
+        log.warn('[Scanner] Auto-checkin failed, proceeding to workout anyway:', ciError);
+      }
+
+      // Already checked in (or checkin failed) — proceed normally
+      proceedWithWorkout(machine, isFirstGym);
     } catch (error: any) {
       log.error('[Scanner] Error processing QR code:', error);
       showModal({ title: t('error'), body: error.message || t('errorProcessing'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+    }
+  };
+
+  // Starts the workout session, then routes to checkin-result with the
+  // pending workout params encoded so it forwards automatically when dismissed.
+  const autoCheckinThenStartWorkout = async (
+    machine: MachineStatus,
+    isFirstGym: boolean,
+    ciResult: Record<string, unknown>,
+    ciStatus: string,
+  ) => {
+    try {
+      setIsProcessing(true);
+      const currentSession = sessionRef.current;
+      if (!currentSession?.user) throw new Error('No active session');
+
+      const planParams = params.planId && params.subscriptionId && params.planItemId && params.exerciseIndex
+        ? {
+            planId: params.planId,
+            subscriptionId: params.subscriptionId,
+            planItemId: params.planItemId,
+            exerciseIndex: params.exerciseIndex,
+          }
+        : null;
+
+      const deviceHash = await getDeviceFingerprintHash();
+      const { data: startResultData, error: startSessionError } = await supabase.rpc('start_session_safely', {
+        p_machine_id: machine.machine_id,
+        p_started_at: new Date().toISOString(),
+        p_device_hash: deviceHash,
+      });
+
+      if (startSessionError) throw startSessionError;
+
+      const startResultRaw = Array.isArray(startResultData) ? startResultData[0] : startResultData;
+      const startResult = (startResultRaw ?? null) as StartSessionResult | null;
+
+      if (!startResult?.success || !startResult?.session_id) {
+        const errorCode = startResult?.error_code;
+        if (errorCode === 'machine_busy' || errorCode === 'user_active_session_conflict') {
+          showModal({ title: t('machineBusy'), body: t('machineBusyDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+          return;
+        }
+        throw new Error(startResult?.error_message || t('errorWorkout'));
+      }
+
+      const { data: newSession, error: sessionFetchError } = await supabase
+        .from('sessions')
+        .select('*, machine:machine_id(*), gym:gym_id(*)')
+        .eq('id', startResult.session_id)
+        .single();
+
+      if (sessionFetchError || !newSession) throw sessionFetchError || new Error('Failed to load started session');
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      const workoutParams: Record<string, string> = {
+        sessionId: newSession.id,
+        machineId: machine.machine_id,
+        gymId: machine.gym_id,
+        machineType: machine.machine_type,
+        sensorId: machine.sensor_id || '',
+        bleProtocol: machine.ble_protocol || '',
+        ...(planParams ?? {}),
+      };
+
+      const pendingWorkoutDestination = isFirstGym
+        ? JSON.stringify({ pathname: '/gym-welcome', params: { gymName: newSession.gym?.name ?? 'Your Gym', ...workoutParams } })
+        : JSON.stringify({ pathname: '/workout', params: workoutParams });
+
+      const rawStatus = ciResult?.success ? 'success' : String(ciResult?.error || ciStatus);
+      const normalizedStatus =
+        rawStatus === 'success' ||
+        rawStatus === 'already_checked_in' ||
+        rawStatus === 'too_far' ||
+        rawStatus === 'gym_not_found' ||
+        rawStatus === 'gym_suspended' ||
+        rawStatus === 'checkin_disabled' ||
+        rawStatus === 'cap_reached' ||
+        rawStatus === 'rate_limited' ||
+        rawStatus === 'fraud_blocked'
+          ? rawStatus
+          : 'success';
+
+      router.replace({
+        pathname: '/checkin-result',
+        params: {
+          status: normalizedStatus,
+          dropsEarned: String(ciResult?.drops_earned || 0),
+          gymName: String(ciResult?.gym_name || ''),
+          streakDays: String(ciResult?.streak_days || 0),
+          checkinDrops: String(ciResult?.checkin_drops || 0),
+          distanceM: String(ciResult?.distance_m || 0),
+          radiusM: String(ciResult?.radius_m || 0),
+          isNewGym: isFirstGym ? '1' : '0',
+          pendingWorkout: pendingWorkoutDestination,
+        },
+      });
+    } catch (error: any) {
+      log.error('[Scanner] autoCheckinThenStartWorkout error:', error);
+      showModal({ title: t('error'), body: error.message || t('errorWorkout'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+    } finally {
+      setIsProcessing(false);
     }
   };
 

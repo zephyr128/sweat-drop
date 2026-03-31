@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +21,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { useBranding } from '@/lib/hooks/useBranding';
 import { fontStyles, getNumberStyle, theme as appTheme, hexToRgba} from '@/lib/theme';
@@ -164,6 +164,7 @@ const skeletonStyles = StyleSheet.create({
 export default function StatsScreen() {
   const { t } = useTranslation('stats');
   const branding = useBranding();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
@@ -184,12 +185,17 @@ export default function StatsScreen() {
   const selectedGymId = scope === 'gym' ? activeGymId : null;
   const { state, load } = useMyStats(selectedGymId);
 
-  const [period, setPeriod] = useState<StatsPeriod>('week');
+  const { period: periodParam } = useLocalSearchParams<{ period?: string }>();
+  const initialPeriod: StatsPeriod =
+    periodParam === 'today' || periodParam === 'week' || periodParam === 'month' || periodParam === 'all'
+      ? periodParam
+      : 'week';
+  const [period, setPeriod] = useState<StatsPeriod>(initialPeriod);
   const [refreshing, setRefreshing] = useState(false);
 
   // Track if a period switch is in flight so we can show skeleton
   const [switching, setSwitching] = useState(false);
-  const prevPeriod = useRef<StatsPeriod>('week');
+  const prevPeriod = useRef<StatsPeriod>(initialPeriod);
 
   const handlePeriodChange = useCallback(async (p: StatsPeriod) => {
     if (p === period) return;
@@ -220,16 +226,16 @@ export default function StatsScreen() {
   const originPct = (val: number) => (originTotal > 0 ? Math.round((val / originTotal) * 100) : 0);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Background */}
+    <View style={styles.container}>
+      {/* Background — bleeds under status bar */}
       <LinearGradient
         colors={['#080808', '#0A0E1A', '#080808']}
         start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header — respects status bar via insets */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <BackButton />
         <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={{ width: 32 }} />
@@ -237,21 +243,21 @@ export default function StatsScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={branding.primary}
+            tintColor="rgba(255,255,255,0.4)"
           />
         }
       >
-        {/* Scope Toggle: My Gym | Global — only shown when user has multiple gyms */}
+        {/* Scope Toggle: My Gym | Global */}
         {gymCount > 1 && (
           <Animated.View entering={FadeInDown.delay(25).duration(300)}>
-            <View style={[styles.scopeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.scopeToggleBlur, { backgroundColor: GLASS_BG }]}>
+            <View style={styles.scopeToggle}>
+              <BlurView intensity={50} tint="dark" style={styles.scopeToggleBlur}>
                 {([
                   { key: 'gym' as ScopeType, label: t('myGym'), icon: 'location' as const },
                   { key: 'global' as ScopeType, label: t('global'), icon: 'globe-outline' as const },
@@ -262,8 +268,7 @@ export default function StatsScreen() {
                       styles.scopeTab,
                       scope === tab.key && {
                         backgroundColor: hexToRgba(branding.primary, 0.15),
-                        borderColor: hexToRgba(branding.primary, 0.3),
-                        borderWidth: 1,
+                        borderColor: hexToRgba(branding.primary, 0.35),
                       },
                     ]}
                     onPress={() => setScope(tab.key)}
@@ -272,14 +277,9 @@ export default function StatsScreen() {
                     <Ionicons
                       name={tab.icon}
                       size={14}
-                      color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.40)'}
+                      color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.35)'}
                     />
-                    <Text
-                      style={[
-                        styles.scopeTabText,
-                        scope === tab.key && { color: branding.primary },
-                      ]}
-                    >
+                    <Text style={[styles.scopeTabText, scope === tab.key && { color: branding.primary }]}>
                       {tab.label}
                     </Text>
                   </TouchableOpacity>
@@ -300,17 +300,14 @@ export default function StatsScreen() {
                   style={[
                     styles.periodPill,
                     isActive && {
-                      backgroundColor: hexToRgba(branding.primary, 0.15),
-                      borderColor: hexToRgba(branding.primary, 0.45),
+                      backgroundColor: hexToRgba(branding.primary, 0.14),
+                      borderColor: hexToRgba(branding.primary, 0.40),
                     },
                   ]}
                   onPress={() => handlePeriodChange(p)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[
-                    styles.periodText,
-                    isActive && { color: branding.primary },
-                  ]}>
+                  <Text style={[styles.periodText, isActive && { color: branding.primary }]}>
                     {t(`period.${p}`)}
                   </Text>
                 </TouchableOpacity>
@@ -319,7 +316,7 @@ export default function StatsScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Loading skeleton while switching periods ── */}
+        {/* Skeleton */}
         {isLoading ? (
           <StatsSkeleton primary={branding.primary} />
         ) : (
@@ -327,11 +324,11 @@ export default function StatsScreen() {
             {/* ── Hero card ── */}
             <Animated.View
               entering={FadeInDown.delay(80).duration(300)}
-              style={[styles.heroCardOuter, { borderColor: hexToRgba(branding.primary, 0.28) }]}
+              style={[styles.heroCardOuter, { borderTopColor: hexToRgba(branding.primary, 0.40) }]}
             >
               <BlurView intensity={50} tint="dark" style={styles.heroCardBlur}>
                 <LinearGradient
-                  colors={[hexToRgba(branding.primary, 0.14), hexToRgba(branding.primary, 0.05)]}
+                  colors={[hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={styles.heroCardGradient}
                 >
@@ -346,20 +343,20 @@ export default function StatsScreen() {
             {/* ── 4-stat row ── */}
             <Animated.View entering={FadeInDown.delay(130).duration(300)} style={styles.statRow}>
               {([
-                { icon: 'podium-outline' as const, value: periodStats.rank > 0 ? `#${periodStats.rank}` : '—', label: t('rank'), color: branding.primary },
-                { icon: 'flame-outline' as const, value: periodStats.streak > 0 ? `${periodStats.streak}d` : '—', label: t('streak'), color: '#FF6B00' },
-                { icon: 'barbell-outline' as const, value: periodStats.sessions > 0 ? String(periodStats.sessions) : '—', label: t('sessions'), color: branding.primary },
-                { icon: 'time-outline' as const, value: periodStats.hours > 0 ? `${periodStats.hours}h` : '—', label: t('time'), color: branding.primary },
+                { icon: 'podium-outline' as const,  value: periodStats.rank > 0     ? `#${periodStats.rank}`       : '—', label: t('rank'),     accent: branding.primary },
+                { icon: 'flame-outline' as const,   value: periodStats.streak > 0   ? `${periodStats.streak}d`     : '—', label: t('streak'),   accent: '#FF6B00' },
+                { icon: 'barbell-outline' as const, value: periodStats.sessions > 0 ? String(periodStats.sessions) : '—', label: t('sessions'), accent: branding.primary },
+                { icon: 'time-outline' as const,    value: periodStats.hours > 0    ? `${periodStats.hours}h`      : '—', label: t('time'),     accent: branding.primary },
               ]).map((s, i) => (
-                <View key={i} style={[styles.statCardOuter, { borderColor: hexToRgba(s.color, 0.28) }]}>
+                <View key={i} style={[styles.statCardOuter, { borderTopColor: hexToRgba(s.accent, 0.30) }]}>
                   <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
                     <LinearGradient
-                      colors={[hexToRgba(s.color, 0.14), hexToRgba(s.color, 0.05)]}
+                      colors={[hexToRgba(s.accent, 0.08), 'rgba(255,255,255,0.01)']}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                       style={styles.statCardGradient}
                     >
-                      <Ionicons name={s.icon} size={17} color={s.color} />
-                      <Text style={[styles.statValue, getNumberStyle(16), { color: s.color }]}>{s.value}</Text>
+                      <Ionicons name={s.icon} size={17} color={s.accent} />
+                      <Text style={[styles.statValue, getNumberStyle(16), { color: '#FFFFFF' }]}>{s.value}</Text>
                       <Text style={styles.statLabel}>{s.label}</Text>
                     </LinearGradient>
                   </BlurView>
@@ -371,13 +368,13 @@ export default function StatsScreen() {
             {originTotal > 0 && (
               <Animated.View entering={FadeInDown.delay(220).duration(300)}>
                 <Text style={styles.sectionTitle}>{t('dropsOrigin')}</Text>
-                <View style={[styles.sectionCardOuter, { borderColor: 'rgba(255,255,255,0.12)' }]}>
+                <View style={styles.sectionCardOuter}>
                   <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
                     {([
-                      { key: 'workout', value: origin.session, icon: 'barbell' as const },
-                      { key: 'challenges', value: origin.challenge, icon: 'trophy' as const },
-                      { key: 'checkin', value: origin.checkin, icon: 'qr-code' as const },
-                      { key: 'bonuses', value: origin.bonus, icon: 'gift' as const },
+                      { key: 'workout',    value: origin.session,   icon: 'barbell-outline' as const, color: branding.primary },
+                      { key: 'challenges', value: origin.challenge, icon: 'trophy-outline' as const,  color: '#FFD700' },
+                      { key: 'checkin',    value: origin.checkin,   icon: 'qr-code-outline' as const, color: branding.primary },
+                      { key: 'bonuses',    value: origin.bonus,     icon: 'gift-outline' as const,    color: '#4CD964' },
                     ] as const).filter((r) => r.value > 0).map((row, idx) => {
                       const pct = originPct(row.value);
                       return (
@@ -388,22 +385,20 @@ export default function StatsScreen() {
                             idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
                           ]}
                         >
-                          <View style={[styles.originIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                            <Ionicons name={row.icon} size={14} color={branding.primary} />
+                          <View style={[styles.originIconWrap, { backgroundColor: hexToRgba(row.color, 0.10) }]}>
+                            <Ionicons name={row.icon} size={14} color={row.color} />
                           </View>
                           <Text style={styles.originLabel}>{t(`origin.${row.key}`)}</Text>
                           <View style={styles.originBarOuter}>
                             <View
                               style={[
                                 styles.originBarInner,
-                                {
-                                  width: `${Math.max(pct, 3)}%`,
-                                  backgroundColor: hexToRgba(branding.primary, 0.75),
-                                },
+                                { width: `${Math.max(pct, 3)}%`, backgroundColor: hexToRgba(row.color, 0.6) },
                               ]}
                             />
                           </View>
-                          <Text style={[styles.originPct, getNumberStyle(12)]}>{pct}%</Text>
+                          <Text style={[styles.originCount, getNumberStyle(12)]}>{formatNumber(row.value)}</Text>
+                          <Text style={[styles.originPct, getNumberStyle(11)]}>{pct}%</Text>
                         </View>
                       );
                     })}
@@ -416,7 +411,7 @@ export default function StatsScreen() {
             {weekDays.length > 0 && (
               <Animated.View entering={FadeInDown.delay(260).duration(300)}>
                 <Text style={styles.sectionTitle}>{t('streakHistory')}</Text>
-                <View style={[styles.sectionCardOuter, { borderColor: 'rgba(255,255,255,0.12)' }]}>
+                <View style={styles.sectionCardOuter}>
                   <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
                     <View style={styles.weekHeaderRow}>
                       <Text style={styles.weekSummary}>{t('thisWeek')}</Text>
@@ -437,10 +432,7 @@ export default function StatsScreen() {
                           >
                             {d.active && <Ionicons name="checkmark" size={13} color="#000" />}
                           </View>
-                          <Text style={[
-                            styles.weekDayLabel,
-                            d.active && { color: branding.primary },
-                          ]}>
+                          <Text style={[styles.weekDayLabel, d.active && { color: branding.primary }]}>
                             {d.dayLabel}
                           </Text>
                         </View>
@@ -455,7 +447,7 @@ export default function StatsScreen() {
             {machines.length > 0 && (
               <Animated.View entering={FadeInDown.delay(300).duration(300)}>
                 <Text style={styles.sectionTitle}>{t('machines')}</Text>
-                <View style={[styles.sectionCardOuter, { borderColor: 'rgba(255,255,255,0.12)' }]}>
+                <View style={styles.sectionCardOuter}>
                   <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
                     {machines.map((m, i) => (
                       <View
@@ -484,7 +476,7 @@ export default function StatsScreen() {
             {/* ── Achievements ── */}
             <Animated.View entering={FadeInDown.delay(340).duration(300)}>
               <Text style={styles.sectionTitle}>{t('achievements')}</Text>
-              <View style={[styles.sectionCardOuter, { borderColor: 'rgba(255,255,255,0.12)' }]}>
+              <View style={styles.sectionCardOuter}>
                 <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
                   {([
                     {
@@ -509,7 +501,7 @@ export default function StatsScreen() {
                     },
                     {
                       icon: 'trophy' as const,
-                      color: branding.primary,
+                      color: '#C0C0C0',
                       label: t('challengesDone'),
                       value: achievements.challengesCompleted > 0 ? `${achievements.challengesCompleted} ${t('completed')}` : '—',
                     },
@@ -521,7 +513,7 @@ export default function StatsScreen() {
                         i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
                       ]}
                     >
-                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba(a.color, 0.14) }]}>
+                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba(a.color, 0.12) }]}>
                         <Ionicons name={a.icon} size={15} color={a.color} />
                       </View>
                       <Text style={styles.achieveLabel}>{a.label}</Text>
@@ -531,12 +523,10 @@ export default function StatsScreen() {
                 </BlurView>
               </View>
             </Animated.View>
-
-            <View style={{ height: 40 }} />
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -545,26 +535,25 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: appTheme.colors.background,
+    backgroundColor: '#080808',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 10,
   },
   headerTitle: {
     ...fontStyles.heading,
-    fontSize: 20,
+    fontSize: 18,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 40,
   },
 
   // ── Scope toggle ──
@@ -573,12 +562,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   scopeToggleBlur: {
     flexDirection: 'row',
     borderRadius: appTheme.borderRadius.xl,
     overflow: 'hidden',
     padding: 4,
+    backgroundColor: GLASS_BG,
   },
   scopeTab: {
     flex: 1,
@@ -591,10 +582,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
+  scopeTabActive: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
   scopeTabText: {
     ...fontStyles.heading,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.40)',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+  },
+  scopeTabTextActive: {
+    color: '#FFFFFF',
   },
 
   // ── Period selector ──
@@ -608,28 +606,39 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(255,255,255,0.03)',
     alignItems: 'center',
+  },
+  periodPillActive: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   periodText: {
     ...fontStyles.bodySemiBold,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.40)',
+    color: 'rgba(255,255,255,0.35)',
     letterSpacing: 0.2,
+  },
+  periodTextActive: {
+    color: '#FFFFFF',
   },
 
   // ── Hero card ──
   heroCardOuter: {
     borderRadius: 18,
     borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderLeftColor: 'rgba(255,255,255,0.08)',
+    borderRightColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
     overflow: 'hidden',
     marginBottom: 12,
+    backgroundColor: GLASS_BG,
   },
   heroCardBlur: {
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: GLASS_BG,
   },
   heroCardGradient: {
     paddingVertical: 28,
@@ -638,11 +647,12 @@ const styles = StyleSheet.create({
   },
   heroNumber: {
     lineHeight: 58,
+    color: '#FFFFFF',
   },
   heroLabel: {
     ...fontStyles.body,
     fontSize: 11,
-    color: 'rgba(255,255,255,0.45)',
+    color: 'rgba(255,255,255,0.35)',
     letterSpacing: 2,
     textTransform: 'uppercase',
     marginTop: 6,
@@ -658,12 +668,16 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 14,
     borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.16)',
+    borderLeftColor: 'rgba(255,255,255,0.07)',
+    borderRightColor: 'rgba(255,255,255,0.04)',
+    borderBottomColor: 'rgba(255,255,255,0.03)',
     overflow: 'hidden',
+    backgroundColor: GLASS_BG,
   },
   statCardBlur: {
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: GLASS_BG,
   },
   statCardGradient: {
     paddingVertical: 13,
@@ -678,7 +692,7 @@ const styles = StyleSheet.create({
   statLabel: {
     ...fontStyles.body,
     fontSize: 10,
-    color: 'rgba(255,255,255,0.40)',
+    color: 'rgba(255,255,255,0.35)',
     textAlign: 'center',
     letterSpacing: 0.2,
   },
@@ -686,8 +700,8 @@ const styles = StyleSheet.create({
   // ── Section wrapper ──
   sectionTitle: {
     ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.40)',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.35)',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -696,13 +710,17 @@ const styles = StyleSheet.create({
   sectionCardOuter: {
     borderRadius: 16,
     borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.16)',
+    borderLeftColor: 'rgba(255,255,255,0.07)',
+    borderRightColor: 'rgba(255,255,255,0.04)',
+    borderBottomColor: 'rgba(255,255,255,0.03)',
     overflow: 'hidden',
     marginBottom: 20,
+    backgroundColor: GLASS_BG,
   },
   sectionCardBlur: {
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: GLASS_BG,
     padding: 16,
   },
 
@@ -710,7 +728,7 @@ const styles = StyleSheet.create({
   originRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 11,
     gap: 8,
   },
   originIconWrap: {
@@ -719,29 +737,36 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   originLabel: {
     ...fontStyles.body,
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
-    width: 78,
+    width: 72,
   },
   originBarOuter: {
     flex: 1,
-    height: 5,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.07)',
     overflow: 'hidden',
   },
   originBarInner: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 2,
+  },
+  originCount: {
+    width: 38,
+    textAlign: 'right',
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: 12,
   },
   originPct: {
-    width: 36,
+    width: 30,
     textAlign: 'right',
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
   },
 
   // ── Streak week ──
@@ -754,11 +779,12 @@ const styles = StyleSheet.create({
   weekSummary: {
     ...fontStyles.bodySemiBold,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(255,255,255,0.60)',
   },
   weekActivePill: {
     ...fontStyles.bodySemiBold,
     fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
     letterSpacing: 0.2,
   },
   weekRow: {
@@ -780,9 +806,12 @@ const styles = StyleSheet.create({
   weekDayLabel: {
     ...fontStyles.body,
     fontSize: 10,
-    color: 'rgba(255,255,255,0.30)',
+    color: 'rgba(255,255,255,0.28)',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  weekDayLabelActive: {
+    color: 'rgba(255,255,255,0.80)',
   },
 
   // ── Machines ──
@@ -796,6 +825,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.07)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -808,7 +838,7 @@ const styles = StyleSheet.create({
   machineSub: {
     ...fontStyles.body,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.40)',
+    color: 'rgba(255,255,255,0.38)',
     marginTop: 2,
   },
 
@@ -829,7 +859,7 @@ const styles = StyleSheet.create({
   achieveLabel: {
     ...fontStyles.body,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
+    color: 'rgba(255,255,255,0.50)',
     flex: 1,
   },
   achieveValue: {

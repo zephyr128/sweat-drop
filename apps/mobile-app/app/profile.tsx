@@ -12,6 +12,7 @@ import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
+import { VerificationSheet } from '@/components/VerificationSheet';
 import Animated, {
   FadeInDown,
   useSharedValue,
@@ -84,6 +85,8 @@ export default function ProfileScreen() {
   const [userGyms, setUserGyms] = useState<UserGym[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isVerified, setIsVerified] = useState<boolean | null>(null);
+  const [showVerificationSheet, setShowVerificationSheet] = useState(false);
 
   // Avatar flip animation
   const highestBadge: UserBadge | null = badges.length > 0 ? badges[0] : null;
@@ -188,12 +191,24 @@ export default function ProfileScreen() {
     }
   }, [session?.user?.id, profile?.home_gym_id]);
 
+  const checkVerification = useCallback(async () => {
+    if (!session?.user || !homeGymId) return;
+    const { data } = await supabase
+      .from('gym_member_identities')
+      .select('is_verified')
+      .eq('user_id', session.user.id)
+      .eq('gym_id', homeGymId)
+      .maybeSingle();
+    setIsVerified(data?.is_verified === true);
+  }, [session?.user?.id, homeGymId]);
+
   useEffect(() => { loadProfile(); }, [loadProfile]);
   useEffect(() => {
     if (profile) { loadStats(); loadUserGyms(); }
   }, [profile, loadStats, loadUserGyms]);
+  useEffect(() => { checkVerification(); }, [checkVerification]);
 
-  useFocusEffect(useCallback(() => { loadProfile(); }, [loadProfile]));
+  useFocusEffect(useCallback(() => { loadProfile(); checkVerification(); }, [loadProfile, checkVerification]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -330,6 +345,28 @@ export default function ProfileScreen() {
                       <Text style={{ fontSize: 12 }}>🌱</Text>
                       <Text style={[styles.heroPillText, { color: '#4CAF50' }]}>{t('newcomer')}</Text>
                     </View>
+                  )}
+                  {/* Verification badge — only shown when gym is active */}
+                  {homeGymId && isVerified !== null && (
+                    <TouchableOpacity
+                      onPress={() => { if (!isVerified) setShowVerificationSheet(true); }}
+                      activeOpacity={isVerified ? 1 : 0.7}
+                      style={[
+                        styles.heroPill,
+                        isVerified
+                          ? { backgroundColor: 'rgba(74, 222, 128, 0.10)' }
+                          : { backgroundColor: 'rgba(251, 191, 36, 0.10)' },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isVerified ? 'shield-checkmark' : 'shield-outline'}
+                        size={12}
+                        color={isVerified ? '#4ade80' : '#fbbf24'}
+                      />
+                      <Text style={[styles.heroPillText, { color: isVerified ? '#4ade80' : '#fbbf24' }]}>
+                        {isVerified ? t('verifiedBadge') : t('notVerified')}
+                      </Text>
+                    </TouchableOpacity>
                   )}
                 </View>
 
@@ -543,6 +580,12 @@ export default function ProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <VerificationSheet
+        visible={showVerificationSheet}
+        onClose={() => setShowVerificationSheet(false)}
+        brandColor={branding.primary}
+      />
     </View>
   );
 }
