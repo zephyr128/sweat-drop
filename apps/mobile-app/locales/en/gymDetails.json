@@ -25,6 +25,9 @@
   "visit": "Visit",
   "availableRewards": "Available Rewards",
   "andMore": "...and more",
+  "today": "Today",
+  "members": "Members",
+  "rewards": "Rewards",
   "closed": "Closed",
   "failedToSetGym": "Failed to set home gym. Please try again.",
   "monday": "Monday",
@@ -33,5 +36,13 @@
   "thursday": "Thursday",
   "friday": "Friday",
   "saturday": "Saturday",
-  "sunday": "Sunday"
+  "sunday": "Sunday",
+  "openNow": "Open now",
+  "closedNow": "Closed",
+  "opensAt": "Opens {{day}} at {{time}}",
+  "closesAt": "Closes at {{time}}",
+  "gallery": "Gallery",
+  "viewAll": "View all",
+  "photos": "{{count}} photos",
+  "photoOf": "{{current}} of {{total}}"
 }

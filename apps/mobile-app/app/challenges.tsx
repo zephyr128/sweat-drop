@@ -99,35 +99,8 @@ export default function ChallengesScreen() {
       log.error('Error loading challenge progress:', progressError);
     }
 
-    // For milestone challenges, fetch actual local_drops_balance
-    const hasMilestone = challengesData.some((c) => c.challenge_type === 'milestone');
-    let localDropsBalance = 0;
-    if (hasMilestone) {
-      const { data: membershipData } = await supabase
-        .from('gym_memberships')
-        .select('local_drops_balance')
-        .eq('user_id', session.user.id)
-        .eq('gym_id', gymId)
-        .single();
-      localDropsBalance = membershipData?.local_drops_balance || 0;
-    }
-
     const mergedChallenges = challengesData.map((challenge) => {
       const prog = progressData?.find((p) => p.challenge_id === challenge.id);
-      
-      // For milestone challenges, override progress with local_drops_balance
-      if (challenge.challenge_type === 'milestone' && prog) {
-        return {
-          ...challenge,
-          progress: {
-            ...prog,
-            current_drops: localDropsBalance,
-            // If actual balance >= milestone threshold, mark as completed on client
-            is_completed: prog.is_completed || localDropsBalance >= (challenge.milestone_threshold || challenge.target_drops || 0),
-          },
-        };
-      }
-      
       return { ...challenge, progress: prog };
     });
 

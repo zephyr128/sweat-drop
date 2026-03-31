@@ -215,7 +215,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: theme.spacing.xl,
+    paddingHorizontal: 24,
+    paddingVertical: theme.spacing.xl,
     justifyContent: 'center',
     alignItems: 'center',
   },

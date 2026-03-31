@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   },
   slideContent: {
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
   },
   iconContainer: {
     width: 120,
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   bottomSection: {
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
     paddingBottom: 16,
     gap: 16,
     alignItems: 'center',

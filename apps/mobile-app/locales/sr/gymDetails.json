@@ -25,6 +25,9 @@
   "visit": "Poseti",
   "availableRewards": "Dostupne nagrade",
   "andMore": "...i više",
+  "today": "Danas",
+  "members": "Članovi",
+  "rewards": "Nagrade",
   "closed": "Zatvoreno",
   "failedToSetGym": "Neuspešno postavljanje teretane. Pokušaj ponovo.",
   "monday": "Ponedeljak",
@@ -33,5 +36,13 @@
   "thursday": "Četvrtak",
   "friday": "Petak",
   "saturday": "Subota",
-  "sunday": "Nedelja"
+  "sunday": "Nedelja",
+  "openNow": "Otvoreno",
+  "closedNow": "Zatvoreno",
+  "opensAt": "Otvara se {{day}} u {{time}}",
+  "closesAt": "Zatvara se u {{time}}",
+  "gallery": "Galerija",
+  "viewAll": "Vidi sve",
+  "photos": "{{count}} fotografija",
+  "photoOf": "{{current}} od {{total}}"
 }

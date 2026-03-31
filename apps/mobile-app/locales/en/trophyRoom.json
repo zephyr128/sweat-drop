@@ -1,6 +1,8 @@
 {
   "title": "Trophy Room",
   "ofEarned": "of {{total}} earned",
+  "badgesEarned": "Badges earned",
+  "completion": "Completion",
   "filterAll": "All",
   "filterThisGym": "This gym",
   "filterEarned": "Earned",

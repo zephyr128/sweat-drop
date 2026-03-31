@@ -147,30 +147,6 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         };
       });
 
-      // For milestone challenges, fetch actual local_drops_balance
-      const milestoneChallenges = challengesWithProgress.filter((c) => c.challenge_type === 'milestone');
-      if (milestoneChallenges.length > 0) {
-        const { data: membershipData } = await supabase
-          .from('gym_memberships')
-          .select('local_drops_balance')
-          .eq('user_id', session.user.id)
-          .eq('gym_id', gymId)
-          .single();
-
-        if (membershipData) {
-          milestoneChallenges.forEach((challenge) => {
-            challenge.current_drops = membershipData.local_drops_balance || 0;
-            challenge.progress_percentage = challenge.target_drops > 0
-              ? Math.min((challenge.current_drops / challenge.target_drops) * 100, 100)
-              : 0;
-            // If actual balance >= target, mark as completed on client side
-            if (!challenge.is_completed && challenge.target_drops > 0 && challenge.current_drops >= challenge.target_drops) {
-              challenge.is_completed = true;
-            }
-          });
-        }
-      }
-
       if (isMountedRef.current) {
         setChallenges(challengesWithProgress);
         hasLoadedRef.current = true;

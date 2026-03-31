@@ -122,25 +122,20 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
     }
   }, [visible, badge]);
 
-  // Close animation — snappy reverse
+  // Close animation — clean fade out
   const handleClose = () => {
     if (isClosing) return;
     setIsClosing(true);
 
-    shareOpacity.value = withTiming(0, { duration: 100 });
-    shareTranslateY.value = withTiming(15, { duration: 100 });
-    infoOpacity.value = withTiming(0, { duration: 100 });
-    infoTranslateY.value = withTiming(15, { duration: 100 });
-    coinRotation.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.cubic) });
-    coinScale.value = withTiming(0.2, { duration: 250, easing: Easing.in(Easing.cubic) });
-    coinOpacity.value = withDelay(120, withTiming(0, { duration: 100 }));
-    backdropOpacity.value = withDelay(80, withTiming(0, { duration: 180 }));
+    shareOpacity.value = withTiming(0, { duration: 120 });
+    infoOpacity.value = withTiming(0, { duration: 140 });
+    coinOpacity.value = withTiming(0, { duration: 160 });
+    backdropOpacity.value = withTiming(0, { duration: 200 });
 
-    // Call onClose after animation
     setTimeout(() => {
       onClose();
       setIsClosing(false);
-    }, 320);
+    }, 220);
   };
 
   const handleShare = async () => {

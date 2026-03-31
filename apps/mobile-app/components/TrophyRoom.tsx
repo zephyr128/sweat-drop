@@ -5,24 +5,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useSession } from '@/hooks/useSession';
 import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
 import { useAllBadges, BadgeWithProgress } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
-import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import BackButton from './BackButton';
 import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-
-// AGENT NOTE: [2026-03-03] - mobile-coder
-// Redesigned TrophyRoom to Apple Fitness Awards style:
-// - Clean 3-column grid layout
-// - Earned badges at the top, locked badges below
-// - Minimal chrome, focus on the badges themselves
-// - Category color-coding like Apple Fitness rings
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -33,13 +25,12 @@ interface TrophyRoomProps {
 
 export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const { t } = useTranslation('trophyRoom');
-  const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
   const { badges: earnedBadges, loading: badgesLoading } = useUserBadges(userId);
   const { globalAchievements, gymChallenges, loading: allBadgesLoading } = useAllBadges();
-  const { progress: userProgress, isCompleted } = useUserProgress(userId);
+  const { progress: userProgress } = useUserProgress(userId);
   const [filterType, setFilterType] = useState<'all' | 'this_gym' | 'earned' | 'locked'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
@@ -57,7 +48,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         (b) => b.badge_type === 'global' && b.badge_name === achievement.name
       );
       const prog = userProgress.find((p) => p.global_achievement_id === achievement.id);
-      // Earned if badge row exists OR progress says criteria is met
       const earned = !!earnedBadge || prog?.is_completed === true;
 
       badges.push({
@@ -80,7 +70,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         (b) => b.badge_type === 'gym' && b.badge_name === challenge.name
       );
       const prog = userProgress.find((p) => p.gym_challenge_id === challenge.id);
-      // Earned if badge row exists OR progress says criteria is met
       const earned = !!earnedBadge || prog?.is_completed === true;
 
       badges.push({
@@ -98,12 +87,10 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       });
     });
 
-    // Merge orphan earned gym badges not covered by gymChallenges
-    // ONLY include orphans from the current active gym (not from other gyms)
     const coveredGymBadgeNames = new Set(gymChallenges.map((c) => c.name));
     earnedBadges
       .filter((b) => b.badge_type === 'gym' && !coveredGymBadgeNames.has(b.badge_name))
-      .filter((b) => !activeGymId || b.gym_id === activeGymId) // Only current gym's orphans
+      .filter((b) => !activeGymId || b.gym_id === activeGymId)
       .forEach((b) => {
         badges.push({
           id: b.badge_id,
@@ -126,26 +113,22 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     let filtered = allBadgesWithProgress;
 
     if (filterType === 'this_gym') {
-      // Show only badges from the current active gym
       filtered = filtered.filter((badge) =>
         badge.badge_type === 'gym' &&
         (!activeGymId || badge.gym_id === activeGymId)
       );
     } else if (filterType === 'all') {
-      // Show global badges + current gym badges only (not other gyms)
       filtered = filtered.filter((badge) =>
         badge.badge_type === 'global' ||
         (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId))
       );
     } else if (filterType === 'earned') {
-      // Show earned badges from global + current gym only
       filtered = filtered.filter((badge) =>
         badge.is_earned &&
         (badge.badge_type === 'global' ||
           (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId)))
       );
     } else if (filterType === 'locked') {
-      // Show locked badges from global + current gym only
       filtered = filtered.filter((badge) =>
         !badge.is_earned &&
         (badge.badge_type === 'global' ||
@@ -164,16 +147,14 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     return filtered;
   }, [allBadgesWithProgress, filterType, searchQuery, activeGymId]);
 
-  // Separate earned and locked for display
   const earnedFiltered = filteredBadges.filter((b) => b.is_earned);
   const lockedFiltered = filteredBadges.filter((b) => !b.is_earned);
 
-  // Stats
-  const totalEarned = earnedBadges.length;
+  const totalEarned = allBadgesWithProgress.filter((b) => b.is_earned).length;
   const totalAvailable = allBadgesWithProgress.length;
+  const completionPct = totalAvailable > 0 ? Math.round((totalEarned / totalAvailable) * 100) : 0;
 
   const handleBadgePress = (badge: BadgeWithProgress) => {
-    // Build a UserBadge-compatible object for both earned and locked
     const earnedBadge = earnedBadges.find(
       (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type
     );
@@ -234,6 +215,13 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     );
   }
 
+  const FILTERS: { key: 'all' | 'this_gym' | 'earned' | 'locked'; labelKey: string }[] = [
+    { key: 'all',      labelKey: 'filterAll' },
+    { key: 'this_gym', labelKey: 'filterThisGym' },
+    { key: 'earned',   labelKey: 'filterEarned' },
+    { key: 'locked',   labelKey: 'filterLocked' },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient
@@ -242,7 +230,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       />
 
       {/* Header */}
-      <View style={styles.header}>
+      <Animated.View entering={FadeIn.delay(0).duration(350)} style={styles.header}>
         {onClose ? (
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
@@ -252,37 +240,58 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         )}
         <Text style={styles.headerTitle}>{t('title')}</Text>
         <View style={styles.headerSpacer} />
-      </View>
+      </Animated.View>
 
-      {/* Summary pill */}
-      <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-        <View style={styles.summaryBar}>
-          <View style={[styles.summaryPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-            <Ionicons name="trophy" size={15} color={branding.primary} />
-            <Text style={[styles.summaryText, { color: branding.primary }]}>
-              {totalEarned}
-            </Text>
-            <Text style={styles.summaryLabel}>
-              {t('ofEarned', { total: totalAvailable })}
-            </Text>
+      {/* Hero Stats Banner */}
+      <Animated.View entering={FadeInDown.delay(80).duration(400)}>
+        <View style={styles.heroBanner}>
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          <LinearGradient
+            colors={[hexToRgba(branding.primary, 0.10), 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.heroLeft}>
+            <View style={[styles.heroTrophyBox, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+              <Ionicons name="trophy" size={26} color={branding.primary} />
+            </View>
+            <View>
+              <Text style={[styles.heroCount, { color: branding.primary }]}>
+                {totalEarned}
+                <Text style={styles.heroCountOf}> / {totalAvailable}</Text>
+              </Text>
+              <Text style={styles.heroLabel}>{t('badgesEarned')}</Text>
+            </View>
+          </View>
+          <View style={styles.heroRight}>
+            <Text style={[styles.heroPct, { color: branding.primary }]}>{completionPct}%</Text>
+            <Text style={styles.heroLabel}>{t('completion')}</Text>
           </View>
         </View>
       </Animated.View>
 
       {/* Filter tabs */}
-      <Animated.View entering={FadeInDown.delay(150).duration(400)}>
-        <View style={styles.filterRow}>
-          {(['all', 'this_gym', 'earned', 'locked'] as const).map((type) => {
-            const isActive = filterType === type;
-            const labelMap = { all: t('filterAll'), this_gym: t('filterThisGym'), earned: t('filterEarned'), locked: t('filterLocked') };
+      <Animated.View entering={FadeInDown.delay(160).duration(400)}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {FILTERS.map(({ key, labelKey }) => {
+            const isActive = filterType === key;
             return (
               <TouchableOpacity
-                key={type}
+                key={key}
                 style={[
                   styles.filterTab,
-                  isActive && { backgroundColor: branding.primary },
+                  isActive && {
+                    backgroundColor: branding.primary,
+                    borderColor: branding.primary,
+                  },
                 ]}
-                onPress={() => setFilterType(type)}
+                onPress={() => setFilterType(key)}
+                activeOpacity={0.7}
               >
                 <Text
                   style={[
@@ -290,29 +299,29 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                     isActive && { color: branding.onPrimary, ...fontStyles.bodySemiBold },
                   ]}
                 >
-                  {labelMap[type]}
+                  {t(labelKey)}
                 </Text>
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
       </Animated.View>
 
       {/* Search */}
-      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+      <Animated.View entering={FadeInDown.delay(220).duration(400)}>
         <View style={styles.searchWrapper}>
-          <View style={[styles.searchBox, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
-            <Ionicons name="search" size={16} color="rgba(255,255,255,0.3)" />
+          <View style={[styles.searchBox, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
+            <Ionicons name="search" size={15} color="rgba(255,255,255,0.25)" />
             <TextInput
               style={styles.searchInput}
               placeholder={t('searchPlaceholder')}
-              placeholderTextColor="rgba(255,255,255,0.25)"
+              placeholderTextColor="rgba(255,255,255,0.2)"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.3)" />
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={15} color="rgba(255,255,255,0.3)" />
               </TouchableOpacity>
             )}
           </View>
@@ -326,7 +335,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       >
         {filteredBadges.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={56} color="rgba(255,255,255,0.15)" />
+            <View style={styles.emptyIconBox}>
+              <Ionicons name="trophy-outline" size={40} color="rgba(255,255,255,0.15)" />
+            </View>
             <Text style={styles.emptyTitle}>{t('noBadgesFound')}</Text>
             <Text style={styles.emptyText}>
               {searchQuery ? t('tryAdjustingSearch') : t('completeWorkouts')}
@@ -336,11 +347,12 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           <>
             {/* Earned section */}
             {earnedFiltered.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+              <Animated.View entering={FadeInDown.delay(280).duration(400)}>
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: branding.primary }]} />
                     <Text style={styles.sectionTitle}>{t('sectionEarned')}</Text>
-                    <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                    <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.2) }]}>
                       <Text style={[styles.sectionCountText, { color: branding.primary }]}>
                         {earnedFiltered.length}
                       </Text>
@@ -353,16 +365,15 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
               </Animated.View>
             )}
 
-            {/* Locked section */}
+            {/* In-progress / locked section */}
             {lockedFiltered.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(350).duration(400)}>
+              <Animated.View entering={FadeInDown.delay(360).duration(400)}>
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
                     <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
                     <View style={styles.sectionCountPill}>
-                      <Text style={styles.sectionCountText}>
-                        {lockedFiltered.length}
-                      </Text>
+                      <Text style={styles.sectionCountText}>{lockedFiltered.length}</Text>
                     </View>
                   </View>
                   <View style={styles.badgeGrid}>
@@ -375,7 +386,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         )}
       </ScrollView>
 
-      {/* Badge Detail Modal */}
       <BadgeDetailModal
         visible={modalVisible}
         badge={selectedBadge}
@@ -402,7 +412,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  /* Header */
+
+  /* ── Header ── */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -424,60 +435,90 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 1,
     pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
   },
-  /* Summary pill */
-  summaryBar: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  summaryPill: {
+
+  /* ── Hero stats banner ── */
+  heroBanner: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  heroLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  heroTrophyBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  summaryText: {
-    fontSize: 14,
+  heroCount: {
     ...fontStyles.heading,
+    fontSize: 26,
+    letterSpacing: 0.5,
   },
-  summaryLabel: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.45)',
-    ...fontStyles.bodyMedium,
+  heroCountOf: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.3)',
   },
-  /* Filter row */
+  heroLabel: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: 1,
+    letterSpacing: 0.3,
+  },
+  heroRight: {
+    alignItems: 'flex-end',
+  },
+  heroPct: {
+    ...fontStyles.heading,
+    fontSize: 30,
+    letterSpacing: 0.5,
+  },
+
+  /* ── Filters ── */
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   filterTab: {
-    flex: 1,
     paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   filterTabText: {
     fontSize: 13,
     ...fontStyles.bodyMedium,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.45)',
     letterSpacing: 0.2,
   },
-  /* Search */
+
+  /* ── Search ── */
   searchWrapper: {
     paddingHorizontal: 16,
     marginBottom: 8,
@@ -486,9 +527,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
     borderWidth: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
@@ -497,8 +538,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.text,
     padding: 0,
+    ...fontStyles.body,
   },
-  /* Scroll content */
+
+  /* ── Scroll ── */
   scrollView: {
     flex: 1,
   },
@@ -507,46 +550,68 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 64,
   },
-  /* Sections */
+
+  /* ── Sections ── */
   section: {
-    marginBottom: 28,
+    marginBottom: 32,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     gap: 8,
   },
+  sectionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 13,
     ...fontStyles.bodySemiBold,
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 0.2,
+    color: 'rgba(255, 255, 255, 0.55)',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    flex: 1,
   },
   sectionCountPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   sectionCountText: {
-    fontSize: 12,
+    fontSize: 11,
     ...fontStyles.bodySemiBold,
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(255, 255, 255, 0.35)',
   },
-  /* Badge grid — 3 columns */
+
+  /* ── Badge grid ── */
   badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 10,
   },
-  /* Empty state */
+
+  /* ── Empty state ── */
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 80,
-    gap: 12,
+    gap: 14,
+  },
+  emptyIconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyTitle: {
     fontSize: 18,
@@ -555,7 +620,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(255, 255, 255, 0.35)',
     textAlign: 'center',
+    ...fontStyles.body,
+    lineHeight: 20,
+    paddingHorizontal: 32,
   },
 });

@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { useAppModal } from '@/lib/stores/useAppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,7 +19,6 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useGymStore, Gym } from '@/lib/stores/useGymStore';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
-import { useAuthStore } from '@/lib/stores/authStore';
 import { theme as baseTheme, fontStyles, hexToRgba} from '@/lib/theme';
 import { shouldRetryGymsWithoutColumnFilter } from '@/lib/mobileGymListing';
 // ── GymCard Component ──────────────────────────────
@@ -124,12 +122,10 @@ function GymCard({
 // ── Main Gyms Screen ──────────────────────────
 export default function GymsScreen() {
   const { t } = useTranslation('gyms');
-  const { t: tCommon } = useTranslation('common');
-  const showModal = useAppModal((s) => s.showModal);
   const router = useRouter();
   const { activeGym } = useTheme();
   const branding = useBranding();
-  const { gyms, setGyms, homeGymId, setLoading, isLoading, setActiveGym, setPreviewGymId } = useGymStore();
+  const { gyms, setGyms, homeGymId, setLoading, isLoading } = useGymStore();
   const [localLoading, setLocalLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -225,53 +221,9 @@ export default function GymsScreen() {
     loadGyms();
   }, [loadGyms]);
 
-  const handleGymSelect = useCallback(async (gym: Gym) => {
-    const profile = useAuthStore.getState().profile;
-    const currentActiveGymId = activeGym?.id;
-    const currentHomeGymId = homeGymId;
-    const isAlreadyActive = gym.id === currentActiveGymId;
-    const isAlreadyHome = gym.id === currentHomeGymId;
-
-    if (isAlreadyActive) {
-      router.back();
-      return;
-    }
-
-    // Switch active gym immediately (branding updates)
-    setPreviewGymId(gym.id);
-    setActiveGym(gym);
-
-    // If not already home gym — ask to set as home
-    if (!isAlreadyHome && profile) {
-      showModal({
-        title: gym.name,
-        body: t('set_home_prompt'),
-        buttons: [
-          { label: tCommon('cancel'), style: 'cancel' },
-          {
-            label: t('set_home_confirm'),
-            onPress: async () => {
-              try {
-                const { error } = await supabase
-                  .from('profiles')
-                  .update({ home_gym_id: gym.id })
-                  .eq('id', profile.id);
-
-                if (!error) {
-                  useGymStore.getState().setHomeGymId(gym.id);
-                  await useAuthStore.getState().refreshProfile();
-                }
-              } catch (e) {
-                log.error('Failed to set home gym:', e);
-              }
-            },
-          },
-        ],
-      });
-    }
-
-    router.back();
-  }, [activeGym?.id, homeGymId, t, tCommon, router]);
+  const handleGymSelect = useCallback((gym: Gym) => {
+    router.push({ pathname: '/gym-detail', params: { gymId: gym.id } });
+  }, [router]);
 
   const loading = localLoading || isLoading;
 

@@ -10,6 +10,7 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -170,6 +171,10 @@ export default function SettingsScreen() {
             try {
               const { signOut } = useAuthStore.getState();
               await signOut();
+              await Promise.all([
+                AsyncStorage.removeItem('sweatdrop-auth'),
+                AsyncStorage.removeItem('gym-storage'),
+              ]);
               if (router.canDismiss()) router.dismissAll();
               router.replace('/(onboarding)/welcome');
             } catch (error: any) {
@@ -213,8 +218,15 @@ export default function SettingsScreen() {
         return;
       }
 
-      const { signOut } = useAuthStore.getState();
-      await signOut();
+      // Reset all store state and wipe both persisted keys so the next
+      // cold-start begins at the welcome screen with no stale data.
+      useAuthStore.getState().reset();
+      await Promise.all([
+        AsyncStorage.removeItem('sweatdrop-auth'),
+        AsyncStorage.removeItem('gym-storage'),
+      ]);
+      await supabase.auth.signOut();
+
       if (router.canDismiss()) router.dismissAll();
       router.replace('/(onboarding)/welcome');
     } catch (error: any) {

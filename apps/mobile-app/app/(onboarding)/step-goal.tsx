@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard, type FitnessGoal } from '@/hooks/useOnboardingWizard';
@@ -8,11 +9,13 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import OnboardingStepLayout from '@/components/OnboardingStep';
 import { useAppModal } from '@/lib/stores/useAppModal';
 
-const GOALS: { value: FitnessGoal; emoji: string; labelKey: string; descKey: string }[] = [
-  { value: 'weight_loss', emoji: '🔥', labelKey: 'profileSetup.goal.weight_loss', descKey: 'profileSetup.goal.weight_loss_desc' },
-  { value: 'strength', emoji: '💪', labelKey: 'profileSetup.goal.strength', descKey: 'profileSetup.goal.strength_desc' },
-  { value: 'cardio', emoji: '🏃', labelKey: 'profileSetup.goal.cardio', descKey: 'profileSetup.goal.cardio_desc' },
-  { value: 'health', emoji: '❤️', labelKey: 'profileSetup.goal.health', descKey: 'profileSetup.goal.health_desc' },
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const GOALS: { value: FitnessGoal; icon: IoniconName; color: string; labelKey: string; descKey: string }[] = [
+  { value: 'weight_loss', icon: 'flame',          color: '#FF6B35', labelKey: 'profileSetup.goal.weight_loss', descKey: 'profileSetup.goal.weight_loss_desc' },
+  { value: 'strength',    icon: 'barbell',        color: '#A78BFA', labelKey: 'profileSetup.goal.strength',    descKey: 'profileSetup.goal.strength_desc' },
+  { value: 'cardio',      icon: 'heart-circle',   color: '#F43F5E', labelKey: 'profileSetup.goal.cardio',      descKey: 'profileSetup.goal.cardio_desc' },
+  { value: 'health',      icon: 'leaf',           color: '#34D399', labelKey: 'profileSetup.goal.health',      descKey: 'profileSetup.goal.health_desc' },
 ];
 
 export default function StepGoalScreen() {
@@ -69,7 +72,9 @@ export default function StepGoalScreen() {
               onPress={() => handleSelect(goal.value)}
               activeOpacity={0.8}
             >
-              <Text style={styles.cardEmoji}>{goal.emoji}</Text>
+              <View style={[styles.cardIconBox, selected && { backgroundColor: hexToRgba(goal.color, 0.15) }]}>
+                <Ionicons name={goal.icon} size={28} color={selected ? goal.color : theme.colors.textSecondary} />
+              </View>
               <Text style={[styles.cardLabel, selected && { color: theme.colors.primary }]}>
                 {t(goal.labelKey)}
               </Text>
@@ -100,8 +105,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  cardEmoji: {
-    fontSize: 32,
+  cardIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 4,
   },
   cardLabel: {

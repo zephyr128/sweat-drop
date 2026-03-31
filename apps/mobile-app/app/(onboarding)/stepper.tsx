@@ -9,13 +9,18 @@ import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
-const STEP_ICONS = ['💧', '🏆', '🎁'];
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-// Step accent colors (glow behind emoji)
-const stepColors = [
-  'rgba(0, 229, 255, 0.15)',   // teal for drops
-  'rgba(255, 215, 0, 0.12)',   // gold for compete
-  'rgba(255, 107, 53, 0.12)',  // orange for rewards
+interface StepMeta {
+  icon: IoniconName;
+  color: string;
+  glowColor: string;
+}
+
+const STEP_META: StepMeta[] = [
+  { icon: 'water',       color: '#00E5FF', glowColor: 'rgba(0, 229, 255, 0.15)' },
+  { icon: 'trophy',      color: '#FFD700', glowColor: 'rgba(255, 215, 0, 0.12)' },
+  { icon: 'gift',        color: '#FF6B35', glowColor: 'rgba(255, 107, 53, 0.12)' },
 ];
 
 export default function StepperScreen() {
@@ -24,21 +29,9 @@ export default function StepperScreen() {
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 
   const STEPS = [
-    {
-      icon: STEP_ICONS[0],
-      title: t('stepper.step1Title'),
-      description: t('stepper.step1Desc'),
-    },
-    {
-      icon: STEP_ICONS[1],
-      title: t('stepper.step2Title'),
-      description: t('stepper.step2Desc'),
-    },
-    {
-      icon: STEP_ICONS[2],
-      title: t('stepper.step3Title'),
-      description: t('stepper.step3Desc'),
-    },
+    { meta: STEP_META[0], title: t('stepper.step1Title'), description: t('stepper.step1Desc') },
+    { meta: STEP_META[1], title: t('stepper.step2Title'), description: t('stepper.step2Desc') },
+    { meta: STEP_META[2], title: t('stepper.step3Title'), description: t('stepper.step3Desc') },
   ];
 
   const handleContinue = () => {
@@ -79,16 +72,14 @@ export default function StepperScreen() {
                   style={styles.stepCardBlur}
                 >
                   <View style={styles.stepCardContent}>
-                    {/* Emoji in a glowing circle with step number badge */}
-                    <View style={styles.stepEmojiContainer}>
+                    <View style={styles.stepIconContainer}>
                       <View
                         style={[
-                          styles.stepEmojiGlow,
-                          { backgroundColor: stepColors[index] },
+                          styles.stepIconGlow,
+                          { backgroundColor: step.meta.glowColor },
                         ]}
                       />
-                      <Text style={styles.stepEmoji}>{step.icon}</Text>
-                      {/* Step number badge */}
+                      <Ionicons name={step.meta.icon} size={26} color={step.meta.color} />
                       <View style={styles.stepNumber}>
                         <Text style={styles.stepNumberText}>{index + 1}</Text>
                       </View>
@@ -138,7 +129,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: theme.spacing.xl,
+    paddingHorizontal: 24,
+    paddingVertical: theme.spacing.xl,
   },
 
   // ── Header ──
@@ -181,22 +173,23 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     backgroundColor: 'rgba(20, 20, 30, 0.70)',
   },
-  stepEmojiContainer: {
+  stepIconContainer: {
     position: 'relative',
     width: 52,
     height: 52,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  stepEmojiGlow: {
+  stepIconGlow: {
     position: 'absolute',
     width: 52,
     height: 52,
-    borderRadius: 26,
-  },
-  stepEmoji: {
-    fontSize: 28,
+    borderRadius: 16,
   },
   stepNumber: {
     position: 'absolute',

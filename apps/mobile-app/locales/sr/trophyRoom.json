@@ -1,6 +1,8 @@
 {
   "title": "Soba trofeja",
   "ofEarned": "od {{total}} osvojeno",
+  "badgesEarned": "Bedževi",
+  "completion": "Završenost",
   "filterAll": "Sve",
   "filterThisGym": "Ova teretana",
   "filterEarned": "Osvojeno",

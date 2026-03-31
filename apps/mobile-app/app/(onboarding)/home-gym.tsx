@@ -11,6 +11,7 @@ import { theme, fontStyles } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
 import { GymCard } from '@/components/GymCard';
+import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
 import { useAppModal } from '@/lib/stores/useAppModal';
 
@@ -18,6 +19,7 @@ export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
   const [settingGym, setSettingGym] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
   const router = useRouter();
   const { theme: currentTheme } = useTheme();
   const { t } = useTranslation('onboarding');
@@ -160,20 +162,24 @@ export default function HomeGymScreen() {
           </Animated.View>
         ))}
 
-        {/* Coming Soon Card */}
+        {/* Suggest Your Gym Card */}
         <Animated.View
           entering={FadeInDown.delay(150 + gyms.length * 80).duration(400)}
           style={styles.comingSoonContainer}
         >
-          <View style={styles.comingSoonCard}>
+          <TouchableOpacity
+            style={styles.comingSoonCard}
+            onPress={() => setShowWaitlist(true)}
+            activeOpacity={0.7}
+          >
             <View style={styles.comingSoonContent}>
               <View style={styles.comingSoonIconRow}>
-                <Ionicons name="add-circle-outline" size={24} color={theme.colors.textTertiary} />
+                <Ionicons name="add-circle" size={24} color={currentTheme.colors.primary} />
               </View>
-              <Text style={styles.comingSoonTitle}>{t('homeGym.comingSoon')}</Text>
+              <Text style={[styles.comingSoonTitle, { color: theme.colors.textSecondary }]}>{t('homeGym.comingSoon')}</Text>
               <Text style={styles.comingSoonSubtitle}>{t('homeGym.comingSoonSub')}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Skip */}
@@ -197,6 +203,12 @@ export default function HomeGymScreen() {
           <ActivityIndicator size="large" color={currentTheme.colors.primary} />
         </View>
       )}
+
+      <WaitlistBottomSheet
+        visible={showWaitlist}
+        onClose={() => setShowWaitlist(false)}
+        brandColor={currentTheme.colors.primary}
+      />
     </SafeAreaView>
   );
 }
@@ -215,7 +227,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   header: {

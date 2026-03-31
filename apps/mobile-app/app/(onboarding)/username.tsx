@@ -84,7 +84,7 @@ export default function DisplayNameScreen() {
             style={styles.headerSection}
           >
             <View style={styles.iconRing}>
-              <Text style={styles.iconEmoji}>✏️</Text>
+              <Ionicons name="person-outline" size={30} color={theme.colors.primary} />
             </View>
             <Text style={styles.title}>{t('username.title')}</Text>
             <Text style={styles.subtitle}>
@@ -177,7 +177,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: theme.spacing.xl,
+    paddingHorizontal: 24,
+    paddingVertical: theme.spacing.xl,
     justifyContent: 'center',
   },
 
@@ -196,9 +197,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: theme.spacing.xl,
-  },
-  iconEmoji: {
-    fontSize: 32,
   },
   title: {
     ...fontStyles.heading,

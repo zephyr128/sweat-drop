@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,7 +10,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
@@ -21,11 +21,26 @@ export const ProgressWidget: React.FC = () => {
   const { t } = useTranslation('home');
   const router = useRouter();
   const branding = useBranding();
-  const { globalAchievements, gymChallenges } = useAllBadges();
-  const { badges: earnedBadges } = useUserBadges();
-  const { progress: userProgress } = useUserProgress();
+  const { globalAchievements, gymChallenges, refresh: refreshAllBadges } = useAllBadges();
+  const { badges: earnedBadges, refresh: refreshEarnedBadges } = useUserBadges();
+  const { progress: userProgress, refresh: refreshProgress } = useUserProgress();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshEarnedBadges();
+      refreshProgress();
+    }, [refreshEarnedBadges, refreshProgress])
+  );
 
   const nextBadge = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const activeGymChallenges = gymChallenges.filter((c) => {
+      if (!c.is_active) return false;
+      if (c.start_date && c.start_date > today) return false;
+      if (c.end_date && c.end_date < today) return false;
+      return true;
+    });
+
     const allBadges = [
       ...globalAchievements.map((a) => ({
         id: a.id,
@@ -36,7 +51,7 @@ export const ProgressWidget: React.FC = () => {
         progress: userProgress.find((p) => p.global_achievement_id === a.id),
         is_earned: earnedBadges.some((b) => b.badge_type === 'global' && b.badge_name === a.name),
       })),
-      ...gymChallenges.map((c) => ({
+      ...activeGymChallenges.map((c) => ({
         id: c.id,
         name: c.name,
         badge_image_url: c.badge_image_url,

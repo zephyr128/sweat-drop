@@ -14,7 +14,7 @@ import BackButton from '@/components/BackButton';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { classifyRewardClaimError } from '@/lib/security/reward-claim-errors';
 
@@ -282,14 +282,14 @@ export default function RewardDetailScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Hero Image / Icon */}
-        <Animated.View entering={ZoomIn.delay(100).duration(400)} style={styles.heroContainer}>
+        <Animated.View entering={FadeIn.delay(80).duration(500)} style={styles.heroContainer}>
           {reward.image_url ? (
             <View style={styles.heroImageWrapper}>
               <Image
                 source={reward.image_url}
                 style={[styles.heroImage, { borderColor: hexToRgba(branding.primary, 0.15) }]}
                 contentFit="cover"
-                transition={200}
+                transition={300}
               />
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.6)']}
@@ -423,7 +423,7 @@ export default function RewardDetailScreen() {
 
         {/* Pending: show code with amber */}
         {redemptionStatus === 'pending' && lastCode && (
-          <Animated.View entering={ZoomIn.delay(100).duration(400)}>
+          <Animated.View entering={FadeInDown.delay(350).duration(400)}>
             <View style={[styles.codeCard, { borderColor: 'rgba(251, 191, 36, 0.3)' }]}>
               <BlurView intensity={50} tint="dark" style={[styles.codeBlur, { backgroundColor: 'rgba(30, 25, 15, 0.75)' }]}>
                 <Ionicons name="time-outline" size={32} color="#fbbf24" />
@@ -439,7 +439,7 @@ export default function RewardDetailScreen() {
 
         {/* Confirmed: green badge, no code */}
         {redemptionStatus === 'confirmed' && (
-          <Animated.View entering={ZoomIn.delay(100).duration(400)}>
+          <Animated.View entering={FadeInDown.delay(350).duration(400)}>
             <View style={[styles.codeCard, { borderColor: 'rgba(74, 222, 128, 0.3)' }]}>
               <BlurView intensity={50} tint="dark" style={[styles.codeBlur, { backgroundColor: 'rgba(20, 30, 20, 0.75)' }]}>
                 <Ionicons name="checkmark-circle" size={32} color="#4ade80" />

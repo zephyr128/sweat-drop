@@ -98,7 +98,7 @@
   "profileSetup": {
     "skip": "Preskoči",
     "next": "DALJE",
-    "finish": "ZAVRŠI ✓",
+    "finish": "ZAVRŠI",
     "stepOf": "Korak {{step}} od {{total}}",
     "gender": {
       "title": "KOJI SI POL?",
@@ -156,8 +156,21 @@
   "homeGym": {
     "title": "Otkrij partnerske teretane",
     "subtitle": "SweatDrop je dostupan na ovim lokacijama.\nPostavi svoju teretanu da počneš da osvajiraš kapi.",
-    "comingSoon": "Uskoro još teretana",
-    "comingSoonSub": "Širimo se na nove lokacije.\nPratite nas za ažuriranja!",
+    "comingSoon": "Ne vidiš svoju teretanu?",
+    "comingSoonSub": "Predloži teretanu i radićemo na tome\nda dovedemo SweatDrop tamo",
+    "suggestGym": "Predloži svoju teretanu",
+    "suggestGymSub": "Reci nam u kojoj teretani bi voleo da vidiš SweatDrop i potrudićemo se da je dovedemo.",
+    "gymNamePlaceholder": "Ime teretane",
+    "cityPlaceholder": "Grad (opciono)",
+    "notesPlaceholder": "Zašto bi trebali da dođemo? (opciono)",
+    "submitSuggestion": "Pošalji predlog",
+    "thankYou": "Hvala!",
+    "thankYouSub": "Javićemo ti kada se proširimo tamo. Prati nas!",
+    "alreadySuggested": "Već poslato",
+    "alreadySuggestedSub": "Već si predložio/la ovu teretanu. Radimo na tome!",
+    "submitError": "Nešto je pošlo naopako",
+    "tryAgain": "Pokušaj ponovo",
+    "done": "Gotovo",
     "skip": "Nastavi bez postavljanja teretane",
     "error": "Greška",
     "errorMsg": "Nije uspelo postavljanje teretane. Pokušajte ponovo."

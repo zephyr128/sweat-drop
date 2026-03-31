@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -19,6 +19,9 @@ import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { log } from '@/lib/logger';
 import { useTranslation } from 'react-i18next';
+import { BadgeCard } from '@/components/BadgeCard';
+import { BadgeDetailModal } from '@/components/BadgeDetailModal';
+import type { UserBadge } from '@/hooks/useUserBadges';
 import Animated, {
   FadeInDown,
   FadeIn,
@@ -82,7 +85,8 @@ export default function SessionSummaryScreen() {
   const [challengeProgress, setChallengeProgress] = useState<ChallengeProgressItem[]>([]);
   const [completedChallenges, setCompletedChallenges] = useState<ChallengeProgressItem[]>([]);
   const [streakDays, setStreakDays] = useState<number>(0);
-  const [selectedBadge, setSelectedBadge] = useState<any | null>(null);
+  const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
   const router = useRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
@@ -810,43 +814,43 @@ export default function SessionSummaryScreen() {
                   </Text>
                   <Text style={styles.badgesTapHint}>{t('summary.tapToView')}</Text>
                 </Animated.View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.badgesScroll}
-                >
-                  {earnedBadges.map((badge, index) => (
+                <View style={styles.badgesGrid}>
+                  {earnedBadges.map((badge: any, index: number) => (
                     <Animated.View
                       key={badge.badge_id}
                       entering={ZoomIn.delay(800 + index * 100).duration(400).springify()}
                     >
-                      <TouchableOpacity
-                        style={[styles.badgeCard, { borderColor: hexToRgba('#FFD700', 0.30) }]}
-                        onPress={() => setSelectedBadge(badge)}
-                        activeOpacity={0.8}
-                      >
-                        {badge.badge_image_url ? (
-                          <Image
-                            source={badge.badge_image_url}
-                            style={styles.badgeImage}
-                            contentFit="contain"
-                            transition={200}
-                          />
-                        ) : (
-                          <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
-                            <Ionicons name="trophy" size={28} color="#FFD700" />
-                          </View>
-                        )}
-                        <Text style={styles.badgeName} numberOfLines={2}>
-                          {badge.badge_name ?? badge.challenge_name}
-                        </Text>
-                        <View style={styles.badgeTapIndicator}>
-                          <Ionicons name="information-circle-outline" size={12} color="rgba(255,215,0,0.45)" />
-                        </View>
-                      </TouchableOpacity>
+                      <BadgeCard
+                        badge={{
+                          badge_id: badge.badge_id,
+                          badge_name: badge.badge_name ?? badge.challenge_name,
+                          badge_description: badge.badge_description ?? badge.description ?? null,
+                          badge_image_url: badge.badge_image_url,
+                          earned_at: badge.earned_at,
+                          badge_type: badge.badge_type || 'global',
+                          gym_name: badge.gym_name || null,
+                          gym_id: badge.gym_id || null,
+                        }}
+                        isLocked={false}
+                        progress={100}
+                        onPress={() => {
+                          setSelectedBadge({
+                            badge_id: badge.badge_id,
+                            badge_name: badge.badge_name ?? badge.challenge_name,
+                            badge_description: badge.badge_description ?? badge.description ?? null,
+                            badge_image_url: badge.badge_image_url,
+                            earned_at: badge.earned_at,
+                            badge_type: badge.badge_type || 'global',
+                            gym_name: badge.gym_name || null,
+                            gym_id: badge.gym_id || null,
+                          });
+                          setModalVisible(true);
+                        }}
+                        size="medium"
+                      />
                     </Animated.View>
                   ))}
-                </ScrollView>
+                </View>
               </BlurView>
             </View>
           </Animated.View>
@@ -984,73 +988,17 @@ export default function SessionSummaryScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* ── Badge Detail Modal ── */}
-      <Modal
-        visible={!!selectedBadge}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedBadge(null)}
-        statusBarTranslucent
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedBadge(null)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <BlurView intensity={60} tint="dark" style={styles.modalBlur}>
-              <LinearGradient
-                colors={['rgba(255,215,0,0.12)', 'rgba(18,18,28,0.95)']}
-                start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
-                style={styles.modalGradient}
-              >
-                {/* Badge image */}
-                <View style={styles.modalImageWrap}>
-                  {selectedBadge?.badge_image_url ? (
-                    <Image
-                      source={selectedBadge.badge_image_url}
-                      style={styles.modalBadgeImage}
-                      contentFit="contain"
-                      transition={200}
-                    />
-                  ) : (
-                    <View style={[styles.modalBadgePlaceholder, { backgroundColor: 'rgba(255,215,0,0.12)' }]}>
-                      <Ionicons name="trophy" size={56} color="#FFD700" />
-                    </View>
-                  )}
-                  <View style={[styles.modalBadgeGlow, { shadowColor: '#FFD700' }]} />
-                </View>
-
-                {/* Badge info */}
-                <Text style={styles.modalBadgeName}>
-                  {selectedBadge?.badge_name ?? selectedBadge?.challenge_name}
-                </Text>
-                <View style={styles.modalEarnedRow}>
-                  <Ionicons name="checkmark-circle" size={14} color="#4CD964" />
-                  <Text style={styles.modalEarnedText}>{t('summary.justEarned')}</Text>
-                </View>
-                {selectedBadge?.description ? (
-                  <Text style={styles.modalBadgeDesc}>{selectedBadge.description}</Text>
-                ) : null}
-
-                {/* Actions */}
-                <TouchableOpacity
-                  style={[styles.modalPrimaryBtn, { backgroundColor: branding.primary }]}
-                  onPress={() => {
-                    setSelectedBadge(null);
-                    router.push('/trophy-room');
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="trophy-outline" size={18} color={branding.onPrimary} />
-                  <Text style={[styles.modalPrimaryBtnText, { color: branding.onPrimary }]}>
-                    {t('summary.viewInTrophy')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setSelectedBadge(null)} style={styles.modalDismiss}>
-                  <Text style={styles.modalDismissText}>{t('summary.dismiss')}</Text>
-                </TouchableOpacity>
-              </LinearGradient>
-            </BlurView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* ── Badge Detail Modal (same as TrophyRoom) ── */}
+      <BadgeDetailModal
+        visible={modalVisible}
+        badge={selectedBadge}
+        isLocked={false}
+        progress={100}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedBadge(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -1408,145 +1356,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.35)',
     letterSpacing: 0.2,
   },
-  badgesScroll: {
-    gap: 10,
-    paddingHorizontal: 2,
-    paddingBottom: 2,
-  },
-  badgeCard: {
-    width: 90,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,215,0,0.05)',
-    borderRadius: 14,
-    padding: 10,
-    borderWidth: 1,
-    gap: 6,
-  },
-  badgeImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-  },
-  badgePlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeName: {
-    ...fontStyles.bodyMedium,
-    fontSize: 10,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.2,
-    lineHeight: 14,
-  },
-  badgeTapIndicator: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-  },
-
-  /* Badge detail modal */
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    borderRadius: 28,
-    overflow: 'hidden',
-    margin: 16,
-    marginBottom: 32,
-  },
-  modalBlur: {
-    overflow: 'hidden',
-    borderRadius: 28,
-    backgroundColor: 'rgba(18,18,28,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.20)',
-  },
-  modalGradient: {
-    padding: 24,
-    alignItems: 'center',
-    gap: 10,
-  },
-  modalImageWrap: {
-    width: 120,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  modalBadgeImage: {
-    width: 110,
-    height: 110,
-    borderRadius: 20,
-  },
-  modalBadgePlaceholder: {
-    width: 110,
-    height: 110,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalBadgeGlow: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 30,
-    elevation: 12,
-  },
-  modalBadgeName: {
-    ...fontStyles.heading,
-    fontSize: 22,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  modalEarnedRow: {
+  badgesGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  modalEarnedText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 13,
-    color: '#4CD964',
-  },
-  modalBadgeDesc: {
-    ...fontStyles.body,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
-    textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 8,
-  },
-  modalPrimaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 14,
-    marginTop: 6,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-  },
-  modalPrimaryBtnText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
-  },
-  modalDismiss: {
-    paddingVertical: 8,
-  },
-  modalDismissText: {
-    ...fontStyles.body,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.40)',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   /* Challenge Progress */
   challengeSection: {

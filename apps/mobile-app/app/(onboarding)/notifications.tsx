@@ -101,13 +101,15 @@ export default function NotificationsScreen() {
           entering={FadeInDown.delay(500).duration(500)}
           style={styles.benefitsList}
         >
-          {[
-            { icon: '🔥', text: t('notifications.benefit1') },
-            { icon: '🏆', text: t('notifications.benefit2') },
-            { icon: '🎁', text: t('notifications.benefit3') },
-          ].map((benefit, index) => (
+          {([
+            { icon: 'flame' as const, color: '#FF6B35', text: t('notifications.benefit1') },
+            { icon: 'trophy' as const, color: '#FFD700', text: t('notifications.benefit2') },
+            { icon: 'gift' as const, color: theme.colors.primary, text: t('notifications.benefit3') },
+          ]).map((benefit, index) => (
             <View key={index} style={styles.benefitRow}>
-              <Text style={styles.benefitIcon}>{benefit.icon}</Text>
+              <View style={styles.benefitIconBox}>
+                <Ionicons name={benefit.icon} size={20} color={benefit.color} />
+              </View>
               <Text style={styles.benefitText}>{benefit.text}</Text>
             </View>
           ))}
@@ -168,7 +170,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: theme.spacing.xl,
+    paddingHorizontal: 24,
+    paddingVertical: theme.spacing.xl,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -235,8 +238,13 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
   },
-  benefitIcon: {
-    fontSize: 22,
+  benefitIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   benefitText: {
     ...fontStyles.bodyMedium,

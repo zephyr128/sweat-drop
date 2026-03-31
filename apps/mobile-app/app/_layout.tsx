@@ -90,7 +90,6 @@ function StackNavigator() {
       <Stack.Screen name="challenges" options={{ headerShown: false }} />
       <Stack.Screen name="challenge-detail" options={{ headerShown: false }} />
       <Stack.Screen name="redemptions" options={{ headerShown: false }} />
-      <Stack.Screen name="gym-details" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="gym-detail" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
       <Stack.Screen name="smartcoach" options={{ headerShown: false }} />

@@ -98,7 +98,7 @@
   "profileSetup": {
     "skip": "Skip",
     "next": "NEXT",
-    "finish": "FINISH ✓",
+    "finish": "FINISH",
     "stepOf": "Step {{step}} of {{total}}",
     "gender": {
       "title": "WHAT'S YOUR GENDER?",
@@ -156,8 +156,21 @@
   "homeGym": {
     "title": "Discover Partner Gyms",
     "subtitle": "SweatDrop is available at these locations.\nSet your home gym to start earning drops.",
-    "comingSoon": "More gyms coming soon",
-    "comingSoonSub": "We are expanding to new locations.\nStay tuned for updates!",
+    "comingSoon": "Don't see your gym?",
+    "comingSoonSub": "Suggest a gym and we'll work\nto bring SweatDrop there",
+    "suggestGym": "Suggest Your Gym",
+    "suggestGymSub": "Tell us which gym you'd like to see on SweatDrop and we'll do our best to bring it here.",
+    "gymNamePlaceholder": "Gym name",
+    "cityPlaceholder": "City (optional)",
+    "notesPlaceholder": "Why should we come here? (optional)",
+    "submitSuggestion": "Submit Suggestion",
+    "thankYou": "Thank You!",
+    "thankYouSub": "We'll reach out when we expand there. Stay tuned!",
+    "alreadySuggested": "Already Submitted",
+    "alreadySuggestedSub": "You've already suggested this gym. We're on it!",
+    "submitError": "Something went wrong",
+    "tryAgain": "Try Again",
+    "done": "Done",
     "skip": "Continue without setting a gym",
     "error": "Error",
     "errorMsg": "Failed to set home gym. Please try again."

@@ -334,7 +334,7 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
 const ALLOWED_DEEP_LINK_PREFIXES = [
   '/home', '/store', '/challenges', '/wallet', '/leaderboard',
   '/trophy-room', '/arenas', '/redemptions', '/profile',
-  '/workout-history', '/gym-details', '/challenge-detail',
+  '/workout-history', '/gym-detail', '/challenge-detail',
   '/reward-detail', '/arena', '/session-summary', '/gyms', '/happy-hours',
 ];
 

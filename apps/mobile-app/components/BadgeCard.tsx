@@ -10,46 +10,42 @@ import type { UserBadge } from '@/hooks/useUserBadges';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_PADDING = 16;
-const GRID_GAP = 12;
+const GRID_GAP = 10;
 const COLUMNS = 3;
 const BADGE_SIZE = Math.floor(
   (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * (COLUMNS - 1)) / COLUMNS
 );
-const CIRCLE_SIZE = BADGE_SIZE - 12;
-/** Badge artwork fills most of the coin (was 0.5 — too small on phones). */
-const ICON_SIZE = CIRCLE_SIZE * 0.72;
+const CIRCLE_SIZE = BADGE_SIZE - 16;
+const ICON_SIZE = CIRCLE_SIZE * 0.68;
 
 interface BadgeCardProps {
   badge: UserBadge;
   isLocked: boolean;
-  progress?: number; // 0-100 for locked badges
+  progress?: number;
   onPress: () => void;
   size?: 'small' | 'medium' | 'large';
 }
 
-// Progress ring component (Apple Watch ring style)
 const ProgressRing: React.FC<{
   progress: number;
   size: number;
   color: string;
 }> = ({ progress, size, color }) => {
-  const strokeWidth = 3;
+  const strokeWidth = 2.5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
     <Svg width={size} height={size} style={styles.progressRing}>
-      {/* Background ring */}
       <Circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
-        stroke="rgba(255, 255, 255, 0.06)"
+        stroke="rgba(255, 255, 255, 0.05)"
         strokeWidth={strokeWidth}
         fill="none"
       />
-      {/* Progress ring */}
       <Circle
         cx={size / 2}
         cy={size / 2}
@@ -67,16 +63,15 @@ const ProgressRing: React.FC<{
   );
 };
 
-// Badge category color mapping
 export function getBadgeCategoryColor(badgeName: string, brandPrimary: string): string {
   const name = badgeName.toLowerCase();
   if (name.includes('streak') || name.includes('warm-up') || name.includes('unstoppable') || name.includes('iron will'))
-    return '#FF9500'; // Orange for streaks
+    return '#FF9500';
   if (name.includes('drop') || name.includes('collector') || name.includes('hoarder') || name.includes('legend'))
-    return '#30D158'; // Green for drops milestones
+    return '#30D158';
   if (name.includes('gym') || name.includes('explorer'))
-    return '#BF5AF2'; // Purple for exploration
-  return brandPrimary; // Default brand color
+    return '#BF5AF2';
+  return brandPrimary;
 }
 
 export const BadgeCard: React.FC<BadgeCardProps> = ({
@@ -84,7 +79,6 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
   isLocked,
   progress = 0,
   onPress,
-  size = 'medium',
 }) => {
   const branding = useBranding();
   const categoryColor = getBadgeCategoryColor(badge.badge_name, branding.primary);
@@ -95,23 +89,23 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
       activeOpacity={0.7}
       style={styles.container}
     >
-      {/* Outer glow for earned badges */}
+      {/* Outer glow ring — earned only */}
       {!isLocked && (
         <View
           style={[
             styles.outerGlow,
             {
-              width: CIRCLE_SIZE + 8,
-              height: CIRCLE_SIZE + 8,
-              borderRadius: (CIRCLE_SIZE + 8) / 2,
+              width: CIRCLE_SIZE + 10,
+              height: CIRCLE_SIZE + 10,
+              borderRadius: (CIRCLE_SIZE + 10) / 2,
               shadowColor: categoryColor,
-              borderColor: hexToRgba(categoryColor, 0.2),
+              borderColor: hexToRgba(categoryColor, 0.22),
             },
           ]}
         />
       )}
 
-      {/* Badge circle — coin style */}
+      {/* Badge circle */}
       <View
         style={[
           styles.badgeCircle,
@@ -121,32 +115,32 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
             borderRadius: CIRCLE_SIZE / 2,
           },
           !isLocked && {
-            backgroundColor: hexToRgba(categoryColor, 0.05),
-            borderColor: categoryColor,
-            borderWidth: 2.5,
+            backgroundColor: hexToRgba(categoryColor, 0.06),
+            borderColor: hexToRgba(categoryColor, 0.6),
+            borderWidth: 2,
           },
           isLocked && {
             backgroundColor: 'rgba(255, 255, 255, 0.02)',
-            borderColor: 'rgba(255, 255, 255, 0.08)',
+            borderColor: 'rgba(255, 255, 255, 0.07)',
             borderWidth: 1.5,
           },
         ]}
       >
-        {/* Metallic shine gradient (earned only) */}
+        {/* Earned shine */}
         {!isLocked && (
           <LinearGradient
             colors={[
-              hexToRgba(categoryColor, 0.15),
+              hexToRgba(categoryColor, 0.18),
               'transparent',
-              hexToRgba(categoryColor, 0.08),
+              hexToRgba(categoryColor, 0.06),
             ]}
-            start={{ x: 0.2, y: 0 }}
-            end={{ x: 0.8, y: 1 }}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
             style={[StyleSheet.absoluteFill, { borderRadius: CIRCLE_SIZE / 2 }]}
           />
         )}
 
-        {/* Progress ring for locked badges */}
+        {/* Progress ring */}
         {isLocked && progress > 0 && (
           <ProgressRing
             progress={progress}
@@ -155,16 +149,13 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
           />
         )}
 
-        {/* Badge image or placeholder */}
+        {/* Badge artwork */}
         {badge.badge_image_url ? (
           <Image
             source={{ uri: badge.badge_image_url }}
             style={[
               styles.badgeImage,
-              {
-                width: ICON_SIZE,
-                height: ICON_SIZE,
-              },
+              { width: ICON_SIZE, height: ICON_SIZE },
               isLocked && styles.badgeImageLocked,
             ]}
             contentFit="contain"
@@ -172,45 +163,42 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
         ) : (
           <Ionicons
             name="trophy"
-            size={ICON_SIZE * 0.7}
-            color={isLocked ? 'rgba(255,255,255,0.15)' : categoryColor}
+            size={ICON_SIZE * 0.65}
+            color={isLocked ? 'rgba(255,255,255,0.12)' : categoryColor}
           />
-        )}
-
-        {/* Lock icon for locked badges (no progress) */}
-        {isLocked && progress === 0 && (
-          <View style={styles.lockBadge}>
-            <Ionicons name="lock-closed" size={12} color="rgba(255,255,255,0.4)" />
-          </View>
         )}
       </View>
 
-      {/* Earned checkmark badge */}
+      {/* Lock badge — outside the circle so overflow:hidden doesn't clip it */}
+      {isLocked && progress === 0 && (
+        <View style={styles.lockBadge}>
+          <Ionicons name="lock-closed" size={9} color="rgba(255,255,255,0.55)" />
+        </View>
+      )}
+
+      {/* Earned checkmark — outside the circle */}
       {!isLocked && (
-        <View style={[styles.checkBadge, { backgroundColor: categoryColor }]}>
-          <Ionicons name="checkmark" size={10} color="#000" />
+        <View style={[styles.checkBadge, { backgroundColor: categoryColor, borderColor: '#000' }]}>
+          <Ionicons name="checkmark" size={9} color="#000" />
         </View>
       )}
 
       {/* Badge name */}
       <Text
-        style={[
-          styles.badgeName,
-          isLocked && styles.badgeNameLocked,
-        ]}
+        style={[styles.badgeName, isLocked && styles.badgeNameLocked]}
         numberOfLines={2}
       >
         {badge.badge_name}
       </Text>
 
-      {/* Gym name for gym badges */}
+      {/* Gym name */}
       {badge.badge_type === 'gym' && badge.gym_name && (
         <Text style={[styles.gymName, isLocked && styles.gymNameLocked]} numberOfLines={1}>
           {badge.gym_name}
         </Text>
       )}
 
-      {/* Progress text for locked badges */}
+      {/* Progress % for in-progress badges */}
       {isLocked && progress > 0 && (
         <Text style={[styles.progressText, { color: categoryColor }]}>
           {Math.round(progress)}%
@@ -228,17 +216,17 @@ const styles = StyleSheet.create({
   },
   outerGlow: {
     position: 'absolute',
-    top: 10 - 4, // container paddingVertical - half of extra size
+    top: 10 - 5,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 8,
   },
   badgeCircle: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    // No overflow:hidden — lock/check badges are rendered outside this view
   },
   progressRing: {
     position: 'absolute',
@@ -247,54 +235,61 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   badgeImageLocked: {
-    opacity: 0.2,
+    opacity: 0.18,
   },
   lockBadge: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    top: 10 + CIRCLE_SIZE - 12,
+    right: (BADGE_SIZE - CIRCLE_SIZE) / 2 - 1,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(20, 20, 28, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   checkBadge: {
     position: 'absolute',
-    top: 10 + CIRCLE_SIZE - 14, // container paddingVertical + circleSize - overlap
-    right: (BADGE_SIZE - CIRCLE_SIZE) / 2 - 2,
+    top: 10 + CIRCLE_SIZE - 12,
+    right: (BADGE_SIZE - CIRCLE_SIZE) / 2 - 1,
     width: 18,
     height: 18,
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#000',
-    zIndex: 1,
+    zIndex: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+    elevation: 3,
   },
   badgeName: {
     fontSize: 11,
     color: theme.colors.text,
     textAlign: 'center',
     ...fontStyles.bodyMedium,
-    marginTop: 6,
+    marginTop: 8,
     lineHeight: 14,
     maxWidth: BADGE_SIZE - 4,
   },
   badgeNameLocked: {
-    color: 'rgba(255, 255, 255, 0.3)',
+    color: 'rgba(255, 255, 255, 0.28)',
   },
   gymName: {
     fontSize: 9,
     color: 'rgba(255, 255, 255, 0.35)',
-    textAlign: 'center' as const,
-    marginTop: 1,
+    textAlign: 'center',
+    marginTop: 2,
     maxWidth: BADGE_SIZE - 4,
     ...fontStyles.body,
   },
   gymNameLocked: {
-    color: 'rgba(255, 255, 255, 0.18)',
+    color: 'rgba(255, 255, 255, 0.15)',
   },
   progressText: {
     fontSize: 10,

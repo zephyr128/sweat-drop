@@ -571,15 +571,20 @@ export default function AuthScreen() {
 
             {showForgotPassword ? (
               resetSent ? (
-                <>
+                <View style={styles.resetSentContainer}>
+                  <View style={styles.resetSentIconBox}>
+                    <Ionicons name="checkmark-circle" size={32} color={theme.colors.primary} />
+                  </View>
                   <Text style={styles.resetSentText}>{t('auth.resetEmailSent')}</Text>
                   <TouchableOpacity
                     onPress={() => { setShowForgotPassword(false); setResetSent(false); }}
                     activeOpacity={0.7}
+                    style={styles.backToSignInContainer}
                   >
-                    <Text style={styles.forgotPasswordText}>{t('auth.backToSignIn')}</Text>
+                    <Ionicons name="arrow-back" size={16} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.backToSignInText}>{t('auth.backToSignIn')}</Text>
                   </TouchableOpacity>
-                </>
+                </View>
               ) : (
                 <>
                   <TouchableOpacity
@@ -601,7 +606,8 @@ export default function AuthScreen() {
                     activeOpacity={0.7}
                     style={styles.backToSignInContainer}
                   >
-                    <Text style={styles.forgotPasswordText}>{t('auth.backToSignIn')}</Text>
+                    <Ionicons name="arrow-back" size={16} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.backToSignInText}>{t('auth.backToSignIn')}</Text>
                   </TouchableOpacity>
                 </>
               )
@@ -858,9 +864,27 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     letterSpacing: 0.2,
   },
-  backToSignInContainer: {
+  resetSentContainer: {
     alignItems: 'center',
-    marginTop: 4,
+    gap: 8,
+    paddingVertical: 8,
+  },
+  resetSentIconBox: {
+    marginBottom: 4,
+  },
+  backToSignInContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 8,
+  },
+  backToSignInText: {
+    ...fontStyles.bodyMedium,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.2,
   },
   resetSentText: {
     ...fontStyles.body,
@@ -869,7 +893,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     letterSpacing: 0.2,
-    marginVertical: 8,
   },
 
   // ── Primary Button ──

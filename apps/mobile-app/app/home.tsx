@@ -33,6 +33,7 @@ import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
+import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -73,6 +74,7 @@ export default function HomeScreen() {
   const hasLoadedOnce = useRef(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);
@@ -546,11 +548,15 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     ))}
 
-                    {/* Placeholder card */}
-                    <View style={es.gymPlaceholderCard}>
-                      <Ionicons name="add-circle-outline" size={28} color="rgba(255,255,255,0.20)" />
-                      <Text style={es.gymPlaceholderText}>{t('notYourGym')}</Text>
-                    </View>
+                    {/* Suggest gym card */}
+                    <TouchableOpacity
+                      style={es.gymPlaceholderCard}
+                      onPress={() => setShowWaitlist(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add-circle" size={28} color={branding.primary} />
+                      <Text style={[es.gymPlaceholderText, { color: hexToRgba(branding.primary, 0.6) }]}>{t('notYourGym')}</Text>
+                    </TouchableOpacity>
                   </ScrollView>
                 </View>
               </Animated.View>
@@ -608,6 +614,12 @@ export default function HomeScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
+
+          <WaitlistBottomSheet
+            visible={showWaitlist}
+            onClose={() => setShowWaitlist(false)}
+            brandColor={branding.primary}
+          />
         </SafeAreaView>
       </Animated.View>
     );
@@ -664,7 +676,7 @@ export default function HomeScreen() {
           {activeGym && (
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => router.push('/gym-details')}
+              onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: activeGymId } })}
               style={styles.gymHeaderChip}
             >
               <Animated.View entering={FadeIn.duration(400)} style={styles.gymHeaderChipInner}>

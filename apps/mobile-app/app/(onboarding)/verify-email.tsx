@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: 24,
     paddingTop: theme.spacing['2xl'],
     paddingBottom: theme.spacing.xl,
   },
