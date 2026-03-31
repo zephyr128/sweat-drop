@@ -32,14 +32,26 @@
     "test:fixtures:reset": "node scripts/testing/fixtures-reset.cjs",
     "test:fixtures:seed": "node scripts/testing/fixtures-seed.cjs",
     "test:ci": "node scripts/testing/run-ci.cjs",
+    "env:dev": "node scripts/use-env.cjs dev",
+    "env:prod": "node scripts/use-env.cjs prod",
     "env:mobile:dev": "node scripts/use-mobile-env.cjs dev",
     "env:mobile:prod": "node scripts/use-mobile-env.cjs prod",
+    "env:admin:dev": "node scripts/use-admin-env.cjs dev",
+    "env:admin:prod": "node scripts/use-admin-env.cjs prod",
     "android": "pnpm --filter sweatdrop-mobile-app android",
     "android:setup": "./scripts/setup-android-env.sh",
     "android:run": "./scripts/android-run.sh",
     "android:dev": "./scripts/android-dev.sh",
     "android:help": "./scripts/android-help.sh",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "run:ios": "./scripts/run-ios.sh",
+    "run:ios:dev": "./scripts/run-ios.sh dev",
+    "run:ios:prod": "./scripts/run-ios.sh prod",
+    "run:android": "./scripts/run-android.sh",
+    "run:android:dev": "./scripts/run-android.sh dev",
+    "run:android:prod": "./scripts/run-android.sh prod",
+    "icons:dev": "./scripts/switch-icons.sh dev",
+    "icons:prod": "./scripts/switch-icons.sh prod"
   },
   "devDependencies": {
     "prettier": "^3.1.1"

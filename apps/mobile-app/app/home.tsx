@@ -167,15 +167,6 @@ export default function HomeScreen() {
   const activeChallenges = allChallenges.filter(c => !c.is_completed);
   const displayedChallenges = activeChallenges.slice(0, 3);
   
-  // Debug log
-  useEffect(() => {
-    log.debug('[Home] Challenges state:', {
-      activeGymId,
-      challengesLoading,
-      allChallengesCount: allChallenges.length,
-    });
-  }, [activeGymId, challengesLoading, allChallenges]);
-
   // Glow animation for QR button
   const glowAnim = useSharedValue(0);
 
