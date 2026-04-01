@@ -31,6 +31,12 @@ import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { getPrivacyUrl, getTermsUrl, openLegalUrl } from '@/lib/legalUrls';
 import { useAppModal } from '@/lib/stores/useAppModal';
+import {
+  PUSH_NOTIFICATIONS_ENABLED,
+  getPushPermissionStatus,
+  registerForPushNotifications,
+  savePushToken,
+} from '@/lib/notifications';
 
 interface ProfileData {
   id: string;
@@ -75,7 +81,8 @@ export default function SettingsScreen() {
   const [newUsername, setNewUsername] = useState('');
   const [savingUsername, setSavingUsername] = useState(false);
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!session?.user) return;
@@ -113,6 +120,107 @@ export default function SettingsScreen() {
     await loadProfile();
     setRefreshing(false);
   }, [loadProfile]);
+
+  const syncNotificationToggleState = useCallback(async () => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      setNotificationsEnabled(false);
+      return;
+    }
+    const status = await getPushPermissionStatus();
+    setNotificationsEnabled(status === 'granted');
+  }, []);
+
+  useEffect(() => {
+    syncNotificationToggleState();
+  }, [syncNotificationToggleState]);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncNotificationToggleState();
+    }, [syncNotificationToggleState]),
+  );
+
+  const openSystemSettingsForNotifications = useCallback(() => {
+    Linking.openSettings().catch((err) => {
+      log.warn('[Settings] Failed to open system settings:', err);
+    });
+  }, []);
+
+  const handleNotificationsToggle = useCallback(
+    async (nextValue: boolean) => {
+      if (notificationsBusy) return;
+
+      if (!PUSH_NOTIFICATIONS_ENABLED) {
+        showModal({
+          title: t('notifications') || 'Notifications',
+          body:
+            'Push notifications are disabled in this build environment. Set EXPO_PUBLIC_PUSH_ENABLED=true in build env to enable them.',
+        });
+        setNotificationsEnabled(false);
+        return;
+      }
+
+      if (!nextValue) {
+        // iOS/Android do not allow revoking push permission from app code.
+        setNotificationsEnabled(true);
+        showModal({
+          title: t('notifications') || 'Notifications',
+          body: 'To disable notifications, turn them off in your device Settings.',
+          buttons: [
+            { label: t('common:close') || 'Close', onPress: () => {} },
+            {
+              label: 'Open Settings',
+              onPress: openSystemSettingsForNotifications,
+            },
+          ],
+        });
+        return;
+      }
+
+      setNotificationsBusy(true);
+      try {
+        const currentStatus = await getPushPermissionStatus();
+
+        if (currentStatus === 'denied') {
+          setNotificationsEnabled(false);
+          showModal({
+            title: t('notifications') || 'Notifications',
+            body: 'Notifications are currently blocked for this app. Enable them in system Settings.',
+            buttons: [
+              { label: t('common:close') || 'Close', onPress: () => {} },
+              {
+                label: 'Open Settings',
+                onPress: openSystemSettingsForNotifications,
+              },
+            ],
+          });
+          return;
+        }
+
+        const token = await registerForPushNotifications();
+        const finalStatus = await getPushPermissionStatus();
+        const granted = finalStatus === 'granted';
+        setNotificationsEnabled(granted);
+
+        if (granted && token && session?.user?.id) {
+          await savePushToken(session.user.id, token);
+        }
+      } catch (error) {
+        log.warn('[Settings] Failed to update notifications permission:', error);
+        await syncNotificationToggleState();
+      } finally {
+        setNotificationsBusy(false);
+      }
+    },
+    [
+      notificationsBusy,
+      openSystemSettingsForNotifications,
+      session?.user?.id,
+      showModal,
+      syncNotificationToggleState,
+      t,
+    ],
+  );
 
   /* ── Username edit ─────────────────── */
   const handleStartEditUsername = () => {
@@ -693,7 +801,8 @@ export default function SettingsScreen() {
                   </View>
                   <Switch
                     value={notificationsEnabled}
-                    onValueChange={setNotificationsEnabled}
+                    onValueChange={handleNotificationsToggle}
+                    disabled={notificationsBusy}
                     trackColor={{
                       false: '#3E3E3E',
                       true: hexToRgba(branding.primary, 0.4),

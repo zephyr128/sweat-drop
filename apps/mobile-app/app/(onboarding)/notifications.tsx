@@ -27,13 +27,20 @@ export default function NotificationsScreen() {
   const { t } = useTranslation('onboarding');
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
+  const onboardingStep = useAuthStore((s) => s.onboardingStep);
 
   const [loading, setLoading] = useState(false);
 
   const completeOnboarding = async () => {
     await AsyncStorage.setItem('pushNotificationsAsked', 'true');
-    setOnboardingStep('profile_setup');
-    router.replace('/(onboarding)/step-gender');
+    // New users continue onboarding; returning users (reinstall/sign-in) go home.
+    if (onboardingStep === 'notifications' || onboardingStep === 'profile_setup') {
+      setOnboardingStep('profile_setup');
+      router.replace('/(onboarding)/step-gender');
+      return;
+    }
+    setOnboardingStep('done');
+    router.replace('/home');
   };
 
   const handleEnable = async () => {

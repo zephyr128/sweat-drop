@@ -30,6 +30,7 @@ import {
   PUSH_NOTIFICATIONS_ENABLED,
   configureNotificationHandler,
   registerForPushNotifications,
+  getPushPermissionStatus,
   savePushToken,
   addNotificationListeners,
   getInitialNotification,
@@ -226,7 +227,9 @@ export default function RootLayout() {
     }
   }, []);
 
-  // Push notifications — register token when user is authenticated
+  // Push notifications — sync token only when permission is already granted.
+  // IMPORTANT: Do NOT trigger permission prompt here. Permission is requested
+  // exclusively from the dedicated notifications onboarding screen.
   useEffect(() => {
     if (!PUSH_NOTIFICATIONS_ENABLED) return;
     if (!session?.user?.id) {
@@ -237,14 +240,18 @@ export default function RootLayout() {
     if (pushTokenRegistered.current) return;
     pushTokenRegistered.current = true;
 
-    const registerPush = async () => {
+    const syncGrantedPushToken = async () => {
+      const permissionStatus = await getPushPermissionStatus();
+      if (permissionStatus !== 'granted') {
+        return;
+      }
       const token = await registerForPushNotifications();
       if (token) {
         await savePushToken(session.user.id, token);
       }
     };
 
-    registerPush();
+    syncGrantedPushToken();
 
     getInitialNotification().then((data) => {
       if (data) {

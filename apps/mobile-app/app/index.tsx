@@ -83,7 +83,12 @@ export default function Index() {
               router.replace('/home');
           }
         } else {
-          router.replace('/home');
+          // Existing users after reinstall should still see the push prompt screen once.
+          if (!pushAsked) {
+            router.replace('/(onboarding)/notifications');
+          } else {
+            router.replace('/home');
+          }
         }
 
         setHasNavigated(true);
