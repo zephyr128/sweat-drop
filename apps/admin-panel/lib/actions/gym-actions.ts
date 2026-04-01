@@ -220,22 +220,38 @@ export async function assignGymAdmin(userId: string, gymId: string) {
 /**
  * Update gym details
  */
-export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
+export interface UpdateGymInput {
+  name?: string;
+  city?: string;
+  country?: string;
+  address?: string;
+  description?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  instagram?: string;
+}
+
+export async function updateGym(gymId: string, input: UpdateGymInput) {
   try {
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       return { success: false, error: 'Admin client not available. Check server environment variables.' };
     }
-    const { data, error } = await supabaseAdmin
-      .from('gyms')
-      // @ts-expect-error - Supabase type inference issue
-      .update({
-        name: input.name,
-        city: input.city || null,
-        country: input.country || null,
-        address: input.address || null,
-        updated_at: new Date().toISOString(),
-      } as any)
+
+    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (input.name !== undefined) payload.name = input.name;
+    if (input.city !== undefined) payload.city = input.city || null;
+    if (input.country !== undefined) payload.country = input.country || null;
+    if (input.address !== undefined) payload.address = input.address || null;
+    if (input.description !== undefined) payload.description = input.description || null;
+    if (input.phone !== undefined) payload.phone = input.phone || null;
+    if (input.email !== undefined) payload.email = input.email || null;
+    if (input.website !== undefined) payload.website = input.website || null;
+    if (input.instagram !== undefined) payload.instagram = input.instagram || null;
+
+    const { data, error } = await (supabaseAdmin.from('gyms') as any)
+      .update(payload)
       .eq('id', gymId)
       .select()
       .single();
@@ -245,9 +261,9 @@ export async function updateGym(gymId: string, input: Partial<CreateGymInput>) {
     revalidatePath('/dashboard/gyms');
     revalidatePath(`/dashboard/gym/${gymId}`);
     return { success: true, data };
-  } catch (error: any) {
-    // Error updating gym
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Failed to update gym';
+    return { success: false, error: msg };
   }
 }
 

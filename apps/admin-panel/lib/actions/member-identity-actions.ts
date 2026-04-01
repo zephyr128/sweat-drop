@@ -44,6 +44,10 @@ export async function getCheckinIdentityCandidate(
   userId: string,
 ): Promise<{ success: boolean; data?: IdentityCandidate; error?: string }> {
   try {
+    if (!gymId || !userId) {
+      return { success: false, error: 'Gym ID and User ID are required' };
+    }
+
     const supabase = await createClient();
 
     const { data, error } = await supabase.rpc('get_checkin_identity_candidates', {
@@ -77,6 +81,10 @@ export async function upsertPhysicalMemberIdentity(
   verificationNotes?: string | null,
 ): Promise<{ success: boolean; data?: { identity_id: string }; error?: string }> {
   try {
+    if (!gymId || !userId) {
+      return { success: false, error: 'Gym ID and User ID are required' };
+    }
+
     const profile = await getCurrentProfile();
     if (!profile) return { success: false, error: 'Not authenticated' };
 
@@ -119,6 +127,10 @@ export async function verifyMemberIdentity(
   verificationNotes?: string | null,
 ): Promise<{ success: boolean; data?: VerifyResult; error?: string }> {
   try {
+    if (!gymId || !userId) {
+      return { success: false, error: 'Gym ID and User ID are required' };
+    }
+
     const profile = await getCurrentProfile();
     if (!profile) return { success: false, error: 'Not authenticated' };
 

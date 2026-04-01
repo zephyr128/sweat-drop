@@ -24,6 +24,11 @@ interface GymRow {
   lng: number | null;
   gps_radius_m: number | null;
   working_hours?: GymWorkingHours | null;
+  description?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  instagram?: string | null;
   [key: string]: unknown;
 }
 
@@ -84,6 +89,11 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
           address: gym.address,
           city: gym.city,
           country: gym.country,
+          description: gym.description ?? null,
+          phone: gym.phone ?? null,
+          email: gym.email ?? null,
+          website: gym.website ?? null,
+          instagram: gym.instagram ?? null,
         }}
         checkinData={{
           checkin_drops: checkinDrops,

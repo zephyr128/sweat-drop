@@ -44,6 +44,11 @@ export function MemberIdentityVerifyDrawer({
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
+    if (!gymId || !userId) {
+      toast.error('Gym ID and user ID are required for verification');
+      setLoading(false);
+      return;
+    }
     (async () => {
       const res = await getCheckinIdentityCandidate(gymId, userId);
       if (res.success && res.data) {
@@ -59,6 +64,10 @@ export function MemberIdentityVerifyDrawer({
   }, [gymId, userId]);
 
   const handleVerify = async () => {
+    if (!gymId) {
+      toast.error('Gym ID is required to complete verification');
+      return;
+    }
     setSaving(true);
     const res = await verifyMemberIdentity(
       gymId,

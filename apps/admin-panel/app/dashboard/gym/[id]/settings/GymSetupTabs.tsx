@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Building2, MapPin, Palette, Clock, Camera } from 'lucide-react';
-import { GymGeneralForm } from '@/components/modules/GymGeneralForm';
+import { GymGeneralForm, type GymGeneralData } from '@/components/modules/GymGeneralForm';
 import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
 import { BrandingModule } from '@/components/modules/BrandingModule';
 import { WorkingHoursForm } from '@/components/forms/WorkingHoursForm';
@@ -14,12 +14,7 @@ interface GymSetupTabsProps {
   gymId: string;
   ownerId: string;
   role: string;
-  gymData: {
-    name: string;
-    address: string | null;
-    city: string | null;
-    country: string | null;
-  };
+  gymData: GymGeneralData;
   checkinData: {
     checkin_drops: number;
     lat: number | null;

@@ -9,6 +9,7 @@ export interface ActivityLogItem {
   id: string;
   kind: ActivityKind;
   title: string;
+  memberId: string | null;
   memberName: string;
   memberAvatarUrl: string | null;
   at: string;
@@ -64,12 +65,42 @@ export async function getGymActivityLog(
       id: String(item.id || ''),
       kind: mapActivityKind(String(item.kind || '')),
       title: String(item.title || ''),
+      memberId: (item.member_id || item.user_id || null) as string | null,
       memberName: String(item.member_name || item.memberName || 'Member'),
-      memberAvatarUrl: (item.member_avatar_url || item.memberAvatarUrl || null) as string | null,
+      memberAvatarUrl: (item.member_avatar_url || item.memberAvatarUrl || item.member_avatar || null) as string | null,
       at: String(item.at || item.created_at || item.checked_in_at || item.started_at || item.timestamp || ''),
       status: String(item.status || ''),
       details: String(item.details || ''),
     }));
+
+    // The RPC may not return user_id — resolve from source tables
+    const missing = items.filter((i) => !i.memberId);
+    if (missing.length > 0) {
+      const checkinIds = missing.filter((i) => i.kind === 'checkin').map((i) => i.id);
+      const redemptionIds = missing.filter((i) => i.kind === 'redemption').map((i) => i.id);
+      const sessionIds = missing.filter((i) => i.kind.startsWith('workout')).map((i) => i.id);
+
+      const idMap: Record<string, string> = {};
+
+      if (checkinIds.length > 0) {
+        const { data: rows } = await supabase.from('gym_checkins').select('id, user_id').in('id', checkinIds);
+        for (const r of (rows ?? []) as Array<{ id: string; user_id: string }>) idMap[r.id] = r.user_id;
+      }
+      if (redemptionIds.length > 0) {
+        const { data: rows } = await supabase.from('redemptions').select('id, user_id').in('id', redemptionIds);
+        for (const r of (rows ?? []) as Array<{ id: string; user_id: string }>) idMap[r.id] = r.user_id;
+      }
+      if (sessionIds.length > 0) {
+        const { data: rows } = await supabase.from('sessions').select('id, user_id').in('id', sessionIds);
+        for (const r of (rows ?? []) as Array<{ id: string; user_id: string }>) idMap[r.id] = r.user_id;
+      }
+
+      for (const item of items) {
+        if (!item.memberId && idMap[item.id]) {
+          item.memberId = idMap[item.id];
+        }
+      }
+    }
 
     const total = Number(raw.total || raw.total_count || 0);
     const resultPage = Number(raw.page || page);

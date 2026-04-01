@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import {
   Search, QrCode, Gift, ScrollText, ChevronLeft, ChevronRight,
   Dumbbell, TimerOff, Play, XCircle,
@@ -237,10 +238,20 @@ export function ActivityLog({ gymId }: ActivityLogProps) {
                     <KindBadge kind={item.kind} />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <MemberAvatar avatarUrl={item.memberAvatarUrl} username={item.memberName} size="sm" />
-                      <span className="text-xs text-white font-medium truncate max-w-[120px]">{item.memberName}</span>
-                    </div>
+                    {item.memberId ? (
+                      <Link
+                        href={`/dashboard/gym/${gymId}/members/${item.memberId}`}
+                        className="flex items-center gap-2 group"
+                      >
+                        <MemberAvatar avatarUrl={item.memberAvatarUrl} username={item.memberName} size="sm" />
+                        <span className="text-xs text-white font-medium truncate max-w-[120px] group-hover:text-[#00E5FF] transition-colors">{item.memberName}</span>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <MemberAvatar avatarUrl={item.memberAvatarUrl} username={item.memberName} size="sm" />
+                        <span className="text-xs text-white font-medium truncate max-w-[120px]">{item.memberName}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span className="text-xs text-zinc-500 truncate max-w-[200px] block">{item.details || item.title}</span>
