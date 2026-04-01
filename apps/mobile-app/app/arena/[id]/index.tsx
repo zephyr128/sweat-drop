@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, getContrastColor, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -289,11 +289,7 @@ export default function ArenaDetailScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} style={StyleSheet.absoluteFillObject} />
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('title')}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <ScreenHeader title={t('title')} insetHandled />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
@@ -305,11 +301,7 @@ export default function ArenaDetailScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} style={StyleSheet.absoluteFillObject} />
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('title')}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <ScreenHeader title={t('title')} insetHandled />
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('arenaNotFound')}</Text>
@@ -369,12 +361,7 @@ export default function ArenaDetailScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('title')} insetHandled />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Upcoming Countdown Banner */}
@@ -771,22 +758,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: { width: 40 },
   scrollView: { flex: 1 },
   scrollContent: {
     padding: theme.spacing.lg,

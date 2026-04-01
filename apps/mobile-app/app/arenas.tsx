@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -338,12 +338,7 @@ export default function ArenasScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('title')} insetHandled />
 
       <ScrollView
         style={styles.scrollView}
@@ -402,23 +397,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: theme.colors.text,
-    textAlign: 'center',
-    pointerEvents: 'none',
-  },
-  headerSpacer: {
-    width: 40,
   },
   scrollView: {
     flex: 1,

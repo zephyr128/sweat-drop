@@ -12,6 +12,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import BackButton from './BackButton';
+import { SliderTabs } from './SliderTabs';
 import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -271,44 +272,8 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         </View>
       </Animated.View>
 
-      {/* Filter tabs */}
-      <Animated.View entering={FadeInDown.delay(160).duration(400)}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {FILTERS.map(({ key, labelKey }) => {
-            const isActive = filterType === key;
-            return (
-              <TouchableOpacity
-                key={key}
-                style={[
-                  styles.filterTab,
-                  isActive && {
-                    backgroundColor: branding.primary,
-                    borderColor: branding.primary,
-                  },
-                ]}
-                onPress={() => setFilterType(key)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.filterTabText,
-                    isActive && { color: branding.onPrimary, ...fontStyles.bodySemiBold },
-                  ]}
-                >
-                  {t(labelKey)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </Animated.View>
-
       {/* Search */}
-      <Animated.View entering={FadeInDown.delay(220).duration(400)}>
+      <Animated.View entering={FadeInDown.delay(160).duration(400)}>
         <View style={styles.searchWrapper}>
           <View style={[styles.searchBox, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
             <Ionicons name="search" size={15} color="rgba(255,255,255,0.25)" />
@@ -328,63 +293,89 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         </View>
       </Animated.View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {filteredBadges.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconBox}>
-              <Ionicons name="trophy-outline" size={40} color="rgba(255,255,255,0.15)" />
-            </View>
-            <Text style={styles.emptyTitle}>{t('noBadgesFound')}</Text>
-            <Text style={styles.emptyText}>
-              {searchQuery ? t('tryAdjustingSearch') : t('completeWorkouts')}
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* Earned section */}
-            {earnedFiltered.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(280).duration(400)}>
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <View style={[styles.sectionDot, { backgroundColor: branding.primary }]} />
-                    <Text style={styles.sectionTitle}>{t('sectionEarned')}</Text>
-                    <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                      <Text style={[styles.sectionCountText, { color: branding.primary }]}>
-                        {earnedFiltered.length}
-                      </Text>
+      {/* Filter tabs + swipeable pages */}
+      <Animated.View entering={FadeInDown.delay(220).duration(400)} style={styles.tabsWrapper}>
+        <SliderTabs
+          tabs={FILTERS.map(({ key, labelKey }) => ({ key, label: t(labelKey) }))}
+          activeKey={filterType}
+          onChange={(key) => setFilterType(key as typeof filterType)}
+          accentColor={branding.primary}
+          barStyle={styles.tabBar}
+        >
+          {FILTERS.map(({ key }) => {
+            // Each page recomputes filtered badges for its own filter key
+            const pageBadges = (() => {
+              let filtered = allBadgesWithProgress;
+              if (key === 'this_gym') {
+                filtered = filtered.filter((b) => b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId));
+              } else if (key === 'all') {
+                filtered = filtered.filter((b) => b.badge_type === 'global' || (b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId)));
+              } else if (key === 'earned') {
+                filtered = filtered.filter((b) => b.is_earned && (b.badge_type === 'global' || (b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId))));
+              } else if (key === 'locked') {
+                filtered = filtered.filter((b) => !b.is_earned && (b.badge_type === 'global' || (b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId))));
+              }
+              if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                filtered = filtered.filter((b) => b.name.toLowerCase().includes(q) || (b.description && b.description.toLowerCase().includes(q)));
+              }
+              return filtered;
+            })();
+            const earnedPage = pageBadges.filter((b) => b.is_earned);
+            const lockedPage = pageBadges.filter((b) => !b.is_earned);
+            return (
+              <ScrollView
+                key={key}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {pageBadges.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <View style={styles.emptyIconBox}>
+                      <Ionicons name="trophy-outline" size={40} color="rgba(255,255,255,0.15)" />
                     </View>
+                    <Text style={styles.emptyTitle}>{t('noBadgesFound')}</Text>
+                    <Text style={styles.emptyText}>
+                      {searchQuery ? t('tryAdjustingSearch') : t('completeWorkouts')}
+                    </Text>
                   </View>
-                  <View style={styles.badgeGrid}>
-                    {earnedFiltered.map(renderBadgeItem)}
-                  </View>
-                </View>
-              </Animated.View>
-            )}
-
-            {/* In-progress / locked section */}
-            {lockedFiltered.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(360).duration(400)}>
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-                    <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
-                    <View style={styles.sectionCountPill}>
-                      <Text style={styles.sectionCountText}>{lockedFiltered.length}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.badgeGrid}>
-                    {lockedFiltered.map(renderBadgeItem)}
-                  </View>
-                </View>
-              </Animated.View>
-            )}
-          </>
-        )}
-      </ScrollView>
+                ) : (
+                  <>
+                    {earnedPage.length > 0 && (
+                      <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                          <View style={[styles.sectionDot, { backgroundColor: branding.primary }]} />
+                          <Text style={styles.sectionTitle}>{t('sectionEarned')}</Text>
+                          <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.2) }]}>
+                            <Text style={[styles.sectionCountText, { color: branding.primary }]}>{earnedPage.length}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.badgeGrid}>
+                          {earnedPage.map(renderBadgeItem)}
+                        </View>
+                      </View>
+                    )}
+                    {lockedPage.length > 0 && (
+                      <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                          <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+                          <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
+                          <View style={styles.sectionCountPill}>
+                            <Text style={styles.sectionCountText}>{lockedPage.length}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.badgeGrid}>
+                          {lockedPage.map(renderBadgeItem)}
+                        </View>
+                      </View>
+                    )}
+                  </>
+                )}
+              </ScrollView>
+            );
+          })}
+        </SliderTabs>
+      </Animated.View>
 
       <BadgeDetailModal
         visible={modalVisible}
@@ -495,28 +486,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  /* ── Filters ── */
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 8,
-    marginBottom: 12,
-  },
-  filterTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  filterTabText: {
-    fontSize: 13,
-    ...fontStyles.bodyMedium,
-    color: 'rgba(255, 255, 255, 0.45)',
-    letterSpacing: 0.2,
-  },
 
   /* ── Search ── */
   searchWrapper: {
@@ -541,13 +510,22 @@ const styles = StyleSheet.create({
     ...fontStyles.body,
   },
 
+  /* ── Tabs + Pages wrapper ── */
+  tabsWrapper: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  tabBar: {
+    marginBottom: 10,
+  },
+
   /* ── Scroll ── */
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 0,
+    paddingTop: 4,
     paddingBottom: 64,
   },
 
@@ -568,10 +546,9 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    ...fontStyles.bodySemiBold,
+    ...fontStyles.heading,
     color: 'rgba(255, 255, 255, 0.55)',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    letterSpacing: 2,
     flex: 1,
   },
   sectionCountPill: {

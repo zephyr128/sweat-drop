@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,10 +11,12 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
+import { SliderTabs } from '@/components/SliderTabs';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
 // ── Types (mirrored from backend/types/sweatdrop.ts) ──
@@ -68,8 +70,26 @@ const SCORING_ICONS: Record<string, string> = {
   streak_days: '🔥',
 };
 
+// ── Per-period cache ────────────────────────────────────────────────────────
+interface PeriodCache {
+  leaderboard: LeaderboardEntry[];
+  rewards: LeaderboardReward[];
+  snapshots: any[];
+  currentUserRank: number | null;
+  loading: boolean;
+}
+
+const EMPTY_PERIOD: PeriodCache = {
+  leaderboard: [], rewards: [], snapshots: [], currentUserRank: null, loading: false,
+};
+
+const lbCache = new Map<string, PeriodCache>();
+
+const PERIODS_LB: LeaderboardPeriod[] = ['weekly', 'monthly', 'all_time'];
+
 export default function LeaderboardScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
   const { getActiveGymId } = useGymStore();
@@ -79,12 +99,8 @@ export default function LeaderboardScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('gym');
   const [period, setPeriod] = useState<LeaderboardPeriod>('weekly');
   const [newcomerOnly, setNewcomerOnly] = useState(false);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [rewards, setRewards] = useState<LeaderboardReward[]>([]);
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [arenasLoading, setArenasLoading] = useState(false);
   const [showPastWinners, setShowPastWinners] = useState(false);
   const [winnerBanner, setWinnerBanner] = useState<{
     rank: number;
@@ -95,145 +111,114 @@ export default function LeaderboardScreen() {
   } | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  useEffect(() => {
-    if (session?.user) {
-      if (activeTab === 'arenas') {
-        loadArenas();
-      } else {
-        loadLeaderboard();
-      }
-    }
-  }, [session, period, activeTab, activeGymId, newcomerOnly]);
+  // Per-period cached state
+  const [periodStates, setPeriodStates] = useState<Record<LeaderboardPeriod, PeriodCache>>({
+    weekly: { ...EMPTY_PERIOD },
+    monthly: { ...EMPTY_PERIOD },
+    all_time: { ...EMPTY_PERIOD },
+  });
 
-  const loadLeaderboard = async () => {
+  const cacheKey = useCallback((p: LeaderboardPeriod) =>
+    `${activeTab}:${p}:${newcomerOnly ? '1' : '0'}:${activeGymId ?? 'global'}`,
+  [activeTab, newcomerOnly, activeGymId]);
+
+  const loadLeaderboard = useCallback(async (p: LeaderboardPeriod) => {
     if (!session?.user) return;
-    setLoading(true);
+    const key = cacheKey(p);
+    const cached = lbCache.get(key);
+
+    // Show cached data immediately, then refresh in background
+    if (cached) {
+      setPeriodStates((prev) => ({ ...prev, [p]: { ...cached, loading: false } }));
+    } else {
+      setPeriodStates((prev) => ({ ...prev, [p]: { ...prev[p], loading: true } }));
+    }
 
     try {
       const isGym = activeTab === 'gym';
 
       if (isGym && !activeGymId) {
-        setLeaderboard([]);
-        setLoading(false);
+        const empty = { ...EMPTY_PERIOD, loading: false };
+        lbCache.set(key, empty);
+        setPeriodStates((prev) => ({ ...prev, [p]: empty }));
         return;
       }
 
-      // Try get_leaderboard RPC first
       let { data, error } = await supabase.rpc('get_leaderboard', {
         p_type: isGym ? 'gym' : 'global',
         p_scope_id: isGym ? activeGymId : null,
-        p_period: period,
+        p_period: p,
         p_limit: 100,
         p_newcomer_only: newcomerOnly,
       });
 
-      // Fallback to old RPCs if get_leaderboard fails
       if (error && error.code === 'PGRST202') {
         log.warn('[Leaderboard] get_leaderboard RPC not found, trying fallback...');
         if (isGym && activeGymId) {
-          const { data: fallbackData, error: fallbackError } = await supabase.rpc('get_local_leaderboard', {
-            p_gym_id: activeGymId,
-            p_period: period,
-            p_limit: 100,
-            p_newcomer_only: newcomerOnly,
+          const { data: fd, error: fe } = await supabase.rpc('get_local_leaderboard', {
+            p_gym_id: activeGymId, p_period: p, p_limit: 100, p_newcomer_only: newcomerOnly,
           });
-          if (!fallbackError && fallbackData) {
-            data = fallbackData;
-            error = null;
-          }
+          if (!fe && fd) { data = fd; error = null; }
         } else {
-          const { data: fallbackData, error: fallbackError } = await supabase.rpc('get_global_leaderboard', {
-            p_period: period,
-            p_limit: 100,
-            p_newcomer_only: newcomerOnly,
+          const { data: fd, error: fe } = await supabase.rpc('get_global_leaderboard', {
+            p_period: p, p_limit: 100, p_newcomer_only: newcomerOnly,
           });
-          if (!fallbackError && fallbackData) {
-            data = fallbackData;
-            error = null;
-          }
+          if (!fe && fd) { data = fd; error = null; }
         }
       }
 
-      if (error) {
-        log.error('[Leaderboard] Error loading leaderboard:', error);
-        log.error('[Leaderboard] Error details:', JSON.stringify(error, null, 2));
-        setLeaderboard([]);
-      } else if (data) {
-        const entries = (data as LeaderboardEntry[]) || [];
-        setLeaderboard(entries);
+      const entries: LeaderboardEntry[] = error ? [] : (data as LeaderboardEntry[]) || [];
+      const currentUserRank = entries.find((e) => e.user_id === session.user.id)?.rank ?? null;
 
-        const userEntry = entries.find(
-          (e) => e.user_id === session.user.id
-        );
-        setCurrentUserRank(userEntry?.rank ?? null);
-      } else {
-        // No data returned from RPC
-        setLeaderboard([]);
-      }
-
-      // Fetch prizes for gym tab
+      let rewards: LeaderboardReward[] = [];
+      let snapshots: any[] = [];
       if (isGym && activeGymId) {
-        const { data: rewardData } = await supabase
-          .from('leaderboard_rewards')
-          .select('*')
-          .eq('gym_id', activeGymId)
-          .eq('period', period)
-          .eq('is_active', true)
-          .order('rank_position', { ascending: true })
-          .limit(3);
-
-        setRewards((rewardData as LeaderboardReward[]) || []);
-
-        // Fetch past winner snapshots
-        const { data: snapshotData } = await supabase
-          .from('leaderboard_snapshots')
-          .select('id, period, period_start, period_end, rankings, prizes_distributed')
-          .eq('gym_id', activeGymId)
-          .order('period_end', { ascending: false })
-          .limit(5);
-
-        setSnapshots(snapshotData || []);
-      } else {
-        setRewards([]);
-        setSnapshots([]);
+        const [{ data: rewardData }, { data: snapshotData }] = await Promise.all([
+          supabase.from('leaderboard_rewards').select('*')
+            .eq('gym_id', activeGymId).eq('period', p).eq('is_active', true)
+            .order('rank_position', { ascending: true }).limit(3),
+          supabase.from('leaderboard_snapshots')
+            .select('id, period, period_start, period_end, rankings, prizes_distributed')
+            .eq('gym_id', activeGymId)
+            .order('period_end', { ascending: false }).limit(5),
+        ]);
+        rewards = (rewardData as LeaderboardReward[]) || [];
+        snapshots = snapshotData || [];
       }
-    } catch (error) {
-      log.error('Leaderboard error:', error);
-      setLeaderboard([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const loadArenas = async () => {
-    if (!session?.user) {
-      log.warn('[Leaderboard] loadArenas: No session');
-      return;
+      const newState: PeriodCache = { leaderboard: entries, rewards, snapshots, currentUserRank, loading: false };
+      lbCache.set(key, newState);
+      setPeriodStates((prev) => ({ ...prev, [p]: newState }));
+    } catch (err) {
+      log.error('Leaderboard error:', err);
+      setPeriodStates((prev) => ({ ...prev, [p]: { ...prev[p], loading: false } }));
     }
-    setLoading(true);
+  }, [session?.user?.id, activeTab, activeGymId, newcomerOnly, cacheKey]);
 
+  const loadArenas = useCallback(async () => {
+    if (!session?.user) return;
+    setArenasLoading(true);
     try {
-      // Loading arenas for user
-      const { data, error } = await supabase.rpc('get_available_arenas', {
-        p_user_id: session.user.id,
-      });
-
-      if (error) {
-        log.error('[Leaderboard] Error loading arenas:', error);
-        log.error('[Leaderboard] Error details:', JSON.stringify(error, null, 2));
-        setArenas([]);
-      } else {
-        const allArenas = (data as AvailableArena[]) || [];
-        // Show all available arenas (same as home screen) - user can see and opt-in
-        setArenas(allArenas);
-      }
-    } catch (error) {
-      log.error('[Leaderboard] Arenas exception:', error);
+      const { data, error } = await supabase.rpc('get_available_arenas', { p_user_id: session.user.id });
+      if (error) { log.error('[Leaderboard] Error loading arenas:', error); setArenas([]); }
+      else setArenas((data as AvailableArena[]) || []);
+    } catch (err) {
+      log.error('[Leaderboard] Arenas exception:', err);
       setArenas([]);
     } finally {
-      setLoading(false);
+      setArenasLoading(false);
     }
-  };
+  }, [session?.user?.id]);
+
+  // Preload all periods when tab/scope changes; load arenas when on arenas tab
+  useEffect(() => {
+    if (!session?.user) return;
+    if (activeTab === 'arenas') {
+      loadArenas();
+    } else {
+      PERIODS_LB.forEach((p) => loadLeaderboard(p));
+    }
+  }, [session?.user?.id, activeTab, activeGymId, newcomerOnly]);
 
   const getRankDisplay = (rank: number) => {
     if (rank === 1) return { emoji: '🥇', isTop: true };
@@ -243,9 +228,6 @@ export default function LeaderboardScreen() {
   };
 
   const isCurrentUser = (userId: string) => session?.user?.id === userId;
-
-  const getRewardForRank = (rank: number): LeaderboardReward | undefined =>
-    rewards.find((r) => r.rank_position === rank);
 
   const getDaysLeft = (endDate: string) => {
     const end = new Date(endDate);
@@ -272,22 +254,25 @@ export default function LeaderboardScreen() {
     return `#${rank}`;
   };
 
-  // Winner banner: check if current user was top 3 in any recent snapshot
+  // Winner banner: check if current user was top 3 in any recent snapshot (uses weekly period as source)
+  const bannerSnapshots = periodStates['weekly'].snapshots;
+  const bannerRewards = periodStates['weekly'].rewards;
+
   useEffect(() => {
-    if (!session?.user?.id || snapshots.length === 0) {
+    if (!session?.user?.id || bannerSnapshots.length === 0) {
       setWinnerBanner(null);
       return;
     }
 
     (async () => {
-      for (const snapshot of snapshots) {
+      for (const snapshot of bannerSnapshots) {
         const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
         const userEntry = rankings.find(r => r.user_id === session.user.id && r.rank <= 3);
         if (userEntry) {
           const dismissed = await AsyncStorage.getItem(`dismissedWinBanner_${snapshot.id}`);
           if (dismissed) continue;
 
-          const matchingReward = rewards.find(r => r.rank_position === userEntry.rank);
+          const matchingReward = bannerRewards.find((r: LeaderboardReward) => r.rank_position === userEntry.rank);
           setWinnerBanner({
             rank: userEntry.rank,
             period: snapshot.period,
@@ -301,7 +286,7 @@ export default function LeaderboardScreen() {
       }
       setWinnerBanner(null);
     })();
-  }, [snapshots, session?.user?.id, rewards]);
+  }, [bannerSnapshots, session?.user?.id, bannerRewards]);
 
   const dismissWinnerBanner = async () => {
     if (winnerBanner) {
@@ -310,13 +295,11 @@ export default function LeaderboardScreen() {
     }
   };
 
-  const currentUserEntry = leaderboard.find((entry) => isCurrentUser(entry.user_id));
-
   const renderLeaderboardItem = useCallback(({ item: entry, index }: { item: LeaderboardEntry; index: number }) => {
     const rank = getRankDisplay(entry.rank);
     const isCurrent = isCurrentUser(entry.user_id);
     const isFirst = index === 0;
-    const isLast = index === leaderboard.length - 1;
+    const isLast = index === periodStates[period].leaderboard.length - 1;
     return (
       <Animated.View entering={FadeInDown.delay(400).duration(400)}>
         <TouchableOpacity
@@ -386,414 +369,101 @@ export default function LeaderboardScreen() {
       </TouchableOpacity>
       </Animated.View>
     );
-  }, [leaderboard.length, branding.primary, session?.user?.id]);
+  }, [periodStates, period, branding.primary, session?.user?.id]);
 
-  const listHeader = useMemo(() => (
-    <>
-      {winnerBanner && !bannerDismissed && activeTab === 'gym' && (
-        <Animated.View entering={FadeInDown.delay(50).duration(400)}>
-          <TouchableOpacity
-            style={[styles.winnerBanner, { borderColor: hexToRgba('#FFD700', 0.3) }]}
-            onPress={() => router.push('/redemptions')}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={[hexToRgba('#FFD700', 0.12), hexToRgba('#FFD700', 0.04)]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <View style={styles.winnerBannerContent}>
-              <Text style={styles.winnerMedal}>{getMedalEmoji(winnerBanner.rank)}</Text>
-              <View style={styles.winnerBannerInfo}>
-                <Text style={styles.winnerBannerTitle}>
-                  {t('youFinished', { rank: winnerBanner.rank, period: winnerBanner.periodLabel })}
-                </Text>
-                {winnerBanner.reward && (
-                  <Text style={[styles.winnerBannerPrize, { color: branding.primary }]}>
-                    {t('prize', { prize: winnerBanner.reward })}
-                  </Text>
-                )}
-                <Text style={[styles.winnerBannerLink, { color: branding.primary }]}>
-                  {t('checkRedemptions')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={dismissWinnerBanner}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
 
-      <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-        <View style={[styles.typeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-          <BlurView intensity={50} tint="dark" style={[styles.typeToggleBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-            {([
-              { key: 'gym' as TabType, label: t('myGym'), icon: 'location' as const },
-              { key: 'global' as TabType, label: t('global'), icon: 'globe-outline' as const },
-              { key: 'arenas' as TabType, label: t('arenas'), icon: 'trophy' as const },
-            ]).map((tab) => (
-              <TouchableOpacity
-                key={tab.key}
-                style={[
-                  styles.typeTab,
-                  activeTab === tab.key && {
-                    backgroundColor: hexToRgba(branding.primary, 0.15),
-                    borderColor: hexToRgba(branding.primary, 0.3),
-                    borderWidth: 1,
-                  },
-                ]}
-                onPress={() => setActiveTab(tab.key)}
-              >
-                <Ionicons
-                  name={tab.icon}
-                  size={14}
-                  color={activeTab === tab.key ? branding.primary : theme.colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.typeTabText,
-                    activeTab === tab.key && { color: branding.primary },
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </BlurView>
-        </View>
-      </Animated.View>
+  // Per-period header/footer/data builders — each page gets its own snapshot of state
+  const buildPageProps = useCallback((p: LeaderboardPeriod) => {
+    const ps = periodStates[p];
+    const data = activeTab === 'arenas' || ps.loading || ps.leaderboard.length === 0 ? [] : ps.leaderboard;
+    return { data, ps };
+  }, [periodStates, activeTab]);
 
-      {activeTab !== 'arenas' && (
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-          <View style={styles.periodFilter}>
-            {(['weekly', 'monthly', 'all_time'] as LeaderboardPeriod[]).map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[
-                  styles.periodButton,
-                  period === p && { backgroundColor: branding.primary },
-                ]}
-                onPress={() => setPeriod(p)}
-              >
-                <Text
-                  style={[
-                    styles.periodButtonText,
-                    period === p && { color: branding.onPrimary },
-                  ]}
-                >
-                  {p === 'all_time' ? t('allTime') : p === 'weekly' ? t('weekly') : t('monthly')}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {activeTab === 'gym' && (
-            <TouchableOpacity
-              style={[styles.newcomerToggle, newcomerOnly && { backgroundColor: hexToRgba(branding.primary, 0.15), borderColor: hexToRgba(branding.primary, 0.3) }]}
-              onPress={() => setNewcomerOnly(!newcomerOnly)}
-            >
-              <Ionicons name="sparkles" size={14} color={newcomerOnly ? branding.primary : theme.colors.textSecondary} />
-              <Text style={[styles.newcomerText, newcomerOnly && { color: branding.primary }]}>{t('newcomersOnly')}</Text>
-            </TouchableOpacity>
-          )}
-        </Animated.View>
-      )}
-
-      {activeTab !== 'arenas' && !loading && leaderboard.length > 0 && (
-        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
-          <View style={styles.scoreExplainer}>
-            <Ionicons name="information-circle-outline" size={14} color={theme.colors.textTertiary} />
-            <Text style={styles.scoreExplainerText}>{t('scoreExplanation')}</Text>
-          </View>
-        </Animated.View>
-      )}
-
-      {activeTab === 'gym' && rewards.length > 0 && (
-        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
-          <View style={styles.prizeRow}>
-            {rewards.map((r) => {
-              const medal = r.rank_position === 1 ? '🥇' : r.rank_position === 2 ? '🥈' : '🥉';
-              return (
-                <View key={r.id} style={[styles.prizeBadge, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                  <Text style={styles.prizeMedal}>{medal}</Text>
-                  <Text style={styles.prizeName} numberOfLines={1}>{r.reward_name}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </Animated.View>
-      )}
-
-      {activeTab === 'arenas' && (
-        loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={branding.primary} />
-          </View>
-        ) : arenas.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>{t('noActiveArenas')}</Text>
-            <Text style={styles.emptySubtext}>
-              {loading ? 'Loading arenas...' : 'No arenas available at this time. Check back soon!'}
-            </Text>
-            {__DEV__ && (
-              <Text style={[styles.emptySubtext, { marginTop: 8, fontSize: 12 }]}>
-                Debug: session={session?.user?.id ? 'exists' : 'null'}, arenas={arenas.length}
-              </Text>
-            )}
-          </View>
-        ) : (
-          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            {arenas.map((arena) => {
-              const daysLeft = getDaysLeft(arena.end_date);
-              const scoringIcon = SCORING_ICONS[arena.scoring_model] || '💧';
-              return (
-                <TouchableOpacity
-                  key={arena.arena_id}
-                  style={[styles.arenaCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}
-                  onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
-                  activeOpacity={0.8}
-                >
-                  <BlurView intensity={50} tint="dark" style={[styles.arenaCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                    <View style={styles.arenaCardTop}>
-                      {arena.sponsor_logo ? (
-                        <Image source={arena.sponsor_logo} style={styles.sponsorLogo} contentFit="contain" transition={200} />
-                      ) : (
-                        <View style={[styles.sponsorLogoPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                          <Ionicons name="trophy" size={20} color={branding.primary} />
-                        </View>
-                      )}
-                      <View style={styles.arenaCardInfo}>
-                        <Text style={styles.arenaName} numberOfLines={1}>{arena.name}</Text>
-                        <Text style={[styles.sponsorLabel, { color: branding.primary }]}>{arena.sponsor_name}</Text>
-                      </View>
-                      <View style={styles.arenaCardMeta}>
-                        <Text style={styles.scoringIcon}>{scoringIcon}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.arenaCardBottom}>
-                      <View style={styles.arenaStats}>
-                        <Text style={styles.arenaStatText}>{arena.participant_count} participants</Text>
-                        <Text style={styles.arenaStatDot}>·</Text>
-                        <Text style={[styles.arenaStatText, daysLeft <= 3 && { color: theme.colors.secondary }]}>
-                          {daysLeft} days left
-                        </Text>
-                      </View>
-                      {arena.user_rank != null && (
-                        <View style={styles.arenaRankBadge}>
-                          <Text style={[styles.arenaRankText, { color: branding.primary }]}>
-                            #{arena.user_rank}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </BlurView>
-                </TouchableOpacity>
-              );
-            })}
-          </Animated.View>
-        )
-      )}
-
-      {activeTab !== 'arenas' && (
-        loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={branding.primary} />
-          </View>
-        ) : leaderboard.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>{t('noRankings')}</Text>
-            <Text style={styles.emptySubtext}>
-              {activeTab === 'gym' ? t('beFirstGym') : t('beFirstGlobal')}
-            </Text>
-            {__DEV__ && (
-              <Text style={[styles.emptySubtext, { marginTop: 8, fontSize: 12 }]}>
-                Debug: activeTab={activeTab}, activeGymId={activeGymId || 'null'}, period={period}, loading={loading.toString()}
-              </Text>
-            )}
-          </View>
-        ) : leaderboard.length >= 3 ? (
-          <Animated.View entering={FadeInDown.delay(300).duration(500)}>
-            <View style={styles.podium}>
-              {[1, 0, 2].map((podiumIdx) => {
-                const entry = leaderboard[podiumIdx];
-                if (!entry) return null;
-                const isFirst = podiumIdx === 0;
-                const isSecond = podiumIdx === 1;
-                const reward = getRewardForRank(entry.rank);
-                const medalColors = {
-                  0: '#FFD700',
-                  1: '#C0C0C0',
-                  2: '#CD7F32',
-                };
-                const medalColor = medalColors[podiumIdx as keyof typeof medalColors];
-                const avatarSize = isFirst ? 68 : 52;
-                const platformHeight = isFirst ? 48 : isSecond ? 32 : 20;
-                return (
-                  <View
-                    key={entry.user_id}
-                    style={[styles.podiumItem, isFirst && styles.podiumItemFirst]}
-                  >
-                    <Text style={styles.podiumMedal}>
-                      {isFirst ? '🥇' : isSecond ? '🥈' : '🥉'}
-                    </Text>
-
-                    <View
-                      style={[
-                        styles.podiumAvatar,
-                        {
-                          width: avatarSize,
-                          height: avatarSize,
-                          borderRadius: avatarSize / 2,
-                          borderColor: medalColor,
-                          borderWidth: isFirst ? 3 : 2,
-                        },
-                        isFirst && {
-                          shadowColor: medalColor,
-                          shadowOffset: { width: 0, height: 0 },
-                          shadowOpacity: 0.6,
-                          shadowRadius: 12,
-                          elevation: 8,
-                        },
-                        isCurrentUser(entry.user_id) && {
-                          backgroundColor: hexToRgba(branding.primary, 0.15),
-                        },
-                      ]}
-                    >
-                      {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                        <Image source={entry.avatar_url} style={[styles.podiumAvatarImage, { borderRadius: avatarSize / 2 }]} transition={200} />
-                      ) : entry.avatar_url ? (
-                        <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
-                          {entry.avatar_url}
-                        </Text>
-                      ) : (
-                        <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
-                          {getRankDisplay(entry.rank).emoji}
-                        </Text>
-                      )}
-                    </View>
-                    {entry.streak_days > 0 && (
-                      <Text style={styles.streakBadge}>🔥{entry.streak_days}</Text>
-                    )}
-                    <Text
-                      style={[
-                        styles.podiumName,
-                        isCurrentUser(entry.user_id) && { color: branding.primary },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {entry.username}
-                    </Text>
-                    <Text style={[styles.podiumScore, { color: branding.primary }]} numberOfLines={1}>
-                      {entry.score_label}
-                    </Text>
-                    {reward && (
-                      <Text style={[styles.prizeLabel, { color: branding.primary }]} numberOfLines={1}>
-                        {reward.reward_name}
-                      </Text>
-                    )}
-                    <View style={[
-                      styles.podiumPlatform,
-                      {
-                        height: platformHeight,
-                        backgroundColor: hexToRgba(medalColor, 0.12),
-                        borderColor: hexToRgba(medalColor, 0.25),
-                      },
-                    ]} />
-                  </View>
-                );
-              })}
-            </View>
-          </Animated.View>
-        ) : null
-      )}
-    </>
-  ), [winnerBanner, bannerDismissed, activeTab, branding, period, newcomerOnly, loading, leaderboard, rewards, arenas, snapshots, showPastWinners, activeGymId]);
-
-  const listFooter = useMemo(() => {
-    if (activeTab === 'arenas' || loading || leaderboard.length === 0) return null;
-    return (
+  const arenasHeader = useMemo(() => (
+    arenasLoading ? (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={branding.primary} />
+      </View>
+    ) : arenas.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
+        <Text style={styles.emptyText}>{t('noActiveArenas')}</Text>
+        <Text style={styles.emptySubtext}>No arenas available at this time. Check back soon!</Text>
+      </View>
+    ) : (
       <>
-        {currentUserEntry && currentUserRank != null && currentUserRank > 50 && (
-          <Animated.View entering={FadeInDown.delay(500).duration(400)}>
-            <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                <Text style={styles.stickyFooterRank}>#{currentUserEntry.rank}</Text>
-                <Text style={styles.stickyFooterName}>{currentUserEntry.username}</Text>
-                <Text style={[styles.scoreLabel, { color: branding.primary }]}>{currentUserEntry.score_label}</Text>
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {activeTab === 'gym' && period !== 'all_time' && (
-          <Animated.View entering={FadeInDown.delay(600).duration(400)}>
-            <Text style={styles.resetNote}>
-              {period === 'weekly' ? t('prizesResetWeekly') : t('prizesResetMonthly')}
-            </Text>
-          </Animated.View>
-        )}
-
-        {activeTab === 'gym' && snapshots.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(700).duration(400)}>
+        {arenas.map((arena) => {
+          const daysLeft = getDaysLeft(arena.end_date);
+          const scoringIcon = SCORING_ICONS[arena.scoring_model] || '💧';
+          return (
             <TouchableOpacity
-              style={[styles.pastWinnersToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}
-              onPress={() => setShowPastWinners(!showPastWinners)}
-              activeOpacity={0.7}
+              key={arena.arena_id}
+              style={[styles.arenaCard, {
+                borderTopColor: hexToRgba(branding.primary, 0.28),
+                borderLeftColor: hexToRgba(branding.primary, 0.12),
+                borderRightColor: 'rgba(255,255,255,0.05)',
+                borderBottomColor: 'rgba(255,255,255,0.03)',
+              }]}
+              onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
+              activeOpacity={0.8}
             >
-              <Text style={styles.pastWinnersToggleIcon}>📜</Text>
-              <Text style={styles.pastWinnersToggleText}>{t('pastWinners')}</Text>
-              <Ionicons
-                name={showPastWinners ? 'chevron-up' : 'chevron-down'}
-                size={18}
-                color={theme.colors.textSecondary}
-              />
+              <BlurView intensity={50} tint="dark" style={styles.arenaCardBlur}>
+                <LinearGradient
+                  colors={[hexToRgba(branding.primary, 0.08), 'rgba(255,255,255,0.02)', 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+                <View style={styles.arenaCardTop}>
+                  {arena.sponsor_logo ? (
+                    <Image source={arena.sponsor_logo} style={styles.sponsorLogo} contentFit="contain" transition={200} />
+                  ) : (
+                    <View style={[styles.sponsorLogoPlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                      <Ionicons name="trophy" size={20} color={branding.primary} />
+                    </View>
+                  )}
+                  <View style={styles.arenaCardInfo}>
+                    <Text style={styles.arenaName} numberOfLines={1}>{arena.name}</Text>
+                    <Text style={[styles.sponsorLabel, { color: branding.primary }]}>{arena.sponsor_name}</Text>
+                  </View>
+                  <View style={styles.arenaCardMeta}>
+                    <Text style={styles.scoringIcon}>{scoringIcon}</Text>
+                  </View>
+                </View>
+                <View style={styles.arenaCardBottom}>
+                  <View style={styles.arenaStats}>
+                    <Text style={styles.arenaStatText}>{arena.participant_count} participants</Text>
+                    <Text style={styles.arenaStatDot}>·</Text>
+                    <Text style={[styles.arenaStatText, daysLeft <= 3 && { color: theme.colors.secondary }]}>
+                      {daysLeft} days left
+                    </Text>
+                  </View>
+                  {arena.user_rank != null && (
+                    <View style={styles.arenaRankBadge}>
+                      <Text style={[styles.arenaRankText, { color: branding.primary }]}>#{arena.user_rank}</Text>
+                    </View>
+                  )}
+                </View>
+              </BlurView>
             </TouchableOpacity>
-
-            {showPastWinners && (
-              <View style={[styles.pastWinnersContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.pastWinnersBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                  {snapshots.map((snapshot, idx) => {
-                    const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
-                    const top3 = rankings.filter(r => r.rank <= 3).sort((a, b) => a.rank - b.rank);
-                    if (top3.length === 0) return null;
-                    return (
-                      <View key={snapshot.id} style={[styles.snapshotBlock, idx > 0 && styles.snapshotBlockBorder]}>
-                        <Text style={styles.snapshotLabel}>{formatPeriodLabel(snapshot)}</Text>
-                        {top3.map((entry) => (
-                          <View key={entry.user_id} style={styles.snapshotEntry}>
-                            <Text style={styles.snapshotMedal}>{getMedalEmoji(entry.rank)}</Text>
-                            <Text style={styles.snapshotUsername} numberOfLines={1}>@{entry.username}</Text>
-                            <Text style={[styles.snapshotDrops, { color: branding.primary }]}>
-                              {entry.drops.toLocaleString()} {t('drops')}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    );
-                  })}
-                </BlurView>
-              </View>
-            )}
-          </Animated.View>
-        )}
+          );
+        })}
       </>
-    );
-  }, [activeTab, loading, leaderboard.length, currentUserEntry, currentUserRank, branding.primary, period, snapshots, showPastWinners]);
+    )
+  ), [arenasLoading, arenas, branding.primary]);
 
-  const flatListData = useMemo(() => {
-    if (activeTab === 'arenas' || loading || leaderboard.length === 0) return [];
-    return leaderboard;
-  }, [activeTab, loading, leaderboard]);
+  const arenasList = (
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={[styles.periodPageContent, { paddingBottom: insets.bottom + 32 }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {arenasHeader}
+    </ScrollView>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -801,23 +471,254 @@ export default function LeaderboardScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
+      <ScreenHeader title={t('title')} />
+
+      {/* Scope tabs — My Gym / Global / Arenas (always at top) */}
+      <View style={styles.scopeRowWrapper}>
+        <View style={styles.scopeRow}>
+          {([
+            { key: 'gym' as TabType, label: t('myGym'), icon: 'location' as const },
+            { key: 'global' as TabType, label: t('global'), icon: 'globe-outline' as const },
+            { key: 'arenas' as TabType, label: t('arenas'), icon: 'trophy' as const },
+          ]).map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.scopeTab,
+                  isActive && { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.35) },
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveTab(tab.key);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={tab.icon}
+                  size={14}
+                  color={isActive ? branding.primary : 'rgba(255,255,255,0.38)'}
+                />
+                <Text style={[styles.scopeTabLabel, isActive && { color: branding.primary }]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
-      <FlatList
-        data={flatListData}
-        renderItem={renderLeaderboardItem}
-        keyExtractor={(item) => item.user_id || String(item.rank)}
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={listHeader}
-        ListFooterComponent={listFooter}
-      />
-    </SafeAreaView>
+      {activeTab === 'arenas' ? (
+        arenasList
+      ) : (
+        <SliderTabs
+          tabs={[
+            { key: 'weekly', label: t('weekly') },
+            { key: 'monthly', label: t('monthly') },
+            { key: 'all_time', label: t('allTime') },
+          ]}
+          activeKey={period}
+          onChange={(key) => setPeriod(key as LeaderboardPeriod)}
+          accentColor={branding.primary}
+          style={{ flex: 1 }}
+          barStyle={{ marginBottom: 4, marginHorizontal: theme.spacing.lg }}
+        >
+          {PERIODS_LB.map((p) => {
+            const { data: pageData, ps } = buildPageProps(p);
+            const pageCurrentUserEntry = ps.leaderboard.find((e) => isCurrentUser(e.user_id));
+
+            const pageHeader = (
+              <>
+                {winnerBanner && !bannerDismissed && activeTab === 'gym' && (
+                  <TouchableOpacity
+                    style={[styles.winnerBanner, { borderColor: hexToRgba('#FFD700', 0.3) }]}
+                    onPress={() => router.push('/redemptions')}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={[hexToRgba('#FFD700', 0.12), hexToRgba('#FFD700', 0.04)]}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFillObject}
+                    />
+                    <View style={styles.winnerBannerContent}>
+                      <Text style={styles.winnerMedal}>{getMedalEmoji(winnerBanner.rank)}</Text>
+                      <View style={styles.winnerBannerInfo}>
+                        <Text style={styles.winnerBannerTitle}>
+                          {t('youFinished', { rank: winnerBanner.rank, period: winnerBanner.periodLabel })}
+                        </Text>
+                        {winnerBanner.reward && (
+                          <Text style={[styles.winnerBannerPrize, { color: branding.primary }]}>
+                            {t('prize', { prize: winnerBanner.reward })}
+                          </Text>
+                        )}
+                        <Text style={[styles.winnerBannerLink, { color: branding.primary }]}>
+                          {t('checkRedemptions')}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={dismissWinnerBanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {activeTab === 'gym' && (
+                  <TouchableOpacity
+                    style={[styles.newcomerToggle, newcomerOnly && { backgroundColor: hexToRgba(branding.primary, 0.15), borderColor: hexToRgba(branding.primary, 0.3) }]}
+                    onPress={() => setNewcomerOnly(!newcomerOnly)}
+                  >
+                    <Ionicons name="sparkles" size={14} color={newcomerOnly ? branding.primary : theme.colors.textSecondary} />
+                    <Text style={[styles.newcomerText, newcomerOnly && { color: branding.primary }]}>{t('newcomersOnly')}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {!ps.loading && ps.leaderboard.length > 0 && (
+                  <View style={styles.scoreExplainer}>
+                    <Ionicons name="information-circle-outline" size={14} color={theme.colors.textTertiary} />
+                    <Text style={styles.scoreExplainerText}>{t('scoreExplanation')}</Text>
+                  </View>
+                )}
+
+                {activeTab === 'gym' && ps.rewards.length > 0 && (
+                  <View style={styles.prizeRow}>
+                    {ps.rewards.map((r) => {
+                      const medal = r.rank_position === 1 ? '🥇' : r.rank_position === 2 ? '🥈' : '🥉';
+                      return (
+                        <View key={r.id} style={[styles.prizeBadge, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+                          <Text style={styles.prizeMedal}>{medal}</Text>
+                          <Text style={styles.prizeName} numberOfLines={1}>{r.reward_name}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {ps.loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={branding.primary} />
+                  </View>
+                ) : ps.leaderboard.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
+                    <Text style={styles.emptyText}>{t('noRankings')}</Text>
+                    <Text style={styles.emptySubtext}>
+                      {activeTab === 'gym' ? t('beFirstGym') : t('beFirstGlobal')}
+                    </Text>
+                  </View>
+                ) : ps.leaderboard.length >= 3 ? (
+                  <View style={styles.podium}>
+                    {[1, 0, 2].map((podiumIdx) => {
+                      const entry = ps.leaderboard[podiumIdx];
+                      if (!entry) return null;
+                      const isFirst = podiumIdx === 0;
+                      const isSecond = podiumIdx === 1;
+                      const reward = ps.rewards.find((r) => r.rank_position === entry.rank);
+                      const medalColors = { 0: '#FFD700', 1: '#C0C0C0', 2: '#CD7F32' };
+                      const medalColor = medalColors[podiumIdx as keyof typeof medalColors];
+                      const avatarSize = isFirst ? 68 : 52;
+                      const platformHeight = isFirst ? 48 : isSecond ? 32 : 20;
+                      return (
+                        <View key={entry.user_id} style={[styles.podiumItem, isFirst && styles.podiumItemFirst]}>
+                          <Text style={styles.podiumMedal}>{isFirst ? '🥇' : isSecond ? '🥈' : '🥉'}</Text>
+                          <View style={[
+                            styles.podiumAvatar,
+                            { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderColor: medalColor, borderWidth: isFirst ? 3 : 2 },
+                            isFirst && { shadowColor: medalColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 8 },
+                            isCurrentUser(entry.user_id) && { backgroundColor: hexToRgba(branding.primary, 0.15) },
+                          ]}>
+                            {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
+                              <Image source={entry.avatar_url} style={[styles.podiumAvatarImage, { borderRadius: avatarSize / 2 }]} transition={200} />
+                            ) : entry.avatar_url ? (
+                              <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>{entry.avatar_url}</Text>
+                            ) : (
+                              <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>{getRankDisplay(entry.rank).emoji}</Text>
+                            )}
+                          </View>
+                          {entry.streak_days > 0 && <Text style={styles.streakBadge}>🔥{entry.streak_days}</Text>}
+                          <Text style={[styles.podiumName, isCurrentUser(entry.user_id) && { color: branding.primary }]} numberOfLines={1}>
+                            {entry.username}
+                          </Text>
+                          <Text style={[styles.podiumScore, { color: branding.primary }]} numberOfLines={1}>{entry.score_label}</Text>
+                          {reward && <Text style={[styles.prizeLabel, { color: branding.primary }]} numberOfLines={1}>{reward.reward_name}</Text>}
+                          <View style={[styles.podiumPlatform, { height: platformHeight, backgroundColor: hexToRgba(medalColor, 0.12), borderColor: hexToRgba(medalColor, 0.25) }]} />
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </>
+            );
+
+            const pageFooter = ps.loading || ps.leaderboard.length === 0 ? null : (
+              <>
+                {pageCurrentUserEntry && ps.currentUserRank != null && ps.currentUserRank > 50 && (
+                  <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+                    <BlurView intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                      <Text style={styles.stickyFooterRank}>#{pageCurrentUserEntry.rank}</Text>
+                      <Text style={styles.stickyFooterName}>{pageCurrentUserEntry.username}</Text>
+                      <Text style={[styles.scoreLabel, { color: branding.primary }]}>{pageCurrentUserEntry.score_label}</Text>
+                    </BlurView>
+                  </View>
+                )}
+                {activeTab === 'gym' && p !== 'all_time' && (
+                  <Text style={styles.resetNote}>
+                    {p === 'weekly' ? t('prizesResetWeekly') : t('prizesResetMonthly')}
+                  </Text>
+                )}
+                {activeTab === 'gym' && ps.snapshots.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.pastWinnersToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+                    onPress={() => setShowPastWinners(!showPastWinners)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.pastWinnersToggleIcon}>📜</Text>
+                    <Text style={styles.pastWinnersToggleText}>{t('pastWinners')}</Text>
+                    <Ionicons name={showPastWinners ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+                {activeTab === 'gym' && showPastWinners && ps.snapshots.length > 0 && (
+                  <View style={[styles.pastWinnersContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                    <BlurView intensity={50} tint="dark" style={[styles.pastWinnersBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                      {ps.snapshots.map((snapshot, idx) => {
+                        const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
+                        const top3 = rankings.filter(r => r.rank <= 3).sort((a, b) => a.rank - b.rank);
+                        if (top3.length === 0) return null;
+                        return (
+                          <View key={snapshot.id} style={[styles.snapshotBlock, idx > 0 && styles.snapshotBlockBorder]}>
+                            <Text style={styles.snapshotLabel}>{formatPeriodLabel(snapshot)}</Text>
+                            {top3.map((entry) => (
+                              <View key={entry.user_id} style={styles.snapshotEntry}>
+                                <Text style={styles.snapshotMedal}>{getMedalEmoji(entry.rank)}</Text>
+                                <Text style={styles.snapshotUsername} numberOfLines={1}>@{entry.username}</Text>
+                                <Text style={[styles.snapshotDrops, { color: branding.primary }]}>{entry.drops.toLocaleString()} {t('drops')}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        );
+                      })}
+                    </BlurView>
+                  </View>
+                )}
+              </>
+            );
+
+            return (
+              <FlatList
+                key={p}
+                data={pageData}
+                renderItem={renderLeaderboardItem}
+                keyExtractor={(item) => item.user_id || String(item.rank)}
+                contentContainerStyle={[styles.periodPageContent, { paddingBottom: insets.bottom + 32 }]}
+                showsVerticalScrollIndicator={false}
+                ListHeaderComponent={pageHeader}
+                ListFooterComponent={pageFooter}
+              />
+            );
+          })}
+        </SliderTabs>
+      )}
+    </View>
   );
 }
 
@@ -826,23 +727,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: theme.colors.text,
-    textAlign: 'center',
-    pointerEvents: 'none',
-  },
-  headerSpacer: {
-    width: 40,
-  },
   scrollView: {
     flex: 1,
   },
@@ -850,54 +734,36 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
   },
-  /* Type Toggle */
-  typeToggle: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
+  /* Scope row — My Gym / Global / Arenas */
+  scopeRowWrapper: {
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: 10,
   },
-  typeToggleBlur: {
+  scopeRow: {
     flexDirection: 'row',
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: 4,
+    gap: 8,
   },
-  typeTab: {
+  scopeTab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: theme.spacing.sm + 2,
-    borderRadius: theme.borderRadius.lg,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  typeTabText: {
+  scopeTabLabel: {
     ...fontStyles.heading,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
+    fontSize: 13,
+    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.42)',
   },
-  /* Period Filter */
-  periodFilter: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  periodButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  periodButtonText: {
-    ...fontStyles.heading,
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
+  periodPageContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
   },
   /* Newcomer Toggle */
   newcomerToggle: {
@@ -1182,13 +1048,16 @@ const styles = StyleSheet.create({
 
   /* ─── Arena Cards ─── */
   arenaCard: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: 1,
-    marginBottom: theme.spacing.md,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    marginBottom: 12,
   },
   arenaCardBlur: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     padding: theme.spacing.lg,
   },

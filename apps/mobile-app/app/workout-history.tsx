@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -78,6 +78,7 @@ function formatTime(iso: string): string {
 export default function WorkoutHistoryScreen() {
   const { t } = useTranslation('history');
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
 
@@ -326,22 +327,17 @@ export default function WorkoutHistoryScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <LinearGradient
-          colors={['#000000', '#0A0E1A', '#000000']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.loadingContainer}>
+      <View style={styles.container}>
+        <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFillObject} />
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -349,18 +345,13 @@ export default function WorkoutHistoryScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('title')} />
 
       <SectionList
         sections={groupedByDay.map(group => ({ title: group.label, dateStr: group.dateStr, data: group.sessions }))}
         keyExtractor={(item) => item.id}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
         refreshControl={
@@ -368,16 +359,30 @@ export default function WorkoutHistoryScreen() {
         }
         ListHeaderComponent={
           <>
-            <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-              <View style={[styles.calendarCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.calendarBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            {/* ── Calendar card ── */}
+            <Animated.View entering={FadeInDown.delay(80).duration(400)}>
+              <View style={[styles.calendarCard, {
+                borderTopColor: hexToRgba(branding.primary, 0.30),
+                borderLeftColor: hexToRgba(branding.primary, 0.12),
+                borderRightColor: 'rgba(255,255,255,0.05)',
+                borderBottomColor: 'rgba(255,255,255,0.04)',
+              }]}>
+                <BlurView intensity={55} tint="dark" style={styles.calendarBlur}>
+                  <LinearGradient
+                    colors={[hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)', 'rgba(12,12,22,0.0)']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
                   <View style={styles.monthNav}>
-                    <TouchableOpacity onPress={prevMonth} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Ionicons name="chevron-back" size={24} color={branding.primary} />
+                    <TouchableOpacity onPress={prevMonth} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      style={[styles.monthNavBtn, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
+                      <Ionicons name="chevron-back" size={18} color={branding.primary} />
                     </TouchableOpacity>
-                    <Text style={[styles.monthLabel, { color: branding.primary }]}>{monthLabel}</Text>
-                    <TouchableOpacity onPress={nextMonth} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} disabled={!canGoForward}>
-                      <Ionicons name="chevron-forward" size={24} color={canGoForward ? branding.primary : hexToRgba(branding.primary, 0.3)} />
+                    <Text style={[styles.monthLabel, { color: '#FFFFFF' }]}>{monthLabel}</Text>
+                    <TouchableOpacity onPress={nextMonth} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} disabled={!canGoForward}
+                      style={[styles.monthNavBtn, { borderColor: hexToRgba(branding.primary, canGoForward ? 0.18 : 0.06) }]}>
+                      <Ionicons name="chevron-forward" size={18} color={canGoForward ? branding.primary : hexToRgba(branding.primary, 0.25)} />
                     </TouchableOpacity>
                   </View>
 
@@ -396,12 +401,12 @@ export default function WorkoutHistoryScreen() {
                           <View style={[
                             styles.dateCircle,
                             cell.isToday && { borderColor: branding.primary, borderWidth: 1.5 },
-                            cell.hasWorkout && { backgroundColor: hexToRgba(branding.primary, 0.2) },
+                            cell.hasWorkout && { backgroundColor: hexToRgba(branding.primary, 0.22) },
                           ]}>
                             <Text style={[
                               styles.dateText,
                               cell.isToday && { color: branding.primary, ...fontStyles.bodySemiBold },
-                              cell.hasWorkout && { color: '#fff' },
+                              cell.hasWorkout && { color: '#FFFFFF' },
                             ]}>
                               {cell.date}
                             </Text>
@@ -417,56 +422,76 @@ export default function WorkoutHistoryScreen() {
               </View>
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(180).duration(400)}>
-              <View style={[styles.streakCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.streakCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
-                  <View style={styles.streakRow}>
-                    <View style={styles.streakItem}>
-                      <View style={[styles.streakIconBg, { backgroundColor: streakInfo.current > 0 ? 'rgba(255, 107, 53, 0.2)' : hexToRgba(branding.primary, 0.1) }]}>
-                        <Ionicons name="flame" size={22} color={streakInfo.current > 0 ? '#FF6B35' : '#808080'} />
+            {/* ── Combined streak + month stats card ── */}
+            <Animated.View entering={FadeInDown.delay(160).duration(400)}>
+              <View style={[styles.summaryCard, {
+                borderTopColor: hexToRgba(branding.primary, 0.28),
+                borderLeftColor: hexToRgba(branding.primary, 0.10),
+                borderRightColor: 'rgba(255,255,255,0.05)',
+                borderBottomColor: 'rgba(255,255,255,0.03)',
+              }]}>
+                <BlurView intensity={50} tint="dark" style={styles.summaryBlur}>
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
+                  {/* Top row: streak pair */}
+                  <View style={styles.summaryTopRow}>
+                    {/* Current streak */}
+                    <View style={[styles.summaryStreakItem, { borderColor: streakInfo.current > 0 ? 'rgba(255,107,0,0.18)' : 'rgba(255,255,255,0.07)' }]}>
+                      <View style={[styles.summaryStreakIconBg, { backgroundColor: streakInfo.current > 0 ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.05)' }]}>
+                        <Ionicons name="flame" size={18} color={streakInfo.current > 0 ? '#FF6B00' : 'rgba(255,255,255,0.25)'} />
                       </View>
-                      <Text style={[styles.streakValue, getNumberStyle(28), streakInfo.current > 0 && { color: '#FF6B35' }]}>
-                        {streakInfo.current}
-                      </Text>
-                      <Text style={styles.streakLabel}>{t('currentStreak')}</Text>
-                      <Text style={styles.streakUnit}>{t('days')}</Text>
+                      <View style={styles.summaryStreakText}>
+                        <Text style={[styles.summaryStreakValue, getNumberStyle(22), { color: streakInfo.current > 0 ? '#FF6B00' : 'rgba(255,255,255,0.5)' }]}>
+                          {streakInfo.current === 0 ? '—' : streakInfo.current}
+                        </Text>
+                        <Text style={styles.summaryStreakLabel}>{t('currentStreak')}</Text>
+                      </View>
                     </View>
-                    <View style={[styles.streakDivider, { backgroundColor: hexToRgba(branding.primary, 0.12) }]} />
-                    <View style={styles.streakItem}>
-                      <View style={[styles.streakIconBg, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                        <Ionicons name="trophy" size={22} color={branding.primary} />
+                    <View style={[styles.summaryStreakItem, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
+                      <View style={[styles.summaryStreakIconBg, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                        <Ionicons name="trophy" size={18} color={branding.primary} />
                       </View>
-                      <Text style={[styles.streakValue, getNumberStyle(28), { color: branding.primary }]}>
-                        {streakInfo.max}
-                      </Text>
-                      <Text style={styles.streakLabel}>{t('maxStreak')}</Text>
-                      <Text style={styles.streakUnit}>{t('days')}</Text>
+                      <View style={styles.summaryStreakText}>
+                        <Text style={[styles.summaryStreakValue, getNumberStyle(22), { color: branding.primary }]}>
+                          {streakInfo.max === 0 ? '—' : streakInfo.max}
+                        </Text>
+                        <Text style={styles.summaryStreakLabel}>{t('maxStreak')}</Text>
+                      </View>
                     </View>
                   </View>
-                  <Text style={styles.streakHint}>
-                    {streakInfo.current > 0 ? t('streakActive') : t('streakInactive')}
-                  </Text>
-                </BlurView>
-              </View>
-            </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(260).duration(400)}>
-              <View style={styles.statsRow}>
-                <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="barbell-outline" size={16} color={branding.primary} />
-                  <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>{monthStats.workouts}</Text>
-                  <Text style={styles.statPillLabel}>{t('workouts')}</Text>
-                </View>
-                <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="water" size={16} color={branding.primary} />
-                  <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>{monthStats.totalDrops}</Text>
-                  <Text style={styles.statPillLabel}>{t('drops')}</Text>
-                </View>
-                <View style={[styles.statPill, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="time-outline" size={16} color={branding.primary} />
-                  <Text style={[styles.statPillValue, getNumberStyle(16), { color: branding.primary }]}>{formatDuration(monthStats.totalDuration)}</Text>
-                  <Text style={styles.statPillLabel}>{t('total')}</Text>
-                </View>
+                  {/* Bottom row: month stats */}
+                  <View style={[styles.summaryBottomRow, { borderTopColor: hexToRgba(branding.primary, 0.08) }]}>
+                    {[
+                      { icon: 'barbell' as const,      value: monthStats.workouts.toString(),                           label: t('workouts') },
+                      { icon: 'water' as const,         value: monthStats.totalDrops === 0 ? '—' : monthStats.totalDrops.toLocaleString(), label: t('drops') },
+                      { icon: 'time-outline' as const,  value: formatDuration(monthStats.totalDuration) || '—',          label: t('total') },
+                    ].map((s, i) => (
+                      <View key={i} style={styles.summaryMonthItem}>
+                        {i > 0 && <View style={[styles.summaryMonthDivider, { backgroundColor: hexToRgba(branding.primary, 0.10) }]} />}
+                        <Ionicons name={s.icon} size={13} color={branding.primary} />
+                        <Text style={[styles.summaryMonthValue, getNumberStyle(16), { color: '#FFFFFF' }]}>{s.value}</Text>
+                        <Text style={styles.summaryMonthLabel}>{s.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Hint */}
+                  <View style={[styles.summaryHintRow, { borderTopColor: hexToRgba(branding.primary, 0.06) }]}>
+                    <Ionicons
+                      name={streakInfo.current > 0 ? 'checkmark-circle' : 'information-circle-outline'}
+                      size={12}
+                      color={streakInfo.current > 0 ? '#4ade80' : 'rgba(255,255,255,0.28)'}
+                    />
+                    <Text style={styles.summaryHint}>
+                      {streakInfo.current > 0 ? t('streakActive') : t('streakInactive')}
+                    </Text>
+                  </View>
+                </BlurView>
               </View>
             </Animated.View>
           </>
@@ -499,54 +524,75 @@ export default function WorkoutHistoryScreen() {
           const metrics = s.raw_metrics as RawMetrics | null;
 
           return (
-            <Animated.View entering={FadeInDown.delay(350).duration(400)}>
+            <Animated.View entering={FadeInDown.delay(300).duration(400)}>
               <TouchableOpacity
-                activeOpacity={0.8}
+                activeOpacity={0.85}
                 onPress={() => setExpandedSessionId(isExpanded ? null : s.id)}
-                style={[styles.sessionCard, { borderColor: hexToRgba(branding.primary, isExpanded ? 0.3 : 0.12) }]}
+                style={[styles.sessionCard, {
+                  borderTopColor: hexToRgba(branding.primary, isExpanded ? 0.40 : 0.22),
+                  borderLeftColor: hexToRgba(branding.primary, isExpanded ? 0.18 : 0.10),
+                  borderRightColor: 'rgba(255,255,255,0.05)',
+                  borderBottomColor: 'rgba(255,255,255,0.03)',
+                }]}
               >
-                <BlurView intensity={40} tint="dark" style={[styles.sessionCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                <BlurView intensity={45} tint="dark" style={styles.sessionCardBlur}>
+                  <LinearGradient
+                    colors={isExpanded
+                      ? [hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)', 'transparent']
+                      : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)', 'transparent']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
+
+                  {/* Main row */}
                   <View style={styles.sessionCardRow}>
-                    <View style={[styles.machineIconCircle, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                      <Ionicons name={iconName} size={24} color={branding.primary} />
+                    <View style={[styles.machineIconCircle, {
+                      backgroundColor: hexToRgba(branding.primary, 0.12),
+                      borderColor: hexToRgba(branding.primary, 0.20),
+                    }]}>
+                      <Ionicons name={iconName} size={22} color={branding.primary} />
                     </View>
 
                     <View style={styles.sessionInfo}>
                       <Text style={styles.sessionMachine} numberOfLines={1}>{machineName}</Text>
                       <Text style={styles.sessionDate}>
-                        {formatTime(s.started_at)} • {formatDuration(s.duration_seconds)}
-                        {gymName ? ` • ${gymName}` : ''}
+                        {formatTime(s.started_at)} · {formatDuration(s.duration_seconds)}
+                        {gymName ? ` · ${gymName}` : ''}
                       </Text>
                     </View>
 
                     <View style={styles.sessionStats}>
                       <View style={styles.sessionStatRow}>
-                        <Ionicons name="water" size={14} color={branding.primary} />
+                        <Ionicons name="water" size={13} color={branding.primary} />
                         <Text style={[styles.sessionDrops, getNumberStyle(16), { color: branding.primary }]}>
-                          {s.drops_earned || 0}
+                          {(s.drops_earned || 0).toLocaleString()}
                         </Text>
                       </View>
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={14}
-                        color={theme.colors.textTertiary}
-                      />
+                      <View style={styles.chevronWrap}>
+                        <Ionicons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={13}
+                          color={hexToRgba('#FFFFFF', 0.35)}
+                        />
+                      </View>
                     </View>
                   </View>
 
+                  {/* Inline chips: calories + multiplier */}
                   {(s.calories || (s.multiplier && s.multiplier > 1)) && (
-                    <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.08) }]}>
+                    <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.07) }]}>
                       {s.calories ? (
-                        <View style={styles.detailChip}>
-                          <Ionicons name="flame-outline" size={12} color={theme.colors.secondary} />
+                        <View style={[styles.detailChip, { backgroundColor: 'rgba(255,145,0,0.10)', borderColor: 'rgba(255,145,0,0.18)' }]}>
+                          <Ionicons name="flame-outline" size={11} color={theme.colors.secondary} />
                           <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
                             ~{Math.round(Number(s.calories))} {t('cal')}
                           </Text>
                         </View>
                       ) : null}
                       {s.multiplier && s.multiplier > 1 ? (
-                        <View style={[styles.detailChip, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                          <Ionicons name="flash" size={12} color={branding.primary} />
+                        <View style={[styles.detailChip, { backgroundColor: hexToRgba(branding.primary, 0.10), borderColor: hexToRgba(branding.primary, 0.22) }]}>
+                          <Ionicons name="flash" size={11} color={branding.primary} />
                           <Text style={[styles.detailChipText, { color: branding.primary }]}>
                             ×{s.multiplier.toFixed(1)} {t('multiplier')}
                           </Text>
@@ -555,106 +601,64 @@ export default function WorkoutHistoryScreen() {
                     </View>
                   )}
 
+                  {/* Expanded metrics grid */}
                   {isExpanded && (
-                    <View style={[styles.expandedPanel, { borderTopColor: hexToRgba(branding.primary, 0.1) }]}>
+                    <View style={[styles.expandedPanel, { borderTopColor: hexToRgba(branding.primary, 0.09) }]}>
                       <View style={styles.expandedGrid}>
-                        <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                          <Ionicons name="time-outline" size={16} color={branding.primary} />
-                          <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                            {formatDuration(s.duration_seconds)}
-                          </Text>
-                          <Text style={styles.expandedStatLabel}>{t('duration')}</Text>
-                        </View>
-
-                        <View style={[styles.expandedStat, { backgroundColor: 'rgba(255, 145, 0, 0.06)' }]}>
-                          <Ionicons name="flame-outline" size={16} color={theme.colors.secondary} />
-                          <Text style={[styles.expandedStatValue, getNumberStyle(18), { color: theme.colors.secondary }]}>
-                            {s.calories ? `${Math.round(Number(s.calories))}` : '—'}
-                          </Text>
-                          <Text style={styles.expandedStatLabel}>{t('kcal')}</Text>
-                        </View>
-
-                        {metrics?.total_distance != null && metrics.total_distance > 0 && (
-                          <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="navigate-outline" size={16} color={branding.primary} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                              {metrics.total_distance >= 1000
-                                ? `${(metrics.total_distance / 1000).toFixed(1)}`
-                                : `${Math.round(metrics.total_distance)}`}
+                        {[
+                          { icon: 'time-outline' as const,       value: formatDuration(s.duration_seconds),                           label: t('duration'),  color: branding.primary },
+                          { icon: 'flame-outline' as const,       value: s.calories ? `${Math.round(Number(s.calories))}` : null,      label: t('kcal'),      color: theme.colors.secondary },
+                          metrics?.total_distance && metrics.total_distance > 0
+                            ? { icon: 'navigate-outline' as const,
+                                value: metrics.total_distance >= 1000
+                                  ? `${(metrics.total_distance / 1000).toFixed(1)}`
+                                  : `${Math.round(metrics.total_distance)}`,
+                                label: metrics.total_distance >= 1000 ? t('km') : 'm',
+                                color: branding.primary }
+                            : null,
+                          metrics?.avg_speed_kmh && metrics.avg_speed_kmh > 0
+                            ? { icon: 'speedometer-outline' as const, value: metrics.avg_speed_kmh.toFixed(1), label: 'km/h avg', color: branding.primary }
+                            : null,
+                          metrics?.max_speed_kmh && metrics.max_speed_kmh > 0
+                            ? { icon: 'flash-outline' as const, value: metrics.max_speed_kmh.toFixed(1), label: 'km/h max', color: branding.primary }
+                            : null,
+                          metrics?.avg_cadence && metrics.avg_cadence > 0
+                            ? { icon: 'sync-outline' as const, value: `${Math.round(metrics.avg_cadence)}`, label: `${machineType === 'treadmill' ? 'spm' : 'rpm'} avg`, color: branding.primary }
+                            : null,
+                          metrics?.avg_power_watts && metrics.avg_power_watts > 0
+                            ? { icon: 'pulse-outline' as const, value: `${metrics.avg_power_watts}`, label: 'W avg', color: branding.primary }
+                            : null,
+                          metrics?.max_power_watts && metrics.max_power_watts > 0
+                            ? { icon: 'pulse-outline' as const, value: `${metrics.max_power_watts}`, label: 'W max', color: branding.primary }
+                            : null,
+                        ].filter(Boolean).map((stat, i) => stat && (
+                          <View key={i} style={[styles.expandedStat, {
+                            backgroundColor: stat.color === theme.colors.secondary
+                              ? 'rgba(255,145,0,0.07)'
+                              : hexToRgba(branding.primary, 0.07),
+                            borderColor: stat.color === theme.colors.secondary
+                              ? 'rgba(255,145,0,0.12)'
+                              : hexToRgba(branding.primary, 0.12),
+                          }]}>
+                            <Ionicons name={stat.icon} size={15} color={stat.color} />
+                            <Text style={[styles.expandedStatValue, getNumberStyle(17), { color: '#FFFFFF' }]}>
+                              {stat.value ?? '—'}
                             </Text>
-                            <Text style={styles.expandedStatLabel}>
-                              {metrics.total_distance >= 1000 ? t('km') : 'm'}
-                            </Text>
+                            <Text style={styles.expandedStatLabel}>{stat.label}</Text>
                           </View>
-                        )}
-
-                        {metrics?.avg_speed_kmh != null && metrics.avg_speed_kmh > 0 && (
-                          <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="speedometer-outline" size={16} color={branding.primary} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                              {metrics.avg_speed_kmh.toFixed(1)}
-                            </Text>
-                            <Text style={styles.expandedStatLabel}>km/h avg</Text>
-                          </View>
-                        )}
-
-                        {metrics?.max_speed_kmh != null && metrics.max_speed_kmh > 0 && (
-                          <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="flash-outline" size={16} color={branding.primary} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                              {metrics.max_speed_kmh.toFixed(1)}
-                            </Text>
-                            <Text style={styles.expandedStatLabel}>km/h max</Text>
-                          </View>
-                        )}
-
-                        {metrics?.avg_cadence != null && metrics.avg_cadence > 0 && (
-                          <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="sync-outline" size={16} color={branding.primary} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                              {Math.round(metrics.avg_cadence)}
-                            </Text>
-                            <Text style={styles.expandedStatLabel}>
-                              {machineType === 'treadmill' ? 'spm' : 'rpm'} avg
-                            </Text>
-                          </View>
-                        )}
-
-                        {metrics?.avg_power_watts != null && metrics.avg_power_watts > 0 && (
-                          <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="pulse-outline" size={16} color={branding.primary} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                              {metrics.avg_power_watts}
-                            </Text>
-                            <Text style={styles.expandedStatLabel}>W avg</Text>
-                          </View>
-                        )}
-
-                        {metrics?.max_power_watts != null && metrics.max_power_watts > 0 && (
-                          <View style={[styles.expandedStat, { backgroundColor: hexToRgba(branding.primary, 0.06) }]}>
-                            <Ionicons name="pulse-outline" size={16} color={branding.primary} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(18)]}>
-                              {metrics.max_power_watts}
-                            </Text>
-                            <Text style={styles.expandedStatLabel}>W max</Text>
-                          </View>
-                        )}
+                        ))}
                       </View>
 
                       {metrics?.ble_protocol && (
                         <View style={styles.protocolRow}>
-                          <View style={[styles.protocolBadge, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                          <View style={[styles.protocolBadge, { backgroundColor: hexToRgba(branding.primary, 0.07), borderColor: hexToRgba(branding.primary, 0.12) }]}>
                             <Ionicons name="bluetooth" size={10} color={theme.colors.textTertiary} />
-                            <Text style={styles.protocolText}>
-                              {metrics.ble_protocol.toUpperCase()}
-                            </Text>
+                            <Text style={styles.protocolText}>{metrics.ble_protocol.toUpperCase()}</Text>
                           </View>
                           {metrics.calories_source === 'device' && (
-                            <View style={[styles.protocolBadge, { backgroundColor: 'rgba(255, 145, 0, 0.08)' }]}>
+                            <View style={[styles.protocolBadge, { backgroundColor: 'rgba(255,145,0,0.07)', borderColor: 'rgba(255,145,0,0.12)' }]}>
                               <Ionicons name="checkmark-circle" size={10} color={theme.colors.secondary} />
-                              <Text style={[styles.protocolText, { color: theme.colors.secondary }]}>
-                                Device calories
-                              </Text>
+                              <Text style={[styles.protocolText, { color: theme.colors.secondary }]}>Device calories</Text>
                             </View>
                           )}
                         </View>
@@ -666,10 +670,11 @@ export default function WorkoutHistoryScreen() {
             </Animated.View>
           );
         }}
-        ListFooterComponent={<View style={{ height: 40 }} />}
+        ListFooterComponent={<View style={{ height: 20 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         SectionSeparatorComponent={() => <View style={{ height: 14 }} />}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -683,22 +688,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 40,
-  },
   scrollView: {
     flex: 1,
   },
@@ -707,33 +696,47 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
   },
 
-  // ── Calendar ──
+  // ── Calendar card ──
   calendarCard: {
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     overflow: 'hidden',
-    marginBottom: theme.spacing.md,
+    marginBottom: 12,
   },
   calendarBlur: {
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
+    padding: 16,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   monthNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xs,
+    marginBottom: 14,
+    paddingHorizontal: 2,
+  },
+  monthNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   monthLabel: {
     ...fontStyles.heading,
-    fontSize: 20,
+    fontSize: 18,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   dayHeaders: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: theme.spacing.sm,
+    marginBottom: 6,
   },
   dayHeaderCell: {
     width: CELL_SIZE,
@@ -741,8 +744,10 @@ const styles = StyleSheet.create({
   },
   dayHeaderText: {
     ...fontStyles.bodyMedium,
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textTertiary,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.30)',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -757,111 +762,123 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dateCircle: {
-    width: CELL_SIZE - 8,
-    height: CELL_SIZE - 8,
-    borderRadius: (CELL_SIZE - 8) / 2,
+    width: CELL_SIZE - 6,
+    height: CELL_SIZE - 6,
+    borderRadius: (CELL_SIZE - 6) / 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
   dateText: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
   },
   workoutDot: {
     position: 'absolute',
-    bottom: 2,
+    bottom: 3,
     width: 4,
     height: 4,
     borderRadius: 2,
   },
 
-  // ── Streak Card ──
-  streakCard: {
-    borderRadius: 16,
+  // ── Summary card (streak + month stats merged) ──
+  summaryCard: {
+    borderRadius: 18,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     overflow: 'hidden',
-    borderWidth: 1,
-    marginBottom: theme.spacing.lg,
+    marginBottom: 20,
   },
-  streakCardBlur: {
-    borderRadius: 16,
+  summaryBlur: {
+    borderRadius: 18,
     overflow: 'hidden',
-    padding: 20,
   },
-  streakRow: {
+  // Top row: two streak cells side by side
+  summaryTopRow: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 14,
+    paddingBottom: 12,
+  },
+  summaryStreakItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
   },
-  streakItem: {
+  summaryStreakIconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  summaryStreakText: {
     flex: 1,
-    alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
-  streakIconBg: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  streakValue: {
+  summaryStreakValue: {
     color: '#FFFFFF',
-    lineHeight: 32,
+    lineHeight: 26,
   },
-  streakLabel: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
-  },
-  streakUnit: {
+  summaryStreakLabel: {
     ...fontStyles.body,
     fontSize: 10,
-    color: theme.colors.textTertiary,
+    color: 'rgba(255,255,255,0.38)',
     letterSpacing: 0.2,
   },
-  streakDivider: {
-    width: 1,
-    height: 60,
-    marginHorizontal: 16,
-  },
-  streakHint: {
-    ...fontStyles.body,
-    fontSize: 12,
-    color: theme.colors.textTertiary,
-    textAlign: 'center',
-    marginTop: 14,
-    letterSpacing: 0.2,
-  },
-
-  // ── Stats Row ──
-  statsRow: {
+  // Bottom row: 3 month stats
+  summaryBottomRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.lg,
-    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
-  statPill: {
+  summaryMonthItem: {
     flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    position: 'relative',
+  },
+  summaryMonthDivider: {
+    position: 'absolute',
+    left: 0,
+    top: '10%',
+    height: '80%',
+    width: StyleSheet.hairlineWidth,
+  },
+  summaryMonthValue: {
+    color: '#FFFFFF',
+  },
+  summaryMonthLabel: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 0.2,
+  },
+  summaryHintRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    gap: 5,
+    paddingVertical: 9,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: 14,
   },
-  statPillValue: {
-    ...fontStyles.number,
-  },
-  statPillLabel: {
+  summaryHint: {
     ...fontStyles.body,
     fontSize: 11,
-    color: theme.colors.textTertiary,
+    color: 'rgba(255,255,255,0.32)',
+    letterSpacing: 0.2,
   },
 
   // ── Empty State ──
@@ -883,7 +900,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
   },
 
-  // ── Day Section ──
+  // ── Day Section Header ──
   daySectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -891,29 +908,29 @@ const styles = StyleSheet.create({
   },
   daySectionLabel: {
     ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: 12,
     textTransform: 'capitalize',
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   daySectionLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
   },
-
-  // ── Session Cards ──
-  sessionsList: {
-    gap: 24,
-  },
   dayGroup: {
     gap: 10,
   },
+
+  // ── Session Cards ──
   sessionCard: {
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     overflow: 'hidden',
   },
   sessionCardBlur: {
-    borderRadius: theme.borderRadius.md,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   sessionCardRow: {
@@ -923,29 +940,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   machineIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sessionInfo: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   sessionMachine: {
     ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.text,
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: 0.1,
   },
   sessionDate: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textTertiary,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 0.1,
   },
   sessionStats: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: 4,
   },
   sessionStatRow: {
     flexDirection: 'row',
@@ -954,25 +974,24 @@ const styles = StyleSheet.create({
   },
   sessionDrops: {
     ...fontStyles.number,
+    fontSize: 16,
   },
-  sessionDuration: {
-    ...fontStyles.body,
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textTertiary,
+  chevronWrap: {
+    alignItems: 'flex-end',
   },
   sessionDetailRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 14,
     paddingBottom: 10,
     paddingTop: 8,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   detailChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 145, 0, 0.08)',
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -980,11 +999,12 @@ const styles = StyleSheet.create({
   detailChipText: {
     ...fontStyles.bodySemiBold,
     fontSize: 11,
+    letterSpacing: 0.1,
   },
 
   // ── Expanded Detail Panel ──
   expandedPanel: {
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     padding: 14,
     gap: 10,
   },
@@ -999,17 +1019,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 6,
-    borderRadius: 10,
-    gap: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 3,
   },
   expandedStatValue: {
     color: '#FFFFFF',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   expandedStatLabel: {
     ...fontStyles.body,
     fontSize: 10,
-    color: theme.colors.textTertiary,
+    color: 'rgba(255,255,255,0.35)',
     letterSpacing: 0.2,
   },
   protocolRow: {
@@ -1024,11 +1045,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+    borderWidth: 1,
   },
   protocolText: {
     ...fontStyles.body,
     fontSize: 9,
-    color: theme.colors.textTertiary,
-    letterSpacing: 0.3,
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 0.4,
   },
 });

@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -192,11 +192,7 @@ export default function ChallengeDetailScreen() {
   if (!challenge) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('challenge')}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <ScreenHeader title={t('challenge')} />
         <View style={styles.centerContent}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('challengeNotFound')}</Text>
@@ -241,12 +237,7 @@ export default function ChallengeDetailScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('challengeDetails')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('challengeDetails')} insetHandled />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Main Challenge Card */}
@@ -411,24 +402,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: {
-    width: 40,
   },
   centerContent: {
     flex: 1,

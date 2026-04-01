@@ -11,7 +11,7 @@ import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 import { VerificationSheet } from '@/components/VerificationSheet';
 import Animated, {
   FadeInDown,
@@ -74,7 +74,6 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
-  const { activeGym } = useTheme();
   const { badges } = useUserBadges();
   const { homeGymId } = useGymStore();
   const hasGym = !!homeGymId;
@@ -273,46 +272,60 @@ export default function ProfileScreen() {
       >
         {/* HERO CARD */}
         <Animated.View entering={FadeInDown.delay(100).duration(500)}>
-          <View style={[styles.heroCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.heroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+          <View style={[styles.heroCard, {
+            borderTopColor: hexToRgba(branding.primary, 0.35),
+            borderLeftColor: hexToRgba(branding.primary, 0.14),
+            borderRightColor: 'rgba(255,255,255,0.05)',
+            borderBottomColor: 'rgba(255,255,255,0.04)',
+          }]}>
+            <BlurView intensity={55} tint="dark" style={styles.heroBlur}>
               <LinearGradient
-                colors={[hexToRgba(branding.primary, 0.1), 'rgba(20, 20, 35, 0.95)', hexToRgba(branding.primary, 0.05)]}
+                colors={[hexToRgba(branding.primary, 0.12), 'rgba(255,255,255,0.03)', 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.heroGradient}
-              >
-                {/* Avatar Flip Card */}
-                <TouchableOpacity onPress={handleAvatarFlip} activeOpacity={0.95} style={styles.flipCardContainer} disabled={!highestBadge}>
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+
+              {/* ── Identity row: avatar + name block ── */}
+              <View style={styles.heroIdentityRow}>
+                {/* Flip card */}
+                <TouchableOpacity onPress={handleAvatarFlip} activeOpacity={0.92} style={styles.flipCardContainer} disabled={!highestBadge}>
                   <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
-                    <View style={[styles.avatarContainer, { borderColor: branding.primary }]}>
-                      {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                        <Image source={profile.avatar_url} style={styles.avatar} transition={200} />
-                      ) : profile?.avatar_url ? (
-                        <LinearGradient colors={[branding.primary, branding.primaryDark]} style={styles.avatarPlaceholder}>
-                          <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>
-                        </LinearGradient>
-                      ) : (
-                        <LinearGradient colors={[branding.primary, branding.primaryDark]} style={styles.avatarPlaceholder}>
-                          <Text style={[styles.avatarInitial, { color: branding.onPrimary }]}>
-                            {profile?.username?.charAt(0).toUpperCase() || '?'}
-                          </Text>
-                        </LinearGradient>
-                      )}
+                    {/* Glow ring */}
+                    <View style={[styles.avatarGlowRing, { shadowColor: branding.primary, borderColor: hexToRgba(branding.primary, 0.55) }]}>
+                      <View style={styles.avatarContainer}>
+                        {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+                          <Image source={profile.avatar_url} style={styles.avatar} transition={200} />
+                        ) : profile?.avatar_url ? (
+                          <LinearGradient colors={[branding.primary, branding.primaryDark]} style={styles.avatarPlaceholder}>
+                            <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>
+                          </LinearGradient>
+                        ) : (
+                          <LinearGradient colors={[branding.primary, branding.primaryDark]} style={styles.avatarPlaceholder}>
+                            <Text style={[styles.avatarInitial, { color: branding.onPrimary }]}>
+                              {profile?.username?.charAt(0).toUpperCase() || '?'}
+                            </Text>
+                          </LinearGradient>
+                        )}
+                      </View>
                     </View>
                     {highestBadge && (
-                      <View style={[styles.badgePeekIndicator, { backgroundColor: branding.primaryDark, borderColor: 'rgba(255, 215, 0, 0.6)' }]}>
-                        <Ionicons name="trophy" size={12} color="#FFD700" />
+                      <View style={[styles.badgePeekIndicator, { backgroundColor: branding.primaryDark, borderColor: 'rgba(255,215,0,0.6)' }]}>
+                        <Ionicons name="trophy" size={10} color="#FFD700" />
                       </View>
                     )}
                   </Animated.View>
                   <Animated.View style={[styles.flipCardFace, styles.flipCardBack, backAnimatedStyle]}>
-                    <View style={[styles.avatarContainer, { borderColor: '#FFD700', borderWidth: 2.5 }]}>
-                      {highestBadge?.badge_image_url ? (
-                        <Image source={highestBadge.badge_image_url} style={styles.avatar} transition={200} />
-                      ) : (
-                        <LinearGradient colors={['#2A1F00', '#1A1200']} style={styles.avatarPlaceholder}>
-                          <Ionicons name="trophy" size={36} color="#FFD700" />
-                        </LinearGradient>
-                      )}
+                    <View style={[styles.avatarGlowRing, { shadowColor: '#FFD700', borderColor: 'rgba(255,215,0,0.55)' }]}>
+                      <View style={styles.avatarContainer}>
+                        {highestBadge?.badge_image_url ? (
+                          <Image source={highestBadge.badge_image_url} style={styles.avatar} transition={200} />
+                        ) : (
+                          <LinearGradient colors={['#2A1F00', '#1A1200']} style={styles.avatarPlaceholder}>
+                            <Ionicons name="trophy" size={32} color="#FFD700" />
+                          </LinearGradient>
+                        )}
+                      </View>
                     </View>
                     {highestBadge && (
                       <View style={styles.badgeNameChip}>
@@ -322,99 +335,94 @@ export default function ProfileScreen() {
                   </Animated.View>
                 </TouchableOpacity>
 
-                <Text style={styles.username}>{profile?.username || t('common:user')}</Text>
-                {profile?.full_name && <Text style={styles.fullName}>{profile.full_name}</Text>}
+                {/* Name + meta */}
+                <View style={styles.heroNameBlock}>
+                  <Text style={styles.username} numberOfLines={1}>
+                    {profile?.username || t('common:user')}
+                  </Text>
+                  {profile?.full_name ? (
+                    <Text style={styles.fullName} numberOfLines={1}>{profile.full_name}</Text>
+                  ) : null}
 
-                <View style={styles.heroPills}>
-                  <View style={[styles.heroPill, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                    <Ionicons name="calendar-outline" size={12} color={branding.primary} />
-                    <Text style={[styles.heroPillText, { color: branding.primary }]}>
-                      {t('memberSince', { date: profile ? formatMemberSince(profile.created_at, i18n.language) : '' })}
+                  {/* Member since + newcomer inline */}
+                  <View style={styles.heroMeta}>
+                    <Ionicons name="calendar-outline" size={11} color="rgba(255,255,255,0.35)" />
+                    <Text style={styles.heroMetaText}>
+                      {profile ? formatMemberSince(profile.created_at, i18n.language) : ''}
                     </Text>
+                    {profile?.is_newcomer && (
+                      <View style={styles.newcomerDot}>
+                        <Text style={styles.newcomerDotText}>🌱</Text>
+                      </View>
+                    )}
                   </View>
-                  {profile && profile.streak_days > 0 && (
-                    <View style={[styles.heroPill, { backgroundColor: 'rgba(255, 145, 0, 0.12)' }]}>
-                      <Text style={{ fontSize: 12 }}>🔥</Text>
-                      <Text style={[styles.heroPillText, { color: theme.colors.secondary }]}>
-                        {t('dayStreakPill', { count: profile.streak_days })}
-                      </Text>
-                    </View>
-                  )}
-                  {profile?.is_newcomer && (
-                    <View style={[styles.heroPill, { backgroundColor: 'rgba(76, 175, 80, 0.12)' }]}>
-                      <Text style={{ fontSize: 12 }}>🌱</Text>
-                      <Text style={[styles.heroPillText, { color: '#4CAF50' }]}>{t('newcomer')}</Text>
-                    </View>
-                  )}
-                  {/* Verification badge — only shown when gym is active */}
-                  {homeGymId && isVerified !== null && (
-                    <TouchableOpacity
-                      onPress={() => { if (!isVerified) setShowVerificationSheet(true); }}
-                      activeOpacity={isVerified ? 1 : 0.7}
-                      style={[
-                        styles.heroPill,
-                        isVerified
-                          ? { backgroundColor: 'rgba(74, 222, 128, 0.10)' }
-                          : { backgroundColor: 'rgba(251, 191, 36, 0.10)' },
-                      ]}
-                    >
-                      <Ionicons
-                        name={isVerified ? 'shield-checkmark' : 'shield-outline'}
-                        size={12}
-                        color={isVerified ? '#4ade80' : '#fbbf24'}
-                      />
-                      <Text style={[styles.heroPillText, { color: isVerified ? '#4ade80' : '#fbbf24' }]}>
-                        {isVerified ? t('verifiedBadge') : t('notVerified')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+
+                  {/* Status badges row — streak + verification */}
+                  <View style={styles.heroBadgeRow}>
+                    {profile && profile.streak_days > 0 && (
+                      <View style={styles.streakBadge}>
+                        <Text style={styles.streakBadgeEmoji}>🔥</Text>
+                        <Text style={styles.streakBadgeText}>{profile.streak_days}d</Text>
+                      </View>
+                    )}
+                    {homeGymId && isVerified !== null && (
+                      <TouchableOpacity
+                        onPress={() => { if (!isVerified) setShowVerificationSheet(true); }}
+                        activeOpacity={isVerified ? 1 : 0.7}
+                        style={[
+                          styles.verifiedBadge,
+                          isVerified ? styles.verifiedBadgeOn : styles.verifiedBadgeOff,
+                        ]}
+                      >
+                        <Ionicons
+                          name={isVerified ? 'shield-checkmark' : 'shield-outline'}
+                          size={11}
+                          color={isVerified ? '#4ade80' : '#fbbf24'}
+                        />
+                        <Text style={[styles.verifiedBadgeText, { color: isVerified ? '#4ade80' : '#fbbf24' }]}>
+                          {isVerified ? t('verifiedBadge') : t('notVerified')}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
+              </View>
 
-                {/* Home gym chip */}
-                {activeGym && (
-                  <TouchableOpacity
-                    style={[styles.gymChip, { borderColor: hexToRgba(branding.primary, 0.2) }]}
-                    onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: activeGym.id } } as any)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="fitness-outline" size={14} color={branding.primary} />
-                    <Text style={[styles.gymChipText, { color: branding.primary }]}>{activeGym.name}</Text>
-                    <Ionicons name="chevron-forward" size={12} color={hexToRgba(branding.primary, 0.5)} />
-                  </TouchableOpacity>
-                )}
-              </LinearGradient>
-            </BlurView>
-          </View>
-        </Animated.View>
-
-        {/* MY STATS ROW */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-          <TouchableOpacity
-            style={[styles.statsRowCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}
-            onPress={() => router.push('/stats')}
-            activeOpacity={0.7}
-          >
-            <BlurView intensity={40} tint="dark" style={[styles.statsRowBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-              <View style={styles.statsRowInner}>
+              {/* ── Stat strip ── */}
+              <View style={[styles.heroStatStrip, { borderTopColor: hexToRgba(branding.primary, 0.10) }]}>
                 {[
-                  { icon: 'water' as const, value: profile?.total_drops || 0, label: t('totalDrops'), color: branding.primary },
-                  { icon: 'barbell' as const, value: stats.totalWorkouts, label: t('totalWorkouts'), color: branding.primary },
-                  { icon: 'time' as const, value: stats.totalHours > 0 ? `${stats.totalHours}h` : '—', label: t('trained'), color: branding.primary },
-                ].map((s, i) => (
-                  <View key={i} style={styles.statsRowItem}>
-                    <Ionicons name={s.icon} size={16} color={s.color} />
-                    <Text style={[styles.statsRowValue, getNumberStyle(18), { color: s.color }]}>
-                      {typeof s.value === 'number' ? (s.value === 0 ? '—' : s.value.toLocaleString()) : s.value}
+                  { icon: 'water' as const,   value: profile?.total_drops  ?? 0,          label: t('totalDrops'),   color: branding.primary, numeric: true },
+                  { icon: 'flame' as const,    value: profile?.streak_days  ?? 0,          label: t('streak'),       color: '#FF6B00',         numeric: true },
+                  { icon: 'barbell' as const,  value: stats.totalWorkouts,                 label: t('totalWorkouts'), color: branding.primary, numeric: true },
+                  { icon: 'time' as const,     value: stats.totalHours > 0 ? `${stats.totalHours}h` : '—', label: t('trained'), color: branding.primary, numeric: false },
+                ].map((s, i, arr) => (
+                  <View key={i} style={styles.heroStatItem}>
+                    {i > 0 && <View style={[styles.heroStatDivider, { backgroundColor: hexToRgba(branding.primary, 0.10) }]} />}
+                    <Ionicons name={s.icon} size={14} color={s.color} />
+                    <Text style={[styles.heroStatValue, getNumberStyle(15), { color: '#FFFFFF' }]}>
+                      {s.numeric && typeof s.value === 'number'
+                        ? (s.value === 0 ? '—' : s.value.toLocaleString())
+                        : s.value}
                     </Text>
-                    <Text style={styles.statsRowLabel}>{s.label}</Text>
+                    <Text style={styles.heroStatLabel}>{s.label}</Text>
                   </View>
                 ))}
               </View>
-              <View style={styles.statsRowLink}>
-                <Text style={[styles.statsRowLinkText, { color: branding.primary }]}>{t('viewDetailedStats')}</Text>
-              </View>
+
+              {/* ── View detailed stats strip ── */}
+              <TouchableOpacity
+                style={[styles.gymStrip, { borderTopColor: hexToRgba(branding.primary, 0.10) }]}
+                onPress={() => router.push('/stats')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="stats-chart-outline" size={13} color={hexToRgba(branding.primary, 0.70)} />
+                <Text style={[styles.gymStripText, { color: hexToRgba(branding.primary, 0.80) }]}>
+                  {t('viewDetailedStats')}
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color={hexToRgba(branding.primary, 0.35)} />
+              </TouchableOpacity>
             </BlurView>
-          </TouchableOpacity>
+          </View>
         </Animated.View>
 
         {/* MY GYMS — only shown when user belongs to more than one gym */}
@@ -460,32 +468,45 @@ export default function ProfileScreen() {
         {badges.length > 0 && (
           <Animated.View entering={FadeInDown.delay(340).duration(400)}>
             <SectionLabel label={t('achievements')} />
-            <View style={[styles.achieveCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.achieveBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+            <View style={[styles.achieveCard, {
+              borderTopColor: hexToRgba('#FFD700', 0.22),
+              borderLeftColor: hexToRgba('#FFD700', 0.08),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={50} tint="dark" style={styles.achieveBlur}>
+                <LinearGradient
+                  colors={[hexToRgba('#FFD700', 0.07), 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 <View style={styles.achieveRow}>
                   {badges.slice(0, 4).map((badge, i) => (
                     <View key={badge.badge_id || i} style={styles.achieveBadge}>
-                      {badge.badge_image_url ? (
-                        <Image source={badge.badge_image_url} style={styles.achieveBadgeImg} transition={200} />
-                      ) : (
-                        <View style={[styles.achieveBadgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
-                          <Ionicons name="trophy" size={18} color="#FFD700" />
-                        </View>
-                      )}
-                      <Text style={styles.achieveBadgeName} numberOfLines={1}>{badge.badge_name}</Text>
+                      <View style={[styles.achieveBadgeImgWrap, { borderColor: hexToRgba('#FFD700', 0.20) }]}>
+                        {badge.badge_image_url ? (
+                          <Image source={badge.badge_image_url} style={styles.achieveBadgeImg} transition={200} />
+                        ) : (
+                          <View style={[styles.achieveBadgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
+                            <Ionicons name="trophy" size={24} color="#FFD700" />
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.achieveBadgeName} numberOfLines={2}>{badge.badge_name}</Text>
                     </View>
                   ))}
                 </View>
                 <TouchableOpacity
-                  style={styles.achieveLink}
+                  style={[styles.achieveLink, { borderTopColor: hexToRgba('#FFD700', 0.10) }]}
                   onPress={() => router.push('/trophy-room')}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.achieveLinkText, { color: branding.primary }]}>
+                  <Text style={[styles.achieveLinkText, { color: '#FFD700' }]}>
                     {t('viewTrophyRoom')}
                   </Text>
-                  <View style={[styles.achieveCount, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                    <Text style={[styles.achieveCountText, { color: branding.primary }]}>{badges.length}</Text>
+                  <View style={[styles.achieveCount, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
+                    <Text style={[styles.achieveCountText, { color: '#FFD700' }]}>{badges.length}</Text>
                   </View>
                 </TouchableOpacity>
               </BlurView>
@@ -627,36 +648,115 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
 
-  heroCard: { borderRadius: theme.borderRadius.xl, borderWidth: 1, overflow: 'hidden', marginBottom: theme.spacing.lg },
-  heroBlur: { borderRadius: theme.borderRadius.xl, overflow: 'hidden' },
-  heroGradient: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: theme.spacing.lg },
-  flipCardContainer: { width: 88, height: 100, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  // ── Hero card ──
+  heroCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 12,
+    backgroundColor: 'rgba(12,12,22,0.50)',
+  },
+  heroBlur: { borderRadius: 24, overflow: 'hidden' },
+
+  heroIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 18,
+  },
+
+  // flip card
+  flipCardContainer: { width: 76, height: 90, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   flipCardFace: { alignItems: 'center', backfaceVisibility: 'hidden' },
   flipCardBack: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
-  badgePeekIndicator: { position: 'absolute', bottom: 8, right: -2, width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, zIndex: 10 },
-  badgeNameChip: { marginTop: 4, backgroundColor: 'rgba(255, 215, 0, 0.12)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, maxWidth: 88 },
-  badgeNameChipText: { ...fontStyles.bodySemiBold, fontSize: 9, color: '#FFD700', textAlign: 'center' },
-  avatarContainer: { width: 84, height: 84, borderRadius: 42, borderWidth: 2, overflow: 'hidden' },
+
+  // avatar
+  avatarGlowRing: {
+    width: 72, height: 72, borderRadius: 36,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  avatarContainer: { width: 72, height: 72, borderRadius: 36, overflow: 'hidden' },
   avatar: { width: '100%', height: '100%' },
   avatarPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
-  avatarEmoji: { fontSize: 42 },
-  avatarInitial: { ...fontStyles.heading, fontSize: 34 },
-  username: { ...fontStyles.bodySemiBold, fontSize: theme.typography.fontSize['2xl'], color: theme.colors.text, marginBottom: 2 },
-  fullName: { ...fontStyles.body, fontSize: theme.typography.fontSize.base, color: theme.colors.textSecondary, marginBottom: 12 },
-  heroPills: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  heroPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  heroPillText: { ...fontStyles.bodySemiBold, fontSize: 12 },
-  gymChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.04)' },
-  gymChipText: { ...fontStyles.bodySemiBold, fontSize: 13 },
+  avatarEmoji: { fontSize: 34 },
+  avatarInitial: { ...fontStyles.heading, fontSize: 28 },
+  badgePeekIndicator: { position: 'absolute', bottom: 4, right: -2, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, zIndex: 10 },
+  badgeNameChip: { marginTop: 4, backgroundColor: 'rgba(255,215,0,0.12)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 7, maxWidth: 80 },
+  badgeNameChipText: { ...fontStyles.bodySemiBold, fontSize: 9, color: '#FFD700', textAlign: 'center' },
 
-  statsRowCard: { borderRadius: theme.borderRadius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: theme.spacing.lg },
-  statsRowBlur: { borderRadius: theme.borderRadius.lg, overflow: 'hidden', padding: theme.spacing.md },
-  statsRowInner: { flexDirection: 'row', justifyContent: 'space-around' },
-  statsRowItem: { alignItems: 'center', gap: 4 },
-  statsRowValue: {},
-  statsRowLabel: { ...fontStyles.heading, fontSize: 11, color: theme.colors.textTertiary },
-  statsRowLink: { alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.06)' },
-  statsRowLinkText: { ...fontStyles.bodySemiBold, fontSize: 13 },
+  // name block
+  heroNameBlock: { flex: 1, minWidth: 0 },
+  username: {
+    ...fontStyles.heading,
+    fontSize: 22,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+    marginBottom: 1,
+  },
+  fullName: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    marginBottom: 6,
+  },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  heroMetaText: { ...fontStyles.body, fontSize: 11, color: 'rgba(255,255,255,0.35)' },
+  newcomerDot: { marginLeft: 2 },
+  newcomerDotText: { fontSize: 11 },
+
+  heroBadgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  streakBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 8, backgroundColor: 'rgba(255,107,0,0.14)',
+  },
+  streakBadgeEmoji: { fontSize: 11 },
+  streakBadgeText: { ...fontStyles.bodySemiBold, fontSize: 11, color: '#FF6B00' },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  verifiedBadgeOn: { backgroundColor: 'rgba(74,222,128,0.10)' },
+  verifiedBadgeOff: { backgroundColor: 'rgba(251,191,36,0.10)' },
+  verifiedBadgeText: { ...fontStyles.bodySemiBold, fontSize: 11 },
+
+  // stat strip
+  heroStatStrip: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  heroStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    position: 'relative',
+  },
+  heroStatDivider: {
+    position: 'absolute', left: 0, top: '10%', bottom: '10%',
+    width: StyleSheet.hairlineWidth,
+  },
+  heroStatValue: { lineHeight: 19 },
+  heroStatLabel: { ...fontStyles.body, fontSize: 9, color: 'rgba(255,255,255,0.38)', letterSpacing: 0.3, textTransform: 'uppercase' },
+
+  // gym strip
+  gymStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderTopWidth: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+  },
+  gymStripText: { ...fontStyles.bodySemiBold, fontSize: 12, flex: 1 },
+
 
   gymsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 },
   gymCard: { width: (Dimensions.get('window').width - theme.spacing.lg * 2 - 12) / 2, height: 150, borderRadius: theme.borderRadius.md, borderWidth: 1, overflow: 'hidden' },
@@ -669,14 +769,56 @@ const styles = StyleSheet.create({
   homeBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   homeBadgeText: { ...fontStyles.heading, fontSize: 9, letterSpacing: 1 },
 
-  achieveCard: { borderRadius: theme.borderRadius.md, borderWidth: 1, overflow: 'hidden', marginBottom: theme.spacing.sm },
-  achieveBlur: { borderRadius: theme.borderRadius.md, overflow: 'hidden', padding: theme.spacing.md },
-  achieveRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 12 },
-  achieveBadge: { alignItems: 'center', gap: 4, width: 60 },
-  achieveBadgeImg: { width: 44, height: 44, borderRadius: 22 },
-  achieveBadgePlaceholder: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  achieveBadgeName: { ...fontStyles.body, fontSize: 10, color: theme.colors.textSecondary, textAlign: 'center' },
-  achieveLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.06)' },
+  achieveCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.sm,
+    backgroundColor: 'rgba(12,12,22,0.50)',
+  },
+  achieveBlur: { borderRadius: 18, overflow: 'hidden', padding: 16 },
+  achieveRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    gap: 8,
+  },
+  achieveBadge: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 7,
+  },
+  achieveBadgeImgWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  achieveBadgeImg: { width: 58, height: 58, borderRadius: 29 },
+  achieveBadgePlaceholder: { width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center' },
+  achieveBadgeName: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.65)',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  achieveLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   achieveLinkText: { ...fontStyles.bodySemiBold, fontSize: 13 },
   achieveCount: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   achieveCountText: { ...fontStyles.heading, fontSize: 12 },
@@ -687,6 +829,6 @@ const styles = StyleSheet.create({
   linkIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   linkLabel: { ...fontStyles.bodySemiBold, flex: 1, fontSize: theme.typography.fontSize.base, color: theme.colors.text },
 
-  sectionLabel: { ...fontStyles.heading, fontSize: 13, color: theme.colors.textTertiary, marginBottom: 8, marginLeft: 4, marginTop: theme.spacing.lg },
+  sectionLabel: { ...fontStyles.heading, fontSize: 13, letterSpacing: 2, color: theme.colors.textTertiary, marginBottom: 8, marginLeft: 4, marginTop: theme.spacing.lg },
   sectionDivider: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)' },
 });

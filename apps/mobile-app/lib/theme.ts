@@ -164,7 +164,7 @@ export const theme = {
 
 // Font style presets — use these instead of fontWeight + fontFamily separately
 export const fontStyles = {
-  // Bebas Neue — headlines, titles, section labels, buttons
+  // Bebas Neue — display headlines ONLY (screen titles, hero labels, KPI captions)
   heading: {
     fontFamily: 'BebasNeue_400Regular',
     letterSpacing: 1.5,
@@ -190,10 +190,60 @@ export const fontStyles = {
     fontFamily: 'Inter_700Bold',
   } as const,
 
-  // Space Mono — numbers
+  // Space Mono — numeric data (drops, stats, counters)
   number: {
     fontFamily: 'SpaceMono_400Regular',
   } as const,
+} as const;
+
+// ─────────────────────────────────────────────────────────────
+// Typography tokens — use these for consistent UI across screens
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Screen header title — all stack screens must use this.
+ * Bebas Neue 22px, centered via flex: 1 + textAlign: 'center'.
+ */
+export const typographyTokens = {
+  screenTitle: {
+    ...{ fontFamily: 'BebasNeue_400Regular', letterSpacing: 1.5 },
+    fontSize: 22,
+    color: theme.colors.text,
+    flex: 1,
+    textAlign: 'center' as const,
+  },
+
+  /**
+   * Section label — overline above a content group.
+   * Bebas Neue 13px, wide tracking (Bebas is already all-caps).
+   */
+  sectionLabel: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 13,
+    letterSpacing: 2,
+    color: theme.colors.textTertiary,
+    marginBottom: 8,
+    marginTop: 20,
+  },
+
+  /**
+   * Button text — primary & secondary CTA labels.
+   * Bebas Neue 18px for primary, 16px for secondary.
+   */
+  buttonText: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 18,
+    letterSpacing: 1.5,
+  },
+
+  buttonTextSm: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 15,
+    letterSpacing: 1.2,
+  },
+
+  /** Shared horizontal padding used by headers and scroll content */
+  headerHorizontalPadding: 20,
 } as const;
 
 // Helper function to get number style (monospace)

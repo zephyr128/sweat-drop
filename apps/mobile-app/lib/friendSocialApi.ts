@@ -64,12 +64,41 @@ async function rpcFirstWorkingName<T>(
 }
 
 export type FriendInviteStatusState = 'pending' | 'completed' | 'failed' | 'info';
+export type ReferralJourneyStage =
+  | 'invited'
+  | 'joined'
+  | 'first_checkin'
+  | 'verified_checkin'
+  | 'rewarded'
+  | 'cap_blocked'
+  | 'blocked'
+  | 'expired';
+
+export type ReferralJourneyStepKey =
+  | 'invite_sent'
+  | 'friend_joined'
+  | 'first_checkin'
+  | 'verified_checkin'
+  | 'reward_settled';
+
+export interface ReferralJourneyStep {
+  key: ReferralJourneyStepKey;
+  completed: boolean;
+  current: boolean;
+  at?: string | null;
+}
 
 export interface FriendInviteStatusRow {
   id: string;
   title: string;
   subtitle?: string;
   state: FriendInviteStatusState;
+  stage: ReferralJourneyStage;
+  steps: ReferralJourneyStep[];
+  progress?: {
+    completed: number;
+    total: number;
+  };
 }
 
 export interface Friend1v1Invitation {
@@ -181,7 +210,229 @@ export async function fetchFriendInviteStatusList(gymId: string | null | undefin
   unavailable: boolean;
   errorMessage?: string;
 }> {
+  const formatLocalDateTime = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat(undefined, {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d);
+  };
+
+  const mapTimelineRow = (row: Record<string, unknown>): FriendInviteStatusRow => {
+    const rowId = String(
+      row.referral_id ??
+      row.id ??
+      `${String(row.created_at ?? 'unknown')}:${String(row.status ?? 'unknown')}`,
+    );
+    const status = String(row.status ?? '').toLowerCase();
+    const currentStatus = String(row.current_status ?? status).toLowerCase();
+    const inviteeName = typeof row.invitee_name === 'string' ? row.invitee_name : null;
+    const createdAt = formatLocalDateTime(typeof row.created_at === 'string' ? row.created_at : null);
+    const joinedAt = formatLocalDateTime(typeof row.joined_at === 'string' ? row.joined_at : null);
+    const firstCheckinAt = formatLocalDateTime(
+      typeof row.qualified_checkin_at === 'string' ? row.qualified_checkin_at : null,
+    );
+    const verifiedAt = formatLocalDateTime(
+      typeof row.qualified_verified_at === 'string' ? row.qualified_verified_at : null,
+    );
+    const rewardedAt = formatLocalDateTime(typeof row.rewarded_at === 'string' ? row.rewarded_at : null);
+    const rewardBlockReason =
+      typeof row.reward_block_reason === 'string' ? row.reward_block_reason : null;
+    const blockReason = typeof row.block_reason === 'string' ? row.block_reason : null;
+    const rawCreatedAt = typeof row.created_at === 'string' ? row.created_at : null;
+    const rawJoinedAt = typeof row.joined_at === 'string' ? row.joined_at : null;
+    const rawFirstCheckinAt = typeof row.qualified_checkin_at === 'string' ? row.qualified_checkin_at : null;
+    const rawVerifiedAt = typeof row.qualified_verified_at === 'string' ? row.qualified_verified_at : null;
+    const rawRewardedAt = typeof row.rewarded_at === 'string' ? row.rewarded_at : null;
+    const defaultSteps: ReferralJourneyStep[] = [
+      { key: 'invite_sent', completed: true, current: false, at: rawCreatedAt },
+      { key: 'friend_joined', completed: false, current: false, at: rawJoinedAt },
+      { key: 'first_checkin', completed: false, current: false, at: rawFirstCheckinAt },
+      { key: 'verified_checkin', completed: false, current: false, at: rawVerifiedAt },
+      { key: 'reward_settled', completed: false, current: false, at: rawRewardedAt },
+    ];
+
+    if (status === 'rewarded' && rewardBlockReason === 'monthly_cap_reached') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true },
+        { ...defaultSteps[1], completed: true },
+        { ...defaultSteps[2], completed: true },
+        { ...defaultSteps[3], completed: true },
+        { ...defaultSteps[4], completed: true, current: true },
+      ];
+      return {
+        id: rowId,
+        title: 'Referral settled (monthly cap reached)',
+        subtitle: rewardedAt
+          ? `Verified check-in completed at ${rewardedAt}. Reward payout skipped this month because cap is reached.`
+          : 'Verified check-in completed. Reward payout skipped this month because cap is reached.',
+        state: 'info',
+        stage: 'cap_blocked',
+        steps,
+        progress: { completed: 4, total: 4 },
+      };
+    }
+
+    if (status === 'rewarded' || currentStatus === 'rewarded') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true },
+        { ...defaultSteps[1], completed: true },
+        { ...defaultSteps[2], completed: true },
+        { ...defaultSteps[3], completed: true },
+        { ...defaultSteps[4], completed: true, current: true },
+      ];
+      return {
+        id: rowId,
+        title: 'Referral rewarded',
+        subtitle: rewardedAt
+          ? `Drops granted at ${rewardedAt}.`
+          : 'Drops granted.',
+        state: 'completed',
+        stage: 'rewarded',
+        steps,
+        progress: { completed: 4, total: 4 },
+      };
+    }
+
+    if (status === 'blocked' || currentStatus === 'blocked') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true, current: true },
+        defaultSteps[1],
+        defaultSteps[2],
+        defaultSteps[3],
+        defaultSteps[4],
+      ];
+      return {
+        id: rowId,
+        title: 'Referral blocked',
+        subtitle: blockReason ? `Reason: ${blockReason}` : 'This referral cannot progress.',
+        state: 'failed',
+        stage: 'blocked',
+        steps,
+      };
+    }
+
+    if (status === 'expired' || currentStatus === 'expired') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true, current: true },
+        defaultSteps[1],
+        defaultSteps[2],
+        defaultSteps[3],
+        defaultSteps[4],
+      ];
+      return {
+        id: rowId,
+        title: 'Referral expired',
+        subtitle: 'Invite was not completed before expiry.',
+        state: 'failed',
+        stage: 'expired',
+        steps,
+      };
+    }
+
+    if (currentStatus === 'verified_checkin') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true },
+        { ...defaultSteps[1], completed: true },
+        { ...defaultSteps[2], completed: true },
+        { ...defaultSteps[3], completed: true, current: true },
+        defaultSteps[4],
+      ];
+      return {
+        id: rowId,
+        title: 'Verified check-in completed',
+        subtitle: verifiedAt
+          ? `Completed at ${verifiedAt}. Waiting for reward settlement.`
+          : 'Waiting for reward settlement.',
+        state: 'pending',
+        stage: 'verified_checkin',
+        steps,
+        progress: { completed: 3, total: 4 },
+      };
+    }
+
+    if (currentStatus === 'first_checkin' || currentStatus === 'qualified_checkin') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true },
+        { ...defaultSteps[1], completed: true },
+        { ...defaultSteps[2], completed: true, current: true },
+        defaultSteps[3],
+        defaultSteps[4],
+      ];
+      return {
+        id: rowId,
+        title: 'First check-in completed',
+        subtitle: firstCheckinAt
+          ? `Completed at ${firstCheckinAt}. Waiting for identity verification.`
+          : 'Waiting for identity verification.',
+        state: 'pending',
+        stage: 'first_checkin',
+        steps,
+        progress: { completed: 3, total: 4 },
+      };
+    }
+
+    if (currentStatus === 'joined' || status === 'active') {
+      const steps: ReferralJourneyStep[] = [
+        { ...defaultSteps[0], completed: true },
+        { ...defaultSteps[1], completed: true, current: true },
+        defaultSteps[2],
+        defaultSteps[3],
+        defaultSteps[4],
+      ];
+      return {
+        id: rowId,
+        title: inviteeName ? `${inviteeName} joined with your code` : 'Code used by friend',
+        subtitle: joinedAt
+          ? `Joined at ${joinedAt}. Waiting for first check-in.`
+          : 'Waiting for first check-in.',
+        state: 'pending',
+        stage: 'joined',
+        steps,
+        progress: { completed: 2, total: 4 },
+      };
+    }
+
+    const steps: ReferralJourneyStep[] = [
+      { ...defaultSteps[0], completed: true, current: true },
+      defaultSteps[1],
+      defaultSteps[2],
+      defaultSteps[3],
+      defaultSteps[4],
+    ];
+    return {
+      id: rowId,
+      title: 'Invite sent',
+      subtitle: createdAt
+        ? `Sent at ${createdAt}. Waiting for your friend to use the code.`
+        : 'Waiting for your friend to use the code.',
+      state: 'pending',
+      stage: 'invited',
+      steps,
+      progress: { completed: 1, total: 4 },
+    };
+  };
+
   if (gymId) {
+    const rpcRows = await rpc('get_my_referrals', { p_gym_id: gymId });
+    if (!rpcRows.error && rpcRows.data && typeof rpcRows.data === 'object') {
+      const payload = rpcRows.data as Record<string, unknown>;
+      const referrals = Array.isArray(payload.referrals)
+        ? (payload.referrals as Record<string, unknown>[])
+        : [];
+      return {
+        items: referrals.map(mapTimelineRow),
+        unavailable: false,
+      };
+    }
+    if (rpcRows.error && !isFriendSocialBackendUnavailable(rpcRows.error)) {
+      return { items: [], unavailable: false, errorMessage: rpcRows.error.message };
+    }
+
     const rows = await supabase
       .from('referrals')
       .select('id, status, created_at, updated_at, block_reason')
@@ -207,8 +458,28 @@ export async function fetchFriendInviteStatusList(gymId: string | null | undefin
               : state === 'failed'
                 ? `Referral blocked${r.block_reason ? ` (${r.block_reason})` : ''}`
                 : 'Referral in progress',
-          subtitle: String(r.updated_at ?? r.created_at ?? ''),
+          subtitle: formatLocalDateTime(String(r.updated_at ?? r.created_at ?? '')) ?? undefined,
           state,
+          stage:
+            state === 'completed'
+              ? 'rewarded'
+              : state === 'failed'
+                ? 'blocked'
+                : status === 'active'
+                  ? 'joined'
+                  : 'invited',
+          steps: [
+            {
+              key: 'invite_sent',
+              completed: true,
+              current: state === 'pending',
+              at: typeof r.created_at === 'string' ? r.created_at : null,
+            },
+            { key: 'friend_joined', completed: status === 'active' || status === 'rewarded', current: false },
+            { key: 'first_checkin', completed: status === 'rewarded', current: false },
+            { key: 'verified_checkin', completed: status === 'rewarded', current: false },
+            { key: 'reward_settled', completed: status === 'rewarded', current: state === 'completed' },
+          ],
         } as FriendInviteStatusRow;
       });
       return { items, unavailable: false };

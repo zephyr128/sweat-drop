@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -115,12 +115,7 @@ export default function ArenaLeaderboardScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{arenaInfo?.name || t('arenaLeaderboard')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={arenaInfo?.name || t('arenaLeaderboard')} insetHandled />
 
       {/* Sponsor banner */}
       {arenaInfo && (
@@ -286,22 +281,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: theme.typography.fontSize.lg,
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
-  headerSpacer: { width: 40 },
   sponsorBanner: {
     flexDirection: 'row',
     alignItems: 'center',

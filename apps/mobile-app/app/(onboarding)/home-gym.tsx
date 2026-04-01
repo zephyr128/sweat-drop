@@ -34,6 +34,7 @@ export default function HomeGymScreen() {
       const { data: gymsData, error } = await supabase
         .from('gyms')
         .select('*')
+        .eq('is_mobile_listed', true)
         .order('is_founding_partner', { ascending: false })
         .order('name');
 

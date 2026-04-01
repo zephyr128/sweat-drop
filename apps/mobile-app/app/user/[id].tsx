@@ -13,7 +13,7 @@ import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 
 interface PublicProfile {
   id: string;
@@ -74,9 +74,7 @@ export default function UserProfileScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <BackButton />
-        </View>
+        <ScreenHeader title={t('title')}  />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
@@ -87,9 +85,7 @@ export default function UserProfileScreen() {
   if (!profile) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <BackButton />
-        </View>
+        <ScreenHeader title={t('title')}  />
         <View style={styles.center}>
           <Ionicons name="person-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('userNotFound')}</Text>
@@ -114,11 +110,7 @@ export default function UserProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('title')}  />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -242,19 +234,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    fontSize: 20,
-    color: theme.colors.text,
-    flex: 1,
-    textAlign: 'center',
   },
   center: {
     flex: 1,

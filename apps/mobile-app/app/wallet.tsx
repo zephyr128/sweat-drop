@@ -7,7 +7,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +23,8 @@ import {
   hexToRgba,
   glassCard,
 } from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
+import { SliderTabs } from '@/components/SliderTabs';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { log } from '@/lib/logger';
@@ -83,6 +84,7 @@ const PAGE_SIZE = 15;
 
 export default function WalletScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('wallet');
@@ -379,46 +381,16 @@ export default function WalletScreen() {
   const walletListHeader = useMemo(() => (
     <>
       {userGyms.length > 1 && (
-        <Animated.View entering={FadeInDown.delay(40).duration(400)}>
-          <View style={[styles.scopeToggle, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-            <BlurView intensity={glassCard.blur} tint="dark" style={[styles.scopeToggleBlur, { backgroundColor: glassCard.bg }]}>
-              {([
-                { key: 'gym' as ScopeType, label: t('myGym'), icon: 'location' as const },
-                { key: 'global' as ScopeType, label: t('global'), icon: 'globe-outline' as const },
-              ]).map((tab) => (
-                <TouchableOpacity
-                  key={tab.key}
-                  style={[
-                    styles.scopeTab,
-                    scope === tab.key && {
-                      backgroundColor: hexToRgba(branding.primary, 0.15),
-                      borderColor: hexToRgba(branding.primary, 0.3),
-                      borderWidth: 1,
-                    },
-                  ]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setScope(tab.key);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={tab.icon}
-                    size={14}
-                    color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.40)'}
-                  />
-                  <Text
-                    style={[
-                      styles.scopeTabText,
-                      scope === tab.key && { color: branding.primary },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </BlurView>
-          </View>
+        <Animated.View entering={FadeInDown.delay(40).duration(400)} style={{ marginBottom: 8 }}>
+          <SliderTabs
+            tabs={[
+              { key: 'gym', label: t('myGym'), icon: 'location' },
+              { key: 'global', label: t('global'), icon: 'globe-outline' },
+            ]}
+            activeKey={scope}
+            onChange={(key) => setScope(key as ScopeType)}
+            accentColor={branding.primary}
+          />
         </Animated.View>
       )}
 
@@ -626,7 +598,7 @@ export default function WalletScreen() {
   }, [hasMoreTx, branding.primary, loadMoreTx]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={styles.safe}>
       <LinearGradient
         colors={['#000000', '#080A14', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -634,18 +606,14 @@ export default function WalletScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('title')} />
 
       <FlatList
         data={txLoading ? [] : transactions}
         renderItem={renderTransaction}
         keyExtractor={(item) => item.id}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -660,7 +628,7 @@ export default function WalletScreen() {
         onEndReached={hasMoreTx ? loadMoreTx : undefined}
         onEndReachedThreshold={0.3}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -802,55 +770,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
   scroll: { flex: 1 },
   scrollContent: {
     padding: theme.spacing.lg,
     paddingBottom: 48,
   },
 
-  // ── Scope toggle ──
-  scopeToggle: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-  },
-  scopeToggleBlur: {
-    flexDirection: 'row',
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: 4,
-  },
-  scopeTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  scopeTabText: {
-    ...fontStyles.heading,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.40)',
-  },
 
   // ── Hero ──
   heroOuter: {
@@ -915,7 +840,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...fontStyles.heading,
     fontSize: 13,
-    color: theme.colors.textSecondary,
+    color: theme.colors.textTertiary,
     letterSpacing: 2,
     marginBottom: theme.spacing.md,
   },

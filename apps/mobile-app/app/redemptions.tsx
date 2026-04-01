@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Clipboard } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -26,6 +26,7 @@ const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons
 export default function RedemptionsScreen() {
   const { t } = useTranslation('redemptions');
   const showModal = useAppModal((s) => s.showModal);
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const branding = useBranding();
@@ -100,16 +101,17 @@ export default function RedemptionsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFillObject} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -117,13 +119,9 @@ export default function RedemptionsScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('title')} />
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
         {redemptions.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={64} color={theme.colors.textSecondary} />
@@ -140,8 +138,19 @@ export default function RedemptionsScreen() {
 
             return (
               <Animated.View key={redemption.id} entering={FadeInDown.delay(80 + index * 60).duration(400)}>
-                <View style={[styles.card, { borderColor: hexToRgba(status.color, 0.15) }]}>
-                  <BlurView intensity={50} tint="dark" style={[styles.cardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <View style={[styles.card, {
+                  borderTopColor: hexToRgba(status.color, 0.30),
+                  borderLeftColor: hexToRgba(status.color, 0.12),
+                  borderRightColor: 'rgba(255,255,255,0.04)',
+                  borderBottomColor: 'rgba(255,255,255,0.03)',
+                }]}>
+                  <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                    <LinearGradient
+                      colors={[hexToRgba(status.color, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
                     <View style={styles.cardRow}>
                       {/* Image / Icon */}
                       {imageUrl ? (
@@ -226,7 +235,7 @@ export default function RedemptionsScreen() {
           })
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -239,24 +248,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: {
-    width: 40,
   },
   scrollView: {
     flex: 1,
@@ -284,13 +275,16 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     marginBottom: 12,
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
   },
   cardBlur: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     padding: theme.spacing.lg,
   },

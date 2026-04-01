@@ -10,7 +10,7 @@ import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -266,11 +266,7 @@ export default function RewardDetailScreen() {
   if (!reward) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('rewardDetails')}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <ScreenHeader title={t('rewardDetails')} insetHandled />
         <View style={styles.centerContent}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('noRewards')}</Text>
@@ -297,12 +293,7 @@ export default function RewardDetailScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('rewardDetails')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('rewardDetails')} insetHandled />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Hero Image / Icon */}
@@ -555,24 +546,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 20,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
-  headerSpacer: {
-    width: 40,
   },
   centerContent: {
     flex: 1,

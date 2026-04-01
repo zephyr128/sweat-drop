@@ -104,8 +104,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#00E5FF',
   },
   buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 18,
+    letterSpacing: 1.5,
     color: '#000000',
   },
 });

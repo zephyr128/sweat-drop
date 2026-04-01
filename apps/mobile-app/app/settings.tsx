@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +27,7 @@ import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { getPrivacyUrl, getTermsUrl, openLegalUrl } from '@/lib/legalUrls';
 import { useAppModal } from '@/lib/stores/useAppModal';
@@ -64,6 +64,7 @@ export default function SettingsScreen() {
   const { session } = useSession();
   const branding = useBranding();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { activeGym } = useGymStore();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -322,9 +323,9 @@ export default function SettingsScreen() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-        <SafeAreaView style={styles.loadingContainer}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={branding.primary} />
-        </SafeAreaView>
+        </View>
       </View>
     );
   }
@@ -338,19 +339,12 @@ export default function SettingsScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* ═══════════════════════════════════════ */}
-        {/* HEADER                                  */}
-        {/* ═══════════════════════════════════════ */}
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('title') || 'Settings'}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+      <View style={styles.safeArea}>
+        <ScreenHeader title={t('title') || 'Settings'} />
 
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           refreshControl={
@@ -369,8 +363,14 @@ export default function SettingsScreen() {
             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
               {t('accountSection') || 'ACCOUNT'}
             </Text>
-            <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={40} tint="dark" style={styles.cardBlur}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(branding.primary, 0.22),
+              borderLeftColor: hexToRgba(branding.primary, 0.09),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+                <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Email row (read-only) */}
                 <View style={styles.row}>
                   <View style={[styles.rowIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
@@ -477,8 +477,14 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={40} tint="dark" style={styles.cardBlur}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(branding.primary, 0.22),
+              borderLeftColor: hexToRgba(branding.primary, 0.09),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+                <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Gender */}
                 <View style={styles.row}>
                   <View style={[styles.rowIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
@@ -577,8 +583,14 @@ export default function SettingsScreen() {
             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
               {t('gymSection') || 'GYM'}
             </Text>
-            <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={40} tint="dark" style={styles.cardBlur}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(branding.primary, 0.22),
+              borderLeftColor: hexToRgba(branding.primary, 0.09),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+                <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Home gym */}
                 <View style={styles.row}>
                   <View style={[styles.rowIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
@@ -619,8 +631,14 @@ export default function SettingsScreen() {
             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
               {t('preferencesSection') || 'PREFERENCES'}
             </Text>
-            <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={40} tint="dark" style={styles.cardBlur}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(branding.primary, 0.22),
+              borderLeftColor: hexToRgba(branding.primary, 0.09),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+                <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Language toggle */}
                 <View style={styles.row}>
                   <View style={[styles.rowIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
@@ -711,8 +729,14 @@ export default function SettingsScreen() {
             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
               {t('legalSection') || 'LEGAL'}
             </Text>
-            <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={40} tint="dark" style={styles.cardBlur}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(branding.primary, 0.22),
+              borderLeftColor: hexToRgba(branding.primary, 0.09),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+                <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Terms of Service */}
                 <TouchableOpacity
                   style={styles.row}
@@ -773,8 +797,14 @@ export default function SettingsScreen() {
             <Text style={[styles.sectionTitle, { color: 'rgba(255, 82, 82, 0.7)' }]}>
               {t('dangerZone') || 'DANGER ZONE'}
             </Text>
-            <View style={[styles.card, { borderColor: 'rgba(255, 82, 82, 0.15)' }]}>
-              <BlurView intensity={40} tint="dark" style={styles.cardBlur}>
+            <View style={[styles.card, {
+              borderTopColor: 'rgba(255,82,82,0.22)',
+              borderLeftColor: 'rgba(255,82,82,0.10)',
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+                <LinearGradient colors={['rgba(255,82,82,0.06)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Logout */}
                 <TouchableOpacity style={styles.row} onPress={handleLogout} activeOpacity={0.7}>
                   <View style={[styles.rowIcon, { backgroundColor: 'rgba(255, 145, 0, 0.1)' }]}>
@@ -816,9 +846,8 @@ export default function SettingsScreen() {
             <Text style={styles.footerText}>SweatDrop v{appVersion}</Text>
           </Animated.View>
 
-          <View style={{ height: 40 }} />
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -835,25 +864,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-
-  /* ── Header ── */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 1.5,
-  },
-  headerSpacer: {
-    width: 40,
   },
 
   /* ── Scroll ── */
@@ -877,13 +887,16 @@ const styles = StyleSheet.create({
 
   /* ── Glass Card ── */
   card: {
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     marginBottom: theme.spacing.sm,
   },
   cardBlur: {
-    backgroundColor: 'rgba(18, 18, 28, 0.78)',
+    backgroundColor: 'rgba(14,14,22,0.80)',
   },
 
   /* ── Settings Row ── */
@@ -985,7 +998,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
 
-  /* ── Language Toggle ── */
+  /* ── Language Toggle (unified pill style) ── */
   languageToggle: {
     flexDirection: 'row',
     gap: 6,
@@ -993,18 +1006,19 @@ const styles = StyleSheet.create({
   langButton: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   langButtonActive: {
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   langButtonText: {
     ...fontStyles.heading,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 0.5,
   },
 
   /* ── Complete Profile Banner ── */

@@ -12,8 +12,7 @@ import {
   Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,51 +21,20 @@ import { useTranslation } from 'react-i18next';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { useSession } from '@/hooks/useSession';
-import { theme, fontStyles, hexToRgba} from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
+import ScreenHeader from '@/components/ScreenHeader';
 import {
   applyFriendInviteCode,
   fetchFriendInviteStatusList,
   fetchMyFriendInviteCode,
   fetchReferralMonthlyStats,
   type FriendInviteStatusRow,
+  type ReferralJourneyStep,
   type ReferralMonthlyStats,
 } from '@/lib/friendSocialApi';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { log } from '@/lib/logger';
 
-function SafeBackButton() {
-  const router = useRouter();
-  const branding = useBranding();
-  return (
-    <TouchableOpacity
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-        borderWidth: 1,
-        borderColor: hexToRgba(branding.primary, 0.15),
-      }}
-      onPress={() => {
-        try {
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace('/home');
-          }
-        } catch {
-          router.replace('/home');
-        }
-      }}
-      activeOpacity={0.7}
-    >
-      <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-    </TouchableOpacity>
-  );
-}
 
 interface HowItWorksStep {
   icon: keyof typeof Ionicons.glyphMap;
@@ -93,7 +61,7 @@ function timelineStateForRow(row: FriendInviteStatusRow): {
     case 'pending':
       return { icon: 'time-outline', color: '#FFB74D' };
     default:
-      return { icon: 'information-circle-outline', color: 'rgba(255,255,255,0.45)' };
+      return { icon: 'information-circle-outline', color: '#81D4FA' };
   }
 }
 
@@ -118,6 +86,9 @@ export default function InviteFriendScreen() {
   const [copied, setCopied] = useState(false);
   const [showApply, setShowApply] = useState(false);
   const [faqOpen, setFaqOpen] = useState<number | null>(null);
+  const [expandedReferralId, setExpandedReferralId] = useState<string | null>(null);
+  const [learnOpen, setLearnOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'rewarded' | 'blocked'>('all');
 
   const storePendingCode = usePendingReferralStore((s) => s.pendingCode);
   const clearPendingCode = usePendingReferralStore((s) => s.clearPendingCode);
@@ -199,6 +170,53 @@ export default function InviteFriendScreen() {
   }, [load]);
 
   const fullUnavailable = codeUnavailable && listUnavailable;
+  const referralKpis = useMemo(() => {
+    const invited = statusItems.length;
+    const joined = statusItems.filter((row) => row.stage !== 'invited' && row.stage !== 'blocked' && row.stage !== 'expired').length;
+    const verified = statusItems.filter((row) => row.stage === 'verified_checkin' || row.stage === 'rewarded' || row.stage === 'cap_blocked').length;
+    const rewarded = statusItems.filter((row) => row.state === 'completed').length;
+    return { invited, joined, verified, rewarded };
+  }, [statusItems]);
+  const filteredStatusItems = useMemo(() => {
+    if (statusFilter === 'rewarded') {
+      return statusItems.filter((row) => row.state === 'completed');
+    }
+    if (statusFilter === 'blocked') {
+      return statusItems.filter((row) => row.state === 'failed');
+    }
+    if (statusFilter === 'in_progress') {
+      return statusItems.filter((row) => row.state === 'pending' || row.state === 'info');
+    }
+    return statusItems;
+  }, [statusItems, statusFilter]);
+
+  const formatStepTime = useCallback((iso?: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, []);
+
+  const stepMeta = useCallback((step: ReferralJourneyStep) => {
+    if (step.key === 'invite_sent') {
+      return { label: t('stepInviteSent'), icon: 'paper-plane-outline' as const };
+    }
+    if (step.key === 'friend_joined') {
+      return { label: t('stepFriendJoined'), icon: 'person-add-outline' as const };
+    }
+    if (step.key === 'first_checkin') {
+      return { label: t('stepFirstCheckin'), icon: 'qr-code-outline' as const };
+    }
+    if (step.key === 'verified_checkin') {
+      return { label: t('stepVerifiedCheckin'), icon: 'shield-checkmark-outline' as const };
+    }
+    return { label: t('stepRewardSettled'), icon: 'gift-outline' as const };
+  }, [t]);
 
   const onShare = useCallback(async () => {
     if (!inviteCode) return;
@@ -255,11 +273,7 @@ export default function InviteFriendScreen() {
           style={styles.gradientTop}
         />
         <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.header}>
-            <SafeBackButton />
-            <Text style={styles.headerTitle}>{t('inviteTitle')}</Text>
-            <View style={{ width: 40 }} />
-          </View>
+          <ScreenHeader title={t('inviteTitle')} insetHandled />
           <Text style={styles.centerMessage}>{t('signInRequired')}</Text>
         </SafeAreaView>
       </View>
@@ -273,11 +287,7 @@ export default function InviteFriendScreen() {
         style={styles.gradientTop}
       />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <SafeBackButton />
-          <Text style={styles.headerTitle}>{t('inviteTitle')}</Text>
-          <View style={{ width: 40 }} />
-        </View>
+        <ScreenHeader title={t('inviteTitle')} insetHandled />
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -324,36 +334,6 @@ export default function InviteFriendScreen() {
                 </View>
               </Animated.View>
             )}
-
-            {/* ── How it works ── */}
-            <Animated.View entering={FadeInDown.delay(80).duration(400)}>
-              <Text style={styles.sectionLabel}>{t('howItWorks')}</Text>
-              <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                  {HOW_IT_WORKS_STEPS.map((step, idx) => (
-                    <View key={step.titleKey} style={styles.howRow}>
-                      <View style={styles.howTimelineCol}>
-                        <View
-                          style={[
-                            styles.howDot,
-                            { backgroundColor: hexToRgba(branding.primary, 0.15), borderColor: branding.primary },
-                          ]}
-                        >
-                          <Ionicons name={step.icon} size={16} color={branding.primary} />
-                        </View>
-                        {idx < HOW_IT_WORKS_STEPS.length - 1 && (
-                          <View style={[styles.howLine, { backgroundColor: hexToRgba(branding.primary, 0.12) }]} />
-                        )}
-                      </View>
-                      <View style={styles.howContent}>
-                        <Text style={styles.howStepTitle}>{t(step.titleKey)}</Text>
-                        <Text style={styles.howStepDesc}>{t(step.descKey)}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </BlurView>
-              </View>
-            </Animated.View>
 
             {/* ── Your code + Share CTA ── */}
             <Animated.View entering={FadeInDown.delay(160).duration(400)}>
@@ -427,6 +407,65 @@ export default function InviteFriendScreen() {
               </View>
             </Animated.View>
 
+            {/* ── Have a friend's code? (prominent secondary CTA) ── */}
+            <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+              <View style={[styles.applySpotlightCard, { borderColor: hexToRgba(branding.primary, 0.22) }]}>
+                <BlurView intensity={50} tint="dark" style={styles.applySpotlightBlur}>
+                  <View style={styles.applySpotlightHeader}>
+                    <View style={[styles.applySpotlightIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.16) }]}>
+                      <Ionicons name="ticket-outline" size={16} color={branding.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.applySpotlightTitle}>{t('applySection')}</Text>
+                      <Text style={styles.applySpotlightDesc}>{t('applySpotlightDesc')}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setShowApply((v) => !v)}
+                      activeOpacity={0.8}
+                      style={[styles.applyRevealBtn, { borderColor: hexToRgba(branding.primary, 0.35) }]}
+                    >
+                      <Text style={[styles.applyRevealBtnText, { color: branding.primary }]}>
+                        {showApply ? t('common:close') : t('applyRevealCta')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {showApply && (
+                    <Animated.View entering={FadeInDown.duration(220)} style={styles.applySpotlightBody}>
+                      <TextInput
+                        value={applyInput}
+                        onChangeText={setApplyInput}
+                        placeholder={t('applyPlaceholder')}
+                        placeholderTextColor="rgba(255,255,255,0.35)"
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        style={styles.input}
+                        editable={!applying}
+                      />
+                      <TouchableOpacity
+                        onPress={onApply}
+                        disabled={applying || fullUnavailable}
+                        activeOpacity={0.85}
+                        style={fullUnavailable ? { opacity: 0.4 } : undefined}
+                      >
+                        <LinearGradient
+                          colors={[branding.primary, branding.primaryDark]}
+                          style={styles.applyCta}
+                        >
+                          {applying ? (
+                            <ActivityIndicator color={branding.onPrimary} />
+                          ) : (
+                            <Text style={[styles.applyCtaText, { color: branding.onPrimary }]}>
+                              {t('applyCta')}
+                            </Text>
+                          )}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  )}
+                </BlurView>
+              </View>
+            </Animated.View>
+
             {/* ── Monthly payout counter ── */}
             {monthlyStats && (
               <Animated.View entering={FadeInDown.delay(220).duration(400)}>
@@ -470,68 +509,70 @@ export default function InviteFriendScreen() {
               </Animated.View>
             )}
 
-            {/* ── Have a code? (collapsible) ── */}
-            <Animated.View entering={FadeInDown.delay(270).duration(400)}>
-              <TouchableOpacity
-                style={styles.applyToggle}
-                onPress={() => setShowApply((v) => !v)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.applyToggleText, { color: branding.primary }]}>
-                  {t('applySection')}
-                </Text>
-                <Ionicons
-                  name={showApply ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={branding.primary}
-                />
-              </TouchableOpacity>
-              {showApply && (
-                <Animated.View entering={FadeInDown.duration(250)}>
-                  <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
-                    <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                      <TextInput
-                        value={applyInput}
-                        onChangeText={setApplyInput}
-                        placeholder={t('applyPlaceholder')}
-                        placeholderTextColor="rgba(255,255,255,0.35)"
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        style={styles.input}
-                        editable={!applying}
-                      />
-                      <TouchableOpacity
-                        onPress={onApply}
-                        disabled={applying || fullUnavailable}
-                        activeOpacity={0.85}
-                        style={fullUnavailable ? { opacity: 0.4 } : undefined}
-                      >
-                        <LinearGradient
-                          colors={[branding.primary, branding.primaryDark]}
-                          style={styles.applyCta}
-                        >
-                          {applying ? (
-                            <ActivityIndicator color={branding.onPrimary} />
-                          ) : (
-                            <Text style={[styles.applyCtaText, { color: branding.onPrimary }]}>
-                              {t('applyCta')}
-                            </Text>
-                          )}
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </BlurView>
+            {/* ── Funnel / Progress strip ── */}
+            <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+              <Text style={styles.sectionLabel}>{t('funnelTitle')}</Text>
+              <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.16) }]}>
+                <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                  <View style={styles.funnelGrid}>
+                    <View style={styles.funnelItem}>
+                      <Text style={styles.funnelValue}>{referralKpis.invited}</Text>
+                      <Text style={styles.funnelLabel}>{t('funnelInvited')}</Text>
+                    </View>
+                    <View style={styles.funnelItem}>
+                      <Text style={styles.funnelValue}>{referralKpis.joined}</Text>
+                      <Text style={styles.funnelLabel}>{t('funnelJoined')}</Text>
+                    </View>
+                    <View style={styles.funnelItem}>
+                      <Text style={styles.funnelValue}>{referralKpis.verified}</Text>
+                      <Text style={styles.funnelLabel}>{t('funnelVerified')}</Text>
+                    </View>
+                    <View style={styles.funnelItem}>
+                      <Text style={styles.funnelValue}>{referralKpis.rewarded}</Text>
+                      <Text style={styles.funnelLabel}>{t('funnelRewarded')}</Text>
+                    </View>
                   </View>
-                </Animated.View>
-              )}
+                </BlurView>
+              </View>
             </Animated.View>
 
             {/* ── Activity / timeline ── */}
             {statusItems.length > 0 && (
               <Animated.View entering={FadeInDown.delay(320).duration(400)}>
                 <Text style={styles.sectionLabel}>{t('statusSection')}</Text>
+                <View style={styles.filterRow}>
+                  {([
+                    { key: 'all', label: t('filterAll') },
+                    { key: 'in_progress', label: t('filterInProgress') },
+                    { key: 'rewarded', label: t('filterRewarded') },
+                    { key: 'blocked', label: t('filterBlocked') },
+                  ] as const).map((filter) => (
+                    <TouchableOpacity
+                      key={filter.key}
+                      style={[
+                        styles.filterChip,
+                        statusFilter === filter.key && {
+                          borderColor: hexToRgba(branding.primary, 0.45),
+                          backgroundColor: hexToRgba(branding.primary, 0.16),
+                        },
+                      ]}
+                      onPress={() => setStatusFilter(filter.key)}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          { color: statusFilter === filter.key ? branding.primary : theme.colors.textSecondary },
+                        ]}
+                      >
+                        {filter.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
                   <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                    {statusItems.map((row, idx) => {
+                    {filteredStatusItems.map((row, idx) => {
                       const { icon, color } = timelineStateForRow(row);
                       return (
                         <View key={row.id}>
@@ -540,24 +581,94 @@ export default function InviteFriendScreen() {
                               style={[styles.rowDivider, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}
                             />
                           )}
-                          <View style={styles.statusRow}>
+                          <TouchableOpacity
+                            style={styles.statusRow}
+                            onPress={() => setExpandedReferralId((prev) => (prev === row.id ? null : row.id))}
+                            activeOpacity={0.75}
+                          >
                             <Ionicons name={icon} size={20} color={color} />
                             <View style={{ flex: 1 }}>
                               <Text style={styles.statusTitle}>{row.title}</Text>
                               {row.subtitle ? (
                                 <Text style={styles.statusSub}>{row.subtitle}</Text>
                               ) : null}
+                              {row.progress ? (
+                                <Text style={styles.statusSub}>
+                                  {t('progressLabel')}: {row.progress.completed}/{row.progress.total}
+                                </Text>
+                              ) : null}
                             </View>
-                            <Text style={[styles.stateTag, { color }]}>
-                              {row.state === 'pending' && t('statePending')}
-                              {row.state === 'completed' && t('stateDone')}
-                              {row.state === 'failed' && t('stateFailed')}
-                              {row.state === 'info' && t('stateInfo')}
-                            </Text>
-                          </View>
+                            <View style={styles.statusRight}>
+                              <Text style={[styles.stateTag, { color }]}>
+                                {row.state === 'pending' && t('statePending')}
+                                {row.state === 'completed' && t('stateDone')}
+                                {row.state === 'failed' && t('stateFailed')}
+                                {row.state === 'info' && t('stateInfo')}
+                              </Text>
+                              <Ionicons
+                                name={expandedReferralId === row.id ? 'chevron-up' : 'chevron-down'}
+                                size={16}
+                                color="rgba(255,255,255,0.45)"
+                              />
+                            </View>
+                          </TouchableOpacity>
+                          {expandedReferralId === row.id && (
+                            <View style={styles.stepperCard}>
+                              <Text style={styles.stepperTitle}>{t('journeyTitle')}</Text>
+                              {row.steps.map((step, stepIndex) => {
+                                const meta = stepMeta(step);
+                                const isDone = step.completed;
+                                const isCurrent = step.current;
+                                const stepColor = isDone ? '#4CAF50' : isCurrent ? branding.primary : 'rgba(255,255,255,0.35)';
+                                return (
+                                  <View key={`${row.id}-${step.key}`} style={styles.stepRow}>
+                                    <View style={styles.stepTimeline}>
+                                      <View style={[styles.stepDot, { borderColor: stepColor, backgroundColor: hexToRgba(stepColor, isDone || isCurrent ? 0.18 : 0.08) }]}>
+                                        <Ionicons
+                                          name={isDone ? 'checkmark' : meta.icon}
+                                          size={12}
+                                          color={stepColor}
+                                        />
+                                      </View>
+                                      {stepIndex < row.steps.length - 1 && (
+                                        <View
+                                          style={[
+                                            styles.stepLine,
+                                            {
+                                              backgroundColor: row.steps[stepIndex + 1].completed
+                                                ? hexToRgba('#4CAF50', 0.32)
+                                                : 'rgba(255,255,255,0.12)',
+                                            },
+                                          ]}
+                                        />
+                                      )}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={[styles.stepLabel, { color: isDone || isCurrent ? theme.colors.text : theme.colors.textSecondary }]}>
+                                        {meta.label}
+                                      </Text>
+                                      {formatStepTime(step.at) ? (
+                                        <Text style={styles.stepTime}>{formatStepTime(step.at)}</Text>
+                                      ) : null}
+                                    </View>
+                                    {isCurrent && !isDone ? (
+                                      <Text style={[styles.currentBadge, { color: branding.primary }]}>
+                                        {t('stepCurrent')}
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          )}
                         </View>
                       );
                     })}
+                    {filteredStatusItems.length === 0 && (
+                      <View style={styles.filterEmptyWrap}>
+                        <Text style={styles.filterEmptyText}>{t('emptyFiltered')}</Text>
+                      </View>
+                    )}
                   </BlurView>
                 </View>
               </Animated.View>
@@ -576,41 +687,80 @@ export default function InviteFriendScreen() {
               </Animated.View>
             )}
 
-            {/* ── FAQ accordion ── */}
-            <Animated.View entering={FadeInDown.delay(380).duration(400)}>
-              <Text style={styles.sectionLabel}>{t('faqTitle')}</Text>
-              <View style={[styles.card, { borderColor: 'rgba(255,255,255,0.08)' }]}>
-                <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                  {([
-                    { q: t('faq1Q'), a: t('faq1A'), idx: 0 },
-                    { q: t('faq2Q'), a: t('faq2A'), idx: 1 },
-                    { q: t('faq3Q'), a: t('faq3A'), idx: 2 },
-                  ] as { q: string; a: string; idx: number }[]).map(({ q, a, idx }) => (
-                    <View key={idx}>
-                      {idx > 0 && (
-                        <View style={[styles.rowDivider, { backgroundColor: 'rgba(255,255,255,0.05)', marginVertical: 0 }]} />
-                      )}
-                      <TouchableOpacity
-                        style={styles.faqRow}
-                        onPress={() => setFaqOpen((prev) => (prev === idx ? null : idx))}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.faqQ}>{q}</Text>
-                        <Ionicons
-                          name={faqOpen === idx ? 'chevron-up' : 'chevron-down'}
-                          size={15}
-                          color="rgba(255,255,255,0.35)"
-                        />
-                      </TouchableOpacity>
-                      {faqOpen === idx && (
-                        <Animated.View entering={FadeInDown.duration(200)} style={styles.faqAnswer}>
-                          <Text style={styles.faqA}>{a}</Text>
-                        </Animated.View>
-                      )}
-                    </View>
-                  ))}
-                </BlurView>
-              </View>
+            {/* ── Learn more (How it works + FAQ) ── */}
+            <Animated.View entering={FadeInDown.delay(420).duration(400)}>
+              <TouchableOpacity
+                style={styles.learnToggle}
+                onPress={() => setLearnOpen((v) => !v)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.learnToggleText}>{t('learnMore')}</Text>
+                <Ionicons
+                  name={learnOpen ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color="rgba(255,255,255,0.6)"
+                />
+              </TouchableOpacity>
+              {learnOpen && (
+                <Animated.View entering={FadeInDown.duration(250)}>
+                  <View style={[styles.card, { borderColor: 'rgba(255,255,255,0.08)' }]}>
+                    <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                      <Text style={styles.sectionInlineLabel}>{t('howItWorks')}</Text>
+                      {HOW_IT_WORKS_STEPS.map((step, idx) => (
+                        <View key={step.titleKey} style={styles.howRow}>
+                          <View style={styles.howTimelineCol}>
+                            <View
+                              style={[
+                                styles.howDot,
+                                { backgroundColor: hexToRgba(branding.primary, 0.15), borderColor: branding.primary },
+                              ]}
+                            >
+                              <Ionicons name={step.icon} size={16} color={branding.primary} />
+                            </View>
+                            {idx < HOW_IT_WORKS_STEPS.length - 1 && (
+                              <View style={[styles.howLine, { backgroundColor: hexToRgba(branding.primary, 0.12) }]} />
+                            )}
+                          </View>
+                          <View style={styles.howContent}>
+                            <Text style={styles.howStepTitle}>{t(step.titleKey)}</Text>
+                            <Text style={styles.howStepDesc}>{t(step.descKey)}</Text>
+                          </View>
+                        </View>
+                      ))}
+
+                      <Text style={[styles.sectionInlineLabel, { marginTop: 14 }]}>{t('faqTitle')}</Text>
+                      {([
+                        { q: t('faq1Q'), a: t('faq1A'), idx: 0 },
+                        { q: t('faq2Q'), a: t('faq2A'), idx: 1 },
+                        { q: t('faq3Q'), a: t('faq3A'), idx: 2 },
+                      ] as { q: string; a: string; idx: number }[]).map(({ q, a, idx }) => (
+                        <View key={idx}>
+                          {idx > 0 && (
+                            <View style={[styles.rowDivider, { backgroundColor: 'rgba(255,255,255,0.05)', marginVertical: 0 }]} />
+                          )}
+                          <TouchableOpacity
+                            style={styles.faqRow}
+                            onPress={() => setFaqOpen((prev) => (prev === idx ? null : idx))}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.faqQ}>{q}</Text>
+                            <Ionicons
+                              name={faqOpen === idx ? 'chevron-up' : 'chevron-down'}
+                              size={15}
+                              color="rgba(255,255,255,0.35)"
+                            />
+                          </TouchableOpacity>
+                          {faqOpen === idx && (
+                            <Animated.View entering={FadeInDown.duration(200)} style={styles.faqAnswer}>
+                              <Text style={styles.faqA}>{a}</Text>
+                            </Animated.View>
+                          )}
+                        </View>
+                      ))}
+                    </BlurView>
+                  </View>
+                </Animated.View>
+              )}
             </Animated.View>
           </ScrollView>
         )}
@@ -634,19 +784,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
-  },
   loadingBox: {
     flex: 1,
     justifyContent: 'center',
@@ -660,13 +797,19 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xl,
   },
   sectionLabel: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 2,
     color: theme.colors.textTertiary,
     marginBottom: 8,
     marginTop: 18,
+  },
+  sectionInlineLabel: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 2,
+    color: theme.colors.textTertiary,
+    marginBottom: 8,
   },
   // Code + CTA card (below How it works)
   codeCard: {
@@ -849,18 +992,101 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
+  funnelGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  funnelItem: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  funnelValue: {
+    ...fontStyles.number,
+    fontSize: 18,
+    color: theme.colors.text,
+  },
+  funnelLabel: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    marginTop: 3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
 
-  applyToggle: {
+  applySpotlightCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  applySpotlightBlur: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: 'rgba(18, 18, 28, 0.80)',
+  },
+  applySpotlightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    marginTop: 4,
+    gap: 10,
   },
-  applyToggleText: {
+  applySpotlightIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applySpotlightTitle: {
     ...fontStyles.bodySemiBold,
     fontSize: 14,
+    color: theme.colors.text,
+  },
+  applySpotlightDesc: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  applyRevealBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  applyRevealBtnText: {
+    ...fontStyles.heading,
+    fontSize: 14,
+    letterSpacing: 1.5,
+  },
+  applySpotlightBody: {
+    marginTop: 10,
+  },
+  learnToggle: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  learnToggleText: {
+    ...fontStyles.heading,
+    fontSize: 15,
+    letterSpacing: 1.5,
+    color: theme.colors.text,
   },
   input: {
     ...fontStyles.body,
@@ -890,6 +1116,39 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 4,
   },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterChipText: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 1.5,
+  },
+  filterEmptyWrap: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  filterEmptyText: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+  },
+  statusRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 6,
+  },
   statusTitle: {
     ...fontStyles.bodySemiBold,
     fontSize: 14,
@@ -910,6 +1169,60 @@ const styles = StyleSheet.create({
   rowDivider: {
     height: StyleSheet.hairlineWidth,
     marginVertical: 10,
+  },
+  stepperCard: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    padding: 12,
+  },
+  stepperTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    color: theme.colors.textTertiary,
+    marginBottom: 8,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  stepTimeline: {
+    width: 20,
+    alignItems: 'center',
+  },
+  stepDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepLine: {
+    width: 1.5,
+    flex: 1,
+    marginTop: 2,
+  },
+  stepLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+  },
+  stepTime: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
+  currentBadge: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
 
   emptyCard: {

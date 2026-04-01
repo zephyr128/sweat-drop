@@ -27,6 +27,8 @@
   "monthlyCapDesc": "{{rewarded}} od {{max}} nagrađenih ovog meseca",
 
   "applySection": "Imaš kod prijatelja?",
+  "applySpotlightDesc": "Unesi kod prijatelja da povežeš preporuku i otključaš nagrade.",
+  "applyRevealCta": "Unesi kod",
   "applyPlaceholder": "Unesi kod prijatelja",
   "applyCta": "Primeni kod",
   "applyEmpty": "Prvo unesi kod.",
@@ -38,8 +40,18 @@
   "deepLinkConfirm": "Primeni pozivni kod \"{{code}}\" za {{gym}}?",
 
   "statusSection": "Tvoji pozivi",
+  "funnelTitle": "Referral funnel",
+  "funnelInvited": "Pozvani",
+  "funnelJoined": "Pridruženi",
+  "funnelVerified": "Verifikovani",
+  "funnelRewarded": "Nagrađeni",
+  "filterAll": "Svi",
+  "filterInProgress": "U toku",
+  "filterRewarded": "Nagrađeni",
+  "filterBlocked": "Blokirani",
   "emptyTitle": "Još nema poziva",
   "emptyDesc": "Podeli svoj link sa prijateljima da zajedno osvajate bonus kapi.",
+  "emptyFiltered": "Nema poziva za ovaj filter.",
 
   "faqTitle": "Česta pitanja",
   "faq1Q": "Kada dobijam nagradu?",
@@ -53,5 +65,14 @@
   "statePending": "Na čekanju",
   "stateDone": "Gotovo",
   "stateFailed": "Neuspešno",
-  "stateInfo": "Info"
+  "stateInfo": "Info",
+  "progressLabel": "Napredak",
+  "journeyTitle": "Tok preporuke",
+  "stepCurrent": "Trenutno",
+  "stepInviteSent": "Poziv je poslat",
+  "stepFriendJoined": "Prijatelj je uneo kod",
+  "stepFirstCheckin": "Prvi QR check-in",
+  "stepVerifiedCheckin": "Identitet verifikovan",
+  "stepRewardSettled": "Nagrada obrađena",
+  "learnMore": "Saznaj više"
 }

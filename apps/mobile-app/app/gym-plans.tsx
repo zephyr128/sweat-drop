@@ -11,7 +11,7 @@ import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 
@@ -115,11 +115,7 @@ export default function GymPlansScreen() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('workoutPlans')}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <ScreenHeader title={t('workoutPlans')} insetHandled />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
@@ -136,12 +132,7 @@ export default function GymPlansScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('workoutPlans')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('workoutPlans')} insetHandled />
 
       <ScrollView
         style={styles.scrollView}
@@ -236,24 +227,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: {
-    width: 40,
   },
   /* Plans List */
   plansList: {

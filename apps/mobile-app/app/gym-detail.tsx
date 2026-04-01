@@ -11,14 +11,13 @@ import {
   FlatList,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import Animated, {
   FadeInDown,
-  FadeIn,
   useSharedValue,
   useAnimatedStyle,
   useAnimatedScrollHandler,
@@ -143,6 +142,7 @@ export default function GymDetailScreen() {
   const { homeGymId, setHomeGymId, setActiveGym } = useGymStore();
   const { updateHomeGym } = useGymData();
   const appBranding = useBranding();
+  const insets = useSafeAreaInsets();
 
   const gymId = params.gymId;
 
@@ -166,7 +166,7 @@ export default function GymDetailScreen() {
   const mapLng = dbLng ?? geocoded?.lng ?? null;
   const hasMapCoords = mapLat != null && mapLng != null;
 
-  // Parallax scroll
+  // Scroll tracking
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -174,12 +174,12 @@ export default function GymDetailScreen() {
     },
   });
 
-  // Parallax: images translate up at half scroll speed, stretchy on pull-down
+  // Gallery parallax + stretchy pull-down
   const galleryInnerStyle = useAnimatedStyle(() => {
     const translateY = interpolate(
       scrollY.value,
       [0, GALLERY_HEIGHT],
-      [0, -GALLERY_HEIGHT * 0.4],
+      [0, -GALLERY_HEIGHT * 0.35],
       Extrapolation.CLAMP,
     );
     const scale = interpolate(
@@ -191,7 +191,31 @@ export default function GymDetailScreen() {
     return { transform: [{ scale }, { translateY }] };
   });
 
-  const headerOpacityStyle = useAnimatedStyle(() => ({ opacity: 0 }));
+  // Logo threshold: logo sits at GALLERY_HEIGHT, overlapping by 36px
+  // It disappears under the header (~insets.top + 56) when scrollY passes that point
+  const LOGO_SCROLL_THRESHOLD = GALLERY_HEIGHT - 36 - (insets.top + 56);
+
+  // Header blur background fades in as cover scrolls away
+  const headerBgStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollY.value,
+      [LOGO_SCROLL_THRESHOLD, LOGO_SCROLL_THRESHOLD + 60],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity };
+  });
+
+  // Logo+name in header: fade in when on-page logo scrolls off, fade out when back
+  const headerLogoStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollY.value,
+      [LOGO_SCROLL_THRESHOLD + 20, LOGO_SCROLL_THRESHOLD + 70],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity };
+  });
 
   const geocodeKey = useMemo(() => {
     if (!gym) return '';
@@ -345,7 +369,7 @@ export default function GymDetailScreen() {
   if (loading && !gym) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}><BackButton /><View style={styles.headerSpacer} /></View>
+        <View style={styles.header}><BackButton /></View>
         <View style={styles.centerContent}><ActivityIndicator size="large" color={appBranding.primary} /></View>
       </SafeAreaView>
     );
@@ -354,7 +378,7 @@ export default function GymDetailScreen() {
   if (!gym) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}><BackButton /><View style={styles.headerSpacer} /></View>
+        <View style={styles.header}><BackButton /></View>
         <View style={styles.centerContent}>
           <Ionicons name="alert-circle-outline" size={52} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('gymNotFound')}</Text>
@@ -372,29 +396,46 @@ export default function GymDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#000000', '#000000']}
-        style={StyleSheet.absoluteFillObject}
-      />
 
       {/* Floating header — always on top */}
-      <SafeAreaView edges={['top']} style={styles.floatingHeader}>
+      <View style={[styles.floatingHeader, { paddingTop: insets.top }]}>
+        {/* Blur background fades in as cover scrolls away */}
+        <Animated.View style={[StyleSheet.absoluteFillObject, headerBgStyle]} pointerEvents="none">
+          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.75)', 'rgba(0,0,0,0.0)']}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+        </Animated.View>
+
         <BackButton />
-        <Animated.View style={[styles.headerTitleContainer, headerOpacityStyle]}>
+
+        {/* Logo + gym name — fade in when on-page logo scrolls off */}
+        <Animated.View style={[styles.headerTitleContainer, headerLogoStyle]}>
+          {gym.logo_url ? (
+            <Image
+              source={gym.logo_url}
+              style={styles.headerLogo}
+              contentFit="contain"
+              transition={100}
+            />
+          ) : null}
           <Text style={styles.headerTitle} numberOfLines={1}>{gym.name}</Text>
         </Animated.View>
-        <View style={styles.headerSpacer} />
-      </SafeAreaView>
 
-      {/* Single scroll view — gallery is first child, content follows naturally */}
+        <View style={styles.headerSpacer} />
+      </View>
+
+      {/* Scroll view — gallery is first child, content slides over it */}
       <Animated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
       >
-        {/* Gallery — inside scroll, clips parallax, FlatList handles horizontal swipes */}
+        {/* Gallery — inside scroll so touch/swipe works naturally */}
         {heroImages.length > 0 && (
           <View style={styles.galleryClip}>
             <Animated.View style={[styles.galleryInner, galleryInnerStyle]}>
@@ -423,7 +464,7 @@ export default function GymDetailScreen() {
               />
             </Animated.View>
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.45)', '#000000']}
+              colors={['transparent', 'rgba(0,0,0,0.55)', '#000000']}
               style={styles.galleryGradient}
               pointerEvents="none"
             />
@@ -437,163 +478,160 @@ export default function GymDetailScreen() {
           </View>
         )}
 
-        {/* All content gets horizontal padding */}
-        <View style={styles.scrollInner}>
-        {/* Gym Identity */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.identitySection}>
-          {/* Logo overlapping gallery */}
-          {gym.logo_url && (
-            <View style={[styles.logoOverlay, { borderColor: hexToRgba(brandColor, 0.35), shadowColor: brandColor }]}>
-              <Image source={gym.logo_url} style={styles.logoImg} contentFit="contain" transition={200} />
-            </View>
-          )}
-          {!gym.logo_url && (
-            <View style={[styles.logoPlaceholder, { backgroundColor: hexToRgba(brandColor, 0.08), borderColor: hexToRgba(brandColor, 0.15) }]}>
-              <Ionicons name="fitness" size={32} color={brandColor} />
-            </View>
-          )}
+        {/* All content — opaque background slides over gallery as user scrolls */}
+        <View style={[styles.scrollInner, heroImages.length === 0 && { paddingTop: insets.top + 60 }]}>
 
-          <Text style={styles.gymName}>{gym.name}</Text>
-
-          {/* Stat cards — matches home screen design */}
-          <View style={styles.statsRow}>
+        {/* ── Hero identity card ── */}
+        <Animated.View entering={FadeInDown.delay(80).duration(400)} style={styles.heroWrapper}>
+          {/* Logo floats above the card — outside overflow:hidden boundary */}
+          <View style={styles.heroLogoRow}>
+            {gym.logo_url ? (
+              <View style={[styles.logoOverlay, { borderColor: hexToRgba(brandColor, 0.40), shadowColor: brandColor }]}>
+                <Image source={gym.logo_url} style={styles.logoImg} contentFit="contain" transition={200} />
+              </View>
+            ) : (
+              <View style={[styles.logoPlaceholder, { backgroundColor: hexToRgba(brandColor, 0.10), borderColor: hexToRgba(brandColor, 0.20) }]}>
+                <Ionicons name="fitness" size={32} color={brandColor} />
+              </View>
+            )}
             {isHome && (
-              <View style={[styles.statCardOuter, { borderColor: hexToRgba(brandColor, 0.28) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-                  <LinearGradient
-                    colors={[hexToRgba(brandColor, 0.14), hexToRgba(brandColor, 0.06)]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={styles.statCardGradient}
-                  >
-                    <Ionicons name="home" size={17} color={brandColor} />
-                    <Text style={[styles.statValue, { color: brandColor }]}>{t('home')}</Text>
-                    <Text style={styles.statLabel}>{t('yourHomeGym')}</Text>
-                  </LinearGradient>
-                </BlurView>
-              </View>
-            )}
-            {memberCount != null && memberCount > 0 && (
-              <View style={[styles.statCardOuter, { borderColor: 'rgba(255,255,255,0.12)' }]}>
-                <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={styles.statCardGradient}
-                  >
-                    <Ionicons name="people-outline" size={17} color="rgba(255,255,255,0.65)" />
-                    <Text style={styles.statValue}>{memberCount}</Text>
-                    <Text style={styles.statLabel}>{t('members')}</Text>
-                  </LinearGradient>
-                </BlurView>
-              </View>
-            )}
-            {gym.working_hours && openStatus.label && (
-              <View style={[styles.statCardOuter, { borderColor: openStatus.isOpen ? 'rgba(74,222,128,0.28)' : 'rgba(248,113,113,0.22)' }]}>
-                <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-                  <LinearGradient
-                    colors={openStatus.isOpen
-                      ? ['rgba(74,222,128,0.14)', 'rgba(74,222,128,0.05)']
-                      : ['rgba(248,113,113,0.12)', 'rgba(248,113,113,0.04)']
-                    }
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={styles.statCardGradient}
-                  >
-                    <Ionicons
-                      name={openStatus.isOpen ? 'radio-button-on' : 'radio-button-off'}
-                      size={17}
-                      color={openStatus.isOpen ? '#4ade80' : '#f87171'}
-                    />
-                    <Text style={[styles.statValue, { color: openStatus.isOpen ? '#4ade80' : '#f87171' }]}>
-                      {t(openStatus.label)}
-                    </Text>
-                    <Text style={styles.statLabel} numberOfLines={1}>
-                      {openStatus.isOpen && openStatus.nextTime ? `${t('closesAt', { time: openStatus.nextTime })}` : ''}
-                      {!openStatus.isOpen && openStatus.nextTime && openStatus.nextDay ? `${t('opensAt', { day: t(openStatus.nextDay), time: openStatus.nextTime })}` : ''}
-                    </Text>
-                  </LinearGradient>
-                </BlurView>
-              </View>
-            )}
-            {rewards.length > 0 && (
-              <View style={[styles.statCardOuter, { borderColor: hexToRgba(brandColor, 0.22) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-                  <LinearGradient
-                    colors={[hexToRgba(brandColor, 0.12), hexToRgba(brandColor, 0.04)]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={styles.statCardGradient}
-                  >
-                    <Ionicons name="gift-outline" size={17} color={brandColor} />
-                    <Text style={[styles.statValue, { color: brandColor }]}>{rewards.length}+</Text>
-                    <Text style={styles.statLabel}>{t('rewards')}</Text>
-                  </LinearGradient>
-                </BlurView>
+              <View style={[styles.homePill, { backgroundColor: hexToRgba(brandColor, 0.14), borderColor: hexToRgba(brandColor, 0.30) }]}>
+                <Ionicons name="home" size={11} color={brandColor} />
+                <Text style={[styles.homePillText, { color: brandColor }]}>{t('yourHomeGym')}</Text>
               </View>
             )}
           </View>
 
-          {/* Address */}
-          {!!fullAddress && (
-            <View style={[styles.addressCard, { borderColor: hexToRgba(brandColor, 0.15) }]}>
-              <BlurView intensity={50} tint="dark" style={styles.addressCardBlur}>
-                <View style={styles.addressCardTop}>
-                  <View style={[styles.addressIconWrap, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
-                    <Ionicons name="location" size={18} color={brandColor} />
+          <View style={[styles.heroCard, {
+            borderTopColor: hexToRgba(brandColor, 0.40),
+            borderLeftColor: hexToRgba(brandColor, 0.16),
+            borderRightColor: 'rgba(255,255,255,0.05)',
+            borderBottomColor: 'rgba(255,255,255,0.04)',
+          }]}>
+            <BlurView intensity={55} tint="dark" style={styles.heroBlur}>
+              <LinearGradient
+                colors={[hexToRgba(brandColor, 0.14), 'rgba(255,255,255,0.03)', 'rgba(12,12,22,0.0)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+
+              <Text style={styles.gymName}>{gym.name}</Text>
+              {!!gym.description && (
+                <Text style={styles.gymDescription}>{gym.description}</Text>
+              )}
+
+              {/* Stat strip */}
+              <View style={[styles.heroStatStrip, { borderTopColor: hexToRgba(brandColor, 0.10) }]}>
+                {memberCount != null && memberCount > 0 && (
+                  <View style={styles.heroStatItem}>
+                    <Ionicons name="people-outline" size={14} color="rgba(255,255,255,0.55)" />
+                    <Text style={styles.heroStatValue}>{memberCount}</Text>
+                    <Text style={styles.heroStatLabel}>{t('members')}</Text>
                   </View>
-                  <Text style={styles.addressCardText}>{fullAddress}</Text>
+                )}
+                {gym.working_hours && openStatus.label && (
+                  <>
+                    {memberCount != null && memberCount > 0 && (
+                      <View style={[styles.heroStatDivider, { backgroundColor: hexToRgba(brandColor, 0.10) }]} />
+                    )}
+                    <View style={styles.heroStatItem}>
+                      <Ionicons
+                        name={openStatus.isOpen ? 'radio-button-on' : 'time-outline'}
+                        size={14}
+                        color={openStatus.isOpen ? '#4ade80' : '#f87171'}
+                      />
+                      <Text style={[styles.heroStatValue, { color: openStatus.isOpen ? '#4ade80' : '#f87171' }]}>
+                        {t(openStatus.label)}
+                      </Text>
+                      <Text style={styles.heroStatLabel} numberOfLines={1}>
+                        {openStatus.isOpen && openStatus.nextTime ? t('closesAt', { time: openStatus.nextTime }) : ''}
+                        {!openStatus.isOpen && openStatus.nextTime && openStatus.nextDay
+                          ? t('opensAt', { day: t(openStatus.nextDay), time: openStatus.nextTime }) : ''}
+                      </Text>
+                    </View>
+                  </>
+                )}
+                {rewards.length > 0 && (
+                  <>
+                    <View style={[styles.heroStatDivider, { backgroundColor: hexToRgba(brandColor, 0.10) }]} />
+                    <View style={styles.heroStatItem}>
+                      <Ionicons name="gift-outline" size={14} color={brandColor} />
+                      <Text style={[styles.heroStatValue, { color: brandColor }]}>{rewards.length}+</Text>
+                      <Text style={styles.heroStatLabel}>{t('rewards')}</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Address strip */}
+              {!!fullAddress && (
+                <View style={[styles.addressStrip, { borderTopColor: hexToRgba(brandColor, 0.10) }]}>
+                  <View style={[styles.addressIconWrap, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
+                    <Ionicons name="location" size={15} color={brandColor} />
+                  </View>
+                  <Text style={styles.addressStripText} numberOfLines={2}>{fullAddress}</Text>
                 </View>
-                <View style={styles.addressCardDivider} />
-                <View style={styles.addressCardActions}>
-                  <TouchableOpacity style={styles.addressMapBtn} onPress={openInAppleMaps} activeOpacity={0.75}>
-                    <Ionicons name="map" size={14} color={brandColor} />
-                    <Text style={[styles.addressMapBtnText, { color: brandColor }]}>Apple Maps</Text>
+              )}
+
+              {/* Map buttons */}
+              {!!fullAddress && (
+                <View style={[styles.mapBtnRow, { borderTopColor: hexToRgba(brandColor, 0.08) }]}>
+                  <TouchableOpacity style={styles.mapBtn} onPress={openInAppleMaps} activeOpacity={0.75}>
+                    <Ionicons name="map-outline" size={13} color={hexToRgba(brandColor, 0.80)} />
+                    <Text style={[styles.mapBtnText, { color: hexToRgba(brandColor, 0.80) }]}>Apple Maps</Text>
                   </TouchableOpacity>
-                  <View style={styles.addressMapBtnDivider} />
-                  <TouchableOpacity style={styles.addressMapBtn} onPress={openInGoogleMaps} activeOpacity={0.75}>
-                    <Ionicons name="navigate" size={14} color={brandColor} />
-                    <Text style={[styles.addressMapBtnText, { color: brandColor }]}>Google Maps</Text>
+                  <View style={[styles.mapBtnDivider, { backgroundColor: hexToRgba(brandColor, 0.10) }]} />
+                  <TouchableOpacity style={styles.mapBtn} onPress={openInGoogleMaps} activeOpacity={0.75}>
+                    <Ionicons name="navigate-outline" size={13} color={hexToRgba(brandColor, 0.80)} />
+                    <Text style={[styles.mapBtnText, { color: hexToRgba(brandColor, 0.80) }]}>Google Maps</Text>
                   </TouchableOpacity>
                 </View>
-              </BlurView>
-            </View>
-          )}
+              )}
+            </BlurView>
+          </View>
         </Animated.View>
 
-        {/* About Section */}
-        {!!gym.description && (
-          <Animated.View entering={FadeInDown.delay(160).duration(400)}>
-            <View style={[styles.card, { borderColor: hexToRgba(brandColor, 0.12) }]}>
-              <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                <View style={styles.cardHeader}>
-                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.1) }]}>
-                    <Ionicons name="information-circle-outline" size={16} color={brandColor} />
-                  </View>
-                  <Text style={styles.cardTitle}>{t('about')}</Text>
-                </View>
-                <Text style={styles.descriptionText}>{gym.description}</Text>
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Working Hours */}
+        {/* ── Working Hours ── */}
         {gym.working_hours && (
-          <Animated.View entering={FadeInDown.delay(220).duration(400)}>
-            <View style={[styles.card, { borderColor: hexToRgba(brandColor, 0.12) }]}>
+          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(brandColor, 0.22),
+              borderLeftColor: hexToRgba(brandColor, 0.10),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
               <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                <LinearGradient
+                  colors={[hexToRgba(brandColor, 0.08), 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 <View style={styles.cardHeader}>
-                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.1) }]}>
+                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
                     <Ionicons name="time-outline" size={16} color={brandColor} />
                   </View>
                   <Text style={styles.cardTitle}>{t('hours')}</Text>
+                  {openStatus.label && (
+                    <View style={[styles.openBadge, {
+                      backgroundColor: openStatus.isOpen ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.10)',
+                    }]}>
+                      <View style={[styles.openDot, { backgroundColor: openStatus.isOpen ? '#4ade80' : '#f87171' }]} />
+                      <Text style={[styles.openBadgeText, { color: openStatus.isOpen ? '#4ade80' : '#f87171' }]}>
+                        {t(openStatus.label)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.hoursGrid}>
                   {DAY_ORDER.map((day) => {
                     const hrs = gym.working_hours?.[day];
                     const isToday = day === todayKey;
                     return (
-                      <View key={day} style={[styles.hoursRow, isToday && { backgroundColor: hexToRgba(brandColor, 0.07), borderRadius: 8 }]}>
-                        <Text style={[styles.hoursDay, isToday && { color: brandColor, fontWeight: '700' }]}>{DAY_LABELS[day]}</Text>
-                        <Text style={[styles.hoursTime, isToday && { color: brandColor, fontWeight: '700' }]}>
+                      <View key={day} style={[styles.hoursRow, isToday && { backgroundColor: hexToRgba(brandColor, 0.08), borderRadius: 8 }]}>
+                        <Text style={[styles.hoursDay, isToday && { color: brandColor }]}>{DAY_LABELS[day]}</Text>
+                        <Text style={[styles.hoursTime, isToday && { color: brandColor }]}>
                           {hrs ? `${hrs.open} – ${hrs.close}` : t('closed')}
                         </Text>
                       </View>
@@ -605,35 +643,55 @@ export default function GymDetailScreen() {
           </Animated.View>
         )}
 
-        {/* Contact */}
+        {/* ── Contact ── */}
         {(gym.phone || gym.instagram || gym.website) && (
-          <Animated.View entering={FadeInDown.delay(380).duration(400)}>
-            <View style={[styles.card, { borderColor: hexToRgba(brandColor, 0.12) }]}>
+          <Animated.View entering={FadeInDown.delay(260).duration(400)}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(brandColor, 0.22),
+              borderLeftColor: hexToRgba(brandColor, 0.10),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
               <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                <LinearGradient
+                  colors={[hexToRgba(brandColor, 0.08), 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 <View style={styles.cardHeader}>
-                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.1) }]}>
+                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
                     <Ionicons name="call-outline" size={16} color={brandColor} />
                   </View>
                   <Text style={styles.cardTitle}>{t('contact')}</Text>
                 </View>
                 {gym.phone && (
                   <TouchableOpacity style={styles.contactRow} onPress={callPhone} activeOpacity={0.7}>
-                    <Ionicons name="call-outline" size={16} color={brandColor} />
-                    <Text style={[styles.contactText, { color: brandColor }]}>{gym.phone}</Text>
+                    <View style={[styles.contactIcon, { backgroundColor: hexToRgba(brandColor, 0.10) }]}>
+                      <Ionicons name="call-outline" size={15} color={brandColor} />
+                    </View>
+                    <Text style={[styles.contactText, { color: '#FFFFFF' }]}>{gym.phone}</Text>
+                    <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.25)" />
                   </TouchableOpacity>
                 )}
                 {gym.phone && gym.instagram && <View style={styles.divider} />}
                 {gym.instagram && (
                   <TouchableOpacity style={styles.contactRow} onPress={openInstagram} activeOpacity={0.7}>
-                    <Ionicons name="logo-instagram" size={16} color={brandColor} />
-                    <Text style={[styles.contactText, { color: brandColor }]}>{gym.instagram}</Text>
+                    <View style={[styles.contactIcon, { backgroundColor: hexToRgba(brandColor, 0.10) }]}>
+                      <Ionicons name="logo-instagram" size={15} color={brandColor} />
+                    </View>
+                    <Text style={[styles.contactText, { color: '#FFFFFF' }]}>{gym.instagram}</Text>
+                    <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.25)" />
                   </TouchableOpacity>
                 )}
                 {gym.instagram && gym.website && <View style={styles.divider} />}
                 {gym.website && (
                   <TouchableOpacity style={styles.contactRow} onPress={() => Linking.openURL(gym.website!)} activeOpacity={0.7}>
-                    <Ionicons name="globe-outline" size={16} color={brandColor} />
-                    <Text style={[styles.contactText, { color: brandColor }]} numberOfLines={1}>{gym.website}</Text>
+                    <View style={[styles.contactIcon, { backgroundColor: hexToRgba(brandColor, 0.10) }]}>
+                      <Ionicons name="globe-outline" size={15} color={brandColor} />
+                    </View>
+                    <Text style={[styles.contactText, { color: '#FFFFFF' }]} numberOfLines={1}>{gym.website}</Text>
+                    <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.25)" />
                   </TouchableOpacity>
                 )}
               </BlurView>
@@ -641,16 +699,30 @@ export default function GymDetailScreen() {
           </Animated.View>
         )}
 
-        {/* Rewards */}
+        {/* ── Rewards ── */}
         {rewards.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(420).duration(400)}>
-            <View style={[styles.card, { borderColor: hexToRgba(brandColor, 0.12) }]}>
+          <Animated.View entering={FadeInDown.delay(320).duration(400)}>
+            <View style={[styles.card, {
+              borderTopColor: hexToRgba(brandColor, 0.22),
+              borderLeftColor: hexToRgba(brandColor, 0.10),
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
               <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                <LinearGradient
+                  colors={[hexToRgba(brandColor, 0.08), 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 <View style={styles.cardHeader}>
-                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.1) }]}>
+                  <View style={[styles.cardIcon, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
                     <Ionicons name="gift" size={16} color={brandColor} />
                   </View>
                   <Text style={styles.cardTitle}>{t('availableRewards')}</Text>
+                  <View style={[styles.rewardCountBadge, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
+                    <Text style={[styles.rewardCountText, { color: brandColor }]}>{rewards.length}{rewards.length >= 4 ? '+' : ''}</Text>
+                  </View>
                 </View>
                 {rewards.map((reward, idx) => (
                   <React.Fragment key={reward.id}>
@@ -659,20 +731,17 @@ export default function GymDetailScreen() {
                       {reward.image_url ? (
                         <Image source={reward.image_url} style={styles.rewardThumb} contentFit="cover" transition={150} cachePolicy="disk" />
                       ) : (
-                        <View style={[styles.rewardThumbEmpty, { backgroundColor: hexToRgba(brandColor, 0.08) }]}>
-                          <Ionicons name="gift-outline" size={14} color={brandColor} />
+                        <View style={[styles.rewardThumbEmpty, { backgroundColor: hexToRgba(brandColor, 0.10) }]}>
+                          <Ionicons name="gift-outline" size={15} color={brandColor} />
                         </View>
                       )}
                       <Text style={styles.rewardName} numberOfLines={1}>{reward.name}</Text>
-                      <View style={[styles.rewardBadge, { backgroundColor: hexToRgba(brandColor, 0.1) }]}>
+                      <View style={[styles.rewardBadge, { backgroundColor: hexToRgba(brandColor, 0.12), borderColor: hexToRgba(brandColor, 0.22) }]}>
                         <Text style={[styles.rewardCost, { color: brandColor }]}>{reward.drops_cost} 💧</Text>
                       </View>
                     </View>
                   </React.Fragment>
                 ))}
-                {rewards.length >= 4 && (
-                  <Text style={[styles.rewardMore, { color: hexToRgba(brandColor, 0.5) }]}>{t('andMore')}</Text>
-                )}
               </BlurView>
             </View>
           </Animated.View>
@@ -719,7 +788,7 @@ export default function GymDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000000' },
 
-  // Gallery
+  // Gallery inside scroll
   galleryClip: {
     width: SCREEN_WIDTH,
     height: GALLERY_HEIGHT,
@@ -738,7 +807,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 200,
+    height: 220,
   },
   galleryDots: {
     position: 'absolute',
@@ -767,7 +836,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   header: {
     flexDirection: 'row',
@@ -778,15 +847,23 @@ const styles = StyleSheet.create({
   },
   headerTitleContainer: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  headerLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
   },
   headerTitle: {
     ...fontStyles.heading,
     fontSize: 20,
     color: theme.colors.text,
-    letterSpacing: 0.3,
+    letterSpacing: 1.2,
   },
-  headerSpacer: { width: 56 },
+  headerSpacer: { width: 40 },
 
   centerContent: {
     flex: 1,
@@ -803,137 +880,156 @@ const styles = StyleSheet.create({
   errorBtnText: { fontSize: 15, fontWeight: '600' },
 
   scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 40 },
+  scrollContent: {},
   scrollInner: {
     paddingHorizontal: theme.spacing.lg,
+    backgroundColor: '#000000',
   },
 
-  // Identity
-  identitySection: {
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+  // ── Hero identity card ──
+  heroWrapper: {
+    marginBottom: 12,
   },
+  heroLogoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 0,
+    zIndex: 2,
+    // Pull logo down so it overlaps the card below
+    marginBottom: -36,
+  },
+  heroCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(12,12,22,0.50)',
+  },
+  heroBlur: { borderRadius: 24, overflow: 'hidden' },
   logoOverlay: {
     width: 72,
     height: 72,
     borderRadius: 20,
-    borderWidth: 2,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -36,
-    marginBottom: 12,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.50,
+    shadowRadius: 14,
+    elevation: 8,
     overflow: 'hidden',
   },
-  logoImg: { width: 60, height: 60, borderRadius: 16 },
+  logoImg: { width: 68, height: 68, borderRadius: 18 },
   logoPlaceholder: {
     width: 72,
     height: 72,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+  },
+  homePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 12,
+  },
+  homePillText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
   gymName: {
     ...fontStyles.heading,
-    fontSize: 28,
+    fontSize: 26,
     color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: 8,
+    letterSpacing: 0.5,
+    paddingHorizontal: 20,
+    paddingTop: 46,
+    paddingBottom: 2,
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-    width: '100%',
-  },
-  statCardOuter: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  statCardBlur: {
-    flex: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(18, 18, 28, 0.80)',
-  },
-  statCardGradient: {
-    flex: 1,
-    paddingVertical: 13,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
-    color: '#FFFFFF',
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  statLabel: {
+  gymDescription: {
     ...fontStyles.body,
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.45)',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  addressCard: {
-    width: '100%',
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    borderWidth: 1,
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  addressCardBlur: {
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(20,20,30,0.75)',
-    paddingTop: 14,
-    paddingHorizontal: 16,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.50)',
+    lineHeight: 19,
+    paddingHorizontal: 20,
     paddingBottom: 4,
   },
-  addressCardTop: {
+
+  // Hero stat strip (inside hero card)
+  heroStatStrip: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    marginHorizontal: 0,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  heroStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    position: 'relative',
+  },
+  heroStatDivider: {
+    width: StyleSheet.hairlineWidth,
+    marginVertical: 2,
+  },
+  heroStatValue: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+    lineHeight: 19,
+  },
+  heroStatLabel: {
+    ...fontStyles.body,
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.40)',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+
+  // Address strip (inside hero card)
+  addressStrip: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    paddingBottom: 12,
+    borderTopWidth: 1,
+    paddingTop: 13,
+    paddingBottom: 4,
+    paddingHorizontal: 20,
   },
   addressIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
     marginTop: 1,
   },
-  addressCardText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 15,
-    color: '#FFFFFF',
+  addressStripText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.65)',
     flex: 1,
-    lineHeight: 22,
-    letterSpacing: 0.1,
+    lineHeight: 19,
   },
-  addressCardDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    marginHorizontal: -16,
-  },
-  addressCardActions: {
+
+  // Map buttons (inside hero card)
+  mapBtnRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderTopWidth: 1,
+    marginTop: 10,
   },
-  addressMapBtn: {
+  mapBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -941,60 +1037,77 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 13,
   },
-  addressMapBtnDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+  mapBtnDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
   },
-  addressMapBtnText: {
+  mapBtnText: {
     ...fontStyles.bodySemiBold,
     fontSize: 13,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
-  // Cards
+
+  // ── Glass cards ──
   card: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    marginBottom: theme.spacing.md,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    marginBottom: 12,
+    backgroundColor: 'rgba(12,12,22,0.50)',
   },
   cardBlur: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 20,
     overflow: 'hidden',
-    padding: theme.spacing.xl,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    padding: 18,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 14,
   },
   cardIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   cardTitle: {
-    ...fontStyles.bodyMedium,
+    ...fontStyles.heading,
     fontSize: 14,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 1.5,
     flex: 1,
-  },
-  cardCount: {
-    ...fontStyles.body,
-    fontSize: 12,
-    color: theme.colors.textTertiary,
   },
   descriptionText: {
     ...fontStyles.body,
     fontSize: 14,
-    color: theme.colors.textSecondary,
+    color: 'rgba(255,255,255,0.60)',
     lineHeight: 22,
     letterSpacing: 0.2,
+  },
+
+  // Open/closed badge in hours header
+  openBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  openBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
   },
 
   // Hours
@@ -1002,16 +1115,16 @@ const styles = StyleSheet.create({
   hoursRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: 7,
     paddingHorizontal: 8,
   },
   hoursDay: {
     ...fontStyles.body,
     fontSize: 13,
-    color: theme.colors.textSecondary,
+    color: 'rgba(255,255,255,0.50)',
   },
   hoursTime: {
-    ...fontStyles.body,
+    ...fontStyles.bodySemiBold,
     fontSize: 13,
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
@@ -1021,59 +1134,70 @@ const styles = StyleSheet.create({
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 6,
+    gap: 12,
+    paddingVertical: 8,
+  },
+  contactIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
   },
   contactText: {
-    ...fontStyles.bodySemiBold,
+    ...fontStyles.body,
     fontSize: 14,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
     flex: 1,
   },
   divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginVertical: 8,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    marginVertical: 4,
   },
 
   // Rewards
+  rewardCountBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  rewardCountText: {
+    ...fontStyles.heading,
+    fontSize: 12,
+  },
   rewardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    gap: 10,
+    paddingVertical: 9,
+    gap: 12,
   },
-  rewardThumb: { width: 32, height: 32, borderRadius: 8 },
+  rewardThumb: { width: 36, height: 36, borderRadius: 10 },
   rewardThumbEmpty: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   rewardName: {
     ...fontStyles.body,
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: '#FFFFFF',
     letterSpacing: 0.1,
   },
   rewardBadge: {
     paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 10,
+    borderWidth: 1,
   },
   rewardCost: {
+    ...fontStyles.bodySemiBold,
     fontSize: 12,
-    fontWeight: '700',
     fontVariant: ['tabular-nums'],
-  },
-  rewardMore: {
-    ...fontStyles.body,
-    fontSize: 11,
-    marginTop: 8,
-    textAlign: 'center',
-    letterSpacing: 0.3,
   },
 
   // CTA

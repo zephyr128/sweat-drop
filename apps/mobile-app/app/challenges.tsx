@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +18,7 @@ import i18n from '@/lib/i18n';
 
 export default function ChallengesScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('challenges');
@@ -277,16 +278,17 @@ export default function ChallengesScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFillObject} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -294,18 +296,13 @@ export default function ChallengesScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('title')} />
 
       <FlatList
         data={listData}
         keyExtractor={(item) => item.id}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -337,7 +334,12 @@ export default function ChallengesScreen() {
             return (
               <Animated.View entering={FadeInDown.delay(100 + index * 80).duration(400)}>
                 <TouchableOpacity
-                  style={[styles.completedCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}
+                  style={[styles.completedCard, {
+                    borderTopColor: hexToRgba(branding.primary, 0.14),
+                    borderLeftColor: hexToRgba(branding.primary, 0.07),
+                    borderRightColor: 'rgba(255,255,255,0.04)',
+                    borderBottomColor: 'rgba(255,255,255,0.02)',
+                  }]}
                   onPress={() => router.push({
                     pathname: '/challenge-detail',
                     params: { challengeId: challenge.id, gymId: challenge.gym_id },
@@ -400,7 +402,12 @@ export default function ChallengesScreen() {
               <TouchableOpacity
                 style={[
                   styles.challengeCard,
-                  { borderColor: hexToRgba(branding.primary, isCompleted ? 0.3 : 0.15) },
+                  {
+                    borderTopColor: hexToRgba(branding.primary, isCompleted ? 0.40 : 0.26),
+                    borderLeftColor: hexToRgba(branding.primary, isCompleted ? 0.18 : 0.10),
+                    borderRightColor: 'rgba(255,255,255,0.05)',
+                    borderBottomColor: 'rgba(255,255,255,0.03)',
+                  },
                 ]}
                 onPress={() => {
                   router.push({
@@ -410,7 +417,15 @@ export default function ChallengesScreen() {
                 }}
                 activeOpacity={0.8}
               >
-                <BlurView intensity={50} tint="dark" style={[styles.challengeBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <BlurView intensity={50} tint="dark" style={styles.challengeBlur}>
+                  <LinearGradient
+                    colors={isCompleted
+                      ? ['rgba(74,222,128,0.06)', 'transparent']
+                      : [hexToRgba(branding.primary, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
                   <View style={styles.challengeHeader}>
                     <View style={[styles.typeIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                       <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={branding.primary} />
@@ -519,7 +534,7 @@ export default function ChallengesScreen() {
           );
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -527,23 +542,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 40,
   },
   centerContent: {
     flex: 1,
@@ -576,13 +574,16 @@ const styles = StyleSheet.create({
   },
   /* Challenge Card */
   challengeCard: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
+    marginBottom: 12,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
   },
   challengeBlur: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     padding: theme.spacing.lg,
   },
@@ -713,10 +714,11 @@ const styles = StyleSheet.create({
   /* Section labels */
   sectionLabel: {
     ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
+    fontSize: 13,
+    letterSpacing: 2,
+    color: theme.colors.textTertiary,
     marginBottom: theme.spacing.md,
-    letterSpacing: 0.3,
+    marginTop: theme.spacing.md,
   },
   emptySection: {
     padding: theme.spacing.xl,
@@ -734,9 +736,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
   },

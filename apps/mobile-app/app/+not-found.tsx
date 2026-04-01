@@ -60,8 +60,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   buttonText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
+    ...fontStyles.heading,
+    fontSize: 16,
+    letterSpacing: 1.5,
     color: theme.colors.text,
   },
 });

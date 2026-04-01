@@ -310,10 +310,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   primaryBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 15,
+    letterSpacing: 1.5,
     color: '#000',
-    letterSpacing: 0.3,
   },
   homeActiveTag: {
     flexDirection: 'row',

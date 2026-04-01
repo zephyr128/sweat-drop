@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,24 +11,85 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  FadeInDown,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
   withSequence,
   withTiming,
   cancelAnimation,
+  Easing,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { useBranding } from '@/lib/hooks/useBranding';
 import { fontStyles, getNumberStyle, theme as appTheme, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
+import { SliderTabs } from '@/components/SliderTabs';
 import { useMyStats, StatsPeriod } from '@/hooks/useMyStats';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useSession } from '@/hooks/useSession';
 import { supabase } from '@/lib/supabase';
+
+// ── Animation config ────────────────────────────────────────────────────────
+const NUM_DURATION = 520;
+const BAR_DURATION = 480;
+const NUM_EASING = Easing.out(Easing.cubic);
+
+// ── useCountUp: animates a displayed integer from prev → next value ─────────
+function useCountUp(target: number, format: (n: number) => string): string {
+  const displayed = useSharedValue(target);
+  const [text, setText] = useState(format(target));
+  const prevTarget = useRef(target);
+
+  useEffect(() => {
+    const from = prevTarget.current;
+    prevTarget.current = target;
+    if (from === target) return;
+
+    // Run a JS-side interval for cross-platform reliability
+    const steps = 24;
+    const duration = NUM_DURATION;
+    const stepMs = duration / steps;
+    let step = 0;
+    const id = setInterval(() => {
+      step++;
+      const progress = Easing.out(Easing.cubic)(step / steps);
+      const current = Math.round(from + (target - from) * progress);
+      setText(format(current));
+      if (step >= steps) {
+        clearInterval(id);
+        setText(format(target));
+      }
+    }, stepMs);
+    return () => clearInterval(id);
+  }, [target]);
+
+  return text;
+}
+
+// ── AnimatedBar: smoothly transitions width% ────────────────────────────────
+const AnimatedBar: React.FC<{ pct: number; color: string }> = ({ pct, color }) => {
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    width.value = withTiming(Math.max(pct, pct > 0 ? 3 : 0), {
+      duration: BAR_DURATION,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [pct]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${width.value}%` as any,
+  }));
+
+  return (
+    <Animated.View
+      style={[{ height: '100%', borderRadius: 2, backgroundColor: color }, barStyle]}
+    />
+  );
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function formatNumber(n: number): string {
@@ -159,6 +219,233 @@ const skeletonStyles = StyleSheet.create({
   sectionBlur: { padding: 16, backgroundColor: GLASS_BG, borderRadius: 16, overflow: 'hidden' },
 });
 
+// ── Per-period page — stays mounted, animates numbers in-place ─────────────
+
+interface PeriodPageProps {
+  p: StatsPeriod;
+  periodState: import('@/hooks/useMyStats').MyStatsState;
+  branding: { primary: string };
+  t: TFunction<'stats'>;
+}
+
+const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => {
+  const { periodStats, origin, weekDays, weekActive, machines, achievements } = periodState;
+  const isLoading = periodState.loading && periodStats.totalDrops === 0;
+
+  const originTotal = origin.session + origin.challenge + origin.checkin + origin.bonus;
+  const originPct = (val: number) => (originTotal > 0 ? Math.round((val / originTotal) * 100) : 0);
+
+  const heroText           = useCountUp(periodStats.totalDrops, formatNumber);
+  const rankText           = useCountUp(periodStats.rank,       (n) => n > 0 ? `#${n}` : '—');
+  const streakText         = useCountUp(periodStats.streak,     (n) => n > 0 ? `${n}d` : '—');
+  const sessionsText       = useCountUp(periodStats.sessions,   (n) => n > 0 ? String(n) : '—');
+  const hoursText          = useCountUp(periodStats.hours,      (n) => n > 0 ? `${n}h` : '—');
+  const sessionCountText   = useCountUp(origin.session,         formatNumber);
+  const challengeCountText = useCountUp(origin.challenge,       formatNumber);
+  const checkinCountText   = useCountUp(origin.checkin,         formatNumber);
+  const bonusCountText     = useCountUp(origin.bonus,           formatNumber);
+
+  if (isLoading) {
+    return <StatsSkeleton primary={branding.primary} />;
+  }
+
+  return (
+    <>
+      {/* ── Hero card ── */}
+      <View style={[styles.heroCardOuter, { borderTopColor: hexToRgba(branding.primary, 0.40) }]}>
+        <BlurView intensity={50} tint="dark" style={styles.heroCardBlur}>
+          <LinearGradient
+            colors={[hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.heroCardGradient}
+          >
+            <Text style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}>
+              {heroText}
+            </Text>
+            <Text style={styles.heroLabel}>{t('totalDrops')}</Text>
+          </LinearGradient>
+        </BlurView>
+      </View>
+
+      {/* ── 4-stat row ── */}
+      <View style={styles.statRow}>
+        {([
+          { icon: 'podium-outline' as const,  value: rankText,     label: t('rank'),     accent: branding.primary },
+          { icon: 'flame-outline' as const,   value: streakText,   label: t('streak'),   accent: '#FF6B00' },
+          { icon: 'barbell-outline' as const, value: sessionsText, label: t('sessions'), accent: branding.primary },
+          { icon: 'time-outline' as const,    value: hoursText,    label: t('time'),     accent: branding.primary },
+        ]).map((s, i) => (
+          <View key={i} style={[styles.statCardOuter, { borderTopColor: hexToRgba(s.accent, 0.30) }]}>
+            <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
+              <LinearGradient
+                colors={[hexToRgba(s.accent, 0.08), 'rgba(255,255,255,0.01)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={styles.statCardGradient}
+              >
+                <Ionicons name={s.icon} size={17} color={s.accent} />
+                <Text style={[styles.statValue, getNumberStyle(16), { color: '#FFFFFF' }]}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </LinearGradient>
+            </BlurView>
+          </View>
+        ))}
+      </View>
+
+      {/* ── Drops Origin ── */}
+      {originTotal > 0 && (
+        <View>
+          <Text style={styles.sectionTitle}>{t('dropsOrigin')}</Text>
+          <View style={styles.sectionCardOuter}>
+            <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
+              {([
+                { key: 'workout',    pct: originPct(origin.session),   countText: sessionCountText,   icon: 'barbell-outline' as const, color: branding.primary },
+                { key: 'challenges', pct: originPct(origin.challenge), countText: challengeCountText, icon: 'trophy-outline' as const,  color: '#FFD700' },
+                { key: 'checkin',    pct: originPct(origin.checkin),   countText: checkinCountText,   icon: 'qr-code-outline' as const, color: branding.primary },
+                { key: 'bonuses',    pct: originPct(origin.bonus),     countText: bonusCountText,     icon: 'gift-outline' as const,    color: '#4CD964' },
+              ] as const).filter((r) => r.pct > 0).map((row, idx) => (
+                <View
+                  key={row.key}
+                  style={[
+                    styles.originRow,
+                    idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
+                  ]}
+                >
+                  <View style={[styles.originIconWrap, { backgroundColor: hexToRgba(row.color, 0.10) }]}>
+                    <Ionicons name={row.icon} size={14} color={row.color} />
+                  </View>
+                  <Text style={styles.originLabel}>{t(`origin.${row.key}`)}</Text>
+                  <View style={styles.originBarOuter}>
+                    <AnimatedBar pct={row.pct} color={hexToRgba(row.color, 0.65)} />
+                  </View>
+                  <Text style={[styles.originCount, getNumberStyle(12)]}>{row.countText}</Text>
+                  <Text style={[styles.originPct, getNumberStyle(11)]}>{row.pct}%</Text>
+                </View>
+              ))}
+            </BlurView>
+          </View>
+        </View>
+      )}
+
+      {/* ── Streak / This week ── */}
+      {weekDays.length > 0 && (
+        <View>
+          <Text style={styles.sectionTitle}>{t('streakHistory')}</Text>
+          <View style={styles.sectionCardOuter}>
+            <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
+              <View style={styles.weekHeaderRow}>
+                <Text style={styles.weekSummary}>{t('thisWeek')}</Text>
+                <Text style={[styles.weekActivePill, { color: branding.primary }]}>
+                  {weekActive}/7 {t('days')}
+                </Text>
+              </View>
+              <View style={styles.weekRow}>
+                {weekDays.map((d, i) => (
+                  <View key={i} style={styles.weekDayCol}>
+                    <View
+                      style={[
+                        styles.weekDayDot,
+                        d.active
+                          ? { backgroundColor: branding.primary, borderColor: 'transparent' }
+                          : { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.12)' },
+                      ]}
+                    >
+                      {d.active && <Ionicons name="checkmark" size={13} color="#000" />}
+                    </View>
+                    <Text style={[styles.weekDayLabel, d.active && { color: branding.primary }]}>
+                      {d.dayLabel}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </BlurView>
+          </View>
+        </View>
+      )}
+
+      {/* ── Machines ── */}
+      {machines.length > 0 && (
+        <View>
+          <Text style={styles.sectionTitle}>{t('machines')}</Text>
+          <View style={styles.sectionCardOuter}>
+            <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
+              {machines.map((m, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.machineRow,
+                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
+                  ]}
+                >
+                  <View style={[styles.machineIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                    <Ionicons name={machineIcon(m.type)} size={18} color={branding.primary} />
+                  </View>
+                  <View style={styles.machineInfo}>
+                    <Text style={styles.machineType}>{machineLabel(m.type)}</Text>
+                    <Text style={styles.machineSub}>
+                      {m.sessions} {t('sessionCount', { count: m.sessions })} · {t('avg')} {m.avgMinutes} min
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </BlurView>
+          </View>
+        </View>
+      )}
+
+      {/* ── Achievements ── */}
+      <View>
+        <Text style={styles.sectionTitle}>{t('achievements')}</Text>
+        <View style={styles.sectionCardOuter}>
+          <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
+            {([
+              {
+                icon: 'podium' as const,
+                color: '#FFD700',
+                label: t('bestSession'),
+                value: achievements.bestSessionDrops > 0
+                  ? `${achievements.bestSessionDrops} drops (${formatDate(achievements.bestSessionDate)})`
+                  : '—',
+              },
+              {
+                icon: 'flame' as const,
+                color: '#FF6B00',
+                label: t('bestStreak'),
+                value: achievements.bestStreak > 0 ? `${achievements.bestStreak} ${t('days')}` : '—',
+              },
+              {
+                icon: 'flash' as const,
+                color: '#FFD700',
+                label: t('happyHours'),
+                value: achievements.happyHoursUsed > 0 ? `${achievements.happyHoursUsed} ${t('used')}` : '—',
+              },
+              {
+                icon: 'trophy' as const,
+                color: '#C0C0C0',
+                label: t('challengesDone'),
+                value: achievements.challengesCompleted > 0 ? `${achievements.challengesCompleted} ${t('completed')}` : '—',
+              },
+            ]).map((a, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.achieveRow,
+                  i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
+                ]}
+              >
+                <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba(a.color, 0.12) }]}>
+                  <Ionicons name={a.icon} size={15} color={a.color} />
+                </View>
+                <Text style={styles.achieveLabel}>{a.label}</Text>
+                <Text style={[styles.achieveValue, getNumberStyle(13)]}>{a.value}</Text>
+              </View>
+            ))}
+          </BlurView>
+        </View>
+      </View>
+    </>
+  );
+};
+
 // ── Main screen ────────────────────────────────────────────────────────────
 
 export default function StatsScreen() {
@@ -183,7 +470,7 @@ export default function StatsScreen() {
   type ScopeType = 'gym' | 'global';
   const [scope, setScope] = useState<ScopeType>('gym');
   const selectedGymId = scope === 'gym' ? activeGymId : null;
-  const { state, load } = useMyStats(selectedGymId);
+  const { states, load } = useMyStats(selectedGymId);
 
   const { period: periodParam } = useLocalSearchParams<{ period?: string }>();
   const initialPeriod: StatsPeriod =
@@ -193,37 +480,24 @@ export default function StatsScreen() {
   const [period, setPeriod] = useState<StatsPeriod>(initialPeriod);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Track if a period switch is in flight so we can show skeleton
-  const [switching, setSwitching] = useState(false);
-  const prevPeriod = useRef<StatsPeriod>(initialPeriod);
-
-  const handlePeriodChange = useCallback(async (p: StatsPeriod) => {
-    if (p === period) return;
-    setSwitching(true);
+  const handlePeriodChange = useCallback((p: StatsPeriod) => {
     setPeriod(p);
-  }, [period]);
+    load(p);
+  }, [load]);
 
+  // On focus, reload just the active period
+  useFocusEffect(useCallback(() => { load(period); }, []));
+
+  // Preload all periods on first mount
   useEffect(() => {
-    if (period !== prevPeriod.current) {
-      prevPeriod.current = period;
-      load(period).finally(() => setSwitching(false));
-    }
-  }, [period, load]);
-
-  useFocusEffect(useCallback(() => { load(period); }, [period, load]));
+    PERIODS.forEach((p) => load(p));
+  }, [scope]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load(period);
     setRefreshing(false);
   }, [period, load]);
-
-  const isLoading = state.loading || switching;
-
-  const { periodStats, origin, weekDays, weekActive, machines, achievements } = state;
-
-  const originTotal = origin.session + origin.challenge + origin.checkin + origin.bonus;
-  const originPct = (val: number) => (originTotal > 0 ? Math.round((val / originTotal) * 100) : 0);
 
   return (
     <View style={styles.container}>
@@ -234,298 +508,52 @@ export default function StatsScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header — respects status bar via insets */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={{ width: 32 }} />
-      </View>
+      <ScreenHeader title={t('title')} />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="rgba(255,255,255,0.4)"
+      {/* Scope Toggle: My Gym | Global (above the period tab bar) */}
+      {gymCount > 1 && (
+        <View style={styles.scopeRow}>
+          <SliderTabs
+            tabs={[
+              { key: 'gym', label: t('myGym'), icon: 'location' },
+              { key: 'global', label: t('global'), icon: 'globe-outline' },
+            ]}
+            activeKey={scope}
+            onChange={(key) => setScope(key as ScopeType)}
+            accentColor={branding.primary}
           />
-        }
-      >
-        {/* Scope Toggle: My Gym | Global */}
-        {gymCount > 1 && (
-          <Animated.View entering={FadeInDown.delay(25).duration(300)}>
-            <View style={styles.scopeToggle}>
-              <BlurView intensity={50} tint="dark" style={styles.scopeToggleBlur}>
-                {([
-                  { key: 'gym' as ScopeType, label: t('myGym'), icon: 'location' as const },
-                  { key: 'global' as ScopeType, label: t('global'), icon: 'globe-outline' as const },
-                ]).map((tab) => (
-                  <TouchableOpacity
-                    key={tab.key}
-                    style={[
-                      styles.scopeTab,
-                      scope === tab.key && {
-                        backgroundColor: hexToRgba(branding.primary, 0.15),
-                        borderColor: hexToRgba(branding.primary, 0.35),
-                      },
-                    ]}
-                    onPress={() => setScope(tab.key)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={tab.icon}
-                      size={14}
-                      color={scope === tab.key ? branding.primary : 'rgba(255,255,255,0.35)'}
-                    />
-                    <Text style={[styles.scopeTabText, scope === tab.key && { color: branding.primary }]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </BlurView>
-            </View>
-          </Animated.View>
-        )}
+        </View>
+      )}
 
-        {/* Period Selector */}
-        <Animated.View entering={FadeInDown.delay(50).duration(300)}>
-          <View style={styles.periodRow}>
-            {PERIODS.map((p) => {
-              const isActive = period === p;
-              return (
-                <TouchableOpacity
-                  key={p}
-                  style={[
-                    styles.periodPill,
-                    isActive && {
-                      backgroundColor: hexToRgba(branding.primary, 0.14),
-                      borderColor: hexToRgba(branding.primary, 0.40),
-                    },
-                  ]}
-                  onPress={() => handlePeriodChange(p)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.periodText, isActive && { color: branding.primary }]}>
-                    {t(`period.${p}`)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </Animated.View>
-
-        {/* Skeleton */}
-        {isLoading ? (
-          <StatsSkeleton primary={branding.primary} />
-        ) : (
-          <>
-            {/* ── Hero card ── */}
-            <Animated.View
-              entering={FadeInDown.delay(80).duration(300)}
-              style={[styles.heroCardOuter, { borderTopColor: hexToRgba(branding.primary, 0.40) }]}
+      {/* Period TabView — pages stay mounted, data updates in background */}
+      <View style={styles.tabsWrapper}>
+        <SliderTabs
+          tabs={PERIODS.map((p) => ({ key: p, label: t(`period.${p}`) }))}
+          activeKey={period}
+          onChange={(key) => handlePeriodChange(key as StatsPeriod)}
+          accentColor={branding.primary}
+          barStyle={styles.tabBar}
+        >
+          {PERIODS.map((p) => (
+            <ScrollView
+              key={p}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                p === period ? (
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor="rgba(255,255,255,0.4)"
+                  />
+                ) : undefined
+              }
             >
-              <BlurView intensity={50} tint="dark" style={styles.heroCardBlur}>
-                <LinearGradient
-                  colors={[hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={styles.heroCardGradient}
-                >
-                  <Text style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}>
-                    {formatNumber(periodStats.totalDrops)}
-                  </Text>
-                  <Text style={styles.heroLabel}>{t('totalDrops')}</Text>
-                </LinearGradient>
-              </BlurView>
-            </Animated.View>
-
-            {/* ── 4-stat row ── */}
-            <Animated.View entering={FadeInDown.delay(130).duration(300)} style={styles.statRow}>
-              {([
-                { icon: 'podium-outline' as const,  value: periodStats.rank > 0     ? `#${periodStats.rank}`       : '—', label: t('rank'),     accent: branding.primary },
-                { icon: 'flame-outline' as const,   value: periodStats.streak > 0   ? `${periodStats.streak}d`     : '—', label: t('streak'),   accent: '#FF6B00' },
-                { icon: 'barbell-outline' as const, value: periodStats.sessions > 0 ? String(periodStats.sessions) : '—', label: t('sessions'), accent: branding.primary },
-                { icon: 'time-outline' as const,    value: periodStats.hours > 0    ? `${periodStats.hours}h`      : '—', label: t('time'),     accent: branding.primary },
-              ]).map((s, i) => (
-                <View key={i} style={[styles.statCardOuter, { borderTopColor: hexToRgba(s.accent, 0.30) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
-                    <LinearGradient
-                      colors={[hexToRgba(s.accent, 0.08), 'rgba(255,255,255,0.01)']}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                      style={styles.statCardGradient}
-                    >
-                      <Ionicons name={s.icon} size={17} color={s.accent} />
-                      <Text style={[styles.statValue, getNumberStyle(16), { color: '#FFFFFF' }]}>{s.value}</Text>
-                      <Text style={styles.statLabel}>{s.label}</Text>
-                    </LinearGradient>
-                  </BlurView>
-                </View>
-              ))}
-            </Animated.View>
-
-            {/* ── Drops Origin ── */}
-            {originTotal > 0 && (
-              <Animated.View entering={FadeInDown.delay(220).duration(300)}>
-                <Text style={styles.sectionTitle}>{t('dropsOrigin')}</Text>
-                <View style={styles.sectionCardOuter}>
-                  <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-                    {([
-                      { key: 'workout',    value: origin.session,   icon: 'barbell-outline' as const, color: branding.primary },
-                      { key: 'challenges', value: origin.challenge, icon: 'trophy-outline' as const,  color: '#FFD700' },
-                      { key: 'checkin',    value: origin.checkin,   icon: 'qr-code-outline' as const, color: branding.primary },
-                      { key: 'bonuses',    value: origin.bonus,     icon: 'gift-outline' as const,    color: '#4CD964' },
-                    ] as const).filter((r) => r.value > 0).map((row, idx) => {
-                      const pct = originPct(row.value);
-                      return (
-                        <View
-                          key={row.key}
-                          style={[
-                            styles.originRow,
-                            idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
-                          ]}
-                        >
-                          <View style={[styles.originIconWrap, { backgroundColor: hexToRgba(row.color, 0.10) }]}>
-                            <Ionicons name={row.icon} size={14} color={row.color} />
-                          </View>
-                          <Text style={styles.originLabel}>{t(`origin.${row.key}`)}</Text>
-                          <View style={styles.originBarOuter}>
-                            <View
-                              style={[
-                                styles.originBarInner,
-                                { width: `${Math.max(pct, 3)}%`, backgroundColor: hexToRgba(row.color, 0.6) },
-                              ]}
-                            />
-                          </View>
-                          <Text style={[styles.originCount, getNumberStyle(12)]}>{formatNumber(row.value)}</Text>
-                          <Text style={[styles.originPct, getNumberStyle(11)]}>{pct}%</Text>
-                        </View>
-                      );
-                    })}
-                  </BlurView>
-                </View>
-              </Animated.View>
-            )}
-
-            {/* ── Streak / This week ── */}
-            {weekDays.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(260).duration(300)}>
-                <Text style={styles.sectionTitle}>{t('streakHistory')}</Text>
-                <View style={styles.sectionCardOuter}>
-                  <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-                    <View style={styles.weekHeaderRow}>
-                      <Text style={styles.weekSummary}>{t('thisWeek')}</Text>
-                      <Text style={[styles.weekActivePill, { color: branding.primary }]}>
-                        {weekActive}/7 {t('days')}
-                      </Text>
-                    </View>
-                    <View style={styles.weekRow}>
-                      {weekDays.map((d, i) => (
-                        <View key={i} style={styles.weekDayCol}>
-                          <View
-                            style={[
-                              styles.weekDayDot,
-                              d.active
-                                ? { backgroundColor: branding.primary, borderColor: 'transparent' }
-                                : { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.12)' },
-                            ]}
-                          >
-                            {d.active && <Ionicons name="checkmark" size={13} color="#000" />}
-                          </View>
-                          <Text style={[styles.weekDayLabel, d.active && { color: branding.primary }]}>
-                            {d.dayLabel}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </BlurView>
-                </View>
-              </Animated.View>
-            )}
-
-            {/* ── Machines ── */}
-            {machines.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(300).duration(300)}>
-                <Text style={styles.sectionTitle}>{t('machines')}</Text>
-                <View style={styles.sectionCardOuter}>
-                  <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-                    {machines.map((m, i) => (
-                      <View
-                        key={i}
-                        style={[
-                          styles.machineRow,
-                          i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
-                        ]}
-                      >
-                        <View style={[styles.machineIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                          <Ionicons name={machineIcon(m.type)} size={18} color={branding.primary} />
-                        </View>
-                        <View style={styles.machineInfo}>
-                          <Text style={styles.machineType}>{machineLabel(m.type)}</Text>
-                          <Text style={styles.machineSub}>
-                            {m.sessions} {t('sessionCount', { count: m.sessions })} · {t('avg')} {m.avgMinutes} min
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </BlurView>
-                </View>
-              </Animated.View>
-            )}
-
-            {/* ── Achievements ── */}
-            <Animated.View entering={FadeInDown.delay(340).duration(300)}>
-              <Text style={styles.sectionTitle}>{t('achievements')}</Text>
-              <View style={styles.sectionCardOuter}>
-                <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-                  {([
-                    {
-                      icon: 'podium' as const,
-                      color: '#FFD700',
-                      label: t('bestSession'),
-                      value: achievements.bestSessionDrops > 0
-                        ? `${achievements.bestSessionDrops} drops (${formatDate(achievements.bestSessionDate)})`
-                        : '—',
-                    },
-                    {
-                      icon: 'flame' as const,
-                      color: '#FF6B00',
-                      label: t('bestStreak'),
-                      value: achievements.bestStreak > 0 ? `${achievements.bestStreak} ${t('days')}` : '—',
-                    },
-                    {
-                      icon: 'flash' as const,
-                      color: '#FFD700',
-                      label: t('happyHours'),
-                      value: achievements.happyHoursUsed > 0 ? `${achievements.happyHoursUsed} ${t('used')}` : '—',
-                    },
-                    {
-                      icon: 'trophy' as const,
-                      color: '#C0C0C0',
-                      label: t('challengesDone'),
-                      value: achievements.challengesCompleted > 0 ? `${achievements.challengesCompleted} ${t('completed')}` : '—',
-                    },
-                  ]).map((a, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.achieveRow,
-                        i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
-                      ]}
-                    >
-                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba(a.color, 0.12) }]}>
-                        <Ionicons name={a.icon} size={15} color={a.color} />
-                      </View>
-                      <Text style={styles.achieveLabel}>{a.label}</Text>
-                      <Text style={[styles.achieveValue, getNumberStyle(13)]}>{a.value}</Text>
-                    </View>
-                  ))}
-                </BlurView>
-              </View>
-            </Animated.View>
-          </>
-        )}
-      </ScrollView>
+              <PeriodPage p={p} periodState={states[p]} branding={branding} t={t} />
+            </ScrollView>
+          ))}
+        </SliderTabs>
+      </View>
     </View>
   );
 }
@@ -537,92 +565,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#080808',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  scopeRow: {
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    marginBottom: 8,
   },
-  headerTitle: {
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: '#FFFFFF',
-    letterSpacing: 0.4,
+  tabsWrapper: {
+    flex: 1,
   },
-  scroll: { flex: 1 },
+  tabBar: {
+    marginHorizontal: 16,
+    marginBottom: 0,
+  },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     paddingTop: 8,
   },
 
-  // ── Scope toggle ──
-  scopeToggle: {
-    borderRadius: appTheme.borderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  scopeToggleBlur: {
-    flexDirection: 'row',
-    borderRadius: appTheme.borderRadius.xl,
-    overflow: 'hidden',
-    padding: 4,
-    backgroundColor: GLASS_BG,
-  },
-  scopeTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: appTheme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  scopeTabActive: {
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  scopeTabText: {
-    ...fontStyles.heading,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
-  },
-  scopeTabTextActive: {
-    color: '#FFFFFF',
-  },
-
-  // ── Period selector ──
-  periodRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  periodPill: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-  },
-  periodPillActive: {
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  periodText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
-    letterSpacing: 0.2,
-  },
-  periodTextActive: {
-    color: '#FFFFFF',
-  },
 
   // ── Hero card ──
   heroCardOuter: {
@@ -699,11 +657,10 @@ const styles = StyleSheet.create({
 
   // ── Section wrapper ──
   sectionTitle: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.35)',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 13,
+    color: appTheme.colors.textTertiary,
+    letterSpacing: 2,
     marginBottom: 8,
     marginLeft: 2,
   },

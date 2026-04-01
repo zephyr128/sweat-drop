@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -64,6 +64,7 @@ function getClaimStatus(rewardId: string, limit: RedemptionLimit, redemptions: R
 
 export default function StoreScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
   const { getActiveGymId } = useGymStore();
@@ -170,16 +171,17 @@ export default function StoreScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFillObject} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -188,30 +190,39 @@ export default function StoreScreen() {
       />
 
       {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <TouchableOpacity
-          onPress={() => router.push('/redemptions')}
-          style={styles.headerButton}
-        >
-          <Ionicons name="receipt-outline" size={24} color={branding.primary} />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title={t('title')}
+        right={
+          <TouchableOpacity onPress={() => router.push('/redemptions')} hitSlop={8}>
+            <Ionicons name="receipt-outline" size={24} color={branding.primary} />
+          </TouchableOpacity>
+        }
+      />
 
       <FlatList
         data={rewards}
         keyExtractor={(item) => item.id}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-            <View style={[styles.balanceCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.balanceBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            <View style={[styles.balanceCard, {
+              borderTopColor: hexToRgba(branding.primary, 0.30),
+              borderLeftColor: hexToRgba(branding.primary, 0.12),
+              borderRightColor: 'rgba(255,255,255,0.05)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            }]}>
+              <BlurView intensity={50} tint="dark" style={styles.balanceBlur}>
+                <LinearGradient
+                  colors={[hexToRgba(branding.primary, 0.12), 'rgba(255,255,255,0.02)', 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 <Ionicons name="water" size={22} color={branding.primary} />
                 <Text style={[styles.balanceText, getNumberStyle(18), { color: branding.primary }]}>
-                  {localDrops} drops
+                  {localDrops.toLocaleString()} drops
                 </Text>
                 <Text style={styles.balanceLabel}>{t('availableAtGym')}</Text>
               </BlurView>
@@ -238,13 +249,31 @@ export default function StoreScreen() {
               <TouchableOpacity
                 style={[
                   styles.rewardCard,
-                  { borderColor: hexToRgba(branding.primary, disabled ? 0.06 : 0.18) },
+                  disabled ? {
+                    borderTopColor: 'rgba(255,255,255,0.06)',
+                    borderLeftColor: 'rgba(255,255,255,0.04)',
+                    borderRightColor: 'rgba(255,255,255,0.02)',
+                    borderBottomColor: 'rgba(255,255,255,0.02)',
+                  } : {
+                    borderTopColor: hexToRgba(branding.primary, 0.28),
+                    borderLeftColor: hexToRgba(branding.primary, 0.12),
+                    borderRightColor: 'rgba(255,255,255,0.05)',
+                    borderBottomColor: 'rgba(255,255,255,0.03)',
+                  },
                   disabled && styles.rewardCardDisabled,
                 ]}
                 onPress={() => router.push({ pathname: '/reward-detail', params: { rewardId: reward.id, gymId: activeGymId || '' } })}
                 activeOpacity={0.8}
               >
-                <BlurView intensity={50} tint="dark" style={[styles.rewardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <BlurView intensity={50} tint="dark" style={styles.rewardBlur}>
+                  {!disabled && (
+                    <LinearGradient
+                      colors={[hexToRgba(branding.primary, 0.08), 'rgba(255,255,255,0.02)', 'transparent']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
+                  )}
                   {reward.image_url ? (
                     <Image
                       source={reward.image_url}
@@ -316,7 +345,7 @@ export default function StoreScreen() {
           );
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -324,26 +353,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    flex: 1,
-    fontSize: 26,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  headerButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   centerContent: {
     flex: 1,
@@ -358,16 +367,19 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   balanceCard: {
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     marginBottom: theme.spacing.lg,
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
   },
   balanceBlur: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: 18,
     overflow: 'hidden',
     padding: theme.spacing.lg,
   },
@@ -401,10 +413,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     marginBottom: theme.spacing.lg,
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
   },
   rewardCardDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   rewardBlur: {
     borderRadius: 20,

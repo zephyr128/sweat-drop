@@ -86,13 +86,38 @@ function startOfMonth(): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+// Cache per gymId+period so switching tabs never blanks content
+const cache = new Map<string, MyStatsState>();
+
 export function useMyStats(gymId: string | null | undefined) {
   const { session } = useSession();
-  const [state, setState] = useState<MyStatsState>(EMPTY);
+
+  // Initialize from cache if available
+  const [states, setStates] = useState<Record<StatsPeriod, MyStatsState>>(() => ({
+    today: { ...EMPTY, loading: false },
+    week:  { ...EMPTY, loading: false },
+    month: { ...EMPTY, loading: false },
+    all:   { ...EMPTY, loading: false },
+  }));
+
+  // For backwards-compat: expose the active period's state
+  const [activePeriod, setActivePeriod] = useState<StatsPeriod>('week');
+  const state = states[activePeriod];
 
   const load = useCallback(async (period: StatsPeriod) => {
     if (!session?.user) return;
-    setState((prev) => ({ ...prev, loading: true }));
+    setActivePeriod(period);
+
+    const cacheKey = `${gymId ?? 'global'}:${period}`;
+    const cached = cache.get(cacheKey);
+
+    // If we have cached data, show it immediately and refresh silently
+    if (cached) {
+      setStates((prev) => ({ ...prev, [period]: { ...cached, loading: false } }));
+    } else {
+      // Only show loading spinner on the very first load of this period
+      setStates((prev) => ({ ...prev, [period]: { ...prev[period], loading: true } }));
+    }
     const userId = session.user.id;
 
     try {
@@ -333,7 +358,7 @@ export function useMyStats(gymId: string | null | undefined) {
         .eq('is_completed', true);
       const challengesCompleted = completedChallenges?.length ?? 0;
 
-      setState({
+      const newState: MyStatsState = {
         periodStats: { rank, streak, sessions: totalSessions, hours: totalHours, totalDrops: periodDrops },
         breakdown: { today: dropsToday, week: dropsWeek, month: dropsMonth, all: dropsAll },
         origin,
@@ -348,12 +373,15 @@ export function useMyStats(gymId: string | null | undefined) {
           challengesCompleted,
         },
         loading: false,
-      });
+      };
+
+      cache.set(cacheKey, newState);
+      setStates((prev) => ({ ...prev, [period]: newState }));
     } catch (err) {
       log.error('[useMyStats] Error:', err);
-      setState((prev) => ({ ...prev, loading: false }));
+      setStates((prev) => ({ ...prev, [period]: { ...prev[period], loading: false } }));
     }
   }, [session?.user?.id, gymId]);
 
-  return { state, load };
+  return { state, states, load }; // state kept for backwards-compat with other callers
 }

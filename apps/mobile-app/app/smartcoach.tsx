@@ -11,7 +11,7 @@ import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 
@@ -170,11 +170,7 @@ export default function SmartCoachScreen() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('title')}</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <ScreenHeader title={t('title')} insetHandled />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={branding.primary} />
           <Text style={styles.loadingText}>{t('loading')}</Text>
@@ -192,12 +188,7 @@ export default function SmartCoachScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle}>{t('title')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={t('title')} insetHandled />
 
       <ScrollView
         style={styles.scrollView}
@@ -298,24 +289,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: theme.typography.fontSize['2xl'],
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: {
-    width: 40,
   },
   subtitle: {
     fontSize: theme.typography.fontSize.base,

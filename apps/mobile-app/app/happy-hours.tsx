@@ -10,7 +10,7 @@ import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useUpcomingHappyHours, type HappyHourWindow } from '@/hooks/useUpcomingHappyHours';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { log } from '@/lib/logger';
@@ -112,12 +112,7 @@ export default function HappyHoursScreen() {
         style={styles.gradient}
       />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('title')}</Text>
-          <View style={{ width: 36 }} />
-        </View>
+        <ScreenHeader title={t('title')} insetHandled />
 
         <ScrollView
           style={styles.scroll}
@@ -280,18 +275,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
-  },
   scroll: {
     flex: 1,
   },
@@ -397,10 +380,9 @@ const styles = StyleSheet.create({
 
   // Section title
   sectionTitle: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 2,
     color: theme.colors.textTertiary,
     marginBottom: 8,
     marginTop: 18,

@@ -129,8 +129,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   btnText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
+    ...fontStyles.heading,
+    fontSize: 16,
+    letterSpacing: 1.5,
     color: theme.colors.text,
   },
   btnTextDestructive: {

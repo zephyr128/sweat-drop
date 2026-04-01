@@ -341,9 +341,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryBtnText: {
-    ...fontStyles.bodySemiBold,
+    ...fontStyles.heading,
+    fontSize: 16,
+    letterSpacing: 1.5,
     color: theme.colors.text,
-    fontSize: theme.typography.fontSize.base,
   },
   textBtn: {
     alignItems: 'center',

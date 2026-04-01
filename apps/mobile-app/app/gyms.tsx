@@ -341,9 +341,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...fontStyles.heading,
-    fontSize: 26,
+    fontSize: 22,
     color: baseTheme.colors.text,
-    letterSpacing: 2,
+    letterSpacing: 1.5,
   },
   headerSubtitle: {
     ...fontStyles.body,

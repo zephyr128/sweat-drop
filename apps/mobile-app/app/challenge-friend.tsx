@@ -16,7 +16,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import BackButton from '@/components/BackButton';
+import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
@@ -200,11 +200,7 @@ export default function ChallengeFriendScreen() {
           style={styles.gradientTop}
         />
         <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.header}>
-            <BackButton />
-            <Text style={styles.headerTitle}>{t('challengeTitle')}</Text>
-            <View style={{ width: 40 }} />
-          </View>
+          <ScreenHeader title={t('challengeTitle')} insetHandled />
           <Text style={styles.centerMessage}>{t('signInRequired')}</Text>
         </SafeAreaView>
       </View>
@@ -219,11 +215,7 @@ export default function ChallengeFriendScreen() {
           style={styles.gradientTop}
         />
         <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.header}>
-            <BackButton />
-            <Text style={styles.headerTitle}>{t('challengeTitle')}</Text>
-            <View style={{ width: 40 }} />
-          </View>
+          <ScreenHeader title={t('challengeTitle')} insetHandled />
           <View style={styles.loadingBox}>
             <Text style={styles.centerMessage}>{t('challengeBackendUnavailableBody')}</Text>
           </View>
@@ -239,11 +231,7 @@ export default function ChallengeFriendScreen() {
         style={styles.gradientTop}
       />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{t('challengeTitle')}</Text>
-          <View style={{ width: 40 }} />
-        </View>
+        <ScreenHeader title={t('challengeTitle')} insetHandled />
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -544,19 +532,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
-  },
   loadingBox: {
     flex: 1,
     justifyContent: 'center',
@@ -570,9 +545,9 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xl,
   },
   sectionLabel: {
-    ...fontStyles.body,
-    fontSize: 11,
-    letterSpacing: 1.2,
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 2,
     color: theme.colors.textTertiary,
     marginBottom: 8,
     marginTop: 4,
@@ -633,8 +608,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
+    ...fontStyles.heading,
+    fontSize: 18,
+    letterSpacing: 1.5,
   },
   invTitle: {
     ...fontStyles.bodySemiBold,
@@ -668,8 +644,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryBtnText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
+    ...fontStyles.heading,
+    fontSize: 15,
+    letterSpacing: 1.2,
     color: theme.colors.textSecondary,
   },
   acceptCta: {

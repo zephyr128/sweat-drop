@@ -27,6 +27,8 @@
   "monthlyCapDesc": "{{rewarded}} of {{max}} rewarded this month",
 
   "applySection": "Have a friend's code?",
+  "applySpotlightDesc": "Enter your friend's code to connect the referral and unlock rewards.",
+  "applyRevealCta": "Enter code",
   "applyPlaceholder": "Enter friend's code",
   "applyCta": "Apply code",
   "applyEmpty": "Enter a code first.",
@@ -38,8 +40,18 @@
   "deepLinkConfirm": "Apply invite code \"{{code}}\" at {{gym}}?",
 
   "statusSection": "Your referrals",
+  "funnelTitle": "Referral funnel",
+  "funnelInvited": "Invited",
+  "funnelJoined": "Joined",
+  "funnelVerified": "Verified",
+  "funnelRewarded": "Rewarded",
+  "filterAll": "All",
+  "filterInProgress": "In progress",
+  "filterRewarded": "Rewarded",
+  "filterBlocked": "Blocked",
   "emptyTitle": "No referrals yet",
   "emptyDesc": "Share your link with friends to start earning bonus drops together.",
+  "emptyFiltered": "No referrals in this filter.",
 
   "faqTitle": "FAQ",
   "faq1Q": "When do I get my reward?",
@@ -53,5 +65,14 @@
   "statePending": "Pending",
   "stateDone": "Done",
   "stateFailed": "Failed",
-  "stateInfo": "Info"
+  "stateInfo": "Info",
+  "progressLabel": "Progress",
+  "journeyTitle": "Referral journey",
+  "stepCurrent": "Current",
+  "stepInviteSent": "Invite sent",
+  "stepFriendJoined": "Friend joined with code",
+  "stepFirstCheckin": "First QR check-in",
+  "stepVerifiedCheckin": "Identity verified",
+  "stepRewardSettled": "Reward settled",
+  "learnMore": "Learn more"
 }
