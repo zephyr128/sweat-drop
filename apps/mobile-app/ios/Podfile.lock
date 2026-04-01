@@ -280,6 +280,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - ExpoNetwork (55.0.9):
+    - ExpoModulesCore
   - ExpoSharing (13.0.1):
     - ExpoModulesCore
   - ExpoSplashScreen (31.0.13):
@@ -1633,6 +1635,29 @@ PODS:
     - Yoga
   - react-native-netinfo (11.4.1):
     - React-Core
+  - react-native-pager-view (8.0.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - SwiftUIIntrospect (~> 1.0)
+    - Yoga
   - react-native-safe-area-context (5.6.2):
     - hermes-engine
     - RCTRequired
@@ -2482,6 +2507,7 @@ PODS:
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
   - Sentry/HybridSDK (8.56.1)
+  - SwiftUIIntrospect (1.3.0)
   - VisionCamera (4.7.3):
     - VisionCamera/Core (= 4.7.3)
     - VisionCamera/FrameProcessors (= 4.7.3)
@@ -2525,6 +2551,7 @@ DEPENDENCIES:
   - ExpoLocalization (from `../../../node_modules/expo-localization/ios`)
   - ExpoLocation (from `../../../node_modules/expo-location/ios`)
   - ExpoModulesCore (from `../../../node_modules/expo-modules-core`)
+  - ExpoNetwork (from `../../../node_modules/expo-network/ios`)
   - ExpoSharing (from `../../../node_modules/expo-sharing/ios`)
   - ExpoSplashScreen (from `../../../node_modules/expo-splash-screen/ios`)
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
@@ -2567,6 +2594,7 @@ DEPENDENCIES:
   - React-microtasksnativemodule (from `../../../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - react-native-ble-plx (from `../../../node_modules/react-native-ble-plx`)
   - "react-native-netinfo (from `../../../node_modules/@react-native-community/netinfo`)"
+  - react-native-pager-view (from `../../../node_modules/react-native-pager-view`)
   - react-native-safe-area-context (from `../../../node_modules/react-native-safe-area-context`)
   - "react-native-skia (from `../../../node_modules/@shopify/react-native-skia`)"
   - react-native-view-shot (from `../../../node_modules/react-native-view-shot`)
@@ -2632,6 +2660,7 @@ SPEC REPOS:
     - SDWebImageSVGCoder
     - SDWebImageWebPCoder
     - Sentry
+    - SwiftUIIntrospect
 
 EXTERNAL SOURCES:
   EXApplication:
@@ -2690,6 +2719,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-location/ios"
   ExpoModulesCore:
     :path: "../../../node_modules/expo-modules-core"
+  ExpoNetwork:
+    :path: "../../../node_modules/expo-network/ios"
   ExpoSharing:
     :path: "../../../node_modules/expo-sharing/ios"
   ExpoSplashScreen:
@@ -2773,6 +2804,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native-ble-plx"
   react-native-netinfo:
     :path: "../../../node_modules/@react-native-community/netinfo"
+  react-native-pager-view:
+    :path: "../../../node_modules/react-native-pager-view"
   react-native-safe-area-context:
     :path: "../../../node_modules/react-native-safe-area-context"
   react-native-skia:
@@ -2897,6 +2930,7 @@ SPEC CHECKSUMS:
   ExpoLocalization: ce989b8e6b86ff38698f8ee8e897b9a2e85d46d2
   ExpoLocation: 3579b0f9cbfb04495746d637a9e9057beba72992
   ExpoModulesCore: 77496909fd3c800f97f7f2007dd26aeac4bb3798
+  ExpoNetwork: eb0cf4cc0f901e2890cc00c0e88aad040306ae4a
   ExpoSharing: c4540ef2e6615a92e05d2bddf019e1f58f27119e
   ExpoSplashScreen: 72fbc6dd9d6404dd9d0725a56c9ac1383bc0b14f
   ExpoWebBrowser: 6890a769e6c9d83da938dceb9a03e764afc3ec9c
@@ -2947,6 +2981,7 @@ SPEC CHECKSUMS:
   React-microtasksnativemodule: d77e0c426fce34c23227394c96ca1033b30c813c
   react-native-ble-plx: 86f4b682a06deaa11c0633f38502b30d2455bed6
   react-native-netinfo: f0a9899081c185db1de5bb2fdc1c88c202a059ac
+  react-native-pager-view: 8fe6fcac550c2c5083e23706f11452e27ca5506f
   react-native-safe-area-context: 53f796cb6c814661bbe99fbdfd0585d07b996cdd
   react-native-skia: a9c0ab55f18fa812b0db161c333e8bff4d739bb9
   react-native-view-shot: 26174e54ec6b4b7c5d70b86964b747919759adc1
@@ -2996,6 +3031,7 @@ SPEC CHECKSUMS:
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
   Sentry: b3ec44d01708fce73f99b544beb57e890eca4406
+  SwiftUIIntrospect: fee9aa07293ee280373a591e1824e8ddc869ba5d
   VisionCamera: 47f10351a1b6a8d251b90986ae72ca5f52331954
   Yoga: 3fd22c2cae22d7a2b0f0b538f55f7c2a17dc94d5
 
