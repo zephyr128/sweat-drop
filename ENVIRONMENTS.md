@@ -217,6 +217,7 @@ eas submit --platform ios
 | `EXPO_PUBLIC_EAS_PROJECT_ID`      | Yes      | EAS project UUID               |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Yes      | Google Sign-In (web)           |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Yes      | Google Sign-In (iOS)           |
+| `EXPO_PUBLIC_SITE_URL`            | Yes      | Landing page URL — used as `emailRedirectTo` base for email confirm (`/auth/confirm`) and password reset (`/auth/reset`) emails. Must match the deployed landing page domain (`https://www.sweat-drop.com` in prod). |
 | `EXPO_PUBLIC_TERMS_URL`           | No       | Terms of service URL           |
 | `EXPO_PUBLIC_PRIVACY_URL`         | No       | Privacy policy URL             |
 | `EXPO_PUBLIC_SENTRY_DSN`          | No       | Sentry error tracking          |
