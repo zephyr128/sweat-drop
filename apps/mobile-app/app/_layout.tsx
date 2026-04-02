@@ -131,23 +131,20 @@ function StackNavigator() {
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="transactions" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="(onboarding)/reset-password"
-        options={{
-          headerShown: false,
-          animation: 'fade',
-          animationDuration: 300,
-          gestureEnabled: false,
-        }}
-      />
     </Stack>
   );
 }
 
 function parseReferralCode(url: string | null): string | null {
   if (!url) return null;
-  const match = url.match(/(?:sweatdrop:\/\/|https?:\/\/sweat-drop\.com\/)join\/([A-Za-z0-9_-]+)/);
-  return match?.[1] ?? null;
+  // Match both plain and percent-encoded characters (encodeURIComponent from the web page)
+  const match = url.match(/(?:sweatdrop:\/\/|https?:\/\/sweat-drop\.com\/)join\/([A-Za-z0-9_\-%.]+)/);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }
 
 /**
@@ -183,6 +180,7 @@ export default function RootLayout() {
   const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
   const clearPendingPasswordRecovery = useAuthStore((s) => s.clearPendingPasswordRecovery);
   const pushTokenRegistered = useRef(false);
+  const coldStartReferralCode = useRef<string | null>(null);
   const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
   const hydratePendingReferral = usePendingReferralStore((s) => s.hydrate);
 
@@ -194,9 +192,9 @@ export default function RootLayout() {
   // Deep link handler for sweatdrop:// URLs
   // Handles: sweatdrop://join/<code> (referral), sweatdrop://auth/confirm#... (email verification tokens)
   useEffect(() => {
-    const handleDeepLink = async (event: { url: string }) => {
+    const processUrl = async (url: string, isWarmLaunch: boolean) => {
       // Auth tokens from landing page (email confirm / password reset)
-      const tokens = parseAuthTokensFromUrl(event.url);
+      const tokens = parseAuthTokensFromUrl(url);
       if (tokens) {
         log.debug('[App] Auth tokens received via deep link');
         try {
@@ -213,24 +211,52 @@ export default function RootLayout() {
         return;
       }
 
-      // Referral codes
-      const code = parseReferralCode(event.url);
+      // Referral codes — always store the code.
+      const code = parseReferralCode(url);
       if (code) {
-        log.debug('[App] Referral deep link received:', code);
+        log.debug('[App] Referral deep link received:', code, 'warm:', isWarmLaunch);
         setPendingCode(code);
+        if (isWarmLaunch) {
+          setTimeout(() => router.navigate('/invite-friend' as any), 150);
+        } else {
+          // Flag for cold-start navigation effect (fires once user reaches a main screen)
+          coldStartReferralCode.current = code;
+        }
       }
     };
 
-    // Check initial URL on cold start
+    // Cold start: just store the code, don't navigate (index.tsx handles routing)
     Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleDeepLink({ url });
-      }
+      if (url) processUrl(url, false);
     });
 
-    const sub = Linking.addEventListener('url', handleDeepLink);
+    // Warm/hot launch: store and navigate
+    const sub = Linking.addEventListener('url', (event) => {
+      processUrl(event.url, true);
+    });
     return () => sub.remove();
   }, []);
+
+  // Cold-start referral: once initial routing completes and user lands on a main
+  // screen (home, wallet, etc.), auto-navigate to /invite-friend so they see the
+  // accept sheet immediately. Only fires for codes from getInitialURL (not hydration).
+  useEffect(() => {
+    if (!coldStartReferralCode.current) return;
+    if (!isInitialized || !session?.user) return;
+
+    const topSegment = (segments as string[])[0];
+    const isMainScreen =
+      topSegment === 'home' ||
+      topSegment === 'wallet' ||
+      topSegment === 'profile' ||
+      topSegment === 'stats';
+    if (!isMainScreen) return;
+
+    const code = coldStartReferralCode.current;
+    coldStartReferralCode.current = null;
+    log.debug('[App] Cold-start referral — navigating to invite-friend with code:', code);
+    setTimeout(() => router.navigate('/invite-friend' as any), 300);
+  }, [isInitialized, session?.user, segments]);
 
   // Load custom fonts
   const [fontsLoaded, fontError] = useFonts({

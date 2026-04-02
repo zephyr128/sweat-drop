@@ -32,13 +32,14 @@ export default function NotificationsScreen() {
 
   const completeOnboarding = async () => {
     await AsyncStorage.setItem('pushNotificationsAsked', 'true');
+    // Advance the step BEFORE fetchProfile so computeOnboardingStep
+    // won't re-enter the notifications branch when it runs inside fetchProfile.
+    setOnboardingStep('done');
     // Re-fetch profile so we have the latest onboarding_completed flag.
     const { fetchProfile, profile: staleProfile } = useAuthStore.getState();
     await fetchProfile();
     const profile = useAuthStore.getState().profile ?? staleProfile;
     if (profile?.onboarding_completed) {
-      // Profile is already fully set up — go straight home.
-      setOnboardingStep('done');
       router.replace('/home');
     } else {
       setOnboardingStep('profile_setup');

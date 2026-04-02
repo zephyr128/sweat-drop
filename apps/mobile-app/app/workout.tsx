@@ -2606,6 +2606,13 @@ export default function WorkoutScreen() {
           badges_earned: serverBadges,
           securityMessage,
         });
+
+        // Evaluate referral qualification (check-in + identity verification)
+        void supabase
+          .rpc('evaluate_referral_qualification', { p_referral_id: null })
+          .then(({ error: refErr }) => {
+            if (refErr && __DEV__) log.warn('[Workout] evaluate_referral_qualification failed:', refErr.message);
+          });
       }
     } catch (awardRetryError: any) {
       if (awardRetryError?._noRetry) {

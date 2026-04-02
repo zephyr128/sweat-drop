@@ -49,6 +49,7 @@
     "googleConfigError": "Google sign-in configuration error. Please contact support.",
     "legalHint": "Accept Terms & Privacy below to continue",
     "appleFailed": "Apple sign-in failed. Please try again.",
+    "appleConfigError": "Apple sign-in is misconfigured for this app build. Please contact support.",
     "appleNotAvailable": "Apple Sign-In is not available on this device.",
     "appleNetworkError": "Could not reach Apple servers. Check your connection and try again.",
     "googleNetworkError": "Could not reach Google servers. Check your connection and try again.",

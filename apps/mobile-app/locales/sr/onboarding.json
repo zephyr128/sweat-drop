@@ -49,6 +49,7 @@
     "googleConfigError": "Greška u konfiguraciji Google prijave. Kontaktiraj podršku.",
     "legalHint": "Prihvati Uslove i Politiku privatnosti ispod da nastaviš",
     "appleFailed": "Apple prijava nije uspela. Pokušaj ponovo.",
+    "appleConfigError": "Apple prijava nije ispravno podešena za ovaj build aplikacije. Kontaktiraj podršku.",
     "appleNotAvailable": "Apple prijava nije dostupna na ovom uređaju.",
     "appleNetworkError": "Nije moguće povezati se sa Apple serverom. Proveri internet i pokušaj ponovo.",
     "googleNetworkError": "Nije moguće povezati se sa Google serverom. Proveri internet i pokušaj ponovo.",

@@ -515,6 +515,13 @@ export default function WorkoutSimScreen() {
         dropsEarned = awardRow?.drops_earned ?? 0;
         awardMultiplier = awardRow?.multiplier ?? null;
         awardBadges = awardRow?.badges_earned?.length ? awardRow.badges_earned : null;
+
+        // Evaluate referral qualification (check-in + identity verification)
+        void supabase
+          .rpc('evaluate_referral_qualification', { p_referral_id: null })
+          .then(({ error: refErr }) => {
+            if (refErr && __DEV__) log.warn('[WorkoutSim] evaluate_referral_qualification failed:', refErr.message);
+          });
       } catch (awardRetryErr) {
         log.error('[WorkoutSim] award_drops failed after all retries:', awardRetryErr);
         await savePendingFinalization(session.id);

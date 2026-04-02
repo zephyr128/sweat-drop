@@ -111,6 +111,7 @@ export interface Friend1v1Invitation {
 
 const JOIN_BASE_URL = 'https://sweat-drop.com/join/';
 const JOIN_DEEP_LINK_PREFIX = 'sweatdrop://join/';
+const PREVIEW_API_BASE = 'https://sweat-drop.com/api/referral-preview/';
 
 export function buildJoinUrl(code: string): string {
   return `${JOIN_BASE_URL}${encodeURIComponent(code)}`;
@@ -118,6 +119,93 @@ export function buildJoinUrl(code: string): string {
 
 export function buildJoinDeepLink(code: string): string {
   return `${JOIN_DEEP_LINK_PREFIX}${encodeURIComponent(code)}`;
+}
+
+// ── Referral code preview (resolves gym info from invite code) ──
+
+export interface ReferralPreviewResult {
+  status: 'valid' | 'expired' | 'used' | 'invalid' | 'error';
+  gymId: string | null;
+  gymName: string | null;
+  gymCity: string | null;
+  gymLogoUrl: string | null;
+  gymPrimaryColor: string | null;
+  referrerName: string | null;
+}
+
+const EMPTY_PREVIEW: ReferralPreviewResult = {
+  status: 'error',
+  gymId: null,
+  gymName: null,
+  gymCity: null,
+  gymLogoUrl: null,
+  gymPrimaryColor: null,
+  referrerName: null,
+};
+
+function parsePreviewPayload(d: Record<string, unknown>): ReferralPreviewResult {
+  return {
+    status: (d.status as ReferralPreviewResult['status']) || 'error',
+    gymId: (d.gym_id as string) || null,
+    gymName: (d.gym_name as string) || null,
+    gymCity: (d.gym_city as string) || null,
+    gymLogoUrl: (d.gym_logo_url as string) || null,
+    gymPrimaryColor: (d.gym_primary_color as string) || null,
+    referrerName: (d.referrer_name as string) || null,
+  };
+}
+
+/**
+ * Preview a referral code to get gym info + referrer name.
+ * Tries the Supabase RPC first (reliable, same DB), falls back to the
+ * landing page HTTP API if the RPC doesn't exist yet.
+ */
+export async function previewReferralCode(code: string): Promise<ReferralPreviewResult> {
+  const trimmed = code.trim().toUpperCase();
+  if (!trimmed || trimmed.length < 4) return { ...EMPTY_PREVIEW, status: 'invalid' };
+
+  // 1. Try Supabase RPC directly (bypass the custom wrapper to avoid type issues)
+  try {
+    const { data, error } = await supabase.rpc('preview_referral_code', {
+      p_invite_code: trimmed,
+    });
+    if (__DEV__) {
+      console.log('[previewReferralCode] RPC response:', JSON.stringify({ data, error: error?.message }));
+    }
+    if (!error && data && typeof data === 'object' && !Array.isArray(data)) {
+      const d = data as Record<string, unknown>;
+      if (d.status) return parsePreviewPayload(d);
+    }
+    // Even if the status field is missing, if we got data back it means the
+    // function exists. Don't fall through to HTTP.
+    if (!error && data != null) {
+      if (__DEV__) console.warn('[previewReferralCode] RPC returned unexpected shape:', data);
+      return EMPTY_PREVIEW;
+    }
+    if (error) {
+      if (__DEV__) console.warn('[previewReferralCode] RPC error:', error.code, error.message);
+      if (!isFriendSocialBackendUnavailable(error)) {
+        return EMPTY_PREVIEW;
+      }
+      // Function doesn't exist on this server — fall through to HTTP
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[previewReferralCode] RPC exception:', e);
+  }
+
+  // 2. Fallback: landing page HTTP API
+  try {
+    const resp = await fetch(`${PREVIEW_API_BASE}${encodeURIComponent(trimmed)}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (__DEV__) console.log('[previewReferralCode] HTTP status:', resp.status);
+    if (!resp.ok) return EMPTY_PREVIEW;
+    const d = (await resp.json()) as Record<string, unknown>;
+    return parsePreviewPayload(d);
+  } catch (e) {
+    if (__DEV__) console.warn('[previewReferralCode] HTTP exception:', e);
+    return EMPTY_PREVIEW;
+  }
 }
 
 function parseInviteResult(data: unknown): {
@@ -148,29 +236,30 @@ export async function fetchMyFriendInviteCode(gymId: string | null | undefined):
   joinUrl: string | null;
   deepLink: string | null;
   unavailable: boolean;
+  noGym: boolean;
   errorMessage?: string;
 }> {
-  if (!gymId) return { code: null, joinUrl: null, deepLink: null, unavailable: true };
+  if (!gymId) return { code: null, joinUrl: null, deepLink: null, unavailable: false, noGym: true };
 
   const primary = await rpc('create_referral_invite', { p_gym_id: gymId });
   if (!primary.error) {
     const result = parseInviteResult(primary.data);
     if (__DEV__) console.log('[InviteAPI] create_referral_invite →', JSON.stringify(primary.data));
-    return { ...result, unavailable: false };
+    return { ...result, unavailable: false, noGym: false };
   }
   if (__DEV__) console.warn('[InviteAPI] create_referral_invite error:', primary.error.message, primary.error.code);
   if (!isFriendSocialBackendUnavailable(primary.error)) {
-    return { code: null, joinUrl: null, deepLink: null, unavailable: false, errorMessage: primary.error.message };
+    return { code: null, joinUrl: null, deepLink: null, unavailable: false, noGym: false, errorMessage: primary.error.message };
   }
 
   const fallback = await rpcFirstWorkingName<unknown>([
     'get_my_friend_invite_code',
     'get_friend_invite_code',
   ]);
-  if (fallback.error) return { code: null, joinUrl: null, deepLink: null, unavailable: false, errorMessage: fallback.error.message };
-  if (fallback.unavailable) return { code: null, joinUrl: null, deepLink: null, unavailable: true };
+  if (fallback.error) return { code: null, joinUrl: null, deepLink: null, unavailable: false, noGym: false, errorMessage: fallback.error.message };
+  if (fallback.unavailable) return { code: null, joinUrl: null, deepLink: null, unavailable: true, noGym: false };
   const result = parseInviteResult(fallback.data);
-  return { ...result, unavailable: false };
+  return { ...result, unavailable: false, noGym: false };
 }
 
 export interface ReferralMonthlyStats {
@@ -504,11 +593,12 @@ export async function applyFriendInviteCode(
 ): Promise<{
   ok: boolean;
   unavailable: boolean;
+  noGym: boolean;
   message?: string;
 }> {
   const code = rawCode.trim();
-  if (!code) return { ok: false, unavailable: false };
-  if (!gymId) return { ok: false, unavailable: true };
+  if (!code) return { ok: false, unavailable: false, noGym: false };
+  if (!gymId) return { ok: false, unavailable: false, noGym: true };
 
   const primary = await rpc('apply_referral_code', {
     p_invite_code: code,
@@ -516,20 +606,20 @@ export async function applyFriendInviteCode(
   });
   if (!primary.error) {
     const parsed = parseRpcSuccessPayload(primary.data);
-    return { ok: parsed.ok, unavailable: false, message: parsed.message };
+    return { ok: parsed.ok, unavailable: false, noGym: false, message: parsed.message };
   }
   if (!isFriendSocialBackendUnavailable(primary.error)) {
-    return { ok: false, unavailable: false, message: primary.error.message };
+    return { ok: false, unavailable: false, noGym: false, message: primary.error.message };
   }
 
   const fallback = await rpcFirstWorkingName<unknown>(
     ['apply_friend_invite_code', 'apply_friend_referral_code'],
     { p_code: code },
   );
-  if (fallback.error) return { ok: false, unavailable: false, message: fallback.error.message };
-  if (fallback.unavailable) return { ok: false, unavailable: true };
+  if (fallback.error) return { ok: false, unavailable: false, noGym: false, message: fallback.error.message };
+  if (fallback.unavailable) return { ok: false, unavailable: true, noGym: false };
   const parsed = parseRpcSuccessPayload(fallback.data);
-  return { ok: parsed.ok, unavailable: false, message: parsed.message };
+  return { ok: parsed.ok, unavailable: false, noGym: false, message: parsed.message };
 }
 
 // ── Gym member search (for opponent selection) ──
@@ -701,6 +791,80 @@ export async function fetchFriend1v1Invitations(userId: string | null | undefine
   if (fallback.error) return { items: [], unavailable: false, errorMessage: fallback.error.message };
   if (fallback.unavailable) return { items: [], unavailable: true };
   return { items: [], unavailable: false };
+}
+
+// ── Received referral (inbound — where user is the invitee) ──
+
+export interface ReceivedReferral {
+  referralId: string;
+  referrerName: string | null;
+  gymName: string | null;
+  gymCity: string | null;
+  status: string;
+  currentStatus: string;
+  joinedAt: string | null;
+  qualifiedCheckinAt: string | null;
+  qualifiedVerifiedAt: string | null;
+  rewardedAt: string | null;
+  rewardBlockReason: string | null;
+  createdAt: string;
+}
+
+export async function fetchMyReceivedReferral(): Promise<ReceivedReferral | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return null;
+
+    const { data, error } = await supabase
+      .from('referrals')
+      .select(`
+        id,
+        status,
+        joined_at,
+        qualified_checkin_at,
+        qualified_verified_at,
+        rewarded_at,
+        reward_block_reason,
+        created_at,
+        referrer:referrer_user_id ( username, full_name ),
+        gym:gym_id ( name, city )
+      `)
+      .eq('invitee_user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    const referrer = data.referrer as unknown as { username?: string; full_name?: string } | null;
+    const gym = data.gym as unknown as { name?: string; city?: string } | null;
+
+    const st = String(data.status ?? '').toLowerCase();
+    let currentStatus = st;
+    if (st === 'rewarded') currentStatus = 'rewarded';
+    else if (st === 'blocked') currentStatus = 'blocked';
+    else if (data.qualified_verified_at) currentStatus = 'verified_checkin';
+    else if (data.qualified_checkin_at) currentStatus = 'first_checkin';
+    else if (st === 'active') currentStatus = 'joined';
+    else currentStatus = 'accepted';
+
+    return {
+      referralId: String(data.id),
+      referrerName: referrer?.full_name || referrer?.username || null,
+      gymName: gym?.name || null,
+      gymCity: gym?.city || null,
+      status: st,
+      currentStatus,
+      joinedAt: data.joined_at ? String(data.joined_at) : null,
+      qualifiedCheckinAt: data.qualified_checkin_at ? String(data.qualified_checkin_at) : null,
+      qualifiedVerifiedAt: data.qualified_verified_at ? String(data.qualified_verified_at) : null,
+      rewardedAt: data.rewarded_at ? String(data.rewarded_at) : null,
+      rewardBlockReason: data.reward_block_reason ? String(data.reward_block_reason) : null,
+      createdAt: String(data.created_at),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function respondFriend1v1Invitation(

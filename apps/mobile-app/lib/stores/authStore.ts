@@ -129,12 +129,19 @@ function computeOnboardingStep(
     return 'profile_setup';
   }
 
-  // Check if push notifications need asking (only if enabled).
-  // Only shown once during the initial onboarding flow (before onboarding_completed).
-  // Returning users who reinstall / lose their push token are handled silently
-  // in the background by _layout.tsx — we never force them back through the
-  // notifications screen after onboarding is complete.
-  if (PUSH_NOTIFICATIONS_ENABLED && !profile.expo_push_token) {
+  // Show the notifications prompt only during the forward onboarding flow.
+  // Specifically: only if we're progressing from avatar/display_name (i.e. the
+  // currentStep shows we're actively moving through onboarding for the first time).
+  // If currentStep is already 'notifications' or later (home, done, etc.) we must
+  // NOT return 'notifications' again — that would cause an infinite loop where
+  // fetchProfile() keeps overwriting the step back to 'notifications' even after
+  // the user has already dismissed the screen.
+  const notificationsSteps: OnboardingStep[] = ['avatar', 'display_name', 'notifications'];
+  if (
+    PUSH_NOTIFICATIONS_ENABLED &&
+    !profile.expo_push_token &&
+    notificationsSteps.includes(currentStep)
+  ) {
     return 'notifications';
   }
 

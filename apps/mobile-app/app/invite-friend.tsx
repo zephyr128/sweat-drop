@@ -23,18 +23,31 @@ import { useAppModal } from '@/lib/stores/useAppModal';
 import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
+import { ReferralAcceptSheet, type ReferralAcceptSheetGym } from '@/components/ReferralAcceptSheet';
 import {
   applyFriendInviteCode,
   fetchFriendInviteStatusList,
   fetchMyFriendInviteCode,
+  fetchMyReceivedReferral,
   fetchReferralMonthlyStats,
+  previewReferralCode,
   type FriendInviteStatusRow,
+  type ReceivedReferral,
   type ReferralJourneyStep,
   type ReferralMonthlyStats,
 } from '@/lib/friendSocialApi';
+import { supabase } from '@/lib/supabase';
+import { useGymStore } from '@/lib/stores/useGymStore';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { log } from '@/lib/logger';
 
+
+interface SheetData {
+  code: string;
+  gym: ReferralAcceptSheetGym;
+  referrerName?: string | null;
+  mode: 'apply' | 'join';
+}
 
 interface HowItWorksStep {
   icon: keyof typeof Ionicons.glyphMap;
@@ -80,6 +93,7 @@ export default function InviteFriendScreen() {
   const [monthlyStats, setMonthlyStats] = useState<ReferralMonthlyStats | null>(null);
   const [codeUnavailable, setCodeUnavailable] = useState(false);
   const [listUnavailable, setListUnavailable] = useState(false);
+  const [noGym, setNoGym] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [applyInput, setApplyInput] = useState('');
   const [applying, setApplying] = useState(false);
@@ -89,32 +103,53 @@ export default function InviteFriendScreen() {
   const [expandedReferralId, setExpandedReferralId] = useState<string | null>(null);
   const [learnOpen, setLearnOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'rewarded' | 'blocked'>('all');
+  const [receivedReferral, setReceivedReferral] = useState<ReceivedReferral | null>(null);
 
-  const storePendingCode = usePendingReferralStore((s) => s.pendingCode);
+  // Referral accept bottom sheet
+  const [sheetData, setSheetData] = useState<SheetData | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const sheetVisible = sheetData !== null;
+
+  // Subscribe reactively — when the store gets a new code (e.g. deep link fires
+  // while this screen is already mounted) we pick it up immediately.
+  const pendingCode = usePendingReferralStore((s) => s.pendingCode);
   const clearPendingCode = usePendingReferralStore((s) => s.clearPendingCode);
-  // Capture pending code on mount and clear from store immediately
-  // so navigating back to home won't re-trigger the deep link push.
-  const [pendingCode] = useState(() => {
-    const code = storePendingCode;
-    if (code) clearPendingCode();
-    return code;
-  });
 
   const load = useCallback(async () => {
     setLoadError(null);
-    const [codeRes, listRes, statsRes] = await Promise.all([
+    const [codeRes, listRes, statsRes, received] = await Promise.all([
       fetchMyFriendInviteCode(activeGym?.id),
       fetchFriendInviteStatusList(activeGym?.id),
       fetchReferralMonthlyStats(activeGym?.id),
+      fetchMyReceivedReferral(),
     ]);
     if (codeRes.errorMessage) setLoadError(codeRes.errorMessage);
     else if (listRes.errorMessage) setLoadError(listRes.errorMessage);
     setInviteCode(codeRes.code);
     setJoinUrl(codeRes.joinUrl);
     setCodeUnavailable(codeRes.unavailable);
+    setNoGym(codeRes.noGym);
     setStatusItems(listRes.items);
     setListUnavailable(listRes.unavailable);
     setMonthlyStats(statsRes);
+    setReceivedReferral(received);
+
+    // If the user has an active inbound referral that hasn't been fully rewarded yet,
+    // proactively re-evaluate qualification. This picks up admin-side changes like
+    // identity verification without requiring another check-in/workout.
+    if (received && received.status === 'active' && received.currentStatus !== 'rewarded') {
+      supabase
+        .rpc('evaluate_referral_qualification', { p_referral_id: null })
+        .then(async ({ error: evalErr }) => {
+          if (evalErr) {
+            if (__DEV__) log.warn('[InviteFriend] evaluate_referral_qualification failed:', evalErr.message);
+            return;
+          }
+          // Re-fetch to show updated status
+          const updated = await fetchMyReceivedReferral();
+          if (updated) setReceivedReferral(updated);
+        });
+    }
   }, [activeGym?.id]);
 
   const onMount = useCallback(async () => {
@@ -127,40 +162,60 @@ export default function InviteFriendScreen() {
     void onMount();
   }, [onMount]);
 
-  // Auto-apply pending deep-link referral code
+  // Handle pending deep-link referral code once loading finishes.
+  // Both with-gym and no-gym cases now preview the code to get gym info,
+  // then open the accept sheet with the appropriate mode.
   useEffect(() => {
-    if (!pendingCode || !activeGym?.id || !session?.user || loading) return;
+    if (!pendingCode || !session?.user || loading) return;
 
-    const autoApply = async () => {
-      if (__DEV__) log.debug('[InviteFriend] Auto-applying pending referral code:', pendingCode);
+    let cancelled = false;
+    const openSheet = async () => {
+      if (activeGym?.id) {
+        // User already has a gym — show apply sheet immediately
+        if (__DEV__) log.debug('[InviteFriend] Opening apply sheet for pending code:', pendingCode);
+        setSheetData({
+          code: pendingCode,
+          gym: {
+            id: activeGym.id,
+            name: activeGym.name || '',
+            logoUrl: (activeGym as any).logo_url ?? null,
+            primaryColor: branding.primary,
+          },
+          mode: 'apply',
+        });
+        return;
+      }
 
-      showModal({
-        title: t('deepLinkTitle'),
-        body: t('deepLinkConfirm', { code: pendingCode, gym: activeGym.name || '' }),
-        buttons: [
-          {
-            label: t('common:cancel'),
-            style: 'cancel',
-            onPress: () => clearPendingCode(),
+      // No gym — preview the code to get gym info, then open join sheet
+      if (__DEV__) log.debug('[InviteFriend] Previewing code for no-gym user:', pendingCode);
+      setPreviewing(true);
+      const preview = await previewReferralCode(pendingCode);
+      if (cancelled) return;
+      setPreviewing(false);
+
+      if (preview.status === 'valid' && preview.gymId && preview.gymName) {
+        setSheetData({
+          code: pendingCode,
+          gym: {
+            id: preview.gymId,
+            name: preview.gymName,
+            city: preview.gymCity,
+            logoUrl: preview.gymLogoUrl,
+            primaryColor: preview.gymPrimaryColor || branding.primary,
           },
-          {
-            label: t('applyCta'),
-            onPress: async () => {
-              const res = await applyFriendInviteCode(pendingCode, activeGym.id);
-              clearPendingCode();
-              if (res.ok) {
-                showModal({ title: t('applySuccess') });
-                await load();
-              } else {
-                showModal({ title: t('applyFailed'), body: res.message || t('loadError') });
-              }
-            },
-          },
-        ],
-      });
+          referrerName: preview.referrerName,
+          mode: 'join',
+        });
+      } else {
+        // Preview failed or code is invalid — pre-fill the manual input
+        setApplyInput(pendingCode);
+        setShowApply(true);
+        clearPendingCode();
+      }
     };
 
-    autoApply();
+    void openSheet();
+    return () => { cancelled = true; };
   }, [pendingCode, activeGym?.id, session?.user, loading]);
 
   const onRefresh = useCallback(async () => {
@@ -169,7 +224,13 @@ export default function InviteFriendScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const fullUnavailable = codeUnavailable && listUnavailable;
+  const fullUnavailable = !noGym && codeUnavailable && listUnavailable;
+  // Only show the "sent" section when at least one referral has been engaged with
+  // (not just an auto-generated unused code sitting at 'invited' stage).
+  const hasEngagedReferrals = useMemo(
+    () => statusItems.some((row) => row.stage !== 'invited'),
+    [statusItems],
+  );
   const referralKpis = useMemo(() => {
     const invited = statusItems.length;
     const joined = statusItems.filter((row) => row.stage !== 'invited' && row.stage !== 'blocked' && row.stage !== 'expired').length;
@@ -244,26 +305,114 @@ export default function InviteFriendScreen() {
       showModal({ title: t('applyFailed'), body: t('applyEmpty') });
       return;
     }
-    if (!activeGym?.id) {
-      showModal({ title: t('applyFailed'), body: t('gymRequired') });
+
+    if (activeGym?.id) {
+      // User has a gym — open apply sheet
+      setSheetData({
+        code: trimmed,
+        gym: {
+          id: activeGym.id,
+          name: activeGym.name || '',
+          logoUrl: (activeGym as any).logo_url ?? null,
+          primaryColor: branding.primary,
+        },
+        mode: 'apply',
+      });
       return;
     }
-    setApplying(true);
-    const res = await applyFriendInviteCode(trimmed, activeGym.id);
-    setApplying(false);
-    if (res.unavailable) {
-      showModal({ title: t('backendUnavailableTitle'), body: t('backendUnavailableBody') });
-      return;
+
+    // No gym — preview the code to get gym info, then open join sheet
+    setPreviewing(true);
+    const preview = await previewReferralCode(trimmed);
+    setPreviewing(false);
+
+    if (preview.status === 'valid' && preview.gymId && preview.gymName) {
+      setSheetData({
+        code: trimmed,
+        gym: {
+          id: preview.gymId,
+          name: preview.gymName,
+          city: preview.gymCity,
+          logoUrl: preview.gymLogoUrl,
+          primaryColor: preview.gymPrimaryColor || branding.primary,
+        },
+        referrerName: preview.referrerName,
+        mode: 'join',
+      });
+    } else if (preview.status === 'expired' || preview.status === 'used' || preview.status === 'invalid') {
+      showModal({ title: t('applyFailed'), body: t('acceptSheet.errorTitle') });
+    } else {
+      // Preview API unreachable — save code for later and prompt to scan QR
+      usePendingReferralStore.getState().setPendingCode(trimmed);
+      showModal({
+        title: t('noGymTitle'),
+        body: t('noGymBody'),
+        buttons: [{ label: t('noGymCta') }],
+      });
     }
-    if (res.ok) {
-      setApplyInput('');
-      setShowApply(false);
-      showModal({ title: t('applySuccess') });
-      await load();
-      return;
+  }, [activeGym?.id, activeGym?.name, branding.primary, applyInput, t]);
+
+  const handleSheetAccept = useCallback(async (): Promise<boolean> => {
+    if (!sheetData) return false;
+    const { code: sheetCode, gym: sheetGym, mode } = sheetData;
+
+    try {
+      if (mode === 'join') {
+        const userId = session?.user?.id;
+        if (!userId) return false;
+
+        // 1. Create gym membership (ON CONFLICT DO NOTHING)
+        const { error: membershipErr } = await supabase
+          .from('gym_memberships')
+          .upsert(
+            { user_id: userId, gym_id: sheetGym.id, local_drops_balance: 0 },
+            { onConflict: 'user_id,gym_id', ignoreDuplicates: true },
+          );
+        if (membershipErr) {
+          log.error('[InviteFriend] Failed to create gym membership:', membershipErr);
+          return false;
+        }
+
+        // 2. Set home gym in profiles
+        const { error: profileErr } = await supabase
+          .from('profiles')
+          .update({ home_gym_id: sheetGym.id })
+          .eq('id', userId);
+        if (profileErr) {
+          log.error('[InviteFriend] Failed to set home gym:', profileErr);
+          return false;
+        }
+
+        // 3. Update local gym store so the app reflects the new gym
+        const gymStore = useGymStore.getState();
+        gymStore.setHomeGymId(sheetGym.id);
+        gymStore.clearPreview();
+      }
+
+      // 4. Apply referral code
+      const gymId = mode === 'join' ? sheetGym.id : activeGym?.id;
+      if (!gymId) return false;
+
+      const res = await applyFriendInviteCode(sheetCode, gymId);
+      if (res.ok) {
+        clearPendingCode();
+        setApplyInput('');
+        setShowApply(false);
+        return true;
+      }
+
+      log.warn('[InviteFriend] apply_referral_code failed:', res.message);
+      return false;
+    } catch (e) {
+      log.error('[InviteFriend] handleSheetAccept error:', e);
+      return false;
     }
-    showModal({ title: t('applyFailed'), body: res.message || t('loadError') });
-  }, [activeGym?.id, applyInput, load, t]);
+  }, [sheetData, session?.user?.id, activeGym?.id]);
+
+  const handleSheetDecline = useCallback(() => {
+    clearPendingCode();
+    setSheetData(null);
+  }, []);
 
   if (!session?.user) {
     return (
@@ -307,6 +456,30 @@ export default function InviteFriendScreen() {
               />
             }
           >
+            {noGym && (
+              <Animated.View entering={FadeInDown.delay(80).duration(400)}>
+                <View style={[styles.banner, { borderColor: hexToRgba(branding.primary, 0.22) }]}>
+                  <BlurView intensity={50} tint="dark" style={styles.bannerBlur}>
+                    <View style={[styles.noGymIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                      <Ionicons name="qr-code-outline" size={22} color={branding.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.bannerTitle}>{t('noGymTitle')}</Text>
+                      <Text style={styles.bannerBody}>{t('noGymBody')}</Text>
+                      {pendingCode && (
+                        <View style={styles.pendingCodePill}>
+                          <Ionicons name="ticket-outline" size={12} color={branding.primary} />
+                          <Text style={[styles.pendingCodeText, { color: branding.primary }]}>
+                            {pendingCode}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </BlurView>
+                </View>
+              </Animated.View>
+            )}
+
             {loadError && (
               <Animated.View entering={FadeInDown.delay(80).duration(400)}>
                 <View style={[styles.banner, { borderColor: hexToRgba('#E57373', 0.2) }]}>
@@ -329,6 +502,107 @@ export default function InviteFriendScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.bannerTitle}>{t('backendUnavailableTitle')}</Text>
                       <Text style={styles.bannerBody}>{t('backendUnavailableBody')}</Text>
+                    </View>
+                  </BlurView>
+                </View>
+              </Animated.View>
+            )}
+
+            {/* ── Accepted invite (inbound referral) ── */}
+            {receivedReferral && (
+              <Animated.View entering={FadeInDown.delay(120).duration(400)}>
+                <View style={[styles.receivedCard, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
+                  <BlurView intensity={50} tint="dark" style={styles.receivedCardBlur}>
+                    <LinearGradient
+                      colors={[hexToRgba(branding.primary, 0.08), 'transparent']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.receivedHeader}>
+                      <View style={[styles.receivedIcon, { backgroundColor: hexToRgba(branding.primary, 0.14) }]}>
+                        <Ionicons name="person-add" size={18} color={branding.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.receivedTitle}>
+                          {t('receivedReferral.title')}
+                        </Text>
+                        {receivedReferral.referrerName && (
+                          <Text style={styles.receivedReferrer}>
+                            {t('receivedReferral.invitedBy', { name: receivedReferral.referrerName })}
+                          </Text>
+                        )}
+                        {receivedReferral.gymName && (
+                          <Text style={styles.receivedGym}>
+                            {receivedReferral.gymName}
+                            {receivedReferral.gymCity ? ` · ${receivedReferral.gymCity}` : ''}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={[
+                        styles.receivedStatusBadge,
+                        {
+                          backgroundColor: hexToRgba(
+                            receivedReferral.currentStatus === 'rewarded' ? '#4CAF50'
+                              : receivedReferral.currentStatus === 'blocked' ? '#E57373'
+                              : branding.primary,
+                            0.14,
+                          ),
+                        },
+                      ]}>
+                        <Text style={[
+                          styles.receivedStatusText,
+                          {
+                            color: receivedReferral.currentStatus === 'rewarded' ? '#4CAF50'
+                              : receivedReferral.currentStatus === 'blocked' ? '#E57373'
+                              : branding.primary,
+                          },
+                        ]}>
+                          {t(`receivedReferral.status_${receivedReferral.currentStatus}`, {
+                            defaultValue: t('statePending'),
+                          })}
+                        </Text>
+                      </View>
+                    </View>
+                    {/* Mini progress stepper */}
+                    <View style={styles.receivedSteps}>
+                      {([
+                        { key: 'accepted', done: true },
+                        { key: 'checkin', done: !!receivedReferral.qualifiedCheckinAt },
+                        { key: 'verified', done: !!receivedReferral.qualifiedVerifiedAt },
+                        { key: 'rewarded', done: receivedReferral.currentStatus === 'rewarded' },
+                      ] as const).map((step, idx, arr) => (
+                        <View key={step.key} style={styles.receivedStepItem}>
+                          <View style={[
+                            styles.receivedStepDot,
+                            {
+                              backgroundColor: step.done
+                                ? '#4CAF50'
+                                : hexToRgba(branding.primary, 0.18),
+                              borderColor: step.done
+                                ? '#4CAF50'
+                                : hexToRgba(branding.primary, 0.35),
+                            },
+                          ]}>
+                            {step.done && <Ionicons name="checkmark" size={8} color="#fff" />}
+                          </View>
+                          <Text style={[
+                            styles.receivedStepLabel,
+                            step.done && { color: '#4CAF50' },
+                          ]}>
+                            {t(`receivedReferral.step_${step.key}`)}
+                          </Text>
+                          {idx < arr.length - 1 && (
+                            <View style={[
+                              styles.receivedStepLine,
+                              {
+                                backgroundColor: arr[idx + 1].done
+                                  ? hexToRgba('#4CAF50', 0.4)
+                                  : 'rgba(255,255,255,0.08)',
+                              },
+                            ]} />
+                          )}
+                        </View>
+                      ))}
                     </View>
                   </BlurView>
                 </View>
@@ -443,15 +717,15 @@ export default function InviteFriendScreen() {
                       />
                       <TouchableOpacity
                         onPress={onApply}
-                        disabled={applying || fullUnavailable}
+                        disabled={applying || previewing || fullUnavailable}
                         activeOpacity={0.85}
-                        style={fullUnavailable ? { opacity: 0.4 } : undefined}
+                        style={(fullUnavailable || previewing) ? { opacity: 0.4 } : undefined}
                       >
                         <LinearGradient
                           colors={[branding.primary, branding.primaryDark]}
                           style={styles.applyCta}
                         >
-                          {applying ? (
+                          {applying || previewing ? (
                             <ActivityIndicator color={branding.onPrimary} />
                           ) : (
                             <Text style={[styles.applyCtaText, { color: branding.onPrimary }]}>
@@ -466,8 +740,8 @@ export default function InviteFriendScreen() {
               </View>
             </Animated.View>
 
-            {/* ── Monthly payout counter ── */}
-            {monthlyStats && (
+            {/* ── Monthly payout counter (only when there's referral activity) ── */}
+            {monthlyStats && hasEngagedReferrals && (
               <Animated.View entering={FadeInDown.delay(220).duration(400)}>
                 <View style={[styles.capCard, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
                   <BlurView intensity={50} tint="dark" style={styles.capCardBlur}>
@@ -509,37 +783,39 @@ export default function InviteFriendScreen() {
               </Animated.View>
             )}
 
-            {/* ── Funnel / Progress strip ── */}
-            <Animated.View entering={FadeInDown.delay(250).duration(400)}>
-              <Text style={styles.sectionLabel}>{t('funnelTitle')}</Text>
-              <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.16) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                  <View style={styles.funnelGrid}>
-                    <View style={styles.funnelItem}>
-                      <Text style={styles.funnelValue}>{referralKpis.invited}</Text>
-                      <Text style={styles.funnelLabel}>{t('funnelInvited')}</Text>
+            {/* ── Funnel / Progress strip (only when there's real activity) ── */}
+            {hasEngagedReferrals && (
+              <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+                <Text style={styles.sectionLabel}>{t('funnelTitle')}</Text>
+                <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.16) }]}>
+                  <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                    <View style={styles.funnelGrid}>
+                      <View style={styles.funnelItem}>
+                        <Text style={styles.funnelValue}>{referralKpis.invited}</Text>
+                        <Text style={styles.funnelLabel}>{t('funnelInvited')}</Text>
+                      </View>
+                      <View style={styles.funnelItem}>
+                        <Text style={styles.funnelValue}>{referralKpis.joined}</Text>
+                        <Text style={styles.funnelLabel}>{t('funnelJoined')}</Text>
+                      </View>
+                      <View style={styles.funnelItem}>
+                        <Text style={styles.funnelValue}>{referralKpis.verified}</Text>
+                        <Text style={styles.funnelLabel}>{t('funnelVerified')}</Text>
+                      </View>
+                      <View style={styles.funnelItem}>
+                        <Text style={styles.funnelValue}>{referralKpis.rewarded}</Text>
+                        <Text style={styles.funnelLabel}>{t('funnelRewarded')}</Text>
+                      </View>
                     </View>
-                    <View style={styles.funnelItem}>
-                      <Text style={styles.funnelValue}>{referralKpis.joined}</Text>
-                      <Text style={styles.funnelLabel}>{t('funnelJoined')}</Text>
-                    </View>
-                    <View style={styles.funnelItem}>
-                      <Text style={styles.funnelValue}>{referralKpis.verified}</Text>
-                      <Text style={styles.funnelLabel}>{t('funnelVerified')}</Text>
-                    </View>
-                    <View style={styles.funnelItem}>
-                      <Text style={styles.funnelValue}>{referralKpis.rewarded}</Text>
-                      <Text style={styles.funnelLabel}>{t('funnelRewarded')}</Text>
-                    </View>
-                  </View>
-                </BlurView>
-              </View>
-            </Animated.View>
+                  </BlurView>
+                </View>
+              </Animated.View>
+            )}
 
-            {/* ── Activity / timeline ── */}
-            {statusItems.length > 0 && (
+            {/* ── Activity / timeline (only when friends have engaged) ── */}
+            {hasEngagedReferrals && statusItems.length > 0 && (
               <Animated.View entering={FadeInDown.delay(320).duration(400)}>
-                <Text style={styles.sectionLabel}>{t('statusSection')}</Text>
+                <Text style={styles.sectionLabel}>{t('sentSection')}</Text>
                 <View style={styles.filterRow}>
                   {([
                     { key: 'all', label: t('filterAll') },
@@ -675,7 +951,7 @@ export default function InviteFriendScreen() {
             )}
 
             {/* ── Empty state ── */}
-            {statusItems.length === 0 && (
+            {!hasEngagedReferrals && !receivedReferral && statusItems.length === 0 && (
               <Animated.View entering={FadeInDown.delay(320).duration(400)}>
                 <View style={[styles.emptyCard, { borderColor: 'rgba(255,255,255,0.08)' }]}>
                   <BlurView intensity={50} tint="dark" style={styles.emptyCardBlur}>
@@ -765,6 +1041,19 @@ export default function InviteFriendScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
+
+      {/* Referral accept bottom sheet */}
+      {sheetVisible && sheetData && (
+        <ReferralAcceptSheet
+          visible={sheetVisible}
+          code={sheetData.code}
+          gym={sheetData.gym}
+          referrerName={sheetData.referrerName}
+          mode={sheetData.mode}
+          onAccept={handleSheetAccept}
+          onDecline={handleSheetDecline}
+        />
+      )}
     </View>
   );
 }
@@ -1289,6 +1578,14 @@ const styles = StyleSheet.create({
     padding: 14,
     backgroundColor: 'rgba(18, 18, 28, 0.80)',
   },
+  noGymIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
   bannerTitle: {
     ...fontStyles.bodySemiBold,
     fontSize: 15,
@@ -1301,6 +1598,114 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 18,
   },
+  pendingCodePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  pendingCodeText: {
+    ...fontStyles.number,
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
+  // Received (inbound) referral card
+  receivedCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  receivedCardBlur: {
+    flex: 1,
+    padding: 14,
+    backgroundColor: 'rgba(18, 18, 28, 0.80)',
+  },
+  receivedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  receivedIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receivedTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  receivedReferrer: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  receivedGym: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
+  receivedStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  receivedStatusText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  receivedSteps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  receivedStepItem: {
+    flex: 1,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  receivedStepDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  receivedStepLabel: {
+    ...fontStyles.body,
+    fontSize: 9,
+    color: theme.colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+  receivedStepLine: {
+    position: 'absolute',
+    top: 7,
+    left: '55%' as any,
+    width: '90%' as any,
+    height: 1.5,
+  },
+
   errorText: {
     ...fontStyles.body,
     fontSize: 12,

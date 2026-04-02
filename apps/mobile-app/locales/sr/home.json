@@ -46,6 +46,7 @@
   "last": "Poslednji",
   "gymJoinPrompt": "Postani član ove teretane i počni da zarađuješ drops!",
   "close": "Zatvori",
+  "viewGym": "Pogledaj",
   "notYourGym": "Ne vidiš\nsvoju\nteretanu?",
   "suggestGym": "Predloži teretanu",
   "suggestGymSub": "Dodirni da predložiš teretanu",
@@ -99,6 +100,10 @@
     "startsInMin": "Za {{count}} min",
     "startsInHour": "Za {{count}}h",
     "startsInDay": "Za {{count}}d"
+  },
+  "referralBanner": {
+    "title": "Imaš pozivni kod?",
+    "subtitle": "Unesi kod prijatelja i osvoji bonus kapi"
   },
   "friendsQuick": {
     "invite": "Pozovi",

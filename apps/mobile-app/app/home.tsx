@@ -271,7 +271,7 @@ export default function HomeScreen() {
   );
 
   // ── Available gyms (for empty state) ──
-  const [availableGyms, setAvailableGyms] = useState<{id: string; name: string; city: string | null; address: string | null; logo_url: string | null; is_founding_partner?: boolean}[]>([]);
+  const [availableGyms, setAvailableGyms] = useState<{id: string; name: string; city: string | null; address: string | null; logo_url: string | null; primary_color: string | null}[]>([]);
 
   useEffect(() => {
     if (homeGymId) return;
@@ -280,9 +280,9 @@ export default function HomeScreen() {
       try {
         const { data: gymsData, error } = await supabase
           .from('gyms')
-          .select('id, name, city, address, owner_id, is_active, is_founding_partner')
+          .select('id, name, city, address, owner_id, is_active, is_mobile_listed')
           .eq('is_active', true)
-          .order('is_founding_partner', { ascending: false })
+          .eq('is_mobile_listed', true)
           .order('name')
           .limit(10);
 
@@ -291,9 +291,10 @@ export default function HomeScreen() {
           const { data: fallbackData } = await supabase
             .from('gyms')
             .select('id, name, city, address, owner_id')
+            .eq('is_active', true)
             .limit(10);
           if (fallbackData) {
-            setAvailableGyms(fallbackData.map(g => ({ ...g, logo_url: null })));
+            setAvailableGyms(fallbackData.map(g => ({ ...g, logo_url: null, primary_color: null })));
           }
           return;
         }
@@ -303,26 +304,33 @@ export default function HomeScreen() {
           return;
         }
 
-        // Fetch logos from owner_branding for gyms that have an owner
+        // Fetch logo + brand color from owner_branding for gyms that have an owner
         const ownerIds = [...new Set(gymsData.filter(g => g.owner_id).map(g => g.owner_id!))];
         let logoMap: Record<string, string> = {};
+        let colorMap: Record<string, string> = {};
         if (ownerIds.length > 0) {
           const { data: brandingData } = await supabase
             .from('owner_branding')
-            .select('owner_id, logo_url')
+            .select('owner_id, logo_url, primary_color')
             .in('owner_id', ownerIds);
           if (brandingData) {
             logoMap = Object.fromEntries(brandingData.map(b => [b.owner_id, b.logo_url]));
+            colorMap = Object.fromEntries(
+              brandingData
+                .filter(b => b.primary_color)
+                .map(b => [b.owner_id, b.primary_color!])
+            );
           }
         }
 
-        const gymsWithLogos = gymsData.map(g => ({
+        const gymsWithBranding = gymsData.map(g => ({
           ...g,
           logo_url: (g.owner_id && logoMap[g.owner_id]) || null,
+          primary_color: (g.owner_id && colorMap[g.owner_id]) || null,
         }));
 
-        if (__DEV__) log.debug('[Home] Available gyms:', gymsWithLogos.length);
-        setAvailableGyms(gymsWithLogos);
+        if (__DEV__) log.debug('[Home] Available gyms:', gymsWithBranding.length);
+        setAvailableGyms(gymsWithBranding);
       } catch (e) {
         log.warn('[Home] Unexpected error loading gyms:', e);
       }
@@ -517,6 +525,26 @@ export default function HomeScreen() {
               </View>
             </Animated.View>
 
+            {/* ─── SECTION 4b — REFERRAL CODE BANNER ─── */}
+            <Animated.View entering={FadeInDown.delay(250).duration(500)}>
+              <TouchableOpacity
+                style={[es.referralBanner, { borderColor: hexToRgba(branding.primary, 0.18) }]}
+                onPress={() => router.push('/invite-friend')}
+                activeOpacity={0.7}
+              >
+                <BlurView intensity={35} tint="dark" style={es.referralBannerBlur}>
+                  <View style={[es.referralIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
+                    <Ionicons name="ticket-outline" size={20} color={branding.primary} />
+                  </View>
+                  <View style={es.referralTextBlock}>
+                    <Text style={es.referralTitle}>{t('referralBanner.title')}</Text>
+                    <Text style={es.referralSub}>{t('referralBanner.subtitle')}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
+                </BlurView>
+              </TouchableOpacity>
+            </Animated.View>
+
             {/* ─── SECTION 5 — AVAILABLE GYMS ─── */}
             {availableGyms.length > 0 && (
               <Animated.View entering={FadeInDown.delay(300).duration(500)}>
@@ -531,47 +559,59 @@ export default function HomeScreen() {
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={es.gymScrollContent}
                   >
-                    {availableGyms.map((gym) => (
-                      <TouchableOpacity
-                        key={gym.id}
-                        activeOpacity={0.8}
-                        onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
-                      >
-                        <BlurView intensity={40} tint="dark" style={es.gymCard}>
-                          <View style={es.gymCardInner}>
-                            {gym.logo_url ? (
-                              <Image source={gym.logo_url} style={es.gymLogo} contentFit="contain" transition={200} />
-                            ) : (
-                              <View style={es.gymLogoPlaceholder}>
-                                <Ionicons name="fitness" size={22} color={appTheme.colors.primary} />
-                              </View>
-                            )}
-                            <View style={es.gymInfo}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text style={es.gymName} numberOfLines={1}>{gym.name}</Text>
-                                {gym.is_founding_partner && (
-                                  <View style={es.foundingBadge}>
-                                    <Text style={es.foundingBadgeText}>{t('foundingPartner')}</Text>
+                    {availableGyms.map((gym) => {
+                      const gymColor = gym.primary_color || branding.primary;
+                      return (
+                        <TouchableOpacity
+                          key={gym.id}
+                          activeOpacity={0.75}
+                          onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
+                        >
+                          <BlurView intensity={50} tint="dark" style={[es.gymCard, { borderColor: hexToRgba(gymColor, 0.18) }]}>
+                            {/* Top accent line */}
+                            <View style={[es.gymCardAccent, { backgroundColor: hexToRgba(gymColor, 0.5) }]} />
+                            <View style={es.gymCardInner}>
+                              {/* Logo */}
+                              <View style={es.gymLogoWrap}>
+                                {gym.logo_url ? (
+                                  <Image source={gym.logo_url} style={es.gymLogo} contentFit="contain" transition={200} />
+                                ) : (
+                                  <View style={[es.gymLogoPlaceholder, { borderColor: hexToRgba(gymColor, 0.3), backgroundColor: hexToRgba(gymColor, 0.1) }]}>
+                                    <Ionicons name="fitness" size={24} color={gymColor} />
                                   </View>
                                 )}
                               </View>
-                              {(gym.city || gym.address) && (
-                                <Text style={es.gymCity} numberOfLines={1}>{gym.city || gym.address}</Text>
-                              )}
+                              {/* Info */}
+                              <View style={es.gymInfo}>
+                                <Text style={es.gymName} numberOfLines={2}>{gym.name}</Text>
+                                {(gym.city || gym.address) && (
+                                  <View style={es.gymLocationRow}>
+                                    <Ionicons name="location-outline" size={11} color="rgba(255,255,255,0.3)" />
+                                    <Text style={es.gymCity} numberOfLines={1}>{gym.city || gym.address}</Text>
+                                  </View>
+                                )}
+                              </View>
+                              {/* CTA */}
+                              <View style={[es.gymSelectBtn, { borderColor: hexToRgba(gymColor, 0.35), backgroundColor: hexToRgba(gymColor, 0.1) }]}>
+                                <Text style={[es.gymSelectBtnText, { color: gymColor }]}>{t('viewGym')}</Text>
+                              </View>
                             </View>
-                          </View>
-                        </BlurView>
-                      </TouchableOpacity>
-                    ))}
+                          </BlurView>
+                        </TouchableOpacity>
+                      );
+                    })}
 
                     {/* Suggest gym card */}
                     <TouchableOpacity
-                      style={es.gymPlaceholderCard}
+                      style={[es.gymPlaceholderCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}
                       onPress={() => setShowWaitlist(true)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="add-circle" size={28} color={branding.primary} />
-                      <Text style={[es.gymPlaceholderText, { color: hexToRgba(branding.primary, 0.6) }]}>{t('notYourGym')}</Text>
+                      <View style={[es.gymPlaceholderIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.08), borderColor: hexToRgba(branding.primary, 0.2) }]}>
+                        <Ionicons name="add" size={22} color={hexToRgba(branding.primary, 0.7)} />
+                      </View>
+                      <Text style={[es.gymPlaceholderText, { color: 'rgba(255,255,255,0.5)' }]}>{t('notYourGym')}</Text>
+                      <Text style={[es.gymPlaceholderSub, { color: hexToRgba(branding.primary, 0.55) }]}>{t('suggestGym')}</Text>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -2297,87 +2337,148 @@ const es = StyleSheet.create({
     color: '#B0B0B0',
   },
   gymScrollContent: {
-    gap: 12,
+    gap: 10,
     paddingRight: 16,
   },
   gymCard: {
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
     overflow: 'hidden',
-    width: 150,
-    height: 130,
-    backgroundColor: 'rgba(20,20,30,0.70)',
+    width: 220,
+    backgroundColor: 'rgba(14,14,24,0.82)',
+  },
+  gymCardAccent: {
+    height: 2,
+    width: '100%',
   },
   gymCardInner: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
+    padding: 14,
+    gap: 12,
+  },
+  gymLogoWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   gymLogo: {
-    width: 40,
-    height: 40,
+    width: 46,
+    height: 46,
     borderRadius: 12,
   },
   gymLogoPlaceholder: {
-    width: 40,
-    height: 40,
+    width: 46,
+    height: 46,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,229,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(0,229,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   gymInfo: {
-    gap: 2,
+    gap: 5,
   },
   gymName: {
     ...fontStyles.bodySemiBold,
-    fontSize: 14,
+    fontSize: 15,
     color: '#FFFFFF',
+    letterSpacing: 0.1,
+    lineHeight: 20,
+  },
+  gymLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   gymCity: {
     ...fontStyles.body,
-    fontSize: 11,
-    color: '#B0B0B0',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 0.1,
+    flexShrink: 1,
   },
-  foundingBadge: {
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    borderColor: 'rgba(255, 215, 0, 0.30)',
+  gymSelectBtn: {
+    alignSelf: 'flex-start',
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  foundingBadgeText: {
+  gymSelectBtnText: {
     ...fontStyles.bodySemiBold,
-    fontSize: 8,
-    color: '#FFD700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
   gymPlaceholderCard: {
-    width: 130,
-    height: 130,
+    width: 220,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(20,20,30,0.40)',
+    backgroundColor: 'rgba(14,14,24,0.50)',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+  },
+  gymPlaceholderIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   gymPlaceholderText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.5)',
+    lineHeight: 18,
+  },
+  gymPlaceholderSub: {
     ...fontStyles.body,
     fontSize: 11,
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.25)',
     lineHeight: 16,
   },
 
   /* ── Preview Cards (locked features) ── */
+  referralBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  referralBannerBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  referralIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  referralTextBlock: {
+    flex: 1,
+  },
+  referralTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: '#fff',
+  },
+  referralSub: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 1,
+  },
   previewSection: {
     paddingHorizontal: 16,
     marginBottom: 16,

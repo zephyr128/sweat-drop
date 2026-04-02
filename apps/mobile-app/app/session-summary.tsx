@@ -306,6 +306,13 @@ export default function SessionSummaryScreen() {
           multiplier: row.multiplier,
         });
         await clearPendingFinalization();
+
+        // Evaluate referral qualification (check-in + identity verification)
+        void supabase
+          .rpc('evaluate_referral_qualification', { p_referral_id: null })
+          .then(({ error: refErr }) => {
+            if (refErr && __DEV__) log.warn('[SessionSummary] evaluate_referral_qualification failed:', refErr.message);
+          });
       } else if (error) {
         log.error('[SessionSummary] Recovery award_drops failed:', error.message);
       }

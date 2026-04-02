@@ -551,18 +551,29 @@ export default function ProfileScreen() {
           <SectionLabel label={t('sections.social')} />
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
             <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
-              {socialLinks.map((link, i) => (
-                <View key={link.route}>
-                  <TouchableOpacity style={styles.linkRow} onPress={() => router.push(link.route as any)} activeOpacity={0.7}>
-                    <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                      <Ionicons name={link.icon} size={20} color={branding.primary} />
-                    </View>
-                    <Text style={styles.linkLabel}>{link.label}</Text>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
-                  </TouchableOpacity>
-                  {i < socialLinks.length - 1 && <SectionDivider />}
-                </View>
-              ))}
+              {socialLinks.map((link, i) => {
+                const isDisabled = !hasGym;
+                return (
+                  <View key={link.route}>
+                    <TouchableOpacity
+                      style={[styles.linkRow, isDisabled && { opacity: 0.35 }]}
+                      onPress={() => router.push(link.route as any)}
+                      activeOpacity={0.7}
+                      disabled={isDisabled}
+                    >
+                      <View style={[styles.linkIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                        <Ionicons name={link.icon} size={20} color={branding.primary} />
+                      </View>
+                      <Text style={[styles.linkLabel, isDisabled && { opacity: 0.35 }]}>{link.label}</Text>
+                      {isDisabled
+                        ? <Ionicons name="lock-closed-outline" size={14} color={theme.colors.textTertiary} />
+                        : <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+                      }
+                    </TouchableOpacity>
+                    {i < socialLinks.length - 1 && <SectionDivider />}
+                  </View>
+                );
+              })}
             </BlurView>
           </View>
         </Animated.View>

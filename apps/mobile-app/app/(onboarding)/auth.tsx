@@ -317,6 +317,11 @@ export default function AuthScreen() {
 
       if (code === 'ERR_INVALID_RESPONSE' || code === 'ERR_REQUEST_FAILED') {
         showModal({ title: t('common:error'), body: t('auth.appleNetworkError') });
+      } else if (
+        typeof error?.message === 'string' &&
+        error.message.toLowerCase().includes('unacceptable audience in id_token')
+      ) {
+        showModal({ title: t('common:error'), body: t('auth.appleConfigError') });
       } else if (error?.message?.toLowerCase().includes('network')) {
         showModal({ title: t('common:error'), body: t('auth.appleNetworkError') });
       } else {
