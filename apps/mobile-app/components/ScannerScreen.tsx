@@ -11,12 +11,13 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  Pressable,
   Platform,
   Linking,
   Dimensions,
   Modal,
-  Switch,
-  TextInput,
+  TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -47,7 +48,7 @@ import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import {
   encodeCustomSimulatorSensorId,
-  type WorkoutSimulatorProfile,
+  type SimMachineType,
 } from '@/lib/workout/workout-simulator';
 import { useAppModal } from '@/lib/stores/useAppModal';
 
@@ -58,7 +59,7 @@ const CORNER_WIDTH = 4;
 
 const DEV_QR_UUID = process.env.EXPO_PUBLIC_DEV_QR_UUID || '';
 
-type DevPresetMode = Exclude<WorkoutSimulatorProfile, 'custom' | 'disconnect_mid_session'> | 'custom';
+type DevMachineType = SimMachineType;
 
 interface MachineStatus {
   machine_id: string;
@@ -109,17 +110,21 @@ export function ScannerScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [showDevSimulatorModal, setShowDevSimulatorModal] = useState(false);
-  const [devPreset, setDevPreset] = useState<DevPresetMode>('normal_30min');
-  const [devDurationMinutes, setDevDurationMinutes] = useState('30');
-  const [devBaseRpm, setDevBaseRpm] = useState('72');
-  const [devRpmAmplitude, setDevRpmAmplitude] = useState('8');
-  const [devSpeedKmh, setDevSpeedKmh] = useState('8.5');
-  const [devInclinePct, setDevInclinePct] = useState('1.5');
-  const [devPowerWatts, setDevPowerWatts] = useState('165');
-  const [devIntervalEnabled, setDevIntervalEnabled] = useState(false);
-  const [devIntervalHighRpm, setDevIntervalHighRpm] = useState('112');
-  const [devIntervalSeconds, setDevIntervalSeconds] = useState('45');
-  const [devTimeScale, setDevTimeScale] = useState('1');
+  const [devMachineType, setDevMachineType] = useState<DevMachineType>('bike');
+  const [devDuration, setDevDuration] = useState(30);
+  const [devTimeScale, setDevTimeScale] = useState(1);
+  // Bike
+  const [devBikeRpm, setDevBikeRpm] = useState(72);
+  const [devBikePower, setDevBikePower] = useState(165);
+  // Treadmill
+  const [devTreadmillSpeed, setDevTreadmillSpeed] = useState(8.5);
+  const [devTreadmillIncline, setDevTreadmillIncline] = useState(1.5);
+  // Elliptical
+  const [devEllipticalCadence, setDevEllipticalCadence] = useState(65);
+  const [devEllipticalResistance, setDevEllipticalResistance] = useState(5);
+  // Stepper
+  const [devStepperSpm, setDevStepperSpm] = useState(60);
+  const [devStepperResistance, setDevStepperResistance] = useState(5);
   const router = useRouter();
   const params = useLocalSearchParams<{
     planId?: string;
@@ -134,6 +139,10 @@ export function ScannerScreen() {
   const dropLimit = useDropLimitStatus(getActiveGymId());
   const device = useCameraDevice('back');
   const hasScannedRef = useRef(false);
+
+  // ── 5x tap trigger for simulator modal ──
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Refs to defeat stale closures in useCodeScanner ──
   // useCodeScanner memoizes its onCodeScanned callback and never updates it,
@@ -779,55 +788,99 @@ export function ScannerScreen() {
     }
   };
 
-  const parsePositiveNumber = (value: string, fallback: number) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  };
-
   const buildDevSimulatorSensorId = (): string => {
-    if (devPreset !== 'custom') {
-      return `sim:${devPreset}`;
+    const base = {
+      machineType: devMachineType,
+      durationMinutes: Math.max(1, devDuration),
+      rpmAmplitude: 8,
+      intervalEnabled: false,
+      intervalHighRpm: 110,
+      intervalSeconds: 45,
+      timeScale: Math.max(1, devTimeScale),
+    };
+
+    if (devMachineType === 'bike') {
+      return encodeCustomSimulatorSensorId({
+        ...base,
+        baseRpm: devBikeRpm,
+        speedKmh: devBikeRpm * 0.12,
+        inclinePct: 0,
+        powerWatts: devBikePower,
+        resistanceLevel: 0,
+        stepsPerMin: 0,
+      });
     }
 
+    if (devMachineType === 'treadmill') {
+      return encodeCustomSimulatorSensorId({
+        ...base,
+        baseRpm: Math.round(devTreadmillSpeed * 8),
+        speedKmh: devTreadmillSpeed,
+        inclinePct: devTreadmillIncline,
+        powerWatts: Math.round(devTreadmillSpeed * 14 * (1 + devTreadmillIncline * 0.05)),
+        resistanceLevel: 0,
+        stepsPerMin: 0,
+      });
+    }
+
+    if (devMachineType === 'elliptical') {
+      return encodeCustomSimulatorSensorId({
+        ...base,
+        baseRpm: devEllipticalCadence,
+        speedKmh: devEllipticalCadence * 0.1,
+        inclinePct: 0,
+        powerWatts: Math.round(devEllipticalCadence * 1.8 + devEllipticalResistance * 8),
+        resistanceLevel: devEllipticalResistance,
+        stepsPerMin: 0,
+      });
+    }
+
+    // stepper
     return encodeCustomSimulatorSensorId({
-      durationMinutes: Math.max(1, Math.round(parsePositiveNumber(devDurationMinutes, 30))),
-      baseRpm: Math.round(parsePositiveNumber(devBaseRpm, 72)),
-      rpmAmplitude: Math.max(0, Math.round(parsePositiveNumber(devRpmAmplitude, 8))),
-      speedKmh: parsePositiveNumber(devSpeedKmh, 8.5),
-      inclinePct: parsePositiveNumber(devInclinePct, 1.5),
-      powerWatts: parsePositiveNumber(devPowerWatts, 165),
-      intervalEnabled: devIntervalEnabled,
-      intervalHighRpm: Math.round(parsePositiveNumber(devIntervalHighRpm, 112)),
-      intervalSeconds: Math.round(parsePositiveNumber(devIntervalSeconds, 45)),
-      timeScale: parsePositiveNumber(devTimeScale, 1),
+      ...base,
+      baseRpm: devStepperSpm,
+      speedKmh: devStepperSpm * 0.025,
+      inclinePct: 0,
+      powerWatts: Math.round(devStepperSpm * 1.5 + devStepperResistance * 10),
+      resistanceLevel: devStepperResistance,
+      stepsPerMin: devStepperSpm,
     });
   };
 
-  // Development mode: open debug simulator panel
-  const handleDevelopMode = async () => {
-    if (!__DEV__) return;
-    setShowDevSimulatorModal(true);
+  // 5x tap on scanner area opens simulator modal (available in all builds when DEV_QR_UUID is set)
+  const handleScanAreaTap = () => {
+    if (!DEV_QR_UUID) return;
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 2000);
+    if (tapCountRef.current >= 5) {
+      tapCountRef.current = 0;
+      if (tapTimerRef.current) { clearTimeout(tapTimerRef.current); tapTimerRef.current = null; }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowDevSimulatorModal(true);
+    }
   };
 
+  // Simulator bypass: creates session directly without machine lock so multiple testers can run concurrently
   const startDevelopWorkout = async (sensorIdOverride: string) => {
-    if (!DEV_QR_UUID) {
-      showModal({ title: 'Dev Mode', body: 'Set EXPO_PUBLIC_DEV_QR_UUID in .env' });
-      return;
-    }
+    if (!DEV_QR_UUID) return;
     const resetDevScan = () => { setIsScanning(true); setIsProcessing(false); };
     try {
       setShowDevSimulatorModal(false);
       setIsProcessing(true);
       setIsScanning(false);
 
-      // Check machine status via RPC
+      const currentSession = sessionRef.current;
+      if (!currentSession?.user) {
+        throw new Error('No active session — cannot create simulator workout');
+      }
+
+      // Check machine metadata (gym_id, type, etc.) but do NOT check sensor_id or busy state
       const { data: machineStatus, error: rpcError } = await supabase.rpc('get_machine_status', {
         p_qr_uuid: DEV_QR_UUID,
       });
 
-      if (rpcError) {
-        throw rpcError;
-      }
+      if (rpcError) throw rpcError;
 
       if (!machineStatus || machineStatus.length === 0) {
         showModal({ title: t('machineNotFound'), body: t('devModeNotFound', { uuid: DEV_QR_UUID }), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
@@ -836,40 +889,90 @@ export function ScannerScreen() {
 
       const machine = machineStatus[0] as MachineStatus;
 
-      // Check if machine is under maintenance
       if (machine.is_under_maintenance) {
         showModal({ title: t('machineUnavailable'), body: t('machineUnavailableDesc'), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
         return;
       }
 
-      // Check if machine has sensor_id
-      if (!machine.sensor_id) {
-        showModal({ title: t('sensorNotPaired'), body: t('sensorNotPairedDesc'), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
-        return;
-      }
-
       // ── Read homeGymId directly from store to avoid stale closure ──
       const currentDevHomeGymId = useGymStore.getState().homeGymId;
-      log.debug('[Scanner][Dev] Current homeGymId from store:', currentDevHomeGymId, '| Scanned gym:', machine.gym_id);
+      log.debug('[Scanner][Sim] Current homeGymId from store:', currentDevHomeGymId, '| Machine gym:', machine.gym_id);
 
       if (!currentDevHomeGymId || machine.gym_id !== currentDevHomeGymId) {
         const reason = !currentDevHomeGymId ? 'No home gym set' : `Different gym detected (was ${currentDevHomeGymId})`;
-        log.debug(`[Scanner][Dev] ${reason} — switching to:`, machine.gym_id);
+        log.debug(`[Scanner][Sim] ${reason} — switching to:`, machine.gym_id);
         useGymStore.getState().setHomeGymId(machine.gym_id);
         try {
           await updateHomeGymRef.current(machine.gym_id);
           const { useAuthStore } = require('@/lib/stores/authStore');
           await useAuthStore.getState().refreshProfile();
         } catch (error) {
-          log.error('[Scanner][Dev] Error setting home gym:', error);
+          log.error('[Scanner][Sim] Error setting home gym:', error);
         }
-        proceedWithWorkout(machine, true, sensorIdOverride);
-        return;
       }
 
-      proceedWithWorkout(machine, false, sensorIdOverride);
+      const deviceHash = await getDeviceFingerprintHash();
+
+      // Close any stale active session for this user (uq_sessions_one_active_per_user constraint)
+      await supabase
+        .from('sessions')
+        .update({
+          is_active: false,
+          ended_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', currentSession.user.id)
+        .eq('is_active', true);
+
+      // Bypass start_session_safely to avoid machine_busy conflicts between concurrent testers.
+      // machine_id is set to null to avoid the uq_sessions_one_active_per_machine constraint
+      // so multiple testers can run concurrent simulator sessions on the same DEV_QR_UUID machine.
+      // award_drops gracefully handles machine_id IS NULL; machineType comes from route params.
+      const { data: newSession, error: insertError } = await supabase
+        .from('sessions')
+        .insert({
+          user_id: currentSession.user.id,
+          gym_id: machine.gym_id,
+          machine_id: null,
+          started_at: new Date().toISOString(),
+          is_active: true,
+          raw_metrics: {
+            security: {
+              device_hash: deviceHash,
+              lock_required: false,
+              source: 'simulator_bypass',
+              simulator_machine_id: machine.machine_id,
+            },
+          },
+        })
+        .select('*, gym:gym_id(*)')
+        .single();
+
+      if (insertError || !newSession) {
+        throw insertError || new Error('Failed to create simulator session');
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      const isFirstGym = !currentDevHomeGymId || machine.gym_id !== currentDevHomeGymId;
+      const workoutParams: Record<string, string> = {
+        sessionId: newSession.id,
+        machineId: machine.machine_id,
+        gymId: machine.gym_id,
+        machineType: machine.machine_type,
+        sensorId: sensorIdOverride,
+        bleProtocol: machine.ble_protocol || '',
+      };
+
+      if (isFirstGym) {
+        const gymName = (newSession as any).gym?.name ?? useGymStore.getState().activeGym?.name ?? 'Tvojoj teretani';
+        router.replace({ pathname: '/gym-welcome', params: { gymName, ...workoutParams } });
+      } else {
+        // Route simulator sessions to the lightweight workout-sim screen
+        router.replace({ pathname: '/workout-sim', params: workoutParams });
+      }
     } catch (error: any) {
-      log.error('[Scanner] Development mode error:', error);
+      log.error('[Scanner] Simulator start error:', error);
       showModal({ title: t('devModeError'), body: error.message || t('errorProcessing'), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
     }
   };
@@ -1007,7 +1110,8 @@ export function ScannerScreen() {
         <View style={styles.overlayMiddle}>
           <View style={[styles.overlaySection, { flex: 1 }]} />
           
-          {/* Scan Frame with Premium Animations */}
+          {/* Scan Frame with Premium Animations — 5x tap opens simulator */}
+          <Pressable onPress={handleScanAreaTap}>
           <Animated.View style={[styles.scanFrameContainer, frameAnimatedStyle]}>
             <View style={styles.scanFrame}>
               {/* Corner indicators - Branding color */}
@@ -1034,6 +1138,7 @@ export function ScannerScreen() {
               )}
             </View>
           </Animated.View>
+          </Pressable>
           
           <View style={[styles.overlaySection, { flex: 1 }]} />
         </View>
@@ -1113,130 +1218,229 @@ export function ScannerScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Development Mode Button */}
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.developButton}
-          onPress={handleDevelopMode}
-          activeOpacity={0.7}
-          disabled={isProcessing}
-        >
-          <BlurView intensity={80} tint="dark" style={styles.buttonBlur}>
-            <View style={styles.buttonBorder} />
-            <Ionicons
-              name="code-slash"
-              size={24}
-              color={isProcessing ? theme.colors.textSecondary : branding.primary}
-            />
-          </BlurView>
-        </TouchableOpacity>
-      )}
-
       <Modal
         visible={showDevSimulatorModal}
         animationType="fade"
         transparent
         onRequestClose={() => setShowDevSimulatorModal(false)}
       >
-        <View style={styles.devModalBackdrop}>
-          <View style={styles.devModalCard}>
-            <Text style={styles.devModalTitle}>{t('devSimTitle')}</Text>
-            <Text style={styles.devModalSubtitle}>{t('devSimSubtitle')}</Text>
+        <TouchableWithoutFeedback onPress={() => setShowDevSimulatorModal(false)}>
+          <View style={styles.devModalBackdrop}>
+            <TouchableWithoutFeedback>
+              <View style={styles.devModalCard}>
+                <Text style={styles.devModalTitle}>{t('devSimTitle')}</Text>
+                <Text style={styles.devModalSubtitle}>{t('devSimSubtitleMachine')}</Text>
 
-            <View style={styles.devPresetRow}>
-              <TouchableOpacity
-                style={[styles.devPresetChip, devPreset === 'normal_30min' && styles.devPresetChipActive]}
-                onPress={() => setDevPreset('normal_30min')}
-              >
-                <Text style={styles.devPresetLabel}>{t('devSimPresetNormal')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.devPresetChip, devPreset === 'interval_training' && styles.devPresetChipActive]}
-                onPress={() => setDevPreset('interval_training')}
-              >
-                <Text style={styles.devPresetLabel}>{t('devSimPresetInterval')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.devPresetChip, devPreset === 'suspicious_spike' && styles.devPresetChipActive]}
-                onPress={() => setDevPreset('suspicious_spike')}
-              >
-                <Text style={styles.devPresetLabel}>{t('devSimPresetSpike')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.devPresetChip, devPreset === 'custom' && styles.devPresetChipActive]}
-                onPress={() => setDevPreset('custom')}
-              >
-                <Text style={styles.devPresetLabel}>{t('devSimPresetCustom')}</Text>
-              </TouchableOpacity>
-            </View>
+                {/* Machine type chips */}
+                <View style={styles.devPresetRow}>
+                  {(['bike', 'treadmill', 'elliptical', 'stepper'] as const).map((mt) => (
+                    <TouchableOpacity
+                      key={mt}
+                      style={[styles.devPresetChip, devMachineType === mt && styles.devPresetChipActive]}
+                      onPress={() => setDevMachineType(mt)}
+                    >
+                      <Ionicons
+                        name={mt === 'bike' ? 'bicycle-outline' : mt === 'treadmill' ? 'walk-outline' : mt === 'elliptical' ? 'fitness-outline' : 'trending-up-outline'}
+                        size={14}
+                        color={devMachineType === mt ? 'rgba(89,177,255,0.9)' : theme.colors.textSecondary}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.devPresetLabel, devMachineType === mt && { color: 'rgba(89,177,255,0.9)' }]}>
+                        {t(`devSimMachine_${mt}`)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
-            {devPreset === 'custom' && (
-              <View style={styles.devFieldsContainer}>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimDuration')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devDurationMinutes} onChangeText={setDevDurationMinutes} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimBaseRpm')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devBaseRpm} onChangeText={setDevBaseRpm} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimAmplitude')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devRpmAmplitude} onChangeText={setDevRpmAmplitude} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimSpeed')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devSpeedKmh} onChangeText={setDevSpeedKmh} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimIncline')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devInclinePct} onChangeText={setDevInclinePct} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimPower')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devPowerWatts} onChangeText={setDevPowerWatts} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimTimeScale')}</Text>
-                  <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devTimeScale} onChangeText={setDevTimeScale} />
-                </View>
-                <View style={styles.devFieldRow}>
-                  <Text style={styles.devFieldLabel}>{t('devSimIntervals')}</Text>
-                  <Switch value={devIntervalEnabled} onValueChange={setDevIntervalEnabled} />
-                </View>
-                {devIntervalEnabled && (
-                  <>
-                    <View style={styles.devFieldRow}>
-                      <Text style={styles.devFieldLabel}>{t('devSimIntervalHighRpm')}</Text>
-                      <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devIntervalHighRpm} onChangeText={setDevIntervalHighRpm} />
+                <ScrollView style={styles.devFieldsContainer} keyboardShouldPersistTaps="handled">
+                  {/* Duration slider — shared */}
+                  <View style={styles.devSliderBlock}>
+                    <View style={styles.devSliderHeader}>
+                      <Text style={styles.devFieldLabel}>{t('devSimDuration')}</Text>
+                      <Text style={styles.devSliderValue}>{devDuration} min</Text>
                     </View>
-                    <View style={styles.devFieldRow}>
-                      <Text style={styles.devFieldLabel}>{t('devSimIntervalSeconds')}</Text>
-                      <TextInput style={styles.devFieldInput} keyboardType="numeric" value={devIntervalSeconds} onChangeText={setDevIntervalSeconds} />
+                    <View style={styles.devSliderTrack}>
+                      <View style={[styles.devSliderFill, { width: `${((devDuration - 1) / 59) * 100}%`, backgroundColor: branding.primary }]} />
                     </View>
-                  </>
-                )}
+                    <View style={styles.devSliderTicks}>
+                      {[1, 5, 10, 15, 30, 45, 60].map((v) => (
+                        <TouchableOpacity key={v} onPress={() => setDevDuration(v)} style={styles.devSliderTickBtn}>
+                          <Text style={[styles.devSliderTickText, devDuration === v && { color: branding.primary }]}>{v}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Time scale slider — shared */}
+                  <View style={styles.devSliderBlock}>
+                    <View style={styles.devSliderHeader}>
+                      <Text style={styles.devFieldLabel}>{t('devSimTimeScale')}</Text>
+                      <Text style={styles.devSliderValue}>{devTimeScale}x</Text>
+                    </View>
+                    <View style={styles.devSliderTicks}>
+                      {[1, 10, 30, 60, 180].map((v) => (
+                        <TouchableOpacity
+                          key={v}
+                          onPress={() => setDevTimeScale(v)}
+                          style={[styles.devTimeScaleChip, devTimeScale === v && { borderColor: branding.primary, backgroundColor: 'rgba(89,177,255,0.12)' }]}
+                        >
+                          <Text style={[styles.devSliderTickText, devTimeScale === v && { color: branding.primary }]}>
+                            {v === 1 ? '1x' : v === 10 ? '10x' : v === 30 ? '30x' : v === 60 ? '1m→1s' : '30m→10s'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Bike config */}
+                  {devMachineType === 'bike' && (
+                    <>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimBikeRpm')}</Text>
+                          <Text style={styles.devSliderValue}>{devBikeRpm} RPM</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[40, 55, 72, 85, 100, 120].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevBikeRpm(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devBikeRpm === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimBikePower')}</Text>
+                          <Text style={styles.devSliderValue}>{devBikePower} W</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[80, 120, 165, 200, 280, 350].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevBikePower(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devBikePower === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    </>
+                  )}
+
+                  {/* Treadmill config */}
+                  {devMachineType === 'treadmill' && (
+                    <>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimTreadmillSpeed')}</Text>
+                          <Text style={styles.devSliderValue}>{devTreadmillSpeed} km/h</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[3, 5, 7, 8.5, 10, 12, 16].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevTreadmillSpeed(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devTreadmillSpeed === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimTreadmillIncline')}</Text>
+                          <Text style={styles.devSliderValue}>{devTreadmillIncline}%</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[0, 1, 2, 4, 6, 10, 15].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevTreadmillIncline(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devTreadmillIncline === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    </>
+                  )}
+
+                  {/* Elliptical config */}
+                  {devMachineType === 'elliptical' && (
+                    <>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimEllipticalCadence')}</Text>
+                          <Text style={styles.devSliderValue}>{devEllipticalCadence} SPM</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[35, 50, 65, 80, 95, 110].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevEllipticalCadence(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devEllipticalCadence === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimResistance')}</Text>
+                          <Text style={styles.devSliderValue}>{devEllipticalResistance}</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[1, 3, 5, 8, 12, 16, 20].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevEllipticalResistance(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devEllipticalResistance === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    </>
+                  )}
+
+                  {/* Stepper config */}
+                  {devMachineType === 'stepper' && (
+                    <>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimStepperSpm')}</Text>
+                          <Text style={styles.devSliderValue}>{devStepperSpm} SPM</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[30, 45, 60, 75, 90, 110].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevStepperSpm(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devStepperSpm === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <View style={styles.devSliderBlock}>
+                        <View style={styles.devSliderHeader}>
+                          <Text style={styles.devFieldLabel}>{t('devSimResistance')}</Text>
+                          <Text style={styles.devSliderValue}>{devStepperResistance}</Text>
+                        </View>
+                        <View style={styles.devSliderTicks}>
+                          {[1, 3, 5, 8, 12, 16, 20].map((v) => (
+                            <TouchableOpacity key={v} onPress={() => setDevStepperResistance(v)} style={styles.devSliderTickBtn}>
+                              <Text style={[styles.devSliderTickText, devStepperResistance === v && { color: branding.primary }]}>{v}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    </>
+                  )}
+                </ScrollView>
+
+                <View style={styles.devActionsRow}>
+                  <TouchableOpacity
+                    style={styles.devCancelButton}
+                    onPress={() => setShowDevSimulatorModal(false)}
+                    disabled={isProcessing}
+                  >
+                    <Text style={styles.devCancelText}>{t('common:cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.devStartButton, { backgroundColor: branding.primary }]}
+                    onPress={() => startDevelopWorkout(buildDevSimulatorSensorId())}
+                    disabled={isProcessing}
+                  >
+                    <Text style={[styles.devStartText, { color: branding.onPrimary }]}>{t('devSimStart')}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            )}
-
-            <View style={styles.devActionsRow}>
-              <TouchableOpacity
-                style={styles.devCancelButton}
-                onPress={() => setShowDevSimulatorModal(false)}
-                disabled={isProcessing}
-              >
-                <Text style={styles.devCancelText}>{t('common:cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.devStartButton, { backgroundColor: branding.primary }]}
-                onPress={() => startDevelopWorkout(buildDevSimulatorSensorId())}
-                disabled={isProcessing}
-              >
-                <Text style={[styles.devStartText, { color: branding.onPrimary }]}>{t('devSimStart')}</Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -1387,16 +1591,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 1000,
   },
-  developButton: {
-    position: 'absolute',
-    top: 40,
-    right: 128,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-    zIndex: 1000,
-  },
   flashButton: {
     position: 'absolute',
     top: 40,
@@ -1506,6 +1700,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   devPresetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
     borderRadius: 999,
@@ -1525,29 +1721,63 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
     paddingTop: 10,
-    gap: 8,
-  },
-  devFieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    maxHeight: 320,
   },
   devFieldLabel: {
     ...fontStyles.body,
     color: theme.colors.textSecondary,
     fontSize: 13,
-    flex: 1,
   },
-  devFieldInput: {
-    width: 96,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    borderRadius: 8,
+  devSliderBlock: {
+    marginBottom: 14,
+  },
+  devSliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  devSliderValue: {
+    ...fontStyles.bodyMedium,
     color: theme.colors.text,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    textAlign: 'right',
+    fontSize: 14,
+  },
+  devSliderTrack: {
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 2,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  devSliderFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  devSliderTicks: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 2,
+  },
+  devSliderTickBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    minWidth: 32,
+    alignItems: 'center',
+  },
+  devSliderTickText: {
+    ...fontStyles.body,
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+  },
+  devTimeScaleChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
   },
   devActionsRow: {
     flexDirection: 'row',

@@ -246,9 +246,10 @@ export default function GymWelcomeScreen() {
     if (planItemId) workoutParams.planItemId = planItemId;
     if (exerciseIndex) workoutParams.exerciseIndex = exerciseIndex;
 
-    // Replace so user can't go back to this screen
+    // Route simulator sessions to the lightweight workout-sim screen
+    const isSimulator = (sensorId || '').startsWith('sim:');
     router.replace({
-      pathname: '/workout',
+      pathname: isSimulator ? '/workout-sim' : '/workout',
       params: workoutParams,
     });
   };

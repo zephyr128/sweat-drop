@@ -61,5 +61,14 @@
   "verificationRequiredBody": "Poseti recepciju da potvrdiš svoj identitet. Ovo je jednokratni korak pre preuzimanja nagrada.",
   "notVerified": "Nije verifikovan/a",
   "verified": "Verifikovan/a",
-  "verificationStatus": "Verifikacija"
+  "verificationStatus": "Verifikacija",
+  "cancelRedemption": "Otkaži preuzimanje",
+  "cancelTitle": "Otkazati preuzimanje?",
+  "cancelConfirm": "Tvojih {{drops}} drops biće vraćeno na balans.",
+  "cancelYes": "Da, otkaži",
+  "cancelNo": "Zadrži",
+  "cancelSuccess": "Preuzimanje otkazano",
+  "cancelSuccessDesc": "{{drops}} drops je vraćeno na tvoj balans.",
+  "cancelError": "Nije moguće otkazati",
+  "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo."
 }

@@ -10,6 +10,10 @@
   "codeCopied": "Kod za otkupljenje kopiran",
   "pending": "Na čekanju",
   "cancelled": "Otkazano",
+  "expired": "Isteklo",
+  "claimed": "Nagrada dodeljena",
+  "expiredDesc": "Ovo otkupljenje je isteklo",
+  "prizeAwarded": "Nagrada dodeljena",
   "na": "N/A",
   "showCodeToStaff": "Pokaži kod osoblju teretane da preuzmeš nagradu",
   "unknownReward": "Nepoznata nagrada",
@@ -17,5 +21,14 @@
   "leaderboardPrize": "Nagrada sa leaderboarda",
   "arenaPrize": "Nagrada iz arene",
   "leaderboard": "Leaderboard",
-  "arena": "Arena"
+  "arena": "Arena",
+  "cancelRedemption": "Otkaži otkupljenje",
+  "cancelTitle": "Otkazati otkupljenje?",
+  "cancelConfirm": "Tvojih {{drops}} drops će biti vraćeno na balans.",
+  "cancelYes": "Da, otkaži",
+  "cancelNo": "Zadrži",
+  "cancelSuccess": "Otkupljenje otkazano",
+  "cancelSuccessDesc": "{{drops}} drops je vraćeno na tvoj balans.",
+  "cancelError": "Neuspešno otkazivanje",
+  "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo."
 }

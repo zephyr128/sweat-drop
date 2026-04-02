@@ -61,5 +61,14 @@
   "verificationRequiredBody": "Please visit the reception desk to verify your identity. This is a one-time step required before claiming rewards.",
   "notVerified": "Not verified",
   "verified": "Verified",
-  "verificationStatus": "Verification"
+  "verificationStatus": "Verification",
+  "cancelRedemption": "Cancel redemption",
+  "cancelTitle": "Cancel redemption?",
+  "cancelConfirm": "Your {{drops}} drops will be refunded to your balance.",
+  "cancelYes": "Yes, cancel",
+  "cancelNo": "Keep it",
+  "cancelSuccess": "Redemption cancelled",
+  "cancelSuccessDesc": "{{drops}} drops have been refunded to your balance.",
+  "cancelError": "Could not cancel",
+  "cancelErrorDesc": "Something went wrong. Please try again."
 }

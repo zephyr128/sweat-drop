@@ -29,6 +29,7 @@ export interface ActivityRingsProps {
   totalGymDrops: number;
   size?: number;
   focusKey?: number;
+  gymName?: string;
   onPress?: () => void;
 }
 
@@ -62,6 +63,7 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
   totalGymDrops,
   size = 290,
   focusKey = 0,
+  gymName,
   onPress,
 }) => {
   const { t } = useTranslation('home');
@@ -328,6 +330,9 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
               </View>
             ) : null}
             <Text style={styles.centerLabel}>{t('rings.drops')}</Text>
+            {gymName ? (
+              <Text style={styles.centerGymName} numberOfLines={1}>{gymName}</Text>
+            ) : null}
           </Animated.View>
         </Animated.View>
       </Animated.View>
@@ -375,5 +380,13 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
     marginTop: 4,
+  },
+  centerGymName: {
+    ...fontStyles.body,
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.22)',
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textAlign: 'center',
   },
 });

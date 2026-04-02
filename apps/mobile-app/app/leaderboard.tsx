@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,11 +63,11 @@ interface AvailableArena {
 }
 type TabType = 'gym' | 'global' | 'arenas';
 
-const SCORING_ICONS: Record<string, string> = {
-  total_drops: '💧',
-  days_visited: '📅',
-  variety_score: '🏋️',
-  streak_days: '🔥',
+const SCORING_ICONS: Record<string, ComponentProps<typeof Ionicons>['name']> = {
+  total_drops: 'water',
+  days_visited: 'calendar-outline',
+  variety_score: 'barbell-outline',
+  streak_days: 'flame-outline',
 };
 
 // ── Per-period cache ────────────────────────────────────────────────────────
@@ -394,7 +394,7 @@ export default function LeaderboardScreen() {
       <>
         {arenas.map((arena) => {
           const daysLeft = getDaysLeft(arena.end_date);
-          const scoringIcon = SCORING_ICONS[arena.scoring_model] || '💧';
+          const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
           return (
             <TouchableOpacity
               key={arena.arena_id}
@@ -427,7 +427,7 @@ export default function LeaderboardScreen() {
                     <Text style={[styles.sponsorLabel, { color: branding.primary }]}>{arena.sponsor_name}</Text>
                   </View>
                   <View style={styles.arenaCardMeta}>
-                    <Text style={styles.scoringIcon}>{scoringIcon}</Text>
+                    <Ionicons name={scoringIcon} size={20} color={branding.primary} />
                   </View>
                 </View>
                 <View style={styles.arenaCardBottom}>
@@ -1096,9 +1096,6 @@ const styles = StyleSheet.create({
   },
   arenaCardMeta: {
     alignItems: 'center',
-  },
-  scoringIcon: {
-    fontSize: 20,
   },
   arenaCardBottom: {
     flexDirection: 'row',

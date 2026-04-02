@@ -82,6 +82,13 @@
   "planCompletedSubtitle": "Svaka čast! Završio si sve vežbe.",
   "overachieved": "🎉 Premašeno!",
   "failedNextExercise": "Neuspešno prebacivanje na sledeću vežbu. Pokušaj ponovo.",
+  "leaveWorkoutTitle": "Napustiti trening?",
+  "leaveWorkoutMessage": "Napredak će biti sačuvan i sesija će biti završena.",
+  "leaveWorkoutConfirm": "Završi trening",
+  "cancelWorkout": "Otkaži trening",
+  "sessionLoadFailedTitle": "Greška sesije",
+  "sessionLoadFailedBody": "Nije moguće učitati sesiju treninga. Pokušaj ponovo skeniranjem.",
+  "backToScan": "Nazad na skeniranje",
   "shortWorkoutTitle": "Prekratko za drops",
   "shortWorkoutBody": "Treninzi ispod 2 minuta ne donose drops ({{seconds}}s do sada). Ipak završiti?",
   "shortWorkoutConfirm": "Završi trening",
@@ -125,6 +132,7 @@
     "happyHourBreakdown": "Baza: {{base}} → x{{multiplier}} → {{total}} drops",
     "happyHourApplied": "x{{multiplier}} bonus primenjen — {{earned}} drops zarađeno",
     "trackingOnlyTitle": "Trening zabeležen — nema nagrada",
-    "trackingOnlyBody": "Dnevni limit drops je dostignut pre ove sesije. Aktivnost je zapisana, ali drops i izazovi nisu nagrađeni."
+    "trackingOnlyBody": "Dnevni limit drops je dostignut pre ove sesije. Aktivnost je zapisana, ali drops i izazovi nisu nagrađeni.",
+    "syncingDrops": "Sinhronizujemo tvoje drops — samo trenutak..."
   }
 }

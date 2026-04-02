@@ -82,6 +82,13 @@
   "planCompletedSubtitle": "Congratulations! You've completed all exercises.",
   "overachieved": "🎉 Overachieved!",
   "failedNextExercise": "Failed to move to next exercise. Please try again.",
+  "leaveWorkoutTitle": "Leave workout?",
+  "leaveWorkoutMessage": "Your progress will be saved and the session will be ended.",
+  "leaveWorkoutConfirm": "End workout",
+  "cancelWorkout": "Cancel workout",
+  "sessionLoadFailedTitle": "Session error",
+  "sessionLoadFailedBody": "Failed to load your workout session. Please try scanning again.",
+  "backToScan": "Back to scan",
   "shortWorkoutTitle": "Too short for drops",
   "shortWorkoutBody": "Workouts under 2 minutes don't earn drops ({{seconds}}s so far). End anyway?",
   "shortWorkoutConfirm": "End workout",
@@ -124,6 +131,7 @@
     "happyHourBreakdown": "Base: {{base}} → x{{multiplier}} → {{total}} drops",
     "happyHourApplied": "x{{multiplier}} boost applied — {{earned}} drops earned",
     "trackingOnlyTitle": "Workout tracked — no rewards",
-    "trackingOnlyBody": "Daily drop limit was reached before this session. Your activity is logged, but no drops or challenge progress were awarded."
+    "trackingOnlyBody": "Daily drop limit was reached before this session. Your activity is logged, but no drops or challenge progress were awarded.",
+    "syncingDrops": "Syncing your drops — just a moment..."
   }
 }

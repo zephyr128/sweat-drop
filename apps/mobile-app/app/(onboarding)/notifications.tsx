@@ -27,20 +27,23 @@ export default function NotificationsScreen() {
   const { t } = useTranslation('onboarding');
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
-  const onboardingStep = useAuthStore((s) => s.onboardingStep);
 
   const [loading, setLoading] = useState(false);
 
   const completeOnboarding = async () => {
     await AsyncStorage.setItem('pushNotificationsAsked', 'true');
-    // New users continue onboarding; returning users (reinstall/sign-in) go home.
-    if (onboardingStep === 'notifications' || onboardingStep === 'profile_setup') {
+    // Re-fetch profile so we have the latest onboarding_completed flag.
+    const { fetchProfile, profile: staleProfile } = useAuthStore.getState();
+    await fetchProfile();
+    const profile = useAuthStore.getState().profile ?? staleProfile;
+    if (profile?.onboarding_completed) {
+      // Profile is already fully set up — go straight home.
+      setOnboardingStep('done');
+      router.replace('/home');
+    } else {
       setOnboardingStep('profile_setup');
       router.replace('/(onboarding)/step-gender');
-      return;
     }
-    setOnboardingStep('done');
-    router.replace('/home');
   };
 
   const handleEnable = async () => {

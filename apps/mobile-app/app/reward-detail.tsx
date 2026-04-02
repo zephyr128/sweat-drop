@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Clipboard } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { log } from '@/lib/logger';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -58,6 +59,9 @@ export default function RewardDetailScreen() {
   const [redemptionStatus, setRedemptionStatus] = useState<'pending' | 'confirmed' | null>(null);
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const lastRedemptionId = useRef<string | null>(null);
+  const lastDropsSpent = useRef<number>(0);
 
   const loadReward = useCallback(async () => {
     if (!rewardId) return;
@@ -77,7 +81,7 @@ export default function RewardDetailScreen() {
 
     const { data } = await supabase
       .from('redemptions')
-      .select('reward_id, created_at, status, redemption_code')
+      .select('id, reward_id, created_at, status, redemption_code, drops_spent')
       .eq('user_id', session.user.id)
       .eq('reward_id', rewardId)
       .in('status', ['pending', 'confirmed'])
@@ -107,6 +111,8 @@ export default function RewardDetailScreen() {
     setClaimed(isClaimed);
     if (isClaimed && matchingRedemption) {
       setRedemptionStatus(matchingRedemption.status as 'pending' | 'confirmed');
+      lastRedemptionId.current = matchingRedemption.id;
+      lastDropsSpent.current = matchingRedemption.drops_spent ?? 0;
       if (matchingRedemption.status === 'pending' && matchingRedemption.redemption_code) {
         setLastCode(matchingRedemption.redemption_code);
       } else if (matchingRedemption.status === 'confirmed') {
@@ -114,6 +120,7 @@ export default function RewardDetailScreen() {
       }
     } else {
       setRedemptionStatus(null);
+      lastRedemptionId.current = null;
     }
   }, [session?.user, rewardId, activeGymId, reward]);
 
@@ -222,6 +229,8 @@ export default function RewardDetailScreen() {
       }
 
       setLastCode(data[0].redemption_code);
+      lastRedemptionId.current = data[0].redemption_id ?? null;
+      lastDropsSpent.current = reward.price_drops;
       setClaimed(true);
       setRedemptionStatus('pending');
       refreshLocalDrops();
@@ -249,6 +258,54 @@ export default function RewardDetailScreen() {
       buttons: [
         { label: t('common:cancel'), style: 'cancel' },
         { label: t('redeem'), onPress: handleRedeem },
+      ],
+    });
+  };
+
+  const doCancel = async () => {
+    const redemptionId = lastRedemptionId.current;
+    const dropsSpent = lastDropsSpent.current;
+    if (!redemptionId) return;
+
+    setCancelling(true);
+    try {
+      const { data, error } = await supabase.rpc('cancel_own_redemption', {
+        p_redemption_id: redemptionId,
+      });
+
+      if (error) {
+        showModal({ title: t('cancelError'), body: error.message });
+      } else {
+        const result = Array.isArray(data) ? data[0] : data;
+        if (result?.success) {
+          showModal({
+            title: t('cancelSuccess'),
+            body: t('cancelSuccessDesc', { drops: dropsSpent }),
+          });
+          setClaimed(false);
+          setRedemptionStatus(null);
+          setLastCode(null);
+          lastRedemptionId.current = null;
+          refreshLocalDrops();
+        } else {
+          showModal({ title: t('cancelError'), body: result?.error_message || t('cancelErrorDesc') });
+        }
+      }
+    } catch (err: any) {
+      log.error('[RewardDetail] Cancel error:', err);
+      showModal({ title: t('cancelError'), body: err?.message || t('cancelErrorDesc') });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleCancelRedemption = () => {
+    showModal({
+      title: t('cancelTitle'),
+      body: t('cancelConfirm', { drops: lastDropsSpent.current }),
+      buttons: [
+        { label: t('cancelNo'), style: 'cancel' },
+        { label: t('cancelYes'), style: 'destructive', onPress: doCancel },
       ],
     });
   };
@@ -453,7 +510,7 @@ export default function RewardDetailScreen() {
           </View>
         </Animated.View>
 
-        {/* Pending: show code with amber */}
+        {/* Pending: show code with amber + cancel */}
         {redemptionStatus === 'pending' && lastCode && (
           <Animated.View entering={FadeInDown.delay(350).duration(400)}>
             <View style={[styles.codeCard, { borderColor: 'rgba(251, 191, 36, 0.3)' }]}>
@@ -464,6 +521,33 @@ export default function RewardDetailScreen() {
                   {lastCode}
                 </Text>
                 <Text style={styles.codeHint}>{t('pendingPickupHint')}</Text>
+
+                <TouchableOpacity
+                  style={styles.copyCodeBtn}
+                  onPress={() => {
+                    Clipboard.setString(lastCode);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="copy-outline" size={15} color="#fbbf24" />
+                  <Text style={styles.copyCodeText}>Copy code</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={handleCancelRedemption}
+                  disabled={cancelling}
+                  activeOpacity={0.75}
+                >
+                  {cancelling ? (
+                    <ActivityIndicator size="small" color="#f87171" />
+                  ) : (
+                    <>
+                      <Ionicons name="close-circle-outline" size={16} color="#f87171" />
+                      <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </BlurView>
             </View>
           </Animated.View>
@@ -497,11 +581,28 @@ export default function RewardDetailScreen() {
               </Text>
             </View>
           ) : claimed && redemptionStatus === 'pending' ? (
-            <View style={[styles.claimedButton, { backgroundColor: 'rgba(251, 191, 36, 0.12)', borderColor: 'rgba(251, 191, 36, 0.3)' }]}>
-              <Ionicons name="time-outline" size={22} color="#fbbf24" />
-              <Text style={[styles.claimedButtonText, { color: '#fbbf24' }]}>
-                {t('pendingPickup')}
-              </Text>
+            <View style={styles.pendingRow}>
+              <View style={[styles.pendingBadge, { backgroundColor: 'rgba(251, 191, 36, 0.12)', borderColor: 'rgba(251, 191, 36, 0.3)' }]}>
+                <Ionicons name="time-outline" size={18} color="#fbbf24" />
+                <Text style={[styles.claimedButtonText, { color: '#fbbf24' }]}>
+                  {t('pendingPickup')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.cancelBarBtn}
+                onPress={handleCancelRedemption}
+                disabled={cancelling}
+                activeOpacity={0.75}
+              >
+                {cancelling ? (
+                  <ActivityIndicator size="small" color="#f87171" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={18} color="#f87171" />
+                    <Text style={styles.cancelBarBtnText}>{t('cancelRedemption')}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
@@ -752,6 +853,83 @@ const styles = StyleSheet.create({
   claimedButtonText: {
     ...fontStyles.heading,
     fontSize: 17,
+    letterSpacing: 0.3,
+  },
+
+  // ── Pending bottom bar row ──
+  pendingRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  pendingBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 54,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+
+  // ── Cancel button (bottom bar) ──
+  cancelBarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 54,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.35)',
+  },
+  cancelBarBtnText: {
+    ...fontStyles.heading,
+    fontSize: 14,
+    color: '#f87171',
+    letterSpacing: 0.3,
+  },
+
+  // ── Cancel button (code card) ──
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingVertical: 9,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.35)',
+    alignSelf: 'stretch',
+  },
+  cancelBtnText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#f87171',
+    letterSpacing: 0.2,
+  },
+
+  // ── Copy code button (code card) ──
+  copyCodeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.25)',
+    backgroundColor: 'rgba(251, 191, 36, 0.06)',
+  },
+  copyCodeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    color: '#fbbf24',
     letterSpacing: 0.3,
   },
 });

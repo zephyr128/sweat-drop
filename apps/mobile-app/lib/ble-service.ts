@@ -702,7 +702,8 @@ export class BLEService {
   async startMonitoring(
     onMeasurement: (measurement: BLEMeasurement) => void,
     onSleep?: () => void,
-    onReconnect?: () => Promise<boolean>
+    onReconnect?: () => Promise<boolean>,
+    onSimulatorComplete?: () => void,
   ): Promise<boolean> {
     if (!this.isConnected || !this.device) {
       log.error('[BLE] Not connected to device');
@@ -730,6 +731,10 @@ export class BLEService {
           },
           onDisconnect: () => {
             this.handleConnectionLoss();
+          },
+          onComplete: () => {
+            this.emitStatus('Simulator complete');
+            onSimulatorComplete?.();
           },
           onStatus: (status) => this.emitStatus(status),
         });

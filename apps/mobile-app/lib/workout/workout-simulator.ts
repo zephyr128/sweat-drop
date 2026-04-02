@@ -11,13 +11,18 @@ export type WorkoutSimulatorProfile =
   | 'disconnect_mid_session'
   | 'custom';
 
+export type SimMachineType = 'bike' | 'elliptical' | 'treadmill' | 'stepper';
+
 export interface CustomWorkoutSimulatorConfig {
+  machineType: SimMachineType;
   durationMinutes: number;
   baseRpm: number;
   rpmAmplitude: number;
   speedKmh: number;
   inclinePct: number;
   powerWatts: number;
+  resistanceLevel: number;
+  stepsPerMin: number;
   intervalEnabled: boolean;
   intervalHighRpm: number;
   intervalSeconds: number;
@@ -35,6 +40,7 @@ export interface WorkoutSimulatorOptions {
   tickMs?: number;
   onMeasurement: (measurement: BLEMeasurement) => void;
   onDisconnect?: () => void;
+  onComplete?: () => void;
   onStatus?: (status: string) => void;
 }
 
@@ -70,12 +76,17 @@ export function parseSimulatorDescriptor(sensorId: string): WorkoutSimulatorDesc
       const encoded = sensorId.replace('sim:custom:', '');
       const parsed = JSON.parse(decodeURIComponent(encoded)) as Partial<CustomWorkoutSimulatorConfig>;
       const config: CustomWorkoutSimulatorConfig = {
+        machineType: (['bike', 'elliptical', 'treadmill', 'stepper'].includes(parsed.machineType as string)
+          ? parsed.machineType as SimMachineType
+          : 'bike'),
         durationMinutes: Math.max(1, Math.round(Number(parsed.durationMinutes ?? 30))),
         baseRpm: Math.max(0, Math.round(Number(parsed.baseRpm ?? 70))),
         rpmAmplitude: Math.max(0, Math.round(Number(parsed.rpmAmplitude ?? 8))),
         speedKmh: Math.max(0, Number(parsed.speedKmh ?? 8)),
         inclinePct: Math.max(0, Number(parsed.inclinePct ?? 1.5)),
         powerWatts: Math.max(0, Number(parsed.powerWatts ?? 160)),
+        resistanceLevel: Math.max(0, Math.min(20, Number(parsed.resistanceLevel ?? 5))),
+        stepsPerMin: Math.max(0, Math.round(Number(parsed.stepsPerMin ?? 60))),
         intervalEnabled: Boolean(parsed.intervalEnabled ?? false),
         intervalHighRpm: Math.max(0, Math.round(Number(parsed.intervalHighRpm ?? 110))),
         intervalSeconds: Math.max(5, Math.round(Number(parsed.intervalSeconds ?? 45))),
@@ -166,6 +177,7 @@ export function startWorkoutSimulator(options: WorkoutSimulatorOptions): Workout
       if (simulatedSeconds >= simulatedDurationSeconds) {
         options.onStatus?.('Simulator duration reached');
         clearInterval(interval);
+        options.onComplete?.();
         return;
       }
     }
@@ -182,16 +194,36 @@ export function startWorkoutSimulator(options: WorkoutSimulatorOptions): Workout
     if (options.profile === 'custom' && options.customConfig) {
       const cfg = options.customConfig;
       syntheticCrankCounter += 1;
-      const dynamicSpeed = Math.max(0, cfg.speedKmh + (rpm - cfg.baseRpm) * 0.025);
+      const mt = cfg.machineType;
+
+      let dynamicSpeed: number;
+      let dynamicPower: number;
+      let incline = cfg.inclinePct;
+
+      if (mt === 'treadmill') {
+        dynamicSpeed = Math.max(0, cfg.speedKmh + (rpm - cfg.baseRpm) * 0.04);
+        const inclineBoost = 1 + incline * 0.05;
+        dynamicPower = Math.max(0, (cfg.powerWatts + (dynamicSpeed - cfg.speedKmh) * 8) * inclineBoost);
+      } else if (mt === 'stepper') {
+        const spm = cfg.stepsPerMin + (rpm - cfg.baseRpm) * 0.5;
+        dynamicSpeed = Math.max(0, spm * 0.025);
+        dynamicPower = Math.max(0, cfg.powerWatts + (spm - cfg.stepsPerMin) * 2.2 + cfg.resistanceLevel * 6);
+      } else if (mt === 'elliptical') {
+        dynamicSpeed = Math.max(0, cfg.speedKmh + (rpm - cfg.baseRpm) * 0.03);
+        dynamicPower = Math.max(0, cfg.powerWatts + (rpm - cfg.baseRpm) * 2.0 + cfg.resistanceLevel * 5);
+      } else {
+        dynamicSpeed = Math.max(0, cfg.speedKmh + (rpm - cfg.baseRpm) * 0.025);
+        dynamicPower = Math.max(0, cfg.powerWatts + (rpm - cfg.baseRpm) * 1.8);
+      }
+
       totalDistanceM += (dynamicSpeed / 3.6) * simulationDeltaSeconds;
-      const dynamicPower = Math.max(0, cfg.powerWatts + (rpm - cfg.baseRpm) * 1.8);
       totalCalories += Math.max(0, dynamicPower / 1000) * simulationDeltaSeconds * 0.9;
       options.onMeasurement(
         createFTMSMeasurement(
           {
             rpm,
             speed: Math.round(dynamicSpeed * 10) / 10,
-            incline: cfg.inclinePct,
+            incline,
             power: Math.round(dynamicPower),
             distance: Math.round(totalDistanceM * 10) / 10,
             calories: Math.round(totalCalories),

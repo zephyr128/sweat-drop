@@ -10,6 +10,7 @@ import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
+import { supabase } from '@/lib/supabase';
 import BleManager from 'react-native-ble-manager';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter } from 'expo-router';
@@ -117,6 +118,7 @@ function StackNavigator() {
       />
       <Stack.Screen name="checkin-result" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
       <Stack.Screen name="workout" options={{ headerShown: false }} />
+      <Stack.Screen name="workout-sim" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
       <Stack.Screen name="workout-history" options={{ headerShown: false }} />
       <Stack.Screen name="arenas" options={{ headerShown: false }} />
@@ -128,15 +130,45 @@ function StackNavigator() {
       <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
+      <Stack.Screen name="transactions" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="(onboarding)/reset-password"
+        options={{
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 300,
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }
 
 function parseReferralCode(url: string | null): string | null {
   if (!url) return null;
-  // Match sweatdrop://join/<code> or https://sweat-drop.com/join/<code>
   const match = url.match(/(?:sweatdrop:\/\/|https?:\/\/sweat-drop\.com\/)join\/([A-Za-z0-9_-]+)/);
   return match?.[1] ?? null;
+}
+
+/**
+ * Extract Supabase auth tokens from a deep link URL.
+ * The landing page passes them as a hash fragment:
+ *   sweatdrop://auth/confirm#access_token=...&refresh_token=...&type=signup
+ */
+function parseAuthTokensFromUrl(url: string | null): {
+  accessToken: string;
+  refreshToken: string;
+} | null {
+  if (!url) return null;
+  // Look for hash fragment tokens in sweatdrop://auth/* URLs
+  const hashIndex = url.indexOf('#');
+  if (hashIndex === -1) return null;
+  const hash = url.slice(hashIndex + 1);
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (!accessToken || !refreshToken) return null;
+  return { accessToken, refreshToken };
 }
 
 // Prevent splash screen from auto-hiding
@@ -148,6 +180,8 @@ export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const session = useAuthStore((s) => s.session);
+  const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
+  const clearPendingPasswordRecovery = useAuthStore((s) => s.clearPendingPasswordRecovery);
   const pushTokenRegistered = useRef(false);
   const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
   const hydratePendingReferral = usePendingReferralStore((s) => s.hydrate);
@@ -157,11 +191,29 @@ export default function RootLayout() {
     hydratePendingReferral();
   }, []);
 
-  // Deep link handler for sweatdrop://join/<code>
-  // Only stores the pending code — navigation to /invite-friend happens
-  // exclusively from home.tsx to guarantee home is always on the stack.
+  // Deep link handler for sweatdrop:// URLs
+  // Handles: sweatdrop://join/<code> (referral), sweatdrop://auth/confirm#... (email verification tokens)
   useEffect(() => {
-    const handleDeepLink = (event: { url: string }) => {
+    const handleDeepLink = async (event: { url: string }) => {
+      // Auth tokens from landing page (email confirm / password reset)
+      const tokens = parseAuthTokensFromUrl(event.url);
+      if (tokens) {
+        log.debug('[App] Auth tokens received via deep link');
+        try {
+          const { error } = await supabase.auth.setSession({
+            access_token: tokens.accessToken,
+            refresh_token: tokens.refreshToken,
+          });
+          if (error) {
+            log.warn('[App] setSession from deep link failed:', error.message);
+          }
+        } catch (e) {
+          log.warn('[App] setSession from deep link exception:', e);
+        }
+        return;
+      }
+
+      // Referral codes
       const code = parseReferralCode(event.url);
       if (code) {
         log.debug('[App] Referral deep link received:', code);
@@ -169,11 +221,10 @@ export default function RootLayout() {
       }
     };
 
+    // Check initial URL on cold start
     Linking.getInitialURL().then((url) => {
-      const code = parseReferralCode(url);
-      if (code) {
-        log.debug('[App] Referral code from initial URL:', code);
-        setPendingCode(code);
+      if (url) {
+        handleDeepLink({ url });
       }
     });
 
@@ -280,6 +331,13 @@ export default function RootLayout() {
       router.replace('/(onboarding)/verify-email');
     }
   }, [isInitialized, session?.user, segments, router]);
+
+  // PASSWORD_RECOVERY deep-link handler — navigate to in-app reset screen.
+  useEffect(() => {
+    if (!pendingPasswordRecovery) return;
+    clearPendingPasswordRecovery();
+    router.replace('/(onboarding)/reset-password');
+  }, [pendingPasswordRecovery, clearPendingPasswordRecovery, router]);
 
   // Block render until custom fonts are loaded
   if (!fontsLoaded && !fontError) {

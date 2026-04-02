@@ -2,13 +2,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,6 +47,13 @@ interface EarnedData {
   allTime: number;
 }
 
+interface SpentData {
+  today: number;
+  week: number;
+  month: number;
+  allTime: number;
+}
+
 interface ExpiryData {
   expiringIn7d: number;
   expiringIn30d: number;
@@ -54,29 +61,7 @@ interface ExpiryData {
   daysSinceLastVisit: number;
 }
 
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  created_at: string;
-  metadata?: Record<string, any>;
-}
-
-const TX_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  session: 'bicycle-outline',
-  checkin: 'location-outline',
-  challenge: 'trophy-outline',
-  referral_reward: 'people-outline',
-  redemption: 'bag-outline',
-  milestone: 'medal-outline',
-  streak: 'flame-outline',
-  expired: 'hourglass-outline',
-  bonus: 'star-outline',
-  arena: 'shield-outline',
-  refund: 'arrow-undo-outline',
-};
-
-const PAGE_SIZE = 15;
+type SummaryPeriod = 'today' | 'week' | 'month' | 'allTime';
 
 // ────────────────────────────────────────────────────
 //  Screen
@@ -94,12 +79,10 @@ export default function WalletScreen() {
   const dropLimits = useDropLimitStatus(activeGymId);
 
   const [earned, setEarned] = useState<EarnedData>({ today: 0, week: 0, month: 0, allTime: 0 });
+  const [spent, setSpent] = useState<SpentData>({ today: 0, week: 0, month: 0, allTime: 0 });
   const [expiry, setExpiry] = useState<ExpiryData | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [txLoading, setTxLoading] = useState(true);
-  const [hasMoreTx, setHasMoreTx] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const pageRef = useRef(0);
+  const [activePeriod, setActivePeriod] = useState<SummaryPeriod>('week');
 
   type ScopeType = 'gym' | 'global';
   const [scope, setScope] = useState<ScopeType>('gym');
@@ -181,6 +164,58 @@ export default function WalletScreen() {
     }
   }, [session?.user, activeGymId, scope]);
 
+  const loadSpent = useCallback(async () => {
+    if (!session?.user) return;
+    try {
+      const userId = session.user.id;
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dayOfWeek = now.getDay();
+      const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const SPEND_TYPES = ['redemption', 'reward_claim', 'expired', 'arena_entry'];
+
+      // Fetch gross spend rows (negative amounts) and refunds (positive) together
+      let query = supabase
+        .from('drops_transactions')
+        .select('amount, created_at, transaction_type')
+        .eq('user_id', userId)
+        .or(`and(transaction_type.in.(${SPEND_TYPES.join(',')}),amount.lt.0),and(transaction_type.eq.refund,amount.gt.0)`)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (selectedGymId) query = query.eq('gym_id', selectedGymId);
+
+      const { data: txRows } = await query;
+
+      let today = 0;
+      let week = 0;
+      let month = 0;
+      let allTime = 0;
+      for (const row of txRows ?? []) {
+        const d = new Date(row.created_at);
+        // Negative spend rows add to spent; refund rows (positive) subtract from spent
+        const delta = row.transaction_type === 'refund'
+          ? -Math.abs(row.amount ?? 0)
+          : Math.abs(row.amount ?? 0);
+        allTime += delta;
+        if (d >= monthStart) month += delta;
+        if (d >= weekStart) week += delta;
+        if (d >= todayStart) today += delta;
+      }
+      // Clamp each bucket to zero — refunds can't make "spent" go negative
+      setSpent({
+        today: Math.max(0, today),
+        week: Math.max(0, week),
+        month: Math.max(0, month),
+        allTime: Math.max(0, allTime),
+      });
+    } catch (err) {
+      log.error('[Wallet] Error loading spent:', err);
+    }
+  }, [session?.user, activeGymId, scope]);
+
   const loadExpiry = useCallback(async () => {
     if (!session?.user || !activeGymId) { setExpiry(null); return; }
     try {
@@ -219,53 +254,15 @@ export default function WalletScreen() {
     }
   }, [session?.user, activeGymId]);
 
-  const loadTransactions = useCallback(async (page: number) => {
-    if (!session?.user) return;
-    try {
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE;
-
-      let query = supabase
-        .from('drops_transactions')
-        .select('id, amount, transaction_type, created_at, metadata')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-      if (selectedGymId) query = query.eq('gym_id', selectedGymId);
-
-      const { data } = await query;
-
-      const rows: Transaction[] = (data ?? []).map((r) => ({
-        id: r.id,
-        type: r.transaction_type,
-        amount: r.amount ?? 0,
-        created_at: r.created_at,
-        metadata: r.metadata as Record<string, any> | undefined,
-      }));
-
-      if (page === 0) {
-        setTransactions(rows);
-      } else {
-        setTransactions((prev) => [...prev, ...rows]);
-      }
-      setHasMoreTx(rows.length > PAGE_SIZE);
-      setTxLoading(false);
-    } catch (err) {
-      log.error('[Wallet] Error loading transactions:', err);
-    }
-  }, [session?.user, scope]);
-
   const refreshAll = useCallback(async () => {
-    pageRef.current = 0;
-    setTxLoading(true);
     await Promise.all([
       loadGyms(),
       loadEarned(),
+      loadSpent(),
       loadExpiry(),
-      loadTransactions(0),
       refreshLocalDrops(),
     ]);
-  }, [loadGyms, loadEarned, loadExpiry, loadTransactions, refreshLocalDrops]);
+  }, [loadGyms, loadEarned, loadSpent, loadExpiry, refreshLocalDrops]);
 
   useEffect(() => {
     if (session?.user) refreshAll();
@@ -290,11 +287,6 @@ export default function WalletScreen() {
     setRefreshing(false);
   }, [refreshAll]);
 
-  const loadMoreTx = useCallback(() => {
-    pageRef.current += 1;
-    loadTransactions(pageRef.current);
-  }, [loadTransactions]);
-
   // ── Derived state ──
 
   const expiryState: ExpiryState = (() => {
@@ -312,6 +304,8 @@ export default function WalletScreen() {
       : expiry.expiringIn7d
     : 0;
 
+  const dailyTarget = dropLimits.maxDropsPerDay || 300;
+  const dailyProgress = Math.min(earned.today / dailyTarget, 1);
   const weeklyTarget = dropLimits.maxDropsPerWeek || 1500;
   const weeklyProgress = Math.min(earned.week / weeklyTarget, 1);
 
@@ -320,282 +314,34 @@ export default function WalletScreen() {
     ? t('availableToSpend')
     : t('totalBalance');
 
-  // ── Render helpers ──
-
-  const formatDate = (iso: string): string => {
-    const d = new Date(iso);
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
-
-    if (d >= todayStart) {
-      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    }
-    if (d >= yesterdayStart) {
-      return t('common:back') || 'Yesterday';
-    }
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
-
-  const getTxIcon = (type: string): keyof typeof Ionicons.glyphMap =>
-    TX_ICONS[type] ?? 'swap-horizontal-outline';
-
-  const getTxLabel = (tx: Transaction): string => {
-    const key = `txType.${tx.type}`;
-    const translated = t(key);
-    if (translated !== key) return translated;
-    return tx.type.replace(/_/g, ' ');
-  };
-
   // ────────────────────────────────────────────────────
   //  UI
   // ────────────────────────────────────────────────────
 
-  const renderTransaction = useCallback(({ item: tx, index }: { item: Transaction; index: number }) => (
-    <View style={[styles.txRow, index < transactions.length - 1 && styles.txRowBorder]}>
-      <View style={[styles.txIconWrap, { backgroundColor: hexToRgba(tx.amount >= 0 ? branding.primary : '#FF3B30', 0.08) }]}>
-        <Ionicons
-          name={getTxIcon(tx.type)}
-          size={18}
-          color={tx.amount >= 0 ? branding.primary : '#FF3B30'}
-        />
-      </View>
-      <View style={styles.txInfo}>
-        <Text style={styles.txLabel} numberOfLines={1}>
-          {getTxLabel(tx)}
-        </Text>
-        <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
-      </View>
-      <Text
-        style={[
-          styles.txAmount,
-          getNumberStyle(16),
-          { color: tx.amount >= 0 ? branding.primary : '#FF3B30' },
-        ]}
-      >
-        {tx.amount >= 0 ? '+' : ''}{tx.amount} 💧
-      </Text>
-    </View>
-  ), [transactions.length, branding.primary]);
+  // Derived: values for the active period tab
+  const periodEarned = earned[activePeriod];
+  const periodSpent = spent[activePeriod];
+  const periodNet = periodEarned - periodSpent;
 
-  const walletListHeader = useMemo(() => (
-    <>
-      {userGyms.length > 1 && (
-        <Animated.View entering={FadeInDown.delay(40).duration(400)} style={{ marginBottom: 8 }}>
-          <SliderTabs
-            tabs={[
-              { key: 'gym', label: t('myGym'), icon: 'location' },
-              { key: 'global', label: t('global'), icon: 'globe-outline' },
-            ]}
-            activeKey={scope}
-            onChange={(key) => setScope(key as ScopeType)}
-            accentColor={branding.primary}
-          />
-        </Animated.View>
-      )}
+  // Period tab config
+  const periodTabs: { key: SummaryPeriod; label: string }[] = useMemo(() => [
+    { key: 'today', label: t('today') },
+    { key: 'week', label: t('thisWeek') },
+    { key: 'month', label: t('thisMonth') },
+    { key: 'allTime', label: t('allTime') },
+  ], [t]);
 
-      <Animated.View entering={FadeInDown.delay(80).duration(500)}>
-        <View style={[styles.heroOuter, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
-          <BlurView intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
-            <LinearGradient
-              colors={[
-                hexToRgba(branding.primary, 0.14),
-                'rgba(12, 12, 22, 0.92)',
-                hexToRgba(branding.primary, 0.06),
-              ]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroGradient}
-            >
-              <Text style={styles.heroLabel}>{heroLabel}</Text>
-
-              <View style={styles.heroRow}>
-                <Ionicons name="water" size={36} color={branding.primary} />
-                <Animated.Text
-                  key={`hero-${scope}`}
-                  entering={FadeInDown.duration(300)}
-                  style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}
-                >
-                  {heroBalance.toLocaleString()}
-                </Animated.Text>
-              </View>
-
-              <Text style={[styles.heroSub, { color: hexToRgba(branding.primary, 0.5) }]}>
-                {scope === 'gym' ? `${activeGym?.name ?? ''} ` : ''}{t('drops')}
-              </Text>
-
-              {scope === 'gym' && (
-                <TouchableOpacity
-                  style={[styles.heroCTA, { backgroundColor: branding.primary }]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push('/store');
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.heroCTAText, { color: branding.onPrimary }]}>
-                    {t('goToStore')} →
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </LinearGradient>
-          </BlurView>
-        </View>
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(180).duration(500)}>
-        <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-          <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
-            <Text style={styles.sectionTitle}>{t('earned')}</Text>
-
-            <EarnedRow
-              icon="today-outline"
-              label={t('today')}
-              value={earned.today}
-              color={branding.primary}
-              last={false}
-            />
-            <EarnedRow
-              icon="calendar-outline"
-              label={t('thisWeek')}
-              value={earned.week}
-              color={branding.primary}
-              last={false}
-              progressFill={weeklyProgress}
-              progressLabel={t('weeklyTarget', { target: weeklyTarget.toLocaleString() })}
-            />
-            <EarnedRow
-              icon="stats-chart-outline"
-              label={t('thisMonth')}
-              value={earned.month}
-              color={branding.primary}
-              last={false}
-            />
-            <EarnedRow
-              icon="trophy-outline"
-              label={t('allTime')}
-              value={earned.allTime}
-              color={branding.primary}
-              last
-            />
-          </BlurView>
-        </View>
-      </Animated.View>
-
-      {scope === 'global' && userGyms.length > 0 && (
-        <Animated.View entering={FadeInDown.delay(240).duration(500)}>
-          <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-            <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
-              <Text style={styles.sectionTitle}>{t('balanceByGym')}</Text>
-              {(() => {
-                const maxDrops = Math.max(...userGyms.map((g) => g.local_drops), 1);
-                return userGyms.map((gym, idx) => (
-                  <Animated.View
-                    key={gym.id}
-                    entering={FadeInDown.delay(260 + idx * 60).duration(350)}
-                  >
-                    <TouchableOpacity
-                      style={[
-                        styles.gymBreakdownRow,
-                        idx < userGyms.length - 1 && styles.gymBreakdownRowBorder,
-                      ]}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setScope('gym');
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.gymBreakdownTop}>
-                        <Text style={styles.gymBreakdownName} numberOfLines={1}>
-                          {gym.name}
-                        </Text>
-                        <View style={styles.gymBreakdownDropsRow}>
-                          <Ionicons name="water" size={14} color={branding.primary} />
-                          <Text
-                            style={[
-                              styles.gymBreakdownDrops,
-                              getNumberStyle(15),
-                              { color: branding.primary },
-                            ]}
-                          >
-                            {gym.local_drops.toLocaleString()}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.gymBreakdownBarTrack}>
-                        <Animated.View
-                          style={[
-                            styles.gymBreakdownBarFill,
-                            {
-                              width: `${Math.round((gym.local_drops / maxDrops) * 100)}%`,
-                              backgroundColor: branding.primary,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </TouchableOpacity>
-                  </Animated.View>
-                ));
-              })()}
-            </BlurView>
-          </View>
-        </Animated.View>
-      )}
-
-      {expiry && (
-        <Animated.View entering={FadeInDown.delay(280).duration(500)}>
-          <ExpiryCard
-            state={expiryState}
-            dropsAtRisk={dropsAtRisk}
-            daysUntilExpiry={daysUntilExpiry}
-            primary={branding.primary}
-            t={t}
-            onSpend={() => router.push('/store')}
-          />
-        </Animated.View>
-      )}
-
-      <Text style={styles.sectionTitle}>{t('activity')}</Text>
-
-      {txLoading && (
-        <ActivityIndicator
-          color={branding.primary}
-          style={{ marginTop: theme.spacing.lg }}
-        />
-      )}
-    </>
-  ), [scope, branding, heroBalance, heroLabel, earned, weeklyProgress, weeklyTarget, userGyms, expiry, expiryState, dropsAtRisk, daysUntilExpiry, txLoading, activeGymId]);
-
-  const walletListEmpty = useMemo(() => {
-    if (txLoading) return null;
-    return (
-      <View style={styles.emptyState}>
-        <Ionicons name="water-outline" size={48} color={theme.colors.textTertiary} />
-        <Text style={styles.emptyTitle}>{t('noActivity')}</Text>
-        <Text style={styles.emptySub}>{t('noActivityDesc')}</Text>
-        <TouchableOpacity
-          style={[styles.emptyCTA, { borderColor: hexToRgba(branding.primary, 0.3) }]}
-          onPress={() => router.push('/scan')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.emptyCTAText, { color: branding.primary }]}>
-            {t('startWorkout')} →
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }, [txLoading, branding.primary]);
-
-  const walletListFooter = useMemo(() => {
-    if (!hasMoreTx) return null;
-    return (
-      <TouchableOpacity style={styles.loadMore} onPress={loadMoreTx} activeOpacity={0.7}>
-        <Text style={[styles.loadMoreText, { color: branding.primary }]}>
-          {t('loadMore')}
-        </Text>
-      </TouchableOpacity>
-    );
-  }, [hasMoreTx, branding.primary, loadMoreTx]);
+  const historyButton = (
+    <Pressable
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push('/transactions');
+      }}
+      style={({ pressed }) => [styles.historyBtn, pressed && { opacity: 0.6 }]}
+    >
+      <Ionicons name="receipt-outline" size={22} color={branding.primary} />
+    </Pressable>
+  );
 
   return (
     <View style={styles.safe}>
@@ -606,14 +352,11 @@ export default function WalletScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <ScreenHeader title={t('title')} />
+      <ScreenHeader title={t('title')} right={historyButton} />
 
-      <FlatList
-        data={txLoading ? [] : transactions}
-        renderItem={renderTransaction}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 48 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -622,69 +365,242 @@ export default function WalletScreen() {
             tintColor={branding.primary}
           />
         }
-        ListHeaderComponent={walletListHeader}
-        ListEmptyComponent={walletListEmpty}
-        ListFooterComponent={walletListFooter}
-        onEndReached={hasMoreTx ? loadMoreTx : undefined}
-        onEndReachedThreshold={0.3}
-      />
-    </View>
-  );
-}
-
-// ────────────────────────────────────────────────────
-//  Sub-components
-// ────────────────────────────────────────────────────
-
-function EarnedRow({
-  icon,
-  label,
-  value,
-  color,
-  last,
-  progressFill,
-  progressLabel,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: number;
-  color: string;
-  last: boolean;
-  progressFill?: number;
-  progressLabel?: string;
-}) {
-  return (
-    <View style={[styles.earnedRow, !last && styles.earnedRowBorder]}>
-      <View style={styles.earnedLeft}>
-        <Ionicons name={icon} size={18} color={color} />
-        <Text style={styles.earnedLabel}>{label}</Text>
-      </View>
-      <View style={styles.earnedRight}>
-        <View style={styles.earnedAmountRow}>
-          <Ionicons name="water" size={16} color={color} />
-          <Text style={[styles.earnedValue, getNumberStyle(17), { color }]}>
-            {value.toLocaleString()}
-          </Text>
-        </View>
-        {progressFill != null && (
-          <View style={styles.progressWrap}>
-            <View style={styles.progressTrack}>
-              <Animated.View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.round(progressFill * 100)}%`, backgroundColor: color },
-                ]}
-              />
-            </View>
-            {progressLabel && (
-              <Text style={styles.progressLabel}>{progressLabel}</Text>
-            )}
-          </View>
+      >
+        {/* ── Scope tabs (multi-gym only) ── */}
+        {userGyms.length > 1 && (
+          <Animated.View entering={FadeInDown.delay(40).duration(400)} style={{ marginBottom: 16 }}>
+            <SliderTabs
+              tabs={[
+                { key: 'gym', label: t('myGym'), icon: 'location' },
+                { key: 'global', label: t('global'), icon: 'globe-outline' },
+              ]}
+              activeKey={scope}
+              onChange={(key) => setScope(key as ScopeType)}
+              accentColor={branding.primary}
+            />
+          </Animated.View>
         )}
-      </View>
+
+        {/* ── Hero balance card ── */}
+        <Animated.View entering={FadeInDown.delay(80).duration(500)}>
+          <View style={[styles.heroOuter, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
+            <BlurView intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
+              <LinearGradient
+                colors={[
+                  hexToRgba(branding.primary, 0.14),
+                  'rgba(12, 12, 22, 0.92)',
+                  hexToRgba(branding.primary, 0.06),
+                ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroGradient}
+              >
+                <Text style={styles.heroLabel}>{heroLabel}</Text>
+                <View style={styles.heroRow}>
+                  <Ionicons name="water" size={36} color={branding.primary} />
+                  <Animated.Text
+                    key={`hero-${scope}`}
+                    entering={FadeInDown.duration(300)}
+                    style={[styles.heroNumber, getNumberStyle(52), { color: branding.primary }]}
+                  >
+                    {heroBalance.toLocaleString()}
+                  </Animated.Text>
+                </View>
+                <Text style={[styles.heroSub, { color: hexToRgba(branding.primary, 0.5) }]}>
+                  {scope === 'gym' ? `${activeGym?.name ?? ''} ` : ''}{t('drops')}
+                </Text>
+                {scope === 'gym' && (
+                  <TouchableOpacity
+                    style={[styles.heroCTA, { backgroundColor: branding.primary }]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push('/store');
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.heroCTAText, { color: branding.onPrimary }]}>
+                      {t('goToStore')} →
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </LinearGradient>
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ── Unified Earned / Spent summary card ── */}
+        <Animated.View entering={FadeInDown.delay(160).duration(500)}>
+          <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+            <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+
+              {/* Period selector tabs — flush to the card top edge, full width */}
+              <SliderTabs
+                tabs={periodTabs}
+                activeKey={activePeriod}
+                onChange={(key) => setActivePeriod(key as SummaryPeriod)}
+                accentColor={branding.primary}
+                barStyle={styles.periodSlider}
+              />
+
+              <View style={styles.sectionInner}>
+                {/* Earned / Spent columns */}
+                <View style={styles.summaryColumns}>
+                  {/* Earned column */}
+                  <View style={styles.summaryCol}>
+                    <View style={styles.summaryColHeader}>
+                      <Ionicons name="arrow-down-circle-outline" size={15} color={branding.primary} />
+                      <Text style={[styles.summaryColLabel, { color: branding.primary }]}>{t('earned')}</Text>
+                    </View>
+                    <Animated.Text
+                      key={`earned-${activePeriod}`}
+                      entering={FadeInDown.duration(250)}
+                      style={[styles.summaryValue, getNumberStyle(28), { color: branding.primary }]}
+                    >
+                      {periodEarned.toLocaleString()}
+                    </Animated.Text>
+                    <View style={styles.summaryDropsRow}>
+                      <Ionicons name="water" size={12} color={hexToRgba(branding.primary, 0.6)} />
+                      <Text style={[styles.summaryDropsLabel, { color: hexToRgba(branding.primary, 0.5) }]}>drops</Text>
+                    </View>
+                    {activePeriod === 'today' && dailyProgress > 0 && (
+                      <View style={styles.progressWrap}>
+                        <View style={styles.progressTrack}>
+                          <View style={[styles.progressFill, { width: `${Math.round(dailyProgress * 100)}%`, backgroundColor: branding.primary }]} />
+                        </View>
+                        <Text style={styles.progressLabel}>{t('dailyTarget', { target: dailyTarget.toLocaleString() })}</Text>
+                      </View>
+                    )}
+                    {activePeriod === 'week' && weeklyProgress > 0 && (
+                      <View style={styles.progressWrap}>
+                        <View style={styles.progressTrack}>
+                          <View style={[styles.progressFill, { width: `${Math.round(weeklyProgress * 100)}%`, backgroundColor: branding.primary }]} />
+                        </View>
+                        <Text style={styles.progressLabel}>{t('weeklyTarget', { target: weeklyTarget.toLocaleString() })}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Divider */}
+                  <View style={styles.summaryDivider} />
+
+                  {/* Spent column */}
+                  <View style={styles.summaryCol}>
+                    <View style={styles.summaryColHeader}>
+                      <Ionicons name="arrow-up-circle-outline" size={15} color="#FF3B30" />
+                      <Text style={[styles.summaryColLabel, { color: '#FF3B30' }]}>{t('spent')}</Text>
+                    </View>
+                    <Animated.Text
+                      key={`spent-${activePeriod}`}
+                      entering={FadeInDown.duration(250)}
+                      style={[styles.summaryValue, getNumberStyle(28), { color: periodSpent > 0 ? '#FF3B30' : theme.colors.textTertiary }]}
+                    >
+                      {periodSpent.toLocaleString()}
+                    </Animated.Text>
+                    <View style={styles.summaryDropsRow}>
+                      <Ionicons name="water" size={12} color="rgba(255,59,48,0.5)" />
+                      <Text style={styles.summaryDropsLabel}>drops</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Net row */}
+                <View style={[styles.netRow, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
+                  <Ionicons
+                    name={periodNet >= 0 ? 'trending-up-outline' : 'trending-down-outline'}
+                    size={14}
+                    color={periodNet >= 0 ? branding.primary : '#FF3B30'}
+                  />
+                  <Text style={styles.netLabel}>{t('net')}</Text>
+                  <Text style={[styles.netValue, getNumberStyle(14), { color: periodNet >= 0 ? branding.primary : '#FF3B30' }]}>
+                    {periodNet >= 0 ? '+' : ''}{periodNet.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+            </BlurView>
+          </View>
+        </Animated.View>
+
+        {/* ── Per-gym breakdown (global scope) ── */}
+        {scope === 'global' && userGyms.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(220).duration(500)}>
+            <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
+              <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+                <View style={styles.sectionInner}>
+                  <Text style={styles.sectionTitle}>{t('balanceByGym')}</Text>
+                  {(() => {
+                    const maxDrops = Math.max(...userGyms.map((g) => g.local_drops), 1);
+                    return userGyms.map((gym, idx) => (
+                      <Animated.View key={gym.id} entering={FadeInDown.delay(240 + idx * 50).duration(350)}>
+                        <TouchableOpacity
+                          style={[styles.gymBreakdownRow, idx < userGyms.length - 1 && styles.gymBreakdownRowBorder]}
+                          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setScope('gym'); }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.gymBreakdownTop}>
+                            <Text style={styles.gymBreakdownName} numberOfLines={1}>{gym.name}</Text>
+                            <View style={styles.gymBreakdownDropsRow}>
+                              <Ionicons name="water" size={14} color={branding.primary} />
+                              <Text style={[styles.gymBreakdownDrops, getNumberStyle(15), { color: branding.primary }]}>
+                                {gym.local_drops.toLocaleString()}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.gymBreakdownBarTrack}>
+                            <View style={[styles.gymBreakdownBarFill, { width: `${Math.round((gym.local_drops / maxDrops) * 100)}%`, backgroundColor: branding.primary }]} />
+                          </View>
+                        </TouchableOpacity>
+                      </Animated.View>
+                    ));
+                  })()}
+                </View>
+              </BlurView>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ── Expiry card ── */}
+        {expiry && (
+          <Animated.View entering={FadeInDown.delay(260).duration(500)}>
+            <ExpiryCard
+              state={expiryState}
+              dropsAtRisk={dropsAtRisk}
+              daysUntilExpiry={daysUntilExpiry}
+              primary={branding.primary}
+              t={t}
+              onSpend={() => router.push('/store')}
+            />
+          </Animated.View>
+        )}
+
+        {/* ── Transaction history CTA ── */}
+        <Animated.View entering={FadeInDown.delay(300).duration(500)}>
+          <TouchableOpacity
+            style={[styles.historyCtaCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/transactions');
+            }}
+            activeOpacity={0.75}
+          >
+            <BlurView intensity={glassCard.blur} tint="dark" style={styles.historyCtaBlur}>
+              <View style={[styles.historyCtaIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+                <Ionicons name="receipt-outline" size={20} color={branding.primary} />
+              </View>
+              <View style={styles.historyCtaText}>
+                <Text style={styles.historyCtaTitle}>{t('transactionHistory')}</Text>
+                <Text style={styles.historyCtaSub}>{t('transactionHistorySub')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
+            </BlurView>
+          </TouchableOpacity>
+        </Animated.View>
+
+      </ScrollView>
     </View>
   );
 }
+
 
 function ExpiryCard({
   state,
@@ -773,9 +689,15 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     padding: theme.spacing.lg,
-    paddingBottom: 48,
   },
 
+  // ── Header history button ──
+  historyBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // ── Hero ──
   heroOuter: {
@@ -835,6 +757,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
     backgroundColor: glassCard.bg,
+    // No padding here — handled per-section so tabs can sit flush at the top
+  },
+  sectionInner: {
     padding: theme.spacing.lg,
   },
   sectionTitle: {
@@ -845,42 +770,64 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
 
-  // ── Earned rows ──
-  earnedRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 14,
-  },
-  earnedRowBorder: {
+  // ── Period slider — flush to card top, full width, no rounded corners ──
+  periodSlider: {
+    borderRadius: 0,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 0,
   },
-  earnedLeft: {
+
+  // ── Summary columns ──
+  summaryColumns: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  earnedLabel: {
-    ...fontStyles.body,
-    fontSize: 15,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.3,
-  },
-  earnedRight: {
-    alignItems: 'flex-end',
+  summaryCol: {
+    flex: 1,
     gap: 4,
   },
-  earnedAmountRow: {
+  summaryColHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    marginBottom: 4,
   },
-  earnedValue: {},
-  progressWrap: {
-    alignItems: 'flex-end',
+  summaryColLabel: {
+    ...fontStyles.heading,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    lineHeight: 34,
+  },
+  summaryDropsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 3,
-    width: 100,
+  },
+  summaryDropsLabel: {
+    ...fontStyles.heading,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.25)',
+  },
+  summaryDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: 16,
+  },
+
+  // ── Progress bar (weekly target) ──
+  progressWrap: {
+    marginTop: 8,
+    gap: 4,
   },
   progressTrack: {
     width: '100%',
@@ -899,6 +846,23 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     letterSpacing: 0.2,
   },
+
+  // ── Net row ──
+  netRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  netLabel: {
+    ...fontStyles.heading,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    letterSpacing: 1.5,
+    flex: 1,
+  },
+  netValue: {},
 
   // ── Gym breakdown ──
   gymBreakdownRow: {
@@ -980,81 +944,41 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ── Transactions ──
-  txRow: {
+  // ── Transaction history CTA card ──
+  historyCtaCard: {
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginBottom: theme.spacing.lg,
+  },
+  historyCtaBlur: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    gap: 12,
+    gap: 14,
+    padding: 16,
+    backgroundColor: glassCard.bg,
   },
-  txRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  txIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  historyCtaIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  txInfo: {
+  historyCtaText: {
     flex: 1,
-    gap: 2,
   },
-  txLabel: {
+  historyCtaTitle: {
     ...fontStyles.bodySemiBold,
-    fontSize: 14,
+    fontSize: 15,
     color: theme.colors.text,
     letterSpacing: 0.2,
   },
-  txDate: {
+  historyCtaSub: {
     ...fontStyles.body,
-    fontSize: 11,
+    fontSize: 12,
     color: theme.colors.textTertiary,
     letterSpacing: 0.2,
-  },
-  txAmount: {},
-
-  // ── Empty state ──
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: theme.spacing['2xl'],
-    gap: theme.spacing.sm,
-  },
-  emptyTitle: {
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
-  },
-  emptySub: {
-    ...fontStyles.body,
-    fontSize: 13,
-    color: theme.colors.textTertiary,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
-  emptyCTA: {
-    marginTop: theme.spacing.md,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  emptyCTAText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
-    letterSpacing: 0.3,
-  },
-
-  // ── Load more ──
-  loadMore: {
-    alignItems: 'center',
-    paddingVertical: theme.spacing.lg,
-  },
-  loadMoreText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
-    letterSpacing: 0.3,
+    marginTop: 2,
   },
 });

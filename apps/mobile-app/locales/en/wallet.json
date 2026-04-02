@@ -13,7 +13,8 @@
   "thisWeek": "This week",
   "thisMonth": "This month",
   "allTime": "All time",
-  "weeklyTarget": "of {{target}}",
+  "dailyTarget": "of {{target}} today",
+  "weeklyTarget": "of {{target}} this week",
   "expiry": {
     "safe": {
       "title": "DROPS ARE SAFE",
@@ -30,6 +31,11 @@
       "cta": "Spend now"
     }
   },
+  "spent": "SPENT",
+  "net": "NET",
+  "transactionHistory": "Transaction History",
+  "transactionHistorySub": "View all drops activity",
+  "seeAll": "See all",
   "activity": "ACTIVITY",
   "noActivity": "No activity yet",
   "noActivityDesc": "Complete a workout to start earning drops",

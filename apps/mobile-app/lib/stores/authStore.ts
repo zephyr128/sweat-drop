@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
-import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
+import { PUSH_NOTIFICATIONS_ENABLED, clearPushToken } from '@/lib/notifications';
 import { setUser as setSentryUser } from '@/lib/sentry';
 
 // ── Types ──────────────────────────────────────────────────
@@ -64,6 +64,8 @@ interface AuthState {
   onboardingStep: OnboardingStep;
   isInitialized: boolean;
   isLoading: boolean;
+  /** Set to true when Supabase fires PASSWORD_RECOVERY — _layout.tsx navigates to reset-password */
+  pendingPasswordRecovery: boolean;
 
   // ── Actions ──
   initialize: () => () => void; // Returns cleanup (unsubscribe) function
@@ -75,6 +77,7 @@ interface AuthState {
     expo_push_token?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   setOnboardingStep: (step: OnboardingStep) => void;
+  clearPendingPasswordRecovery: () => void;
   signOut: () => Promise<void>;
   reset: () => void;
 }
@@ -121,14 +124,18 @@ function computeOnboardingStep(
   if (!usernameValid) return 'display_name';
   if (!hasAvatar) return 'avatar';
 
-  // Check if push notifications need asking (only if enabled)
-  if (PUSH_NOTIFICATIONS_ENABLED && !profile.expo_push_token) {
-    return 'notifications';
-  }
-
   // Profile setup wizard (gender, weight, height, birthday, goal)
   if (!profile.onboarding_completed) {
     return 'profile_setup';
+  }
+
+  // Check if push notifications need asking (only if enabled).
+  // Only shown once during the initial onboarding flow (before onboarding_completed).
+  // Returning users who reinstall / lose their push token are handled silently
+  // in the background by _layout.tsx — we never force them back through the
+  // notifications screen after onboarding is complete.
+  if (PUSH_NOTIFICATIONS_ENABLED && !profile.expo_push_token) {
+    return 'notifications';
   }
 
   return 'done';
@@ -146,6 +153,7 @@ export const useAuthStore = create<AuthState>()(
       onboardingStep: 'auth',
       isInitialized: false,
       isLoading: false,
+      pendingPasswordRecovery: false,
 
       // ────────────────────────────────────────────────────
       // initialize() — called ONCE in _layout.tsx
@@ -179,6 +187,11 @@ export const useAuthStore = create<AuthState>()(
             if (event === 'SIGNED_IN' && session?.user) {
               setSentryUser(session.user.id, session.user.email);
               await get().fetchProfile();
+            }
+
+            if (event === 'PASSWORD_RECOVERY' && session) {
+              // Signal to _layout.tsx that it should navigate to the reset-password screen.
+              set({ pendingPasswordRecovery: true });
             }
 
             if (event === 'SIGNED_OUT') {
@@ -300,11 +313,21 @@ export const useAuthStore = create<AuthState>()(
         set({ onboardingStep: step });
       },
 
+      clearPendingPasswordRecovery: () => {
+        set({ pendingPasswordRecovery: false });
+      },
+
       // ────────────────────────────────────────────────────
       // signOut() — clean logout
       // ────────────────────────────────────────────────────
       signOut: async () => {
         try {
+          // Clear push token BEFORE signing out (while we still have auth to update profiles)
+          const userId = get().session?.user?.id;
+          if (userId) {
+            await clearPushToken(userId);
+          }
+
           // Try to sign out of Google if applicable
           try {
             const { GoogleSignin } = await import(
@@ -345,6 +368,7 @@ export const useAuthStore = create<AuthState>()(
           profile: null,
           onboardingStep: 'auth',
           isLoading: false,
+          pendingPasswordRecovery: false,
         });
       },
     }),

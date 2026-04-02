@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
+import { withRetry } from '@/lib/workout/withRetry';
 
 /**
  * Available arena from get_available_arenas() RPC.
@@ -51,30 +52,43 @@ export function useAvailableArenas() {
   const { session } = useSession();
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
   const [loading, setLoading] = useState(false);
+  // Prevent stale state updates after unmount
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const loadArenas = useCallback(async () => {
     if (!session?.user) return;
+    if (!mountedRef.current) return;
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.rpc('get_available_arenas', {
-        p_user_id: session.user.id,
-      });
+      const data = await withRetry(
+        async () => {
+          const { data: rpcData, error } = await supabase.rpc('get_available_arenas', {
+            p_user_id: session.user.id,
+          });
+          if (error) throw error;
+          return rpcData as AvailableArena[];
+        },
+        { attempts: 3, baseDelayMs: 1500, label: 'useAvailableArenas' },
+      );
 
-      if (error) {
-        log.error('[useAvailableArenas] Error:', error);
-        setArenas([]);
-      } else {
-        const allArenas = (data as AvailableArena[]) || [];
-        // Loaded arenas
-        // Show all available arenas (not just opted-in ones) for home screen
-        setArenas(allArenas);
+      if (mountedRef.current) {
+        setArenas(data ?? []);
       }
     } catch (err) {
-      log.error('[useAvailableArenas] Exception:', err);
-      setArenas([]);
+      log.warn('[useAvailableArenas] Failed to load arenas (will show empty):', err);
+      if (mountedRef.current) {
+        setArenas([]);
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [session?.user?.id]);
 

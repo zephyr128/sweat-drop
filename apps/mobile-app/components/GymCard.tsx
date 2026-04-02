@@ -130,12 +130,6 @@ const CardContent: React.FC<CardContentProps> = ({
               </View>
             )}
           </View>
-          {gym.is_founding_partner && (
-            <View style={styles.foundingBadge}>
-              <Ionicons name="medal" size={12} color="#FFD700" />
-              <Text style={styles.foundingBadgeText}>Founding Partner</Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -269,17 +263,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.3,
-  },
-  foundingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  foundingBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFD700',
-    letterSpacing: 0.4,
   },
   infoSection: {
     gap: 6,

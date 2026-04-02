@@ -1,0 +1,31 @@
+{
+  "title": "Istorija transakcija",
+  "filterAll": "Sve",
+  "filterEarned": "Zarađeno",
+  "filterSpent": "Potrošeno",
+  "filterRewards": "Nagrade",
+  "filterExpired": "Isteklo",
+  "allGyms": "Sve teretane",
+  "noTransactions": "Nema transakcija",
+  "noTransactionsDesc": "Tvoja drops aktivnost će se prikazati ovde",
+  "balanceAfter": "Balans posle",
+  "loadMore": "Učitaj još",
+  "today": "Danas",
+  "yesterday": "Juče",
+  "txType": {
+    "session": "Trening",
+    "checkin": "Check-in",
+    "challenge": "Nagrada izazova",
+    "referral_reward": "Referral bonus",
+    "redemption": "Kupovina iz Store-a",
+    "milestone": "Milestone nagrada",
+    "streak": "Streak bonus",
+    "expired": "Istekli drops",
+    "bonus": "Bonus",
+    "arena": "Arena nagrada",
+    "refund": "Povrat",
+    "reward_claim": "Preuzimanje nagrade",
+    "arena_entry": "Ulaz u arenu",
+    "leaderboard_prize": "Nagrada leaderboarda"
+  }
+}

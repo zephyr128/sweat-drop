@@ -54,7 +54,7 @@
   "days": "days",
   "optInEarly": "Opt-in Early",
   "freeEntry": "Free entry",
-  "entryFee": "Entry: {{value}} 💧",
+  "entryFee": "Entry: {{value}} drops",
   "requiresStreak": "Requires: {{value}}-day streak 🔥",
   "requiresLevel": "Requires: {{value}} total drops ⭐",
   "yourBalance": "Your balance",

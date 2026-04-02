@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, type ComponentProps } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,11 +14,11 @@ import { useTranslation } from 'react-i18next';
 import { useAvailableArenas, AvailableArena } from '@/hooks/useAvailableArenas';
 import { useSession } from '@/hooks/useSession';
 
-const SCORING_ICONS: Record<string, string> = {
-  total_drops: '💧',
-  days_visited: '📅',
-  variety_score: '🏋️',
-  streak_days: '🔥',
+const SCORING_ICONS: Record<string, ComponentProps<typeof Ionicons>['name']> = {
+  total_drops: 'water',
+  days_visited: 'calendar-outline',
+  variety_score: 'barbell-outline',
+  streak_days: 'flame-outline',
 };
 
 // ── Helper: Get arena colors (custom branding or default) ──
@@ -31,10 +31,10 @@ function getArenaColors(arena: AvailableArena, fallbackPrimary: string) {
 }
 
 // ── Helper: Opt-in badge text ──
-function getOptInBadge(arena: AvailableArena): { icon: string; text: string } | null {
+function getOptInBadge(arena: AvailableArena): { icon: string | null; text: string } | null {
   switch (arena.opt_in_type) {
     case 'drops':
-      return { icon: '💧', text: `${arena.opt_in_value}` };
+      return { icon: null, text: `${arena.opt_in_value}` };  // water icon rendered separately
     case 'streak':
       return { icon: '🔥', text: `${arena.opt_in_value}d` };
     case 'level':
@@ -107,7 +107,7 @@ export default function ArenasScreen() {
     const colors = getArenaColors(arena, branding.primary);
     const daysLeft = getDaysLeft(arena.end_date);
     const daysUntilStart = getDaysUntilStart(arena.start_date);
-    const scoringIcon = SCORING_ICONS[arena.scoring_model] || '💧';
+    const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
     const optInBadge = getOptInBadge(arena);
 
     const cardContent = (
@@ -120,7 +120,9 @@ export default function ArenasScreen() {
           {/* Opt-in requirement badge — top-right corner */}
           {optInBadge && (
             <View style={[styles.optInBadge, { backgroundColor: hexToRgba(colors.primary, 0.15) }]}>
-              <Text style={styles.optInBadgeIcon}>{optInBadge.icon}</Text>
+              {optInBadge.icon === null
+                ? <Ionicons name="water" size={12} color={colors.primary} />
+                : <Text style={styles.optInBadgeIcon}>{optInBadge.icon}</Text>}
               <Text style={[styles.optInBadgeText, { color: colors.primary }]}>{optInBadge.text}</Text>
             </View>
           )}
@@ -153,7 +155,7 @@ export default function ArenasScreen() {
               <Text style={[styles.sponsorLabel, { color: colors.primary }]}>{arena.sponsor_name}</Text>
             </View>
             <View style={styles.arenaCardMeta}>
-              <Text style={styles.scoringIcon}>{scoringIcon}</Text>
+              <Ionicons name={scoringIcon} size={20} color={colors.primary} />
             </View>
           </View>
 
@@ -236,7 +238,7 @@ export default function ArenasScreen() {
 
   const renderCompletedCard = (arena: AvailableArena, index: number) => {
     const colors = getArenaColors(arena, branding.primary);
-    const scoringIcon = SCORING_ICONS[arena.scoring_model] || '💧';
+    const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
     const endedDate = new Date(arena.end_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
     return (
@@ -267,8 +269,8 @@ export default function ArenasScreen() {
                   <Text style={[styles.arenaName, { color: hexToRgba(colors.text, 0.8) }]} numberOfLines={1}>{arena.name}</Text>
                   <Text style={[styles.sponsorLabel, { color: hexToRgba(colors.primary, 0.6) }]}>{arena.sponsor_name}</Text>
                 </View>
-                <View style={styles.arenaCardMeta}>
-                  <Text style={[styles.scoringIcon, { opacity: 0.5 }]}>{scoringIcon}</Text>
+                <View style={[styles.arenaCardMeta, { opacity: 0.5 }]}>
+                  <Ionicons name={scoringIcon} size={20} color={colors.primary} />
                 </View>
               </View>
 
@@ -487,9 +489,6 @@ const styles = StyleSheet.create({
   },
   arenaCardMeta: {
     alignItems: 'center',
-  },
-  scoringIcon: {
-    fontSize: 20,
   },
   arenaDescription: {
     ...fontStyles.body,

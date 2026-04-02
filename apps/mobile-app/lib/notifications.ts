@@ -199,6 +199,30 @@ export async function getPushPermissionStatus(): Promise<'granted' | 'denied' | 
 }
 
 /**
+ * Clear the push token from the user's profile in Supabase.
+ * Called on logout — MUST be invoked before supabase.auth.signOut()
+ * so the user still has auth to update their own profile row.
+ *
+ * @param userId - The authenticated user's ID
+ */
+export async function clearPushToken(userId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ expo_push_token: null })
+      .eq('id', userId);
+
+    if (error) {
+      log.error('[Notifications] Failed to clear push token:', error.message);
+    } else {
+      log.debug('[Notifications] Push token cleared from profile');
+    }
+  } catch (error) {
+    log.error('[Notifications] Error clearing push token:', error);
+  }
+}
+
+/**
  * Save the push token to the user's profile in Supabase.
  * Only updates if the token has changed (avoids unnecessary writes).
  *

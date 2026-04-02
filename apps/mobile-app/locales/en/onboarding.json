@@ -62,8 +62,21 @@
     "forgotPassword": "Forgot password?",
     "resetPassword": "Reset Password",
     "sendResetLink": "Send Reset Link",
-    "resetEmailSent": "Check your email for a password reset link.",
-    "backToSignIn": "Back to Sign In"
+    "resetEmailSent": "Reset link sent!",
+    "resetEmailInstructions": "Check your email and follow the link to set a new password. Once done, return here and sign in with your new password.",
+    "resetEmailResend": "Resend Reset Email",
+    "resetEmailResentConfirm": "Resent! Check your inbox.",
+    "backToSignIn": "Back to Sign In",
+    "enterNewPassword": "Enter a new password",
+    "passwordMismatch": "Passwords do not match",
+    "resetPasswordTitle": "Set New Password",
+    "resetPasswordSubtitle": "Choose a strong password for your SweatDrop account.",
+    "resetPasswordSave": "Save New Password",
+    "resetPasswordSuccess": "Password Updated!",
+    "resetPasswordSuccessBody": "Your password has been changed. You can now use it to sign in.",
+    "resetPasswordContinue": "Go to SweatDrop",
+    "newPasswordPlaceholder": "New password",
+    "confirmPasswordPlaceholder": "Confirm new password"
   },
   "stepper": {
     "title": "How it works",

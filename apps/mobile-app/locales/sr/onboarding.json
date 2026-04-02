@@ -62,8 +62,21 @@
     "forgotPassword": "Zaboravljena lozinka?",
     "resetPassword": "Resetuj lozinku",
     "sendResetLink": "Pošalji link za reset",
-    "resetEmailSent": "Proverite email za link za resetovanje lozinke.",
-    "backToSignIn": "Nazad na prijavu"
+    "resetEmailSent": "Link za reset je poslat!",
+    "resetEmailInstructions": "Proveri email i klikni na link da postaviš novu lozinku. Nakon toga, vrati se ovde i prijavi se sa novom lozinkom.",
+    "resetEmailResend": "Ponovo pošalji link",
+    "resetEmailResentConfirm": "Ponovo poslato! Proveri inbox.",
+    "backToSignIn": "Nazad na prijavu",
+    "enterNewPassword": "Unesi novu lozinku",
+    "passwordMismatch": "Lozinke se ne podudaraju",
+    "resetPasswordTitle": "Postavi novu lozinku",
+    "resetPasswordSubtitle": "Odaberi jaku lozinku za tvoj SweatDrop nalog.",
+    "resetPasswordSave": "Sačuvaj novu lozinku",
+    "resetPasswordSuccess": "Lozinka je promenjena!",
+    "resetPasswordSuccessBody": "Tvoja lozinka je uspešno promenjena. Možeš se prijaviti sa novom lozinkom.",
+    "resetPasswordContinue": "Idi na SweatDrop",
+    "newPasswordPlaceholder": "Nova lozinka",
+    "confirmPasswordPlaceholder": "Potvrdi novu lozinku"
   },
   "stepper": {
     "title": "Kako funkcioniše",

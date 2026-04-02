@@ -13,6 +13,7 @@ import Svg, {
 } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect, useMemo } from 'react';
+import { loadPendingFinalization, clearPendingFinalization } from '@/lib/workout/pendingFinalization';
 import { useSession } from '@/hooks/useSession';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
@@ -59,7 +60,7 @@ interface ChallengeProgressItem {
 }
 
 export default function SessionSummaryScreen() {
-  const { sessionId, drops, duration, multiplier, badges, gymId, securityStatus, securityMessage, sessionTier, trackingOnly } = useLocalSearchParams<{
+  const { sessionId, drops, duration, multiplier, badges, gymId, securityStatus, securityMessage, sessionTier, trackingOnly, pendingSync } = useLocalSearchParams<{
     sessionId: string;
     drops: string;
     duration: string;
@@ -70,9 +71,8 @@ export default function SessionSummaryScreen() {
     securityMessage?: string;
     sessionTier?: string;
     trackingOnly?: string;
+    pendingSync?: string;
   }>();
-  // Parse multiplier from award_drops() response (default 1.0)
-  const streakMultiplier = multiplier ? parseFloat(multiplier) : 1.0;
   const { t } = useTranslation('workout');
   // Parse badge names from award_drops() response
   const awardedBadgeNames: string[] = badges ? (() => { try { return JSON.parse(badges); } catch { return []; } })() : [];
@@ -87,12 +87,17 @@ export default function SessionSummaryScreen() {
   const [streakDays, setStreakDays] = useState<number>(0);
   const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [resolvedDrops, setResolvedDrops] = useState<number | null>(null);
+  const [resolvedMultiplier, setResolvedMultiplier] = useState<number | null>(null);
+  const [resolvedBadges, setResolvedBadges] = useState<string[] | null>(null);
+  const [syncingDrops, setSyncingDrops] = useState(false);
   const router = useRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
   const { activeGym } = useTheme();
   const dropLimit = useDropLimitStatus(gymId || null);
-  const dropsNum = parseInt(drops || '0');
+  const dropsNum = resolvedDrops ?? parseInt(drops || '0');
+  const effectiveMultiplier = resolvedMultiplier ?? (multiplier ? parseFloat(multiplier) : 1.0);
   const wasTrackingOnly = trackingOnly === '1';
   const isLimitCapped = dropsNum <= 0 && dropLimit.limitReached && !securityStatus;
   const isSoftWarning = dropsNum > 0 && dropLimit.softSessionWarning && !securityStatus;
@@ -159,9 +164,8 @@ export default function SessionSummaryScreen() {
   const glowPulse = useSharedValue(0);
 
   useEffect(() => {
-    // Outer ring: session drops as a % of 500 (a reasonable single-session goal)
-    const dropsNum = parseInt(drops || '0');
-    const outerTarget = Math.min(dropsNum / 500, 1);
+    const effectiveDrops = resolvedDrops ?? parseInt(drops || '0');
+    const outerTarget = Math.min(effectiveDrops / 500, 1);
     animOuter.value = withTiming(outerTarget, { duration: 1400, easing: Easing.out(Easing.cubic) });
 
     // Inner ring fills fully (represents the completed session)
@@ -179,7 +183,7 @@ export default function SessionSummaryScreen() {
       -1,
       false,
     );
-  }, [drops]);
+  }, [drops, resolvedDrops]);
 
   const outerAnimatedProps = useAnimatedProps(() => ({
     strokeDashoffset: outerCircumference * (1 - animOuter.value),
@@ -255,8 +259,61 @@ export default function SessionSummaryScreen() {
       if (lastData.gym?.name) {
         setGymName(lastData.gym.name);
       }
+
+      // If the DB already has drops_earned from a prior successful award_drops,
+      // use that as the resolved value even if the client missed the response.
+      if (lastData.drops_earned > 0 && pendingSync === '1') {
+        setResolvedDrops(lastData.drops_earned);
+        setResolvedMultiplier(lastData.multiplier ?? null);
+        await clearPendingFinalization();
+        setLoading(false);
+        return;
+      }
     }
+
+    // Recover from a network failure during workout finalization:
+    // If pendingSync is flagged or a pending record exists in AsyncStorage,
+    // attempt one more award_drops call now that we're on a fresh screen.
+    await recoverPendingFinalization();
+
     setLoading(false);
+  };
+
+  const recoverPendingFinalization = async () => {
+    const shouldRecover = pendingSync === '1';
+    if (!shouldRecover || !sessionId) return;
+
+    const pending = await loadPendingFinalization();
+    if (!pending || pending.sessionId !== sessionId) {
+      // No matching pending record — nothing to recover
+      if (pending?.sessionId !== sessionId) await clearPendingFinalization();
+      return;
+    }
+
+    setSyncingDrops(true);
+    log.debug('[SessionSummary] Recovering pending finalization for session:', sessionId);
+
+    try {
+      const { data, error } = await supabase.rpc('award_drops', { p_session_id: sessionId });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const row = data[0];
+        setResolvedDrops(row.drops_earned ?? 0);
+        setResolvedMultiplier(row.multiplier ?? null);
+        setResolvedBadges(row.badges_earned?.length ? row.badges_earned : null);
+        log.debug('[SessionSummary] Pending finalization recovered:', {
+          drops_earned: row.drops_earned,
+          multiplier: row.multiplier,
+        });
+        await clearPendingFinalization();
+      } else if (error) {
+        log.error('[SessionSummary] Recovery award_drops failed:', error.message);
+      }
+    } catch (err) {
+      log.error('[SessionSummary] Recovery attempt threw:', err);
+    } finally {
+      setSyncingDrops(false);
+    }
   };
 
   const loadLeaderboardRank = async () => {
@@ -430,9 +487,9 @@ export default function SessionSummaryScreen() {
   };
 
   const getMultiplierLabel = () => {
-    if (streakMultiplier >= 2.0) return t('summary.streak14');
-    if (streakMultiplier >= 1.5) return t('summary.streak7');
-    if (streakMultiplier >= 1.2) return t('summary.streak3');
+    if (effectiveMultiplier >= 2.0) return t('summary.streak14');
+    if (effectiveMultiplier >= 1.5) return t('summary.streak7');
+    if (effectiveMultiplier >= 1.2) return t('summary.streak3');
     return '';
   };
 
@@ -483,6 +540,15 @@ export default function SessionSummaryScreen() {
             {dropsNum === 0 ? t('summary.noDropsHint') : t('summary.greatJob')}
           </Text>
         </Animated.View>
+
+        {syncingDrops && (
+          <Animated.View entering={FadeInDown.delay(240).duration(400)}>
+            <View style={styles.syncingCard}>
+              <ActivityIndicator size="small" color="#60A5FA" />
+              <Text style={styles.syncingCardText}>{t('summary.syncingDrops')}</Text>
+            </View>
+          </Animated.View>
+        )}
 
         {securityStatus ? (
           <Animated.View entering={FadeInDown.delay(260).duration(450)}>
@@ -1049,6 +1115,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.3,
     textAlign: 'center',
+  },
+  syncingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(96, 165, 250, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(96, 165, 250, 0.30)',
+    marginBottom: 8,
+  },
+  syncingCardText: {
+    ...fontStyles.body,
+    flex: 1,
+    fontSize: 13,
+    color: '#93C5FD',
   },
   securityCard: {
     flexDirection: 'row',

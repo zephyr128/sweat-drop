@@ -105,6 +105,7 @@ export default function AuthScreen() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [resentConfirm, setResentConfirm] = useState(false);
 
   // Legal consent is implicit — tapping any auth action counts as acceptance
   const legalAccepted = true;
@@ -329,7 +330,7 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   //  FORGOT PASSWORD
   // ────────────────────────────────────────────────────
-  const handleResetPassword = async () => {
+  const handleResetPassword = async (isResend = false) => {
     if (!email.trim()) {
       showModal({ title: t('common:error'), body: t('auth.enterEmailPassword') });
       return;
@@ -341,7 +342,12 @@ export default function AuthScreen() {
         redirectTo: siteUrl ? siteUrl + '/auth/reset' : undefined,
       });
       if (error) throw error;
-      setResetSent(true);
+      if (isResend) {
+        setResentConfirm(true);
+        setTimeout(() => setResentConfirm(false), 3000);
+      } else {
+        setResetSent(true);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('auth.somethingWentWrong');
       showModal({ title: t('common:error'), body: msg });
@@ -573,11 +579,26 @@ export default function AuthScreen() {
               resetSent ? (
                 <View style={styles.resetSentContainer}>
                   <View style={styles.resetSentIconBox}>
-                    <Ionicons name="checkmark-circle" size={32} color={theme.colors.primary} />
+                    <Ionicons name="checkmark-circle" size={40} color={theme.colors.primary} />
                   </View>
-                  <Text style={styles.resetSentText}>{t('auth.resetEmailSent')}</Text>
+                  <Text style={styles.resetSentTitle}>{t('auth.resetEmailSent')}</Text>
+                  <Text style={styles.resetSentText}>{t('auth.resetEmailInstructions')}</Text>
                   <TouchableOpacity
-                    onPress={() => { setShowForgotPassword(false); setResetSent(false); }}
+                    style={[styles.resendButton, (resetLoading || resentConfirm) && { opacity: 0.6 }]}
+                    onPress={() => handleResetPassword(true)}
+                    disabled={resetLoading || resentConfirm}
+                    activeOpacity={0.75}
+                  >
+                    {resetLoading ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : (
+                      <Text style={styles.resendButtonText}>
+                        {resentConfirm ? t('auth.resetEmailResentConfirm') : t('auth.resetEmailResend')}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => { setShowForgotPassword(false); setResetSent(false); setResentConfirm(false); }}
                     activeOpacity={0.7}
                     style={styles.backToSignInContainer}
                   >
@@ -589,7 +610,7 @@ export default function AuthScreen() {
                 <>
                   <TouchableOpacity
                     style={[styles.primaryButton, (resetLoading || !email.trim()) && { opacity: 0.6 }]}
-                    onPress={handleResetPassword}
+                    onPress={() => handleResetPassword(false)}
                     disabled={resetLoading || !email.trim()}
                     activeOpacity={0.85}
                   >
@@ -866,11 +887,34 @@ const styles = StyleSheet.create({
   },
   resetSentContainer: {
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     paddingVertical: 8,
   },
   resetSentIconBox: {
     marginBottom: 4,
+  },
+  resetSentTitle: {
+    ...fontStyles.heading,
+    fontSize: 18,
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+  },
+  resendButton: {
+    marginTop: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  resendButtonText: {
+    ...fontStyles.bodyMedium,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.2,
   },
   backToSignInContainer: {
     flexDirection: 'row',

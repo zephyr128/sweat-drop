@@ -24,7 +24,7 @@ interface ArenaGymBreakdownProps {
 function getScoreLabel(score: number, scoringModel: string, t: (key: string) => string): string {
   switch (scoringModel) {
     case 'total_drops':
-      return `${Math.round(score)} 💧`;
+      return `${Math.round(score)}`;
     case 'days_visited':
       return `${Math.round(score)} ${t('scoreLabelDays')}`;
     case 'variety_score':
@@ -32,8 +32,13 @@ function getScoreLabel(score: number, scoringModel: string, t: (key: string) => 
     case 'streak_days':
       return `🔥 ${Math.round(score)} ${t('scoreLabelDays')}`;
     default:
-      return `${Math.round(score)} 💧`;
+      return `${Math.round(score)}`;
   }
+}
+
+/** Whether this scoring model displays drops (needs water icon inline). */
+function isDropsModel(scoringModel: string): boolean {
+  return scoringModel === 'total_drops' || scoringModel === 'streak_days';
 }
 
 /**
@@ -42,7 +47,7 @@ function getScoreLabel(score: number, scoringModel: string, t: (key: string) => 
  */
 function getGymScoreLabel(score: number, scoringModel: string, t: (key: string) => string): string {
   if (scoringModel === 'streak_days') {
-    return `${Math.round(score)} 💧`;
+    return `${Math.round(score)}`;
   }
   return getScoreLabel(score, scoringModel, t);
 }
@@ -111,9 +116,14 @@ export default function ArenaGymBreakdown({
                 {getTotalLabel(scoringModel, t)}
               </Text>
             </View>
-            <Text style={[styles.totalValue, getNumberStyle(20), { color: primary }]}>
-              {getScoreLabel(totalScore, scoringModel, t)}
-            </Text>
+            <View style={styles.scoreValueRow}>
+              <Text style={[styles.totalValue, getNumberStyle(20), { color: primary }]}>
+                {getScoreLabel(totalScore, scoringModel, t)}
+              </Text>
+              {isDropsModel(scoringModel) && (
+                <Ionicons name="water" size={14} color={primary} />
+              )}
+            </View>
           </View>
 
           {/* Streak sub-header: clarify per-gym shows drops, not streak */}
@@ -144,9 +154,14 @@ export default function ArenaGymBreakdown({
                   <Text style={styles.gymName} numberOfLines={1}>{entry.gym_name}</Text>
                 </View>
                 <View style={styles.gymScoreCol}>
-                  <Text style={[styles.gymScore, getNumberStyle(14)]}>
-                    {getGymScoreLabel(entry.score, scoringModel, t)}
-                  </Text>
+                  <View style={styles.scoreValueRow}>
+                    <Text style={[styles.gymScore, getNumberStyle(14)]}>
+                      {getGymScoreLabel(entry.score, scoringModel, t)}
+                    </Text>
+                    {isDropsModel(scoringModel) && (
+                      <Ionicons name="water" size={11} color={theme.colors.textSecondary} />
+                    )}
+                  </View>
                   <Text style={[styles.gymPct, getNumberStyle(11), { color: hexToRgba(primary, 0.7) }]}>
                     ({pct}%)
                   </Text>
@@ -221,6 +236,11 @@ const styles = StyleSheet.create({
   },
   totalValue: {
     letterSpacing: 0.5,
+  },
+  scoreValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   /* Per-gym rows */
   gymRow: {

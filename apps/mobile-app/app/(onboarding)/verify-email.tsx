@@ -60,31 +60,57 @@ export default function VerifyEmailScreen() {
     }
   }, [router]);
 
-  // Auto-poll: check session every 8s to detect email confirmation.
-  // If refreshSession fails (session invalidated after confirmation),
-  // stop polling silently — user will tap the button to proceed.
+  // Auto-poll: check every 5s to detect email confirmation.
+  // Uses getUser() (server API call) as fallback when refreshSession() fails —
+  // this handles the case where the user confirmed on a different device and
+  // the local refresh token is stale but the server already knows.
   useEffect(() => {
     let stopped = false;
 
     const checkConfirmation = async () => {
+      if (stopped) return;
       try {
-        const { data, error } = await supabase.auth.refreshSession();
-        if (error || stopped) return;
-        const u = data.session?.user;
-        if (u && !shouldRequireEmailVerification(u)) {
+        let confirmedUser = null;
+
+        // Attempt 1: refresh the existing session (fast path)
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError && refreshData.session?.user) {
+          confirmedUser = refreshData.session.user;
+        } else {
+          // Attempt 2: ask the server directly for the user's current state.
+          // getUser() hits /auth/v1/user with the current access token and
+          // returns the latest user object regardless of local cache.
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user && !shouldRequireEmailVerification(userData.user)) {
+            // Server says confirmed — try refreshSession again now that
+            // the server state is updated. This often succeeds on the retry.
+            const { data: retryData } = await supabase.auth.refreshSession();
+            confirmedUser = retryData?.session?.user ?? userData.user;
+          }
+        }
+
+        if (stopped) return;
+        if (confirmedUser && !shouldRequireEmailVerification(confirmedUser)) {
           stopped = true;
           if (pollRef.current) clearInterval(pollRef.current);
+          // Update the auth store with the fresh session
+          const { data: freshSession } = await supabase.auth.getSession();
+          if (freshSession.session) {
+            useAuthStore.setState({ session: freshSession.session, user: freshSession.session.user });
+          }
           await useAuthStore.getState().fetchProfile();
           const step = useAuthStore.getState().onboardingStep;
           navigateByStep(step);
         }
       } catch {
-        // Session gone — stop polling, let user tap the button
-        if (pollRef.current) clearInterval(pollRef.current);
+        // Network error — keep polling
       }
     };
 
-    pollRef.current = setInterval(checkConfirmation, 8000);
+    pollRef.current = setInterval(checkConfirmation, 5000);
+
+    // Also check immediately on mount and on app foreground
+    checkConfirmation();
 
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && !stopped) checkConfirmation();
@@ -136,13 +162,39 @@ export default function VerifyEmailScreen() {
   }, [router, signOut]);
 
   const handleRecheck = useCallback(async () => {
-    // Try refreshing the existing session first
-    const { data, error } = await supabase.auth.refreshSession();
+    let confirmedUser = null;
 
-    if (error) {
-      // Session expired/invalidated after email confirmation — send user
-      // back to auth screen so they can sign in with their credentials.
-      // This is expected behavior with some Supabase configurations.
+    // Try refresh first
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError && refreshData.session?.user) {
+      confirmedUser = refreshData.session.user;
+    } else {
+      // Server-side check — getUser() hits the API regardless of local cache
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user && !shouldRequireEmailVerification(userData.user)) {
+        // Retry refresh now that the server confirms the email
+        const { data: retryData } = await supabase.auth.refreshSession();
+        confirmedUser = retryData?.session?.user ?? userData.user;
+      } else if (userData?.user) {
+        // User exists but still unconfirmed
+        showModal({ title: t('auth.verifyTitle'), body: t('auth.verifyInstructions') });
+        return;
+      }
+    }
+
+    if (confirmedUser && !shouldRequireEmailVerification(confirmedUser)) {
+      const { data: freshSession } = await supabase.auth.getSession();
+      if (freshSession.session) {
+        useAuthStore.setState({ session: freshSession.session, user: freshSession.session.user });
+      }
+      await useAuthStore.getState().fetchProfile();
+      const step = useAuthStore.getState().onboardingStep;
+      navigateByStep(step);
+      return;
+    }
+
+    // No session at all — prompt sign-in
+    if (!confirmedUser) {
       showModal({
         title: t('auth.verifyTitle'),
         body: t('auth.sessionExpiredRecovery'),
@@ -158,16 +210,8 @@ export default function VerifyEmailScreen() {
       return;
     }
 
-    const session = data.session;
-    const u = session?.user;
-    if (u && !shouldRequireEmailVerification(u)) {
-      await useAuthStore.getState().fetchProfile();
-      const step = useAuthStore.getState().onboardingStep;
-      navigateByStep(step);
-    } else {
-      showModal({ title: t('auth.verifyTitle'), body: t('auth.verifyInstructions') });
-    }
-  }, [router, navigateByStep, signOut, t]);
+    showModal({ title: t('auth.verifyTitle'), body: t('auth.verifyInstructions') });
+  }, [router, navigateByStep, signOut, t, showModal]);
 
   const busy = resendLoading || signOutLoading;
 

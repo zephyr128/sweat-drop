@@ -21,6 +21,8 @@ const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons
   pending: { color: '#fbbf24', icon: 'time-outline', bgAlpha: 0.1 },
   confirmed: { color: '#4ade80', icon: 'checkmark-circle', bgAlpha: 0.1 },
   cancelled: { color: '#f87171', icon: 'close-circle', bgAlpha: 0.08 },
+  expired: { color: '#94a3b8', icon: 'alert-circle-outline', bgAlpha: 0.08 },
+  claimed: { color: '#60a5fa', icon: 'gift-outline', bgAlpha: 0.1 },
 };
 
 export default function RedemptionsScreen() {
@@ -94,9 +96,55 @@ export default function RedemptionsScreen() {
     return null;
   };
 
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
   const copyCode = (code: string) => {
     Clipboard.setString(code);
     showModal({ title: t('copied'), body: t('codeCopied') });
+  };
+
+  const doCancel = async (redemption: any) => {
+    setCancellingId(redemption.id);
+    try {
+      const { data, error } = await supabase.rpc('cancel_own_redemption', {
+        p_redemption_id: redemption.id,
+      });
+
+      if (error) {
+        showModal({ title: t('cancelError'), body: error.message });
+      } else {
+        const result = Array.isArray(data) ? data[0] : data;
+        if (result?.success) {
+          showModal({
+            title: t('cancelSuccess'),
+            body: t('cancelSuccessDesc', { drops: redemption.drops_spent }),
+          });
+          await loadRedemptions();
+        } else {
+          showModal({ title: t('cancelError'), body: result?.error_message || t('cancelErrorDesc') });
+        }
+      }
+    } catch (err: any) {
+      log.error('Error cancelling redemption:', err);
+      showModal({ title: t('cancelError'), body: err?.message || t('cancelErrorDesc') });
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const handleCancelRedemption = (redemption: any) => {
+    showModal({
+      title: t('cancelTitle'),
+      body: t('cancelConfirm', { drops: redemption.drops_spent }),
+      buttons: [
+        { label: t('cancelNo'), style: 'cancel' },
+        {
+          label: t('cancelYes'),
+          style: 'destructive',
+          onPress: () => doCancel(redemption),
+        },
+      ],
+    });
   };
 
   if (loading) {
@@ -216,6 +264,37 @@ export default function RedemptionsScreen() {
                             {t('showCodeToStaff')}
                           </Text>
                         </View>
+                        {/* Cancel button for pending redemptions */}
+                        <TouchableOpacity
+                          style={[styles.cancelBtn, { borderColor: hexToRgba('#f87171', 0.35) }]}
+                          onPress={() => handleCancelRedemption(redemption)}
+                          disabled={cancellingId === redemption.id}
+                        >
+                          {cancellingId === redemption.id ? (
+                            <ActivityIndicator size="small" color="#f87171" />
+                          ) : (
+                            <>
+                              <Ionicons name="close-circle-outline" size={15} color="#f87171" />
+                              <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {/* Prize Awarded label for claimed status (leaderboard/arena prizes) */}
+                    {redemption.status === 'claimed' && (
+                      <View style={[styles.prizeRow, { backgroundColor: hexToRgba('#60a5fa', 0.07) }]}>
+                        <Text style={styles.prizeEmoji}>🎖️</Text>
+                        <Text style={[styles.prizeLabel, { color: '#60a5fa' }]}>{t('prizeAwarded')}</Text>
+                      </View>
+                    )}
+
+                    {/* Expired badge */}
+                    {redemption.status === 'expired' && (
+                      <View style={[styles.expiredRow, { backgroundColor: hexToRgba('#94a3b8', 0.07) }]}>
+                        <Ionicons name="alert-circle-outline" size={14} color="#94a3b8" />
+                        <Text style={[styles.expiredLabel, { color: '#94a3b8' }]}>{t('expiredDesc')}</Text>
                       </View>
                     )}
 
@@ -404,5 +483,52 @@ const styles = StyleSheet.create({
   },
   dropsText: {
     ...fontStyles.number,
+  },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cancelBtnText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#f87171',
+    letterSpacing: 0.2,
+  },
+  prizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  prizeEmoji: {
+    fontSize: 16,
+  },
+  prizeLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
+  expiredRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  expiredLabel: {
+    ...fontStyles.body,
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
 });

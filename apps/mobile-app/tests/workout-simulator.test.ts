@@ -17,12 +17,15 @@ test('parse simulator profile from sensor id', () => {
 
 test('parse custom simulator descriptor from encoded sensor id', () => {
   const sensorId = encodeCustomSimulatorSensorId({
+    machineType: 'bike',
     durationMinutes: 15,
     baseRpm: 74,
     rpmAmplitude: 10,
     speedKmh: 9.2,
     inclinePct: 2.5,
     powerWatts: 180,
+    resistanceLevel: 6,
+    stepsPerMin: 62,
     intervalEnabled: true,
     intervalHighRpm: 116,
     intervalSeconds: 50,
@@ -116,12 +119,15 @@ test('custom profile emits ftms-like measurements', async () => {
     const handle = startWorkoutSimulator({
       profile: 'custom',
       customConfig: {
+        machineType: 'treadmill',
         durationMinutes: 5,
         baseRpm: 70,
         rpmAmplitude: 6,
         speedKmh: 8,
         inclinePct: 2,
         powerWatts: 170,
+        resistanceLevel: 4,
+        stepsPerMin: 60,
         intervalEnabled: false,
         intervalHighRpm: 110,
         intervalSeconds: 45,

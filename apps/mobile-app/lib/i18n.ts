@@ -27,6 +27,7 @@ import srHappyHours from '@/locales/sr/happyHours.json';
 import srSocialFriends from '@/locales/sr/socialFriends.json';
 import srStats from '@/locales/sr/stats.json';
 import srSettings from '@/locales/sr/settings.json';
+import srTransactions from '@/locales/sr/transactions.json';
 
 // ── English translations ──
 import enCommon from '@/locales/en/common.json';
@@ -54,6 +55,7 @@ import enHappyHours from '@/locales/en/happyHours.json';
 import enSocialFriends from '@/locales/en/socialFriends.json';
 import enStats from '@/locales/en/stats.json';
 import enSettings from '@/locales/en/settings.json';
+import enTransactions from '@/locales/en/transactions.json';
 
 const resources = {
   sr: {
@@ -82,6 +84,7 @@ const resources = {
     socialFriends: srSocialFriends,
     stats: srStats,
     settings: srSettings,
+    transactions: srTransactions,
   },
   en: {
     common: enCommon,
@@ -109,6 +112,7 @@ const resources = {
     socialFriends: enSocialFriends,
     stats: enStats,
     settings: enSettings,
+    transactions: enTransactions,
   },
 };
 
@@ -157,6 +161,7 @@ i18n.use(initReactI18next).init({
     'socialFriends',
     'stats',
     'settings',
+    'transactions',
   ],
   interpolation: {
     escapeValue: false, // React already escapes

@@ -13,7 +13,8 @@
   "thisWeek": "Ova nedelja",
   "thisMonth": "Ovaj mesec",
   "allTime": "Ukupno",
-  "weeklyTarget": "od {{target}}",
+  "dailyTarget": "od {{target}} danas",
+  "weeklyTarget": "od {{target}} ove nedelje",
   "expiry": {
     "safe": {
       "title": "DROPS SU BEZBEDNI",
@@ -30,6 +31,11 @@
       "cta": "Hitno potroši"
     }
   },
+  "spent": "POTROŠENO",
+  "net": "NETO",
+  "transactionHistory": "Istorija transakcija",
+  "transactionHistorySub": "Pregled svih drops aktivnosti",
+  "seeAll": "Vidi sve",
   "activity": "AKTIVNOST",
   "noActivity": "Još nema aktivnosti",
   "noActivityDesc": "Odradi prvi trening da počneš da zarađuješ",

@@ -1,0 +1,31 @@
+{
+  "title": "Transaction History",
+  "filterAll": "All",
+  "filterEarned": "Earned",
+  "filterSpent": "Spent",
+  "filterRewards": "Rewards",
+  "filterExpired": "Expired",
+  "allGyms": "All gyms",
+  "noTransactions": "No transactions",
+  "noTransactionsDesc": "Your drops activity will appear here",
+  "balanceAfter": "Balance after",
+  "loadMore": "Load more",
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "txType": {
+    "session": "Workout",
+    "checkin": "Check-in",
+    "challenge": "Challenge reward",
+    "referral_reward": "Referral bonus",
+    "redemption": "Store purchase",
+    "milestone": "Milestone reward",
+    "streak": "Streak bonus",
+    "expired": "Expired drops",
+    "bonus": "Bonus",
+    "arena": "Arena reward",
+    "refund": "Refund",
+    "reward_claim": "Reward claim",
+    "arena_entry": "Arena entry",
+    "leaderboard_prize": "Leaderboard prize"
+  }
+}

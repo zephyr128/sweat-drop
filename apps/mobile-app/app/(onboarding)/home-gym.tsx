@@ -3,17 +3,102 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
-import { GymCard } from '@/components/GymCard';
 import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
 import { useAppModal } from '@/lib/stores/useAppModal';
+
+// ── Inline gym card designed for the home-gym picker ─────────────────────────
+
+function HomeGymPickerCard({
+  gym,
+  index,
+  onSelect,
+}: {
+  gym: Gym;
+  index: number;
+  onSelect: () => void;
+}) {
+  const brandColor = gym.primary_color || theme.colors.primary;
+
+  return (
+    <Animated.View entering={FadeInDown.delay(120 + index * 70).duration(380)}>
+      <TouchableOpacity
+        style={[styles.gymCard, { borderColor: hexToRgba(brandColor, 0.2) }]}
+        onPress={onSelect}
+        activeOpacity={0.78}
+      >
+        {/* Background image if available */}
+        {gym.background_url && (
+          <>
+            <Image
+              source={gym.background_url}
+              style={[StyleSheet.absoluteFillObject, styles.cardBgImage]}
+              contentFit="cover"
+              transition={200}
+            />
+            <LinearGradient
+              colors={['rgba(0,0,0,0.45)', 'rgba(8,8,18,0.92)']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </>
+        )}
+
+        <BlurView
+          intensity={gym.background_url ? 0 : 50}
+          tint="dark"
+          style={styles.cardBlur}
+        >
+          <View style={styles.cardInner}>
+            {/* Logo */}
+            <View style={[styles.logoWrap, { backgroundColor: hexToRgba(brandColor, 0.12), borderColor: hexToRgba(brandColor, 0.22) }]}>
+              {gym.logo_url ? (
+                <Image
+                  source={gym.logo_url}
+                  style={styles.logoImg}
+                  contentFit="contain"
+                  transition={150}
+                />
+              ) : (
+                <Ionicons name="fitness" size={26} color={brandColor} />
+              )}
+            </View>
+
+            {/* Info */}
+            <View style={styles.cardInfo}>
+              <Text style={styles.gymName} numberOfLines={1}>{gym.name}</Text>
+              {(gym.city || gym.address) && (
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={12} color={theme.colors.textTertiary} />
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {gym.address ? `${gym.address}${gym.city ? `, ${gym.city}` : ''}` : gym.city}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* CTA */}
+            <View style={[styles.selectBtn, { backgroundColor: hexToRgba(brandColor, 0.15), borderColor: hexToRgba(brandColor, 0.3) }]}>
+              <Text style={[styles.selectBtnText, { color: brandColor }]}>Select</Text>
+            </View>
+          </View>
+        </BlurView>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -31,11 +116,12 @@ export default function HomeGymScreen() {
 
   const loadGyms = async () => {
     try {
+      // Only show gyms that are both mobile-listed AND active
       const { data: gymsData, error } = await supabase
         .from('gyms')
         .select('*')
         .eq('is_mobile_listed', true)
-        .order('is_founding_partner', { ascending: false })
+        .eq('is_active', true)
         .order('name');
 
       if (error) throw error;
@@ -100,10 +186,6 @@ export default function HomeGymScreen() {
     }
   };
 
-  const handleDetails = (gym: Gym) => {
-    router.push({ pathname: '/gym-detail', params: { gymId: gym.id } });
-  };
-
   const handleSkip = () => {
     router.replace('/home');
   };
@@ -139,53 +221,47 @@ export default function HomeGymScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <Animated.View entering={FadeInDown.delay(50).duration(400)} style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="fitness" size={36} color={currentTheme.colors.primary} />
+        <Animated.View entering={FadeInDown.delay(40).duration(400)} style={styles.header}>
+          <View style={[styles.iconContainer, { borderColor: hexToRgba(currentTheme.colors.primary, 0.2) }]}>
+            <View style={[styles.iconGlow, { backgroundColor: currentTheme.colors.primary }]} />
+            <Ionicons name="fitness" size={34} color={currentTheme.colors.primary} />
           </View>
           <Text style={styles.title}>{t('homeGym.title')}</Text>
           <Text style={styles.subtitle}>{t('homeGym.subtitle')}</Text>
         </Animated.View>
 
         {/* Gym Cards */}
-        {gyms.map((gym, index) => (
-          <Animated.View
-            key={gym.id}
-            entering={FadeInDown.delay(150 + index * 80).duration(400)}
-            style={styles.gymCardContainer}
-          >
-            <GymCard
+        <View style={styles.gymList}>
+          {gyms.map((gym, index) => (
+            <HomeGymPickerCard
+              key={gym.id}
               gym={gym}
-              onSetHomeGym={() => handleSetHomeGym(gym)}
-              onDetails={() => handleDetails(gym)}
-              variant="full"
+              index={index}
+              onSelect={() => handleSetHomeGym(gym)}
             />
-          </Animated.View>
-        ))}
+          ))}
+        </View>
 
-        {/* Suggest Your Gym Card */}
-        <Animated.View
-          entering={FadeInDown.delay(150 + gyms.length * 80).duration(400)}
-          style={styles.comingSoonContainer}
-        >
+        {/* Suggest Your Gym */}
+        <Animated.View entering={FadeInDown.delay(120 + gyms.length * 70).duration(380)}>
           <TouchableOpacity
-            style={styles.comingSoonCard}
+            style={styles.suggestCard}
             onPress={() => setShowWaitlist(true)}
             activeOpacity={0.7}
           >
-            <View style={styles.comingSoonContent}>
-              <View style={styles.comingSoonIconRow}>
-                <Ionicons name="add-circle" size={24} color={currentTheme.colors.primary} />
-              </View>
-              <Text style={[styles.comingSoonTitle, { color: theme.colors.textSecondary }]}>{t('homeGym.comingSoon')}</Text>
-              <Text style={styles.comingSoonSubtitle}>{t('homeGym.comingSoonSub')}</Text>
+            <Ionicons name="add-circle-outline" size={20} color={currentTheme.colors.primary} />
+            <View style={styles.suggestText}>
+              <Text style={[styles.suggestTitle, { color: theme.colors.textSecondary }]}>
+                {t('homeGym.comingSoon')}
+              </Text>
+              <Text style={styles.suggestSub}>{t('homeGym.comingSoonSub')}</Text>
             </View>
           </TouchableOpacity>
         </Animated.View>
 
         {/* Skip */}
         <Animated.View
-          entering={FadeInDown.delay(300 + gyms.length * 80).duration(400)}
+          entering={FadeInDown.delay(180 + gyms.length * 70).duration(380)}
           style={styles.skipContainer}
         >
           <TouchableOpacity
@@ -228,78 +304,159 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 48,
   },
+
+  // ── Header ──
   header: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 32,
   },
   iconContainer: {
     width: 72,
     height: 72,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    position: 'relative',
+  },
+  iconGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
+    opacity: 0.12,
   },
   title: {
     ...fontStyles.heading,
-    fontSize: 24,
+    fontSize: 26,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 8,
+    letterSpacing: 0.3,
   },
   subtitle: {
     ...fontStyles.body,
-    fontSize: 15,
+    fontSize: 14,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 21,
     letterSpacing: 0.2,
+    paddingHorizontal: 16,
   },
-  gymCardContainer: {
+
+  // ── Gym list ──
+  gymList: {
+    gap: 12,
     marginBottom: 16,
   },
-  comingSoonContainer: {
-    marginBottom: 24,
-  },
-  comingSoonCard: {
-    borderRadius: 20,
+
+  // ── Gym card ──
+  gymCard: {
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    borderStyle: 'dashed',
     overflow: 'hidden',
+    backgroundColor: 'rgba(14,14,24,0.75)',
   },
-  comingSoonContent: {
-    padding: 24,
+  cardBgImage: {
+    borderRadius: 18,
+  },
+  cardBlur: {
+    borderRadius: 18,
+  },
+  cardInner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  comingSoonIconRow: {
-    marginBottom: 4,
+  logoWrap: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
   },
-  comingSoonTitle: {
+  logoImg: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+  },
+  cardInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  gymName: {
     ...fontStyles.bodySemiBold,
     fontSize: 16,
-    color: theme.colors.textTertiary,
-    letterSpacing: 0.3,
-  },
-  comingSoonSubtitle: {
-    ...fontStyles.body,
-    fontSize: 13,
-    color: theme.colors.textTertiary,
-    textAlign: 'center',
-    lineHeight: 20,
+    color: '#FFFFFF',
     letterSpacing: 0.2,
-    opacity: 0.7,
   },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  locationText: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
+    flex: 1,
+  },
+  selectBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexShrink: 0,
+  },
+  selectBtnText: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 0.8,
+  },
+
+  // ── Suggest card ──
+  suggestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderStyle: 'dashed',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 8,
+  },
+  suggestText: {
+    flex: 1,
+    gap: 2,
+  },
+  suggestTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  suggestSub: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
+    lineHeight: 18,
+  },
+
+  // ── Skip ──
   skipContainer: {
     alignItems: 'center',
+    marginTop: 8,
   },
   skipButton: {
     paddingVertical: 14,
@@ -308,12 +465,14 @@ const styles = StyleSheet.create({
   skipText: {
     ...fontStyles.body,
     fontSize: 14,
-    color: theme.colors.textSecondary,
+    color: theme.colors.textTertiary,
     letterSpacing: 0.3,
   },
+
+  // ── Overlay ──
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'center',
     alignItems: 'center',
   },

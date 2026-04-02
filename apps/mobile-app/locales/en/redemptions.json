@@ -10,6 +10,10 @@
   "codeCopied": "Redemption code copied to clipboard",
   "pending": "Pending",
   "cancelled": "Cancelled",
+  "expired": "Expired",
+  "claimed": "Prize awarded",
+  "expiredDesc": "This redemption has expired",
+  "prizeAwarded": "Prize Awarded",
   "na": "N/A",
   "showCodeToStaff": "Show your code to gym staff to claim",
   "unknownReward": "Unknown reward",
@@ -17,5 +21,14 @@
   "leaderboardPrize": "Leaderboard Prize",
   "arenaPrize": "Arena Prize",
   "leaderboard": "Leaderboard",
-  "arena": "Arena"
+  "arena": "Arena",
+  "cancelRedemption": "Cancel redemption",
+  "cancelTitle": "Cancel redemption?",
+  "cancelConfirm": "Your {{drops}} drops will be refunded to your balance.",
+  "cancelYes": "Yes, cancel",
+  "cancelNo": "Keep it",
+  "cancelSuccess": "Redemption cancelled",
+  "cancelSuccessDesc": "{{drops}} drops have been refunded to your balance.",
+  "cancelError": "Could not cancel",
+  "cancelErrorDesc": "Something went wrong. Please try again."
 }

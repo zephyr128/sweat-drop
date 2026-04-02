@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { log } from '@/lib/logger';
@@ -15,25 +14,11 @@ export default function Index() {
   const session = useAuthStore((s) => s.session);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
 
-  const [pushAsked, setPushAsked] = useState<boolean | null>(null);
   const [hasNavigated, setHasNavigated] = useState(false);
 
-  // Load push notification status from AsyncStorage
+  // Navigate once auth is initialized
   useEffect(() => {
-    const loadPushStatus = async () => {
-      try {
-        const status = await AsyncStorage.getItem('pushNotificationsAsked');
-        setPushAsked(status === 'true');
-      } catch {
-        setPushAsked(false);
-      }
-    };
-    loadPushStatus();
-  }, []);
-
-  // Navigate once auth is initialized and push status is loaded
-  useEffect(() => {
-    if (!isInitialized || pushAsked === null || hasNavigated) return;
+    if (!isInitialized || hasNavigated) return;
 
     const navigate = async () => {
       try {
@@ -62,19 +47,7 @@ export default function Index() {
               router.replace('/(onboarding)/avatar');
               break;
             case 'notifications':
-              if (!pushAsked) {
-                router.replace('/(onboarding)/notifications');
-              } else {
-                // Already asked — re-fetch profile to determine next step
-                await useAuthStore.getState().fetchProfile();
-                const nextStep = useAuthStore.getState().onboardingStep;
-                if (nextStep === 'profile_setup') {
-                  router.replace('/(onboarding)/step-gender');
-                } else {
-                  useAuthStore.getState().setOnboardingStep('done');
-                  router.replace('/home');
-                }
-              }
+              router.replace('/(onboarding)/notifications');
               break;
             case 'profile_setup':
               router.replace('/(onboarding)/step-gender');
@@ -83,12 +56,9 @@ export default function Index() {
               router.replace('/home');
           }
         } else {
-          // Existing users after reinstall should still see the push prompt screen once.
-          if (!pushAsked) {
-            router.replace('/(onboarding)/notifications');
-          } else {
-            router.replace('/home');
-          }
+          // onboarding_completed — go straight to home.
+          // Push token sync for returning users happens silently in _layout.tsx.
+          router.replace('/home');
         }
 
         setHasNavigated(true);
@@ -100,7 +70,7 @@ export default function Index() {
     };
 
     navigate();
-  }, [isInitialized, session, onboardingStep, pushAsked, hasNavigated, router]);
+  }, [isInitialized, session, onboardingStep, hasNavigated, router]);
 
   // Render nothing — splash screen is visible until navigation
   return null;

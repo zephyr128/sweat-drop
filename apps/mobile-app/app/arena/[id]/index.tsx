@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Clipboard } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ComponentProps } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,11 +47,11 @@ interface ArenaResult {
     gym_name: string | null;
   }>;
 }
-const SCORING_ICONS: Record<string, string> = {
-  total_drops: '💧',
-  days_visited: '📅',
-  variety_score: '🏋️',
-  streak_days: '🔥',
+const SCORING_ICONS: Record<string, ComponentProps<typeof Ionicons>['name']> = {
+  total_drops: 'water',
+  days_visited: 'calendar-outline',
+  variety_score: 'barbell-outline',
+  streak_days: 'flame-outline',
 };
 
 export default function ArenaDetailScreen() {
@@ -312,7 +312,7 @@ export default function ArenaDetailScreen() {
 
   const daysLeft = getDaysLeft(arena.end_date);
   const countdown = getCountdown(arena.start_date);
-  const scoringIcon = SCORING_ICONS[arena.scoring_model] || SCORING_ICONS.total_drops;
+  const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? SCORING_ICONS.total_drops;
   const scoringTextKey = `scoring_${arena.scoring_model}` as const;
   const scoringText = t(scoringTextKey, { defaultValue: t('scoring_total_drops') });
 
@@ -325,7 +325,8 @@ export default function ArenaDetailScreen() {
       case 'drops':
         return {
           label: t('entryFee', { value: optInValue }),
-          userValue: `${t('yourBalance')}: ${localBalance} 💧`,
+          userValue: `${t('yourBalance')}: ${localBalance}`,
+          userValueIcon: 'water' as const,
           meetsRequirement: localBalance >= optInValue,
         };
       case 'streak':
@@ -407,7 +408,7 @@ export default function ArenaDetailScreen() {
 
               {/* Scoring model */}
               <View style={[styles.scoringRow, { borderColor: hexToRgba(arenaColors.primary, 0.1) }]}>
-                <Text style={styles.scoringIcon}>{scoringIcon}</Text>
+                <Ionicons name={scoringIcon} size={20} color={arenaColors.primary} />
                 <Text style={styles.scoringText}>{scoringText}</Text>
               </View>
 
@@ -517,9 +518,12 @@ export default function ArenaDetailScreen() {
                   </View>
                   <View style={[styles.resultScoreRow, { borderTopColor: hexToRgba(arenaColors.primary, 0.1) }]}>
                     <Text style={styles.resultScoreLabel}>{t('finalScore')}</Text>
-                    <Text style={[styles.resultScoreValue, getNumberStyle(18), { color: arenaColors.primary }]}>
-                      {SCORING_ICONS[arena.scoring_model] || '💧'} {Math.round(arenaResult.final_score)}
-                    </Text>
+                    <View style={styles.resultScoreValueRow}>
+                      <Ionicons name={SCORING_ICONS[arena.scoring_model] ?? 'water'} size={16} color={arenaColors.primary} />
+                      <Text style={[styles.resultScoreValue, getNumberStyle(18), { color: arenaColors.primary }]}>
+                        {Math.round(arenaResult.final_score)}
+                      </Text>
+                    </View>
                   </View>
                 </BlurView>
               </View>
@@ -639,9 +643,18 @@ export default function ArenaDetailScreen() {
                   </Text>
                 </View>
                 {optInInfo.userValue && (
-                  <Text style={[styles.optInInfoValue, { color: optInInfo.meetsRequirement ? theme.colors.textSecondary : theme.colors.secondary }]}>
-                    {optInInfo.userValue}
-                  </Text>
+                  <View style={styles.optInInfoValueRow}>
+                    <Text style={[styles.optInInfoValue, { color: optInInfo.meetsRequirement ? theme.colors.textSecondary : theme.colors.secondary }]}>
+                      {optInInfo.userValue}
+                    </Text>
+                    {'userValueIcon' in optInInfo && optInInfo.userValueIcon && (
+                      <Ionicons
+                        name={optInInfo.userValueIcon}
+                        size={13}
+                        color={optInInfo.meetsRequirement ? theme.colors.textSecondary : theme.colors.secondary}
+                      />
+                    )}
+                  </View>
                 )}
                 {!canOptIn.allowed && (
                   <Text style={styles.optInErrorText}>{canOptIn.reason}</Text>
@@ -872,9 +885,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     marginBottom: 16,
   },
-  scoringIcon: {
-    fontSize: 20,
-  },
   scoringText: {
     ...fontStyles.bodySemiBold,
     fontSize: 14,
@@ -971,11 +981,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     flex: 1,
   },
+  optInInfoValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    marginLeft: 28,
+  },
   optInInfoValue: {
     ...fontStyles.body,
     fontSize: 13,
-    marginTop: 6,
-    marginLeft: 28,
     letterSpacing: 0.2,
   },
   optInErrorText: {
@@ -1170,6 +1185,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     letterSpacing: 0.3,
+  },
+  resultScoreValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   resultScoreValue: {
     letterSpacing: 0.5,

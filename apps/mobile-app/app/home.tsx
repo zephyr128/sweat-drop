@@ -104,7 +104,8 @@ export default function HomeScreen() {
     onEvent: useCallback(() => {
       refreshStats?.();
       refreshLocalDrops();
-    }, [refreshStats, refreshLocalDrops]),
+      dropLimits.refresh();
+    }, [refreshStats, refreshLocalDrops, dropLimits.refresh]),
     pollIntervalMs: 30_000,
     enabled: !!session?.user,
   });
@@ -235,6 +236,7 @@ export default function HomeScreen() {
               refreshStats?.() ?? Promise.resolve(),
               refreshArenas?.() ?? Promise.resolve(),
               userRank.refresh(),
+              dropLimits.refresh(),
             ]
           : []),
       ]);
@@ -256,6 +258,7 @@ export default function HomeScreen() {
       refreshStats,
       refreshArenas,
       userRank,
+      dropLimits.refresh,
     ])
   );
 
@@ -723,6 +726,7 @@ export default function HomeScreen() {
             totalGymDrops={localDrops}
             size={290}
             focusKey={ringFocusKey}
+            gymName={activeGym?.name}
             onPress={() => router.push('/wallet')}
           />
           {activeGym && (
@@ -1164,8 +1168,13 @@ export default function HomeScreen() {
                     const isUpcoming = arena.arena_status === 'upcoming';
                     const targetDate = isUpcoming ? new Date(arena.start_date) : new Date(arena.end_date);
                     const daysLeft = Math.max(0, Math.ceil((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-                    const scoringIcons: Record<string, string> = { total_drops: '💧', days_visited: '📅', variety_score: '🏋️', streak_days: '🔥' };
-                    const scoringIcon = scoringIcons[arena.scoring_model] || '💧';
+                    const ARENA_SCORING_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+                      total_drops: 'water',
+                      days_visited: 'calendar-outline',
+                      variety_score: 'barbell-outline',
+                      streak_days: 'flame-outline',
+                    };
+                    const scoringIcon = ARENA_SCORING_ICONS[arena.scoring_model] ?? 'water';
 
                     // Custom branding per arena
                     const arenaPrimary = arena.card_color || branding.primary;
@@ -1213,7 +1222,7 @@ export default function HomeScreen() {
                                       </View>
                                     )}
                                     <Text style={[styles.challengeType, { color: arenaPrimary }]}>{arena.sponsor_name}</Text>
-                                    <Text style={styles.arenaScoringIcon}>{scoringIcon}</Text>
+                                    <Ionicons name={scoringIcon} size={14} color={arenaPrimary} />
                                   </View>
                                   <Text style={[styles.challengeName, { color: arenaText }]} numberOfLines={2}>{arena.name}</Text>
                                 </View>
@@ -1802,10 +1811,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  arenaScoringIcon: {
-    fontSize: 14,
-    marginLeft: 'auto',
   },
   arenaHomeStats: {
     flexDirection: 'row',

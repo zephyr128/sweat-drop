@@ -737,7 +737,8 @@ export default function GymDetailScreen() {
                       )}
                       <Text style={styles.rewardName} numberOfLines={1}>{reward.name}</Text>
                       <View style={[styles.rewardBadge, { backgroundColor: hexToRgba(brandColor, 0.12), borderColor: hexToRgba(brandColor, 0.22) }]}>
-                        <Text style={[styles.rewardCost, { color: brandColor }]}>{reward.drops_cost} 💧</Text>
+                        <Ionicons name="water" size={11} color={brandColor} />
+                        <Text style={[styles.rewardCost, { color: brandColor }]}>{reward.drops_cost}</Text>
                       </View>
                     </View>
                   </React.Fragment>
@@ -1189,6 +1190,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   rewardBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 10,

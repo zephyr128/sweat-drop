@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -52,7 +52,7 @@ function getBelgradeDateString(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Belgrade' });
 }
 
-export function useDropLimitStatus(gymId: string | null | undefined): DropLimitStatus {
+export function useDropLimitStatus(gymId: string | null | undefined): DropLimitStatus & { refresh: () => void } {
   const { session: authSession } = useSession();
   const [status, setStatus] = useState<DropLimitStatus>(DEFAULTS);
 
@@ -176,5 +176,5 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
     void load();
   }, [load]);
 
-  return status;
+  return useMemo(() => ({ ...status, refresh: load }), [status, load]);
 }

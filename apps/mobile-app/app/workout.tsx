@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, AppState, AppStateStatus, BackHandler, Alert } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +10,6 @@ import { useKeepAwake } from 'expo-keep-awake';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedProps,
   useDerivedValue,
   useAnimatedReaction,
   useFrameCallback,
@@ -23,10 +22,7 @@ import Animated, {
   Easing,
   runOnJS,
   cancelAnimation,
-  SharedValue,
-  FadeIn,
   FadeInDown,
-  FadeOut,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { supabase } from '@/lib/supabase';
@@ -35,8 +31,7 @@ import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
 import LiquidGauge, { LiquidGaugeRef } from '@/components/LiquidGauge';
 import { DropEmitter } from '@/components/DropEmitter';
 import CircularProgressRing from '@/components/CircularProgressRing';
-import GoalTracker from '@/components/GoalTracker';
-import WorkoutSummaryModal from '@/components/WorkoutSummaryModal';
+  
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { bleService, CSCMeasurement } from '@/lib/ble-service';
 import { useBranding } from '@/lib/hooks/useBranding';
@@ -51,43 +46,21 @@ import {
   markInactivityFinalized,
   InactivityFinalizeCoordinator,
 } from '@/lib/workout/inactivity-autofinish';
-import { estimateLiveDropsDetailed, type DropHistoryContext, type DropLimitsConfig, type StreakContext, type RewardedSessionsCapMode, type SessionTier, type MachineDropConfig, type DiminishingConfig } from '@/lib/workout/live-drops-estimator';
+import { estimateLiveDropsDetailed, type SessionTier } from '@/lib/workout/live-drops-estimator';
+import { useWorkoutEconomy } from '@/lib/workout/useWorkoutEconomy';
+import { useWorkoutSync } from '@/lib/workout/useWorkoutSync';
+import { withRetry } from '@/lib/workout/withRetry';
+import { savePendingFinalization } from '@/lib/workout/pendingFinalization';
+import AnimatedText from '@/components/workout/AnimatedText';
+import WorkoutStatsGrid from '@/components/workout/WorkoutStatsGrid';
+import GoalProgressBar from '@/components/workout/GoalProgressBar';
+import WorkoutControls from '@/components/workout/WorkoutControls';
+import { styles } from './workout.styles';
 
 import { useHappyHour } from '@/hooks/useHappyHour';
 import { log } from '@/lib/logger';
 
-// ActiveDrop interface removed - drops are now managed internally by DropEmitter
-
-// Native-driven text component that displays SharedValue<string> with minimal re-renders
-// GPU-Only Text Display: Uses useAnimatedProps for native-driven updates (no JS thread blocking)
-// NO useState, NO runOnJS - pure GPU animation
-// ============================================================================
-// PREMIUM UI: Optimized AnimatedText Component (60FPS Guaranteed)
-// ============================================================================
-// Native-driven text component that displays SharedValue<string> with minimal re-renders
-// GPU-Only Text Display: Uses useAnimatedProps for native-driven updates (no JS thread blocking)
-// NO useState, NO runOnJS - pure GPU animation for 60FPS performance
-// Critical for high-frequency updates (RPM, drops, calories) without blocking UI thread
-const AnimatedText = ({ text, style }: { text: SharedValue<string>; style?: any }) => {
-  // CRITICAL: Read SharedValue through useAnimatedReaction to update state
-  // This ensures text updates work correctly with Animated.Text
-  const [displayText, setDisplayText] = useState(text.value);
-
-  useAnimatedReaction(
-    () => text.value,
-    (value) => {
-      'worklet';
-      runOnJS(setDisplayText)(value);
-    },
-    [text]
-  );
-
-  return (
-    <Animated.Text style={style}>
-      {displayText}
-    </Animated.Text>
-  );
-};
+// AnimatedText is imported from @/components/workout/AnimatedText
 
 // Compact status badge — consistent icon pill for the left header column
 interface StatusBadgeProps {
@@ -184,16 +157,16 @@ function getBelgradeDateString(date: Date): string {
 export default function WorkoutScreen() {
   useKeepAwake();
 
-  const { sessionId, equipmentId, gymId, machineType: paramMachineType, sensorId, planId, machineId, bleProtocol } = useLocalSearchParams<{
+  const { sessionId, equipmentId, gymId, machineType: paramMachineType, sensorId, machineId, bleProtocol } = useLocalSearchParams<{
     sessionId?: string;
     equipmentId?: string;
     gymId?: string;
     machineType?: string;
     sensorId?: string;
-    planId?: string;
     machineId?: string;
     bleProtocol?: string;
   }>();
+  const isSimulator = sensorId?.startsWith('sim:') ?? false;
   const { branding, activeGym } = useTheme();
   const brandingHook = useBranding();
   const { t } = useTranslation('workout');
@@ -228,16 +201,21 @@ export default function WorkoutScreen() {
   // Challenge progress is automatically updated via award_drops() when workout ends
   const [averageRPM, setAverageRPM] = useState<number>(0); // Average RPM for database sync (low frequency, OK to use state)
   const [showAutoPauseOverlay, setShowAutoPauseOverlay] = useState(false);
-  const [showSensorAsleep, setShowSensorAsleep] = useState(false);
+  
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [inactivityCountdownSec, setInactivityCountdownSec] = useState(0);
   const [showNoActivityCancelOverlay, setShowNoActivityCancelOverlay] = useState(false);
-  const [showPlanCompleted, setShowPlanCompleted] = useState(false);
-  const [showWorkoutSummary, setShowWorkoutSummary] = useState(false);
+  
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [showChallengesOverlay, setShowChallengesOverlay] = useState(false);
   const [reconnectTrigger, setReconnectTrigger] = useState(0); // Increment to force BLE useEffect re-run after reconnect
   const reconnectAttemptRef = useRef<number>(0); // Track reconnect attempts for exponential backoff
+  // Bug 1: BLE connecting timeout — show "Cancel Workout" after 60s waiting
+  const [showConnectingCancel, setShowConnectingCancel] = useState(false);
+  const connectingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Bug 8: Resume fail counter — after 3 failures, offer "End workout"
+  const resumeFailCountRef = useRef<number>(0);
+  const [showForceFinishOption, setShowForceFinishOption] = useState(false);
   const isPausedRef = useRef(false); // Stable ref for BLE callbacks (avoids stale closures & dep array issues)
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
@@ -255,10 +233,7 @@ export default function WorkoutScreen() {
   const isMountedRef = useRef<boolean>(true); // Track if component is mounted
   const isAppInBackgroundRef = useRef<boolean>(false); // Track app foreground/background state
   const lastHapticTimeRef = useRef<number>(0); // Throttle haptic feedback (max 5/s)
-  // saveIntervalRef removed — syncIntervalRef is the single DB sync mechanism
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  // REMOVED: challengeUpdateIntervalRef, lastChallengeUpdateRef, challengeMessageTimerRef
-  // Challenge progress is now automatically updated via award_drops() when workout ends
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const inactivityStateRef = useRef(createInactivityState());
   const inactivityFinalizeCoordinatorRef = useRef(new InactivityFinalizeCoordinator());
@@ -269,30 +244,15 @@ export default function WorkoutScreen() {
   const activityProofTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstActivityDetectedRef = useRef<boolean>(false);
   const isFinalizingRef = useRef<boolean>(false);
+  // Stable ref to handleFinishWorkout so BLE/simulator callbacks can call it
+  // without capturing a stale closure.
+  const handleFinishWorkoutRef = useRef<(() => void) | null>(null);
   const lastRPMUpdateRef = useRef<number>(0);
   // BLE Data Optimization: Track last measurement to filter duplicates
   const lastMeasurementRef = useRef<{ crankRevolutions: number; lastCrankEventTime: number } | null>(null);
   // Drop calculation: Track last crank revolutions for drop calculation
   const lastCrankRevolutionsRef = useRef<number>(0);
-  const dropLimitsRef = useRef<DropLimitsConfig>({
-    maxDropsPerSession: 120,
-    maxRewardedSessionsPerDay: 4,
-    maxDropsPerDay: 300,
-    maxDropsPerWeek: 1500,
-    rewardedSessionsCapMode: 'soft',
-  });
-  const dropHistoryRef = useRef<DropHistoryContext>({
-    rewardedSessionsToday: 0,
-    mintedToday: 0,
-    mintedWeek: 0,
-  });
-  const streakContextRef = useRef<StreakContext>({
-    streakDays: 0,
-    lastVisitDate: null,
-  });
-  const machineConfigRef = useRef<MachineDropConfig | null>(null);
-  const diminishingConfigRef = useRef<DiminishingConfig | null>(null);
-  const mergedPriorDropsRef = useRef<number>(0);
+  // Economy refs are populated by useWorkoutEconomy (called after machineType is resolved below)
   // RPM history for average calculation (long-term, 30 values)
   const rpmHistoryRef = useRef<number[]>([]);
   // RPM smoothing: Track last 4 raw RPM values for moving average (Walking Mode)
@@ -312,16 +272,14 @@ export default function WorkoutScreen() {
   const ftmsPowerHistoryRef = useRef<number[]>([]);
   const ftmsDeviceCaloriesRef = useRef<number>(0);
   const ftmsProtocolActiveRef = useRef<boolean>(false);
+  // Simulator: tracks elapsedTime from FTMS measurement so timeScale is honoured
+  const simulatorElapsedRef = useRef<number | null>(null);
   const treadmillDropAccRef = useRef<number>(0);
   const treadmillCalAccRef = useRef<number>(0); // Fractional calorie accumulator for treadmill
   const treadmillLastMeasureTimeRef = useRef<number>(0); // For speed-based distance and calorie accumulation
-  // Throttled sync: Track last sync time
-  const lastSyncRef = useRef<number>(0);
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timeProgressIntervalRef = useRef<NodeJS.Timeout | null>(null); // Ref for time-based progress interval (critical for cleanup)
   // CRITICAL: Refs for BLE callback to avoid stale closures
-  const currentPlanItemRef = useRef<any>(null); // Always has latest currentPlanItem value
-  const isSmartCoachModeRef = useRef<boolean>(false); // Always has latest isSmartCoachMode value
+  
   // Explosion animation when BLE connects
   const explosionScale = useSharedValue(1);
   const explosionOpacity = useSharedValue(0);
@@ -355,37 +313,7 @@ export default function WorkoutScreen() {
   const bleConnectedShared = useSharedValue(0); // 0 = false, 1 = true
   const lastPacketTime = useSharedValue(Date.now()); // Track last packet timestamp for watchdog timer
   
-  // SmartCoach SharedValues
-  const goalTargetShared = useSharedValue(0); // Target value (RPM, time, reps, etc.)
-  const currentProgressShared = useSharedValue(0); // Current progress towards goal
-  const goalPercentageShared = useSharedValue(0); // Progress percentage (0-100)
-  const exerciseCompletedShared = useSharedValue(0); // 0=not done, 1=done (UI-thread safe, avoids EXC_BAD_ACCESS from ref in worklet)
-  const durationShared = useSharedValue(0); // Duration in seconds for time-based goals
-  const [isSmartCoachMode, setIsSmartCoachMode] = useState(false);
-  const [currentPlanItem, setCurrentPlanItem] = useState<any>(null);
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [isPlanCompleted, setIsPlanCompleted] = useState(false); // Guard flag to prevent crashes at plan end
-  const isPlanCompletedRef = useRef(false); // Ref for useFrameCallback guard
-  const isPlanCompletedShared = useSharedValue(0); // SharedValue for useFrameCallback guard (0=false, 1=true)
   
-  // Sync duration state to durationShared for SmartCoach time tracking
-  useEffect(() => {
-    durationShared.value = duration;
-  }, [duration, durationShared]);
-
-  // CRITICAL: Sync refs and SharedValue with state to prevent stale closures in BLE callback and useFrameCallback
-  useEffect(() => {
-    isPlanCompletedRef.current = isPlanCompleted;
-    isPlanCompletedShared.value = isPlanCompleted ? 1 : 0;
-  }, [isPlanCompleted, isPlanCompletedShared]);
-  
-  useEffect(() => {
-    currentPlanItemRef.current = currentPlanItem;
-  }, [currentPlanItem]);
-
-  useEffect(() => {
-    isSmartCoachModeRef.current = isSmartCoachMode;
-  }, [isSmartCoachMode]);
 
   // Keep isPausedRef in sync for BLE callback (avoids stale closures, no dep array re-trigger)
   useEffect(() => {
@@ -412,6 +340,27 @@ export default function WorkoutScreen() {
       Number.isFinite(autoFinishPolicy) ? autoFinishPolicy : undefined
     );
   }, [session?.gym]);
+
+  const {
+    dropLimitsRef,
+    dropHistoryRef,
+    streakContextRef,
+    machineConfigRef,
+    diminishingConfigRef,
+    mergedPriorDropsRef,
+  } = useWorkoutEconomy({
+    userId: authSession?.user?.id,
+    gymId: session?.gym_id,
+    sessionId: session?.id,
+    sessionStartedAt: session?.started_at,
+    machineType: machineType ?? 'generic',
+    onLimitsLoaded: (maxSessionDrops, initialDayRemaining, initialSegTarget) => {
+      setTargetDrops(maxSessionDrops);
+      setDailyRemaining(initialDayRemaining);
+      segmentTargetRef.current = initialSegTarget;
+      segmentTargetShared.value = initialSegTarget;
+    },
+  });
 
   // Ring pulse intensity: speed-based for treadmill, RPM for bike/elliptical
   // Maps treadmill speed (0–15 km/h) → 0–120 to match RPM color breakpoints in CircularProgressRing
@@ -468,8 +417,6 @@ export default function WorkoutScreen() {
       cancelAnimation(earnedDropsShared);
       cancelAnimation(totalDropsShared);
       cancelAnimation(progressShared);
-      cancelAnimation(goalPercentageShared);
-      cancelAnimation(currentProgressShared);
 
       if (tierToastTimerRef.current) { clearTimeout(tierToastTimerRef.current); tierToastTimerRef.current = null; }
       if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
@@ -479,10 +426,32 @@ export default function WorkoutScreen() {
       if (idleSyncTimerRef.current) { clearTimeout(idleSyncTimerRef.current); idleSyncTimerRef.current = null; }
       if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
       if (heartbeatIntervalRef.current) { clearInterval(heartbeatIntervalRef.current); heartbeatIntervalRef.current = null; }
-      if (syncIntervalRef.current) { clearInterval(syncIntervalRef.current); syncIntervalRef.current = null; }
       if (timeProgressIntervalRef.current) { clearInterval(timeProgressIntervalRef.current); timeProgressIntervalRef.current = null; }
+      if (connectingTimeoutRef.current) { clearTimeout(connectingTimeoutRef.current); connectingTimeoutRef.current = null; }
     };
   }, []);
+
+  // Bug 5: Android hardware back button — confirm before leaving workout
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      Alert.alert(
+        t('leaveWorkoutTitle'),
+        t('leaveWorkoutMessage'),
+        [
+          { text: t('common:cancel'), style: 'cancel' },
+          {
+            text: t('leaveWorkoutConfirm'),
+            style: 'destructive',
+            onPress: () => {
+              handleFinishWorkoutRef.current?.();
+            },
+          },
+        ],
+      );
+      return true; // Prevent default back behaviour
+    });
+    return () => handler.remove();
+  }, [t]);
 
   // Debug logging
   useEffect(() => {
@@ -506,118 +475,7 @@ export default function WorkoutScreen() {
   // LiquidGauge target follows economy cap (max drops/session) configured in admin.
   // Challenge progress is displayed separately in challenge cards/overlay.
 
-  // SmartCoach: Load plan item when planId and machineId are available
-  useEffect(() => {
-    const loadPlanItem = async () => {
-      // Use machineId from params first, then fallback to session.machine_id
-      const activeMachineId = machineId || session?.machine_id;
-      
-      if (!planId || !activeMachineId || !authSession?.user) {
-        setIsSmartCoachMode(false);
-        setCurrentPlanItem(null);
-        return;
-      }
-
-      // AGENT NOTE: [2025-01-27] - mobile-coder
-      // Check if SmartCoach is enabled for the gym before loading plan item
-      // If gym doesn't have smartcoach_enabled, disable SmartCoach mode
-      const activeGymId = gymId || session?.gym_id;
-      if (activeGymId) {
-        // Check if gym has smartcoach_enabled
-        // If session.gym is already loaded, use it; otherwise fetch gym data
-        let gymSmartCoachEnabled = session?.gym?.smartcoach_enabled;
-        
-        // If gym data not in session, fetch it
-        if (gymSmartCoachEnabled === undefined) {
-          const { data: gymData } = await supabase
-            .from('gyms')
-            .select('smartcoach_enabled')
-            .eq('id', activeGymId)
-            .single();
-          
-          gymSmartCoachEnabled = gymData?.smartcoach_enabled ?? false;
-        }
-
-        // If SmartCoach is disabled for this gym, don't load plan item
-        if (!gymSmartCoachEnabled) {
-          log.debug('[SmartCoach] SmartCoach is disabled for this gym, skipping plan load');
-          setIsSmartCoachMode(false);
-          setCurrentPlanItem(null);
-          return;
-        }
-      }
-
-      try {
-        log.debug('[SmartCoach] Loading plan item for planId:', planId, 'machineId:', activeMachineId, 'index:', currentExerciseIndex);
-        
-        const { data, error } = await supabase.rpc('get_plan_item_for_machine', {
-          p_plan_id: planId,
-          p_machine_id: activeMachineId,
-          p_current_index: currentExerciseIndex,
-        });
-
-        if (error) {
-          log.error('[SmartCoach] Error loading plan item:', error);
-          setIsSmartCoachMode(false);
-          setCurrentPlanItem(null);
-          return;
-        }
-
-        // CRITICAL GUARD: Only set currentPlanItem if plan is not completed
-        // This prevents useEffect from overwriting currentPlanItem with null during completion
-        if (isPlanCompleted) {
-          log.debug('[SmartCoach] Plan already completed, skipping loadPlanItem');
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const item = data[0];
-          log.debug('[SmartCoach] Loaded plan item:', item);
-          
-          setCurrentPlanItem(item);
-          setIsSmartCoachMode(true);
-          
-          // CRITICAL: Reset isPlanCompleted when loading a new plan item
-          setIsPlanCompleted(false);
-          
-          // Set target based on metric type
-          const targetValue = parseFloat(item.target_value);
-          const targetUnit = item.target_unit?.toLowerCase() || '';
-          
-          // For time-based goals, convert to seconds if needed
-          let targetInSeconds = targetValue;
-          if (item.target_metric === 'time' && (targetUnit.includes('min') || targetUnit.includes('minute'))) {
-            targetInSeconds = targetValue * 60;
-          }
-          
-          // Safely update SharedValues only if component is mounted
-          if (isMountedRef.current) {
-            goalTargetShared.value = targetInSeconds; // Store target in seconds for time-based goals
-            currentProgressShared.value = 0;
-            goalPercentageShared.value = 0;
-            exerciseCompletedShared.value = 0;
-          }
-          setExerciseCompleted(false);
-          // CRITICAL: Reset isPlanCompleted flag when loading new exercise (prevents stale state)
-          setIsPlanCompleted(false);
-        } else {
-          log.debug('[SmartCoach] No plan item found for current index - plan may be completed');
-          // CRITICAL: Only set currentPlanItem to null if plan is not already marked as completed
-          // This prevents race condition where handleNextExercise already set isPlanCompleted=true
-          if (!isPlanCompleted) {
-            setIsSmartCoachMode(false);
-            setCurrentPlanItem(null);
-          }
-        }
-      } catch (err) {
-        log.error('[SmartCoach] Error in loadPlanItem:', err);
-        setIsSmartCoachMode(false);
-        setCurrentPlanItem(null);
-      }
-    };
-
-    loadPlanItem();
-  }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, gymId, session?.gym_id, session?.gym?.smartcoach_enabled]);
+  
 
   // BLE Monitoring - REQUIRED to start workout
   // CRITICAL: isPaused removed from guard & dep array — pausing should NOT kill BLE connection.
@@ -626,7 +484,8 @@ export default function WorkoutScreen() {
     // Use sensorId from params or from session.machine
     const activeSensorId = sensorId || session?.machine?.sensor_id;
     
-    if (!session?.machine_id || !activeSensorId) {
+    // Simulator sessions have machine_id = null; only require activeSensorId
+    if ((!session?.machine_id && !isSimulator) || !activeSensorId) {
       setBleConnected(false);
       return;
     }
@@ -849,6 +708,11 @@ export default function WorkoutScreen() {
                 ftmsDeviceCaloriesRef.current = measurement.calories;
               }
 
+              // Simulator timeScale: track simulated elapsed time from FTMS measurements
+              if (isSimulator && measurement.elapsedTime != null) {
+                simulatorElapsedRef.current = measurement.elapsedTime;
+              }
+
               // Treadmill real-time display updates
               if (machineType === 'treadmill') {
                 const spd = measurement.speed ?? 0;
@@ -1004,7 +868,6 @@ export default function WorkoutScreen() {
               // Battery Optimization: No logging in measurement callback
               runOnJS(setIsPaused)(false);
               runOnJS(setShowAutoPauseOverlay)(false);
-              runOnJS(setShowSensorAsleep)(false);
             }
             lastCrankRevolutionsForAutoResumeRef.current = currentRevolutions;
             
@@ -1063,61 +926,6 @@ export default function WorkoutScreen() {
             // EXC_BAD_ACCESS fix: after async await, skip rest if unmounted
             if (!isMountedRef.current) return;
             
-            // SmartCoach: Update progress if in SmartCoach mode
-            // CRITICAL: Only update for RPM and reps here. Time-based goals are handled by interval.
-            // CRITICAL FIX: Use refs to avoid stale closures in BLE callback
-            if (isSmartCoachModeRef.current && currentPlanItemRef.current && !isPaused && isMountedRef.current) {
-              const targetMetric = currentPlanItemRef.current.target_metric;
-              const targetValue = parseFloat(currentPlanItemRef.current.target_value);
-              
-              // Skip time-based goals - they're handled by interval in useEffect
-              if (targetMetric === 'time') {
-                // Time-based progress is updated by interval, not here
-                // This prevents race conditions and ensures consistent updates
-                return;
-              }
-              
-              if (targetMetric === 'rpm') {
-                // For RPM, track average RPM over time
-                // Progress is based on maintaining target RPM for a duration
-                const currentRPM = smoothedRPMShared.value;
-                if (currentRPM >= targetValue * 0.9) { // Within 90% of target
-                  // Increment progress (1% per second at target RPM)
-                  if (isMountedRef.current) {
-                    currentProgressShared.value = Math.min(
-                      currentProgressShared.value + (1 / 60), // 1% per second
-                      targetValue
-                    );
-                  }
-                }
-              } else if (targetMetric === 'reps') {
-                // For reps, track number of revolutions
-                const currentRevolutions = measurement.crankRevolutions;
-                const lastRevolutions = lastCrankRevolutionsRef.current;
-                if (currentRevolutions > lastRevolutions && isMountedRef.current) {
-                  const delta = currentRevolutions - lastRevolutions;
-                  currentProgressShared.value = Math.min(
-                    currentProgressShared.value + delta,
-                    targetValue
-                  );
-                }
-              }
-              
-              // Calculate percentage (only for RPM and reps)
-              // CRITICAL: Only update if component is still mounted to prevent EXC_BAD_ACCESS
-              if (isMountedRef.current && targetMetric !== 'time') {
-                try {
-                  const percentage = (currentProgressShared.value / targetValue) * 100;
-                  goalPercentageShared.value = Math.min(percentage, 100);
-                } catch (error) {
-                  // Silently handle errors to prevent crashes
-                  if (__DEV__) {
-                    log.error('[SmartCoach] Error calculating percentage:', error);
-                  }
-                }
-              }
-            }
-            
             // Update last RPM time (use raw RPM, not smoothed, for accurate detection)
             // This ensures we detect when sensor actually stops
             if (rawRPM > 0) {
@@ -1131,7 +939,6 @@ export default function WorkoutScreen() {
               }
               lastRPMTimeRef.current = Date.now();
               setShowAutoPauseOverlay(false);
-              setShowSensorAsleep(false);
               
               // Clear auto-pause timer if RPM is detected
               if (autoPauseTimerRef.current) {
@@ -1178,11 +985,16 @@ export default function WorkoutScreen() {
             setPauseReason('connection');
             setIsPaused(true);
             setBleConnected(false);
-            setShowSensorAsleep(false);
             setBleStatus(t('connectionLost'));
           },
           // onReconnect callback - verify session ownership
-          verifySessionOwnership
+          verifySessionOwnership,
+          // onSimulatorComplete - auto-finish when simulator reaches its duration
+          () => {
+            if (isMountedRef.current) {
+              handleFinishWorkoutRef.current?.();
+            }
+          },
         );
 
         // Battery Optimization: Only log critical events
@@ -1259,9 +1071,10 @@ export default function WorkoutScreen() {
     startBLEMonitoring();
 
     return () => {
-        // Mark component as unmounted FIRST to prevent any further SharedValue updates
-        isMountedRef.current = false;
-        
+        // Do NOT set isMountedRef.current = false here — that ref tracks component lifetime,
+        // not a single effect run. Setting it false on reconnectTrigger re-runs would cause all
+        // BLE callbacks to silently drop updates after the first reconnect (Bug 2).
+        // isMountedRef is set false only in the mount/unmount effect above.
         if (isMonitoring) {
           bleService.stopMonitoring();
           bleService.disconnect();
@@ -1274,9 +1087,38 @@ export default function WorkoutScreen() {
       };
     }, [session?.machine_id, session?.machine?.sensor_id, sensorId, authSession?.user, reconnectTrigger]);
 
+  // Bug 1: 60-second connecting timeout — if BLE never connects, show "Cancel Workout"
+  useEffect(() => {
+    if (bleConnected) {
+      // Clear once connected
+      setShowConnectingCancel(false);
+      if (connectingTimeoutRef.current) {
+        clearTimeout(connectingTimeoutRef.current);
+        connectingTimeoutRef.current = null;
+      }
+      return;
+    }
+    const hasActiveSensor = session?.machine_id || sensorId?.startsWith('sim:');
+    if (!hasActiveSensor || sessionLoading) return;
+
+    connectingTimeoutRef.current = setTimeout(() => {
+      if (!bleConnected && isMountedRef.current) {
+        setShowConnectingCancel(true);
+      }
+    }, 60_000);
+
+    return () => {
+      if (connectingTimeoutRef.current) {
+        clearTimeout(connectingTimeoutRef.current);
+        connectingTimeoutRef.current = null;
+      }
+    };
+  }, [bleConnected, session?.machine_id, sensorId, sessionLoading]);
+
   // Detect silent BLE disconnects and keep UI state consistent.
   useEffect(() => {
-    if (!session?.machine_id || !bleConnected || isReconnecting) return;
+    const hasActiveSensor = session?.machine_id || sensorId?.startsWith('sim:');
+    if (!hasActiveSensor || !bleConnected || isReconnecting) return;
 
     const watchdog = setInterval(() => {
       if (!bleService.getConnected()) {
@@ -1288,7 +1130,7 @@ export default function WorkoutScreen() {
     }, 1500);
 
     return () => clearInterval(watchdog);
-  }, [bleConnected, isReconnecting, session?.machine_id, t]);
+  }, [bleConnected, isReconnecting, session?.machine_id, sensorId, t]);
 
   const cancelSessionForNoActivity = useCallback(async () => {
     if (!session || !authSession?.user || session.id === 'mock-session') return;
@@ -1365,215 +1207,6 @@ export default function WorkoutScreen() {
     setInactivityCountdownSec(inactivityPolicy.autoFinishAfterSec);
     setHeartbeatAllowed(true);
   }, [session?.id, inactivityPolicy.autoFinishAfterSec]);
-
-  useEffect(() => {
-    if (!session?.gym_id || !authSession?.user || !session?.id) return;
-
-    const loadLiveEconomyContext = async () => {
-      try {
-        // Prefer SECURITY DEFINER RPC for mobile users (RLS-safe).
-        const { data: rpcLimits } = await supabase.rpc('get_user_drop_limits', {
-          p_gym_id: session.gym_id,
-        });
-
-        const rpcRow = Array.isArray(rpcLimits) ? rpcLimits[0] : rpcLimits;
-        let effectiveLimits = rpcRow as {
-          max_drops_per_session?: number;
-          max_rewarded_sessions_per_day?: number;
-          max_drops_per_day?: number;
-          max_drops_per_week?: number;
-          rewarded_sessions_cap_mode?: string;
-          session_restart_grace_sec?: number;
-          session_soft_tier_1_factor?: number;
-          session_soft_tier_2_factor?: number;
-          session_soft_tier_1_span_ratio?: number;
-        } | null;
-
-        // Compatibility fallback: direct table reads (for environments without RPC migration).
-        if (!effectiveLimits) {
-          const [gymTokenomics, globalTokenomics, gymLimitsFallback, defaultLimitsFallback] = await Promise.all([
-            supabase
-              .from('tokenomics_config')
-              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
-              .eq('gym_id', session.gym_id)
-              .maybeSingle(),
-            supabase
-              .from('tokenomics_config')
-              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
-              .is('gym_id', null)
-              .maybeSingle(),
-            supabase
-              .from('drop_limits')
-              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
-              .eq('gym_id', session.gym_id)
-              .eq('enabled', true)
-              .maybeSingle(),
-            supabase
-              .from('drop_limits')
-              .select('max_drops_per_session,max_rewarded_sessions_per_day,max_drops_per_day,max_drops_per_week')
-              .is('gym_id', null)
-              .eq('enabled', true)
-              .maybeSingle(),
-          ]);
-          effectiveLimits =
-            gymTokenomics.data ||
-            globalTokenomics.data ||
-            gymLimitsFallback.data ||
-            defaultLimitsFallback.data;
-        }
-
-        if (effectiveLimits) {
-          const maxSessionDrops = Math.max(1, Number(effectiveLimits.max_drops_per_session ?? 120));
-          const maxDayDrops = Math.max(maxSessionDrops, Number(effectiveLimits.max_drops_per_day ?? 300));
-          const maxWeekDrops = Math.max(maxDayDrops, Number(effectiveLimits.max_drops_per_week ?? 1500));
-          const maxRewardedSessions = Math.max(1, Number(effectiveLimits.max_rewarded_sessions_per_day ?? 4));
-          let capMode: RewardedSessionsCapMode = 'soft';
-          const rawMode = effectiveLimits.rewarded_sessions_cap_mode;
-          if (rawMode === 'off' || rawMode === 'soft' || rawMode === 'hard') {
-            capMode = rawMode;
-          }
-          dropLimitsRef.current = {
-            maxDropsPerSession: maxSessionDrops,
-            maxRewardedSessionsPerDay: maxRewardedSessions,
-            maxDropsPerDay: maxDayDrops,
-            maxDropsPerWeek: maxWeekDrops,
-            rewardedSessionsCapMode: capMode,
-            sessionSoftTier1Factor: effectiveLimits.session_soft_tier_1_factor != null
-              ? Number(effectiveLimits.session_soft_tier_1_factor) : undefined,
-            sessionSoftTier2Factor: effectiveLimits.session_soft_tier_2_factor != null
-              ? Number(effectiveLimits.session_soft_tier_2_factor) : undefined,
-            sessionSoftTier1SpanRatio: effectiveLimits.session_soft_tier_1_span_ratio != null
-              ? Number(effectiveLimits.session_soft_tier_1_span_ratio) : undefined,
-          };
-          setTargetDrops(maxSessionDrops);
-          const initialDayRemaining = Math.max(0, maxDayDrops - dropHistoryRef.current.mintedToday);
-          setDailyRemaining(initialDayRemaining);
-          // Initialize first segment target: smaller of session cap and daily remaining
-          const initialSegTarget = Math.max(1, Math.min(maxSessionDrops, initialDayRemaining));
-          segmentTargetRef.current = initialSegTarget;
-          segmentTargetShared.value = initialSegTarget;
-        }
-      } catch (limitsError) {
-        log.warn('[Workout] Could not load economy limits for live estimator, using defaults.', limitsError);
-      }
-
-      try {
-        const { data: profileRow } = await supabase
-          .from('profiles')
-          .select('streak_days,last_visit_date')
-          .eq('id', authSession.user.id)
-          .maybeSingle();
-
-        if (profileRow) {
-          streakContextRef.current = {
-            streakDays: profileRow.streak_days ?? 0,
-            lastVisitDate: profileRow.last_visit_date ?? null,
-          };
-        }
-      } catch (profileError) {
-        log.warn('[Workout] Could not load profile streak for live estimator.', profileError);
-      }
-
-      try {
-        const { data: rewardedSessions } = await supabase
-          .from('sessions')
-          .select('drops_earned,started_at,ended_at,machine_id')
-          .eq('user_id', authSession.user.id)
-          .eq('is_active', false)
-          .gt('drops_earned', 0)
-          .neq('id', session.id)
-          .limit(500);
-
-        const now = new Date();
-        const todayStr = getBelgradeDateString(now);
-        const todayDate = new Date(`${todayStr}T00:00:00.000Z`);
-        const dayOfWeek = todayDate.getUTCDay();
-        const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        const weekStartDate = new Date(todayDate);
-        weekStartDate.setUTCDate(weekStartDate.getUTCDate() - weekOffset);
-        const weekStartStr = weekStartDate.toISOString().slice(0, 10);
-
-        let rewardedSessionsToday = 0;
-        let mintedToday = 0;
-        let mintedWeek = 0;
-        let mergedPriorDrops = 0;
-
-        const mergeWindowSec = 900;
-        const sessionStartMs = new Date(session.started_at).getTime();
-
-        for (const row of rewardedSessions || []) {
-          const dateStr = getBelgradeDateString(new Date(row.started_at));
-          const earned = row.drops_earned ?? 0;
-          if (dateStr === todayStr) {
-            rewardedSessionsToday += 1;
-            mintedToday += earned;
-
-            // Merge window: prior sessions that ended recently before this
-            // session started (within mergeWindowSec). Prevents splitting
-            // a long workout into many short sessions to reset tiers.
-            if (row.ended_at) {
-              const endedMs = new Date(row.ended_at).getTime();
-              if (
-                endedMs <= sessionStartMs &&
-                sessionStartMs <= endedMs + mergeWindowSec * 1000
-              ) {
-                mergedPriorDrops += earned;
-              }
-            }
-          }
-          if (dateStr >= weekStartStr) {
-            mintedWeek += earned;
-          }
-        }
-
-        dropHistoryRef.current = {
-          rewardedSessionsToday,
-          mintedToday,
-          mintedWeek,
-        };
-        mergedPriorDropsRef.current = mergedPriorDrops;
-      } catch (historyError) {
-        log.warn('[Workout] Could not load rewarded sessions history for live estimator.', historyError);
-      }
-
-      try {
-        const resolvedType = (machineType || 'generic').toLowerCase();
-        const { data: dmcRow } = await supabase
-          .from('drop_model_config')
-          .select('machine_base_json, full_rate_until_min, reduced_rate_until_min, low_rate_until_min, post_limit_factor')
-          .or(`gym_id.eq.${session.gym_id},gym_id.is.null`)
-          .order('gym_id', { ascending: false, nullsFirst: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (dmcRow?.machine_base_json) {
-          const json = dmcRow.machine_base_json as Record<string, Record<string, number>>;
-          const mcfg = json[resolvedType] ?? json['generic'];
-          if (mcfg) {
-            machineConfigRef.current = {
-              baseRatePerMin: mcfg.baseRatePerMin ?? 1.0,
-              maxMultiplier: mcfg.maxMultiplier ?? 1.8,
-              maxDropsPerMinute: mcfg.maxDropsPerMinute ?? 3.0,
-              sustainedHighEffortRatio: mcfg.sustainedHighEffortRatio ?? 0.55,
-            };
-          }
-        }
-
-        if (dmcRow?.full_rate_until_min != null) {
-          diminishingConfigRef.current = {
-            fullRateUntilMin: Number(dmcRow.full_rate_until_min),
-            reducedRateUntilMin: Number(dmcRow.reduced_rate_until_min ?? 90),
-            lowRateUntilMin: Number(dmcRow.low_rate_until_min ?? 120),
-            postLimitFactor: Number(dmcRow.post_limit_factor ?? 0.4),
-          };
-        }
-      } catch (configError) {
-        log.warn('[Workout] Could not load drop_model_config for live estimator, using defaults.', configError);
-      }
-    };
-
-    void loadLiveEconomyContext();
-  }, [authSession?.user, session?.gym_id, session?.id]);
 
   // Heartbeat update — adaptive cadence: 10s when active, 30s when paused/idle.
   useEffect(() => {
@@ -1784,11 +1417,6 @@ export default function WorkoutScreen() {
   // Enhanced: Even if RPM is stuck on small values (1-5 RPM), force to 0 if no data for 2.5s
   const frameCallback = useFrameCallback((frameInfo) => {
     'worklet';
-    // CRITICAL: Guard - stop processing if plan is completed to prevent JSI crashes
-    if (isPlanCompletedShared.value >= 1) {
-      return; // Stop processing when plan is completed
-    }
-    
     // 1. Current time
     const now = Date.now();
     
@@ -1811,273 +1439,13 @@ export default function WorkoutScreen() {
     }
   });
   
-  // CRITICAL: Stop frameCallback when plan is completed to prevent JSI crashes
+  // Activate frameCallback as long as component is mounted; deactivate on unmount
   useEffect(() => {
-    if (isPlanCompleted) {
-      frameCallback.setActive(false);
-    } else {
-      frameCallback.setActive(true);
-    }
-    
+    frameCallback.setActive(true);
     return () => {
-      // Ensure cleanup on unmount
       frameCallback.setActive(false);
     };
-  }, [isPlanCompleted, frameCallback]);
-
-  // SmartCoach: Track exercise completion
-  const [exerciseCompleted, setExerciseCompleted] = useState(false);
-  
-  useAnimatedReaction(
-    () => goalPercentageShared.value,
-    (percentage) => {
-      'worklet';
-      // Use SharedValue (not ref) so worklet reads on UI thread - avoids EXC_BAD_ACCESS
-      // CRITICAL: Check both percentage and exerciseCompletedShared to prevent duplicate triggers
-      // CRITICAL FIX: Use ref to avoid stale closure in worklet (worklets can read refs via runOnJS)
-      // Note: We can't read JS refs directly in worklet, so we use a SharedValue for isSmartCoachMode
-      // For now, keep isSmartCoachMode in dependency array - it will trigger re-creation of reaction when it changes
-      if (percentage >= 100 && exerciseCompletedShared.value < 1 && isSmartCoachMode && !isPlanCompleted) {
-        // CRITICAL: Set exerciseCompletedShared immediately in worklet to prevent duplicate triggers
-        exerciseCompletedShared.value = 1;
-        
-        runOnJS(() => {
-          // Defer to next tick to avoid EXC_BAD_ACCESS: setState/Haptics during Reanimated frame
-          setTimeout(() => {
-            try {
-              // GUARD: Prevent Haptics/state updates if plan is completed or component is unmounting
-              // Double-check SharedValue to ensure we haven't already completed
-              if (isMountedRef.current && !isPlanCompleted && exerciseCompletedShared.value >= 1) {
-                // exerciseCompletedShared.value is already set to 1 in worklet above
-                setExerciseCompleted(true);
-                
-                // GUARD: Only call Haptics if component is still mounted and plan is not completed
-                if (isMountedRef.current && !isPlanCompleted) {
-                  try {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  } catch (hapticsError) {
-                    log.warn('[SmartCoach] Haptics error:', hapticsError);
-                  }
-                }
-                
-                // CRITICAL: Automatically move to next exercise after a short delay (1.5 seconds)
-                // This provides better UX - user sees completion feedback, then automatically advances
-                // If this is the last exercise, handleNextExercise will detect it and show plan completion overlay
-                // Use runOnJS to safely call handleNextExercise from worklet
-                runOnJS(() => {
-                  setTimeout(() => {
-                    if (isMountedRef.current && !isPlanCompleted) {
-                      log.debug('[SmartCoach] Auto-advancing to next exercise after completion');
-                      handleNextExercise();
-                    }
-                  }, 1500);
-                })();
-              }
-            } catch (e) {
-              log.warn('[SmartCoach] runOnJS completion error:', e);
-            }
-          }, 0);
-        })();
-      }
-    },
-    [goalPercentageShared, isSmartCoachMode, exerciseCompletedShared, isPlanCompleted]
-  );
-
-  // SmartCoach: Move to next exercise
-  // CRITICAL FIX: Peek-ahead pattern - fetch next item BEFORE updating index to prevent race condition
-  const handleNextExercise = useCallback(async () => {
-    // GUARD: Prevent execution if plan is already completed or component is unmounting
-    if (isPlanCompleted || !isMountedRef.current) {
-      log.debug('[SmartCoach] handleNextExercise blocked - plan completed or unmounting');
-      return;
-    }
-    
-    // Use machineId from params first, then fallback to session.machine_id
-    const activeMachineId = machineId || session?.machine_id;
-    
-    if (!planId || !activeMachineId || !authSession?.user) return;
-    
-    try {
-      const nextIndex = currentExerciseIndex + 1;
-      
-      // CRITICAL FIX: Peek-ahead - FIRST check if next item exists BEFORE updating any state
-      // This prevents race condition where useEffect sets currentPlanItem to null
-      const { data, error } = await supabase.rpc('get_plan_item_for_machine', {
-        p_plan_id: planId,
-        p_machine_id: activeMachineId,
-        p_current_index: nextIndex,
-      });
-
-      // CRITICAL: If error or no data, plan is complete - clean up all intervals and navigate
-      if (error || !data || data.length === 0) {
-        log.debug('[SmartCoach] Plan completed! No more exercises found at index:', nextIndex);
-        
-        // CRITICAL: Stop all intervals BEFORE setting completion flags to prevent crashes
-        // Clear time-based progress interval
-        if (timeProgressIntervalRef.current) {
-          clearInterval(timeProgressIntervalRef.current);
-          timeProgressIntervalRef.current = null;
-        }
-        
-        // Clear sync interval
-        if (syncIntervalRef.current) {
-          clearInterval(syncIntervalRef.current);
-          syncIntervalRef.current = null;
-        }
-        
-        // Clear heartbeat interval
-        if (heartbeatIntervalRef.current) {
-          clearInterval(heartbeatIntervalRef.current);
-          heartbeatIntervalRef.current = null;
-        }
-        
-        // REMOVED: challengeUpdateIntervalRef cleanup - challenge progress is now automatic via award_drops()
-        
-        // Clear all timers
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-        
-        // REMOVED: challengeMessageTimerRef cleanup - no longer needed
-        
-        if (autoPauseTimerRef.current) {
-          clearTimeout(autoPauseTimerRef.current);
-          autoPauseTimerRef.current = null;
-        }
-        
-        // CRITICAL: Stop frameCallback BEFORE setting completion flags to prevent JSI crashes
-        frameCallback.setActive(false);
-        
-        // Cancel all animations before completion
-        cancelAnimation(rawRPMShared);
-        cancelAnimation(smoothedRPMShared);
-        cancelAnimation(goalPercentageShared);
-        cancelAnimation(currentProgressShared);
-        
-        // KRAJ PLANA: Set completion flags
-        setIsPlanCompleted(true);
-        setShowPlanCompleted(true);
-        setIsSmartCoachMode(false);
-        
-        // Show workout summary modal after a brief delay
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            setShowWorkoutSummary(true);
-          }
-        }, 1000);
-        
-        // CRITICAL: Navigate to session-summary after showing completion overlay (2.5 seconds delay)
-        // This gives user time to see the "Plan Completed!" message
-        setTimeout(() => {
-          // CRITICAL: Only navigate if component is still mounted
-          // isPlanCompleted is already set to true above, so we don't check it again
-          if (isMountedRef.current) {
-            // Now safe to set currentPlanItem to null since all intervals are cleared
-            setCurrentPlanItem(null);
-            // Navigate to summary - wrap in try-catch to prevent crashes
-            try {
-              log.debug('[SmartCoach] Navigating to session summary after plan completion');
-              handleFinishWorkout();
-            } catch (navError) {
-              log.error('[SmartCoach] Error navigating to summary:', navError);
-              // Fallback: Try direct navigation if handleFinishWorkout fails
-              if (isMountedRef.current && session?.id) {
-                try {
-                  router.replace({
-                    pathname: '/session-summary',
-                    params: {
-                      sessionId: session.id,
-                      drops: Math.round(totalDropsShared.value).toString(),
-                      duration: duration.toString(),
-                      gymId: session.gym_id || '',
-                      sessionTier,
-                      trackingOnly: isTrackingOnly ? '1' : undefined,
-                    },
-                  });
-                } catch (routerError) {
-                  log.error('[SmartCoach] Error with direct navigation:', routerError);
-                }
-              }
-            }
-          }
-        }, 2500);
-        
-        return;
-      }
-
-      // Next item exists - proceed with update
-      const item = data[0];
-      if (!item) {
-        log.error('[SmartCoach] Invalid plan item received');
-        return;
-      }
-      
-      // Machine Switch Logic: Check if next exercise requires different machine
-      const nextMachineId = item.machine_id || item.machine?.id;
-      const currentMachineId = activeMachineId;
-      
-      if (nextMachineId && nextMachineId !== currentMachineId) {
-        log.debug('[SmartCoach] Next exercise requires different machine:', {
-          currentMachineId,
-          nextMachineId,
-          exerciseName: item.exercise_name,
-        });
-        
-        // Stop current workout and navigate to scan with plan context
-        // This ensures user can scan the correct machine for next exercise
-        handleFinishWorkout();
-        
-        // Navigate to scan with plan parameters preserved
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            router.push({
-              pathname: '/scan',
-              params: {
-                planId,
-                machineId: nextMachineId,
-                exerciseIndex: nextIndex.toString(),
-              },
-            });
-          }
-        }, 500);
-        
-        return; // Exit - don't update current exercise
-      }
-      
-      // CRITICAL: Update index and plan item simultaneously to prevent race condition
-      // This ensures loadPlanItem useEffect won't run with stale index
-      setCurrentExerciseIndex(nextIndex);
-      setCurrentPlanItem(item);
-      setExerciseCompleted(false);
-      
-      // Reset progress (safely check if mounted)
-      if (isMountedRef.current) {
-        goalTargetShared.value = 0;
-        currentProgressShared.value = 0;
-        goalPercentageShared.value = 0;
-        exerciseCompletedShared.value = 0;
-      }
-      
-      const targetValue = parseFloat(item.target_value);
-      const targetUnit = item.target_unit?.toLowerCase() || '';
-      
-      // For time-based goals, convert to seconds if needed
-      let targetInSeconds = targetValue;
-      if (item.target_metric === 'time' && (targetUnit.includes('min') || targetUnit.includes('minute'))) {
-        targetInSeconds = targetValue * 60;
-      }
-      
-      // Safely update SharedValues only if component is mounted
-      if (isMountedRef.current) {
-        goalTargetShared.value = targetInSeconds;
-      }
-      log.debug('[SmartCoach] Moved to next exercise:', item.exercise_name);
-    } catch (err) {
-        log.error('[SmartCoach] Error in handleNextExercise:', err);
-        showModal({ title: t('common:error'), body: t('failedNextExercise') });
-    }
-  }, [planId, machineId, session?.machine_id, currentExerciseIndex, authSession?.user, isPlanCompleted]);
+  }, [frameCallback]);
 
   // NATIVE-DRIVEN: Display numbers using SharedValue (no re-renders)
   // These run entirely on UI thread
@@ -2405,10 +1773,14 @@ export default function WorkoutScreen() {
       } catch (unlockError) {
         log.error('[Workout] Failed to unlock machine after session create failure:', unlockError);
       }
-      // CRITICAL: No blocking Alert.alert() - log error and continue
-      log.error('[Workout] Failed to start workout:', error.message);
-      // Continue with mock session or show error in UI
-      setBleStatus(`Failed to start workout: ${error.message}`);
+      if (isMountedRef.current) {
+        showModal({
+          title: t('sessionLoadFailedTitle'),
+          body: t('sessionLoadFailedBody'),
+          buttons: [{ label: t('backToScan'), onPress: () => router.replace('/scan') }],
+        });
+      }
+      return;
     }
 
     if (data) {
@@ -2428,8 +1800,15 @@ export default function WorkoutScreen() {
       .eq('id', sessionId)
       .single();
 
-    if (error) {
+    if (error || !data) {
       log.error('[Workout] Failed to load session:', error);
+      if (isMountedRef.current) {
+        showModal({
+          title: t('sessionLoadFailedTitle'),
+          body: t('sessionLoadFailedBody'),
+          buttons: [{ label: t('backToScan'), onPress: () => router.replace('/scan') }],
+        });
+      }
       return;
     }
 
@@ -2457,50 +1836,16 @@ export default function WorkoutScreen() {
     }
   };
 
-  // Throttled Sync: Save session progress to Supabase (every 15 seconds)
-  // Database Sync on Idle: Skip syncing if RPM is 0 for 15+ seconds (idleSyncRef.current === true)
-  useEffect(() => {
-    if (!session?.id || session.id === 'mock-session' || !authSession?.user) return;
-    if (isPaused) return; // Don't save when paused
-    if (idleSyncRef.current) return; // Don't sync if in idle state (RPM 0 for 15+ seconds)
-
-    const syncToDatabase = async () => {
-      const now = Date.now();
-      // Battery Optimization: Throttle to 30 seconds minimum
-      if (lastSyncRef.current && now - lastSyncRef.current < 30000) {
-        return;
-      }
-
-      try {
-        // CRITICAL: Do NOT save drops_earned during workout sync.
-        // award_drops() has an idempotency check (drops_earned > 0 = already processed).
-        const estimatedCalories = Math.round(caloriesShared.value);
-        await supabase
-          .from('sessions')
-          .update({
-            duration_seconds: duration,
-            calories: estimatedCalories > 0 ? estimatedCalories : null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', session.id);
-        
-        lastSyncRef.current = now;
-        // Battery Optimization: Only log critical sync events
-      } catch (error) {
-        log.error('[Workout] Sync error:', error);
-      }
-    };
-
-    // Battery Optimization: Sync immediately, then every 30 seconds (reduced frequency)
-    syncToDatabase();
-    syncIntervalRef.current = setInterval(syncToDatabase, 30000);
-
-    return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-      }
-    };
-  }, [session?.id, averageRPM, duration, isPaused, authSession]); // Removed earnedDrops - using SharedValue
+  // Throttled DB sync — delegated to useWorkoutSync hook
+  useWorkoutSync({
+    sessionId: session?.id,
+    userId: authSession?.user?.id,
+    duration,
+    caloriesShared,
+    isPaused,
+    idleSyncRef,
+    isMockSession: session?.id === 'mock-session',
+  });
 
   const applyLiveDropsEstimate = useCallback((nextDrops: number) => {
     const current = Math.max(0, Math.round(totalDropsShared.value));
@@ -2551,21 +1896,26 @@ export default function WorkoutScreen() {
 
   // Timer for duration only - REQUIRES BLE connection
   useEffect(() => {
-    // GUARD: Stop timer if plan is completed
-    if (isPlanCompleted) return;
     if (!session && !startTime) return;
     if (isPaused) return;
     if (!bleConnected) return; // Don't start timer until BLE is connected
 
     const interval = setInterval(() => {
-      // GUARD: Check if plan is completed during timer execution
-      if (isPlanCompleted || !isMountedRef.current) {
+      if (!isMountedRef.current) {
         return;
       }
       const now = new Date();
-      const start = startTime || (session ? new Date(session.started_at) : now);
-      const pausedOffset = pausedTime ? now.getTime() - pausedTime.getTime() : 0;
-      const seconds = Math.floor((now.getTime() - start.getTime() - pausedOffset) / 1000);
+      // For simulator sessions with timeScale, use simulated elapsed time from
+      // FTMS measurements rather than wall-clock time so all UI and drop
+      // calculations honour the accelerated timeline.
+      let seconds: number;
+      if (isSimulator && simulatorElapsedRef.current != null) {
+        seconds = simulatorElapsedRef.current;
+      } else {
+        const start = startTime || (session ? new Date(session.started_at) : now);
+        const pausedOffset = pausedTime ? now.getTime() - pausedTime.getTime() : 0;
+        seconds = Math.floor((now.getTime() - start.getTime() - pausedOffset) / 1000);
+      }
 
       if (seconds >= 0) {
         setDuration(seconds);
@@ -2665,164 +2015,12 @@ export default function WorkoutScreen() {
     return () => {
       clearInterval(interval);
     };
-  }, [applyLiveDropsEstimate, bleConnected, isPaused, isPlanCompleted, isTrackingOnly, pausedTime, session, startTime, caloriesShared]);
+  }, [applyLiveDropsEstimate, bleConnected, isPaused, isTrackingOnly, pausedTime, session, startTime, caloriesShared]);
 
   // Calculate current minutes (memoized to avoid recalculating on every render)
   const currentMinutes = useMemo(() => Math.floor(duration / 60), [duration]);
 
-  // SmartCoach: Update progress every second for time-based goals
-  // CRITICAL: This is the ONLY place where time-based progress is updated to prevent race conditions
-  useEffect(() => {
-    // CRITICAL: Clear any existing interval before creating a new one
-    if (timeProgressIntervalRef.current) {
-      clearInterval(timeProgressIntervalRef.current);
-      timeProgressIntervalRef.current = null;
-    }
-    
-    // GUARD: Stop timer if plan is completed OR exercise is completed - CRITICAL for preventing crashes
-    if (isPlanCompleted || exerciseCompleted) {
-      return;
-    }
-    
-    // CRITICAL SAFETY GUARD: Check ref first to prevent accessing null currentPlanItem
-    if (!currentPlanItemRef.current) {
-      return;
-    }
-    
-    // Undefined guard: Check if currentPlanItem exists before using
-    // CRITICAL FIX: Use refs to avoid stale closures
-    if (!isSmartCoachModeRef.current || !currentPlanItemRef.current || isPaused || !bleConnected || !isMountedRef.current) {
-      return;
-    }
-    
-    if (!currentPlanItemRef.current.target_metric) {
-      log.warn('[SmartCoach] currentPlanItem missing target_metric');
-      return;
-    }
-    
-    const targetMetric = currentPlanItemRef.current.target_metric;
-    
-    // Only handle time-based goals here
-    if (targetMetric !== 'time') {
-      return;
-    }
-    
-    if (!currentPlanItemRef.current.target_value) {
-      log.warn('[SmartCoach] currentPlanItem missing target_value');
-      return;
-    }
-    
-    const targetValue = parseFloat(currentPlanItemRef.current.target_value);
-    const targetUnit = currentPlanItemRef.current.target_unit?.toLowerCase() || '';
-    
-    // Convert target to seconds if it's in minutes
-    let targetInSeconds = targetValue;
-    if (targetUnit.includes('min') || targetUnit.includes('minute')) {
-      targetInSeconds = targetValue * 60;
-    }
-    
-    // CRITICAL: Capture targetInSeconds in closure for interval callback to avoid stale reference
-    const capturedTargetInSeconds = targetInSeconds;
-    
-    const interval = setInterval(() => {
-      // CRITICAL NULL GUARD: Check ref and state FIRST at the very top to prevent crashes
-      // This prevents accessing null currentPlanItem when plan is completed
-      if (!currentPlanItem || isPlanCompleted) {
-        return; // If plan is done or loading, do nothing
-      }
-      
-      // Double-check with ref for additional safety
-      if (!currentPlanItemRef.current) {
-        return;
-      }
-      
-      // CRITICAL GUARDS: Stop immediately if plan/exercise is completed or component is unmounting
-      if (isPlanCompleted || exerciseCompleted || !isMountedRef.current) {
-        return;
-      }
-      
-      // CRITICAL: Stop once goal is completed (avoids SharedValue writes during completion, reduces EXC_BAD_ACCESS risk)
-      // Check both SharedValue (UI thread) and state (JS thread) for maximum safety
-      if (exerciseCompletedShared.value >= 1) {
-        return;
-      }
-      
-      // CRITICAL FIX: Use refs to avoid stale closures
-      if (isPaused || !isSmartCoachModeRef.current || !currentPlanItemRef.current || !bleConnected) {
-        return;
-      }
-      
-      try {
-        const elapsedSeconds = durationShared.value;
-        
-        // CRITICAL: Check if goal is completed FIRST - if so, STOP interval immediately
-        const percentage = (elapsedSeconds / capturedTargetInSeconds) * 100;
-        if (percentage >= 100 && exerciseCompletedShared.value >= 1) {
-          // Goal completed - STOP interval immediately to prevent race condition
-          if (timeProgressIntervalRef.current) {
-            clearInterval(timeProgressIntervalRef.current);
-            timeProgressIntervalRef.current = null;
-          }
-          return; // Goal already completed, don't write to SharedValues
-        }
-        
-        // CRITICAL: If elapsed >= target, STOP interval BEFORE calling handleNextExercise
-        if (elapsedSeconds >= capturedTargetInSeconds && !exerciseCompleted) {
-          // STOP interval immediately to prevent race condition
-          if (timeProgressIntervalRef.current) {
-            clearInterval(timeProgressIntervalRef.current);
-            timeProgressIntervalRef.current = null;
-          }
-          // Now safe to call handleNextExercise (interval is stopped)
-          // Use setTimeout(0) to defer execution and ensure interval cleanup completes
-          setTimeout(() => {
-            if (isMountedRef.current && !isPlanCompleted) {
-              handleNextExercise();
-            }
-          }, 0);
-          return;
-        }
-        
-        // Update progress (in seconds) - only if mounted
-        if (isMountedRef.current && !exerciseCompleted && !isPlanCompleted) {
-          currentProgressShared.value = elapsedSeconds;
-          
-          // Calculate percentage based on target in seconds
-          // CRITICAL: Only update if not already at 100% to prevent re-triggering
-          const newPercentage = Math.min(percentage, 100);
-          if (goalPercentageShared.value < 100 || newPercentage < 100) {
-            goalPercentageShared.value = newPercentage;
-          }
-          
-          // Only log in development to avoid performance issues
-          if (__DEV__ && percentage <= 100) {
-            log.debug('[SmartCoach] Time progress update:', {
-              elapsed: elapsedSeconds,
-              target: targetInSeconds,
-              targetOriginal: targetValue,
-              unit: targetUnit,
-              percentage: percentage.toFixed(1) + '%',
-            });
-          }
-        }
-      } catch (error) {
-        // Silently handle errors to prevent crashes
-        if (__DEV__) {
-          log.error('[SmartCoach] Error updating time progress:', error);
-        }
-      }
-    }, 1000);
-    
-    // Store interval reference for cleanup
-    timeProgressIntervalRef.current = interval;
-    
-    return () => {
-      if (timeProgressIntervalRef.current) {
-        clearInterval(timeProgressIntervalRef.current);
-        timeProgressIntervalRef.current = null;
-      }
-    };
-  }, [isSmartCoachMode, currentPlanItem, isPaused, bleConnected, exerciseCompleted, isPlanCompleted, durationShared, currentProgressShared, goalPercentageShared, exerciseCompletedShared, isMountedRef, handleNextExercise]);
+  
 
   // Auto-refresh challenge progress every 12 seconds during workout
   useEffect(() => {
@@ -2948,21 +2146,28 @@ export default function WorkoutScreen() {
     }
 
     setBleConnected(false);
-    router.replace({
-      pathname: '/session-summary',
-      params: {
-        sessionId: session.id,
-        drops: String(dropsEarned),
-        duration: String(duration),
-        multiplier: String(multiplier),
-        badges: badgesEarned.length > 0 ? JSON.stringify(badgesEarned) : undefined,
-        gymId: session.gym_id || '',
-        securityStatus: 'cap',
-        securityMessage: message,
-        sessionTier,
-        trackingOnly: isTrackingOnly ? '1' : undefined,
-      },
-    });
+    try {
+      router.replace({
+        pathname: '/session-summary',
+        params: {
+          sessionId: session.id,
+          drops: String(dropsEarned),
+          duration: String(duration),
+          multiplier: String(multiplier),
+          badges: badgesEarned.length > 0 ? JSON.stringify(badgesEarned) : undefined,
+          gymId: session.gym_id || '',
+          securityStatus: 'cap',
+          securityMessage: message,
+          sessionTier,
+          trackingOnly: isTrackingOnly ? '1' : undefined,
+        },
+      });
+    } catch (navError) {
+      log.error('[Workout] finalizeForInactivity navigation failed, falling back to /scan:', navError);
+      try { router.replace('/scan'); } catch { /* ignore */ }
+    } finally {
+      isFinalizingRef.current = false;
+    }
   }, [authSession?.user, duration, isTrackingOnly, router, session, t]);
 
   useEffect(() => {
@@ -3043,10 +2248,17 @@ export default function WorkoutScreen() {
       }
 
       if (!reconnectOk) {
+        resumeFailCountRef.current += 1;
         setPauseReason('connection');
         setBleStatus(t('reconnectionFailed'));
+        if (resumeFailCountRef.current >= 3) {
+          setShowForceFinishOption(true);
+        }
         return;
       }
+      // Reset fail counter on success
+      resumeFailCountRef.current = 0;
+      setShowForceFinishOption(false);
 
       if (pausedTime) {
         const pauseDuration = new Date().getTime() - pausedTime.getTime();
@@ -3059,7 +2271,6 @@ export default function WorkoutScreen() {
       }
 
       setPausedTime(null);
-      setShowSensorAsleep(false);
       setPauseReason('manual');
       setIsPaused(false);
       pausedOverlayOpacity.value = withSpring(0, { damping: 15, stiffness: 100, mass: 1 });
@@ -3116,6 +2327,24 @@ export default function WorkoutScreen() {
       return;
     }
     isFinalizingRef.current = true;
+    try {
+      await _handleFinishWorkoutCore();
+    } catch (fatalError) {
+      log.error('[Workout] handleFinishWorkout fatal error:', fatalError);
+      // Fallback: always give the user a way out
+      if (isMountedRef.current) {
+        try {
+          router.replace('/scan');
+        } catch {
+          // ignore secondary navigation error
+        }
+      }
+    } finally {
+      isFinalizingRef.current = false;
+    }
+  };
+
+  const _handleFinishWorkoutCore = async () => {
 
     // CRITICAL: Clean up all timers/intervals before finishing
     if (longPressTimerRef.current) {
@@ -3123,7 +2352,6 @@ export default function WorkoutScreen() {
       longPressTimerRef.current = null;
     }
     
-    // CRITICAL: Clear time-based progress interval to prevent crashes when currentPlanItem becomes null
     if (timeProgressIntervalRef.current) {
       clearInterval(timeProgressIntervalRef.current);
       timeProgressIntervalRef.current = null;
@@ -3274,127 +2502,135 @@ export default function WorkoutScreen() {
       ? ftmsDeviceCaloriesRef.current
       : estimatedCalories;
 
+    let finalSyncOk = false;
     try {
-      const { error: syncError, count: syncCount } = await supabase
-        .from('sessions')
-        .update({
-          duration_seconds: duration,
-          calories: finalCalories > 0 ? finalCalories : null,
-          raw_metrics: rawMetrics,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', session.id);
-
-      if (syncError) {
-        log.error('[Workout] Final sync DB error:', syncError.message, syncError.code);
-      } else {
-        log.debug('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current, rowsAffected: syncCount });
-      }
-
-      // Safety net: if the update silently affected 0 rows (e.g. RLS denied), retry
-      // with a forced read-back to confirm raw_metrics persisted.
-      if (!syncError) {
-        const { data: verify } = await supabase
+      await withRetry(async () => {
+        const { error: syncError } = await supabase
           .from('sessions')
-          .select('raw_metrics')
-          .eq('id', session.id)
-          .single();
-        if (verify && !verify.raw_metrics?.avg_rpm && finalAverageRPM) {
-          log.warn('[Workout] raw_metrics.avg_rpm missing after sync — retrying update');
-          await supabase
-            .from('sessions')
-            .update({ raw_metrics: rawMetrics })
-            .eq('id', session.id);
-        }
+          .update({
+            duration_seconds: duration,
+            calories: finalCalories > 0 ? finalCalories : null,
+            raw_metrics: rawMetrics,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', session.id);
+        if (syncError) throw syncError;
+      }, { attempts: 3, baseDelayMs: 1000, label: 'Workout/finalSync' });
+
+      finalSyncOk = true;
+      log.debug('[Workout] Final sync completed:', { finalCalories, averageRPM: finalAverageRPM, duration, isFTMS: ftmsProtocolActiveRef.current });
+
+      // Safety net: if the update silently affected 0 rows (e.g. RLS denied),
+      // verify raw_metrics persisted.
+      const { data: verify } = await supabase
+        .from('sessions')
+        .select('raw_metrics')
+        .eq('id', session.id)
+        .single();
+      if (verify && !verify.raw_metrics?.avg_rpm && finalAverageRPM) {
+        log.warn('[Workout] raw_metrics.avg_rpm missing after sync — retrying update');
+        await supabase
+          .from('sessions')
+          .update({ raw_metrics: rawMetrics })
+          .eq('id', session.id);
       }
     } catch (syncError) {
-      log.error('[Workout] Final sync error:', syncError);
+      log.error('[Workout] Final sync failed after retries:', syncError);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // CALL award_drops() — SERVER-SIDE DROPS CALCULATION
     // This is the ONLY way drops are calculated. NEVER send drops from client.
-    // award_drops() will:
-    //   1. Calculate drops = calories × 2.5 × streak_multiplier
-    //   2. Update profiles (total_drops, available_drops, weekly, monthly, streak)
-    //   3. Update gym_memberships (local_drops_balance)
-    //   4. Insert drops_transactions ledger entry
-    //   5. Update challenge progress
-    //   6. Evaluate and award badges
-    //   7. Return { drops_earned, multiplier, badges_earned }
+    // award_drops() is idempotent — safe to retry on transient failures.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let serverDrops = 0;
     let serverMultiplier = 1.0;
     let serverBadges: string[] = [];
     let securityStatus: 'cap' | 'rate' | 'fraud' | null = null;
     let securityMessage: string | null = null;
+    let pendingSync = false;
 
-    const { data: awardResult, error } = await supabase.rpc('award_drops', {
-      p_session_id: session.id,
-    });
-
-    if (error) {
-      log.error('[Workout] award_drops() failed:', error.message);
-      const normalized = mapSecurityError(error.message || '');
-      if (normalized !== 'other') {
-        securityStatus = normalized;
-        if (normalized === 'cap') securityMessage = t('securityCapReached');
-        if (normalized === 'rate') securityMessage = t('securityRateLimited');
-        if (normalized === 'fraud') securityMessage = t('securityFraudBlocked');
-      } else {
-        securityStatus = 'rate';
-        securityMessage = t('securityAwardFailed');
-      }
-    } else if (awardResult && awardResult.length > 0) {
-      const result = awardResult[0];
-      serverDrops = result.drops_earned;
-      serverMultiplier = result.multiplier;
-      serverBadges = result.badges_earned || [];
-
-      // Backend can return success with 0 drops when anti-abuse/cap/min-duration rules apply.
-      if (serverDrops <= 0 && !securityMessage) {
-        const backendReason = String(
-          (result as any)?.reason_code ??
-          (result as any)?.reason ??
-          (result as any)?.error_message ??
-          ''
-        ).toLowerCase();
-
-        const normalized = mapSecurityError(backendReason);
-        if (normalized === 'cap') {
-          securityStatus = 'cap';
-          securityMessage = t('securityCapReached');
-        } else if (normalized === 'rate') {
-          securityStatus = 'rate';
-          securityMessage = t('securityRateLimited');
-        } else if (normalized === 'fraud') {
-          securityStatus = 'fraud';
-          securityMessage = t('securityFraudBlocked');
-        } else if (
-          backendReason.includes('duration') ||
-          backendReason.includes('short') ||
-          duration < 120
-        ) {
-          securityStatus = 'cap';
-          securityMessage = t('securitySessionTooShort');
-        } else {
-          securityStatus = 'cap';
-          securityMessage = t('securityNoDropsAwarded');
+    try {
+      const awardResult = await withRetry(async () => {
+        const { data, error: rpcErr } = await supabase.rpc('award_drops', { p_session_id: session.id });
+        if (rpcErr) {
+          // Business-logic errors (cap/fraud) should NOT be retried
+          const kind = mapSecurityError(rpcErr.message || '');
+          if (kind !== 'other') throw Object.assign(new Error(rpcErr.message), { _noRetry: true });
+          throw new Error(rpcErr.message || 'award_drops RPC error');
         }
-      }
+        return data;
+      }, { attempts: 3, baseDelayMs: 1500, label: 'Workout/awardDrops' });
 
-      log.debug('[Workout] award_drops() success:', {
-        drops_earned: serverDrops,
-        multiplier: serverMultiplier,
-        badges_earned: serverBadges,
-        securityMessage,
-      });
+      if (awardResult && awardResult.length > 0) {
+        const result = awardResult[0];
+        serverDrops = result.drops_earned;
+        serverMultiplier = result.multiplier;
+        serverBadges = result.badges_earned || [];
+
+        // Backend can return success with 0 drops when anti-abuse/cap/min-duration rules apply.
+        if (serverDrops <= 0 && !securityMessage) {
+          const backendReason = String(
+            (result as any)?.reason_code ??
+            (result as any)?.reason ??
+            (result as any)?.error_message ??
+            ''
+          ).toLowerCase();
+
+          const normalized = mapSecurityError(backendReason);
+          if (normalized === 'cap') {
+            securityStatus = 'cap';
+            securityMessage = t('securityCapReached');
+          } else if (normalized === 'rate') {
+            securityStatus = 'rate';
+            securityMessage = t('securityRateLimited');
+          } else if (normalized === 'fraud') {
+            securityStatus = 'fraud';
+            securityMessage = t('securityFraudBlocked');
+          } else if (
+            backendReason.includes('duration') ||
+            backendReason.includes('short') ||
+            duration < 120
+          ) {
+            securityStatus = 'cap';
+            securityMessage = t('securitySessionTooShort');
+          } else {
+            securityStatus = 'cap';
+            securityMessage = t('securityNoDropsAwarded');
+          }
+        }
+
+        log.debug('[Workout] award_drops() success:', {
+          drops_earned: serverDrops,
+          multiplier: serverMultiplier,
+          badges_earned: serverBadges,
+          securityMessage,
+        });
+      }
+    } catch (awardRetryError: any) {
+      if (awardRetryError?._noRetry) {
+        // Definitive backend rejection (cap/fraud/rate) — don't persist for recovery
+        log.error('[Workout] award_drops() rejected:', awardRetryError.message);
+        const normalized = mapSecurityError(awardRetryError.message || '');
+        if (normalized === 'cap') { securityStatus = 'cap'; securityMessage = t('securityCapReached'); }
+        else if (normalized === 'rate') { securityStatus = 'rate'; securityMessage = t('securityRateLimited'); }
+        else if (normalized === 'fraud') { securityStatus = 'fraud'; securityMessage = t('securityFraudBlocked'); }
+        else { securityStatus = 'rate'; securityMessage = t('securityAwardFailed'); }
+      } else {
+        // Network / transient failure — persist for recovery on session-summary
+        log.error('[Workout] award_drops() failed after all retries:', awardRetryError);
+        await savePendingFinalization(session.id);
+        pendingSync = true;
+      }
     }
 
-    // NOTE: Challenge progress + badges are automatically handled by award_drops()
-    // No need to manually update anything — it's all server-side now.
+    // If the final sync itself failed, persist too (award_drops may have had no data to work with)
+    if (!finalSyncOk && !pendingSync) {
+      await savePendingFinalization(session.id);
+      pendingSync = true;
+    }
 
-    // Unlock machine if it was locked
+    // Unlock machine if it was locked (best-effort, don't block navigation)
     if (session.machine_id && authSession?.user) {
       try {
         await supabase.rpc('unlock_machine', {
@@ -3420,9 +2656,13 @@ export default function WorkoutScreen() {
         securityMessage: securityMessage || undefined,
         sessionTier,
         trackingOnly: (isTrackingOnly || hardCapHitDuringSession) ? '1' : undefined,
+        pendingSync: pendingSync ? '1' : undefined,
       },
     });
   };
+
+  // Keep ref in sync so BLE/simulator callbacks always invoke the latest version
+  handleFinishWorkoutRef.current = handleFinishWorkout;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -3502,52 +2742,7 @@ export default function WorkoutScreen() {
   // Pulse Rings are now handled in CircularProgressRing.tsx component (GPU-only animations with interpolateColor)
 
 
-  // Signal Indicator Component
-  const SignalIndicator = ({ status }: { status: 'ok' | 'lost' }) => {
-    const pulseScale = useSharedValue(1);
-    const pulseOpacity = useSharedValue(1);
-
-    useEffect(() => {
-      if (status === 'ok') {
-        // Pulsing animation when signal is OK
-        pulseScale.value = withRepeat(
-          withSequence(
-            withTiming(1.2, { duration: 500, easing: Easing.inOut(Easing.ease) }),
-            withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) })
-          ),
-          -1,
-          false
-        );
-        pulseOpacity.value = withRepeat(
-          withSequence(
-            withTiming(0.6, { duration: 500, easing: Easing.inOut(Easing.ease) }),
-            withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) })
-          ),
-          -1,
-          false
-        );
-      } else {
-        // Static when signal is lost
-        pulseScale.value = 1;
-        pulseOpacity.value = 0.5;
-      }
-    }, [status]);
-
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: pulseScale.value }],
-      opacity: pulseOpacity.value,
-    }));
-
-    return (
-      <Animated.View style={animatedStyle}>
-        <Ionicons
-          name="radio"
-          size={12}
-          color={status === 'ok' ? branding.primary : theme.colors.textSecondary}
-        />
-      </Animated.View>
-    );
-  };
+  // SignalIndicator is rendered inside WorkoutStatsGrid
 
   // Calculate progress and bonus (using SharedValues via useAnimatedReaction)
   const [isOverachieved, setIsOverachieved] = useState(false);
@@ -3768,68 +2963,6 @@ export default function WorkoutScreen() {
         </Animated.View>
       )}
 
-      {/* SmartCoach: GoalTracker - Show when in SmartCoach mode */}
-      {/* GUARD: Render guard - return null if plan is completed or currentPlanItem is invalid */}
-      {/* CRITICAL: key prop forces React to unmount old tracker and stop animations before mounting new one */}
-      {isSmartCoachMode && !isPlanCompleted && currentPlanItem && currentPlanItem.exercise_name && currentPlanItem.target_metric && (
-        <GoalTracker
-          key={currentExerciseIndex}
-          exerciseName={currentPlanItem.exercise_name || 'Exercise'}
-          targetMetric={currentPlanItem.target_metric}
-          targetValue={parseFloat(currentPlanItem.target_value || '0')}
-          targetUnit={currentPlanItem.target_unit || ''}
-          currentProgress={currentProgressShared}
-          goalPercentage={goalPercentageShared}
-          primaryColor={branding.primary}
-          primaryLight={branding.primaryLight}
-        />
-      )}
-
-      {/* SmartCoach: Next Exercise Button - Show when exercise is completed */}
-      {isSmartCoachMode && exerciseCompleted && !showPlanCompleted && (
-        <Animated.View
-          style={[
-            styles.nextExerciseContainer,
-            {
-              backgroundColor: branding.primaryLight,
-              borderColor: branding.primary,
-            }
-          ]}
-        >
-          <View style={styles.nextExerciseContent}>
-            <Ionicons name="checkmark-circle" size={24} color={branding.primary} />
-            <Text style={[styles.nextExerciseText, { color: branding.primary }]}>
-              {t('exerciseCompleted')}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.nextExerciseButton, { backgroundColor: branding.primary }]}
-            onPress={handleNextExercise}
-          >
-            <Text style={[styles.nextExerciseButtonText, { color: branding.onPrimary }]}>
-              {t('nextExercise')}
-            </Text>
-            <Ionicons name="arrow-forward" size={20} color={branding.onPrimary} />
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {/* SmartCoach: Plan Completed Overlay */}
-      {showPlanCompleted && !showWorkoutSummary && (
-        <BlurView intensity={80} style={styles.planCompletedOverlay}>
-          <View style={[styles.planCompletedContainer, { backgroundColor: branding.primaryLight }]}>
-            <Ionicons name="trophy" size={64} color={branding.primary} />
-            <Text style={[styles.planCompletedTitle, { color: branding.primary }]}>
-              {t('planCompleted')}
-            </Text>
-            <Text style={styles.planCompletedSubtitle}>
-              {t('planCompletedSubtitle')}
-            </Text>
-          </View>
-        </BlurView>
-      )}
-
-      {/* Workout Summary Modal */}
       {/* Active Challenges Overlay */}
       {showChallengesOverlay && session?.gym_id && (
         <ActiveChallengesOverlay
@@ -3838,24 +2971,6 @@ export default function WorkoutScreen() {
           onClose={() => setShowChallengesOverlay(false)}
         />
       )}
-
-      <WorkoutSummaryModal
-        visible={showWorkoutSummary}
-        onClose={() => {
-          setShowWorkoutSummary(false);
-          // Navigate to summary after closing modal
-          if (isPlanCompleted && session?.id) {
-            handleFinishWorkout();
-          }
-        }}
-        sessionStats={{
-          duration,
-          drops: Math.round(totalDropsShared.value),
-          calories,
-          exercisesCompleted: currentExerciseIndex + 1,
-          planName: planId ? 'SmartCoach Plan' : undefined,
-        }}
-      />
 
       {/* Main Water Circle with Progress Ring */}
       <View style={styles.waterContainer}>
@@ -3978,168 +3093,47 @@ export default function WorkoutScreen() {
       </View>
 
       {/* Stats Grid */}
-      {machineType === 'treadmill' ? (
-        <View style={styles.statsGridTreadmill}>
-          <View style={styles.statItemTreadmill}>
-            <Ionicons name="time-outline" size={20} color={branding.primary} />
-            <Text style={[styles.statValue, getNumberStyle(18)]}>
-              {formatTime(duration)}
-            </Text>
-            <Text style={styles.statLabel}>Time</Text>
-          </View>
-
-          <View style={styles.statItemTreadmill}>
-            <View style={styles.rpmHeader}>
-              <Ionicons name="speedometer-outline" size={20} color={branding.primary} />
-              {bleConnected && <SignalIndicator status={signalStatus} />}
-            </View>
-            <AnimatedText
-              text={animatedSpeedText}
-              style={[styles.statValue, getNumberStyle(18)]}
-            />
-            <Text style={styles.statLabel}>{t('kmh')}</Text>
-          </View>
-
-          <View style={styles.statItemTreadmill}>
-            <Ionicons name="timer-outline" size={20} color={branding.primary} />
-            <AnimatedText
-              text={animatedPaceText}
-              style={[styles.statValue, getNumberStyle(18)]}
-            />
-            <Text style={styles.statLabel}>{t('minPerKm')}</Text>
-          </View>
-
-          <View style={styles.statItemTreadmill}>
-            <Ionicons name="flame" size={20} color={theme.colors.error} />
-            <AnimatedText
-              text={animatedCaloriesText}
-              style={[styles.statValue, getNumberStyle(18)]}
-            />
-            <Text style={styles.statLabel}>{t('kcal')}</Text>
-          </View>
-
-          <View style={styles.statItemTreadmill}>
-            <Ionicons name="navigate-outline" size={20} color={branding.primary} />
-            <AnimatedText
-              text={animatedDistanceText}
-              style={[styles.statValue, getNumberStyle(18)]}
-            />
-            <Text style={styles.statLabel}>
-              {ftmsTotalDistanceRef.current >= 1000 ? 'km' : 'm'}
-            </Text>
-          </View>
-
-          <View style={styles.statItemTreadmill}>
-            <Ionicons name="trending-up-outline" size={20} color={branding.primary} />
-            <AnimatedText
-              text={animatedInclineText}
-              style={[styles.statValue, getNumberStyle(18)]}
-            />
-            <Text style={styles.statLabel}>{t('incline')} %</Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Ionicons name="time-outline" size={24} color={branding.primary} />
-            <Text style={[styles.statValue, getNumberStyle(20)]}>
-              {formatTime(duration)}
-            </Text>
-            <Text style={styles.statLabel}>Time</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Ionicons name="flame" size={24} color={theme.colors.error} />
-            <AnimatedText
-              text={animatedCaloriesText}
-              style={[styles.statValue, getNumberStyle(20)]}
-            />
-            <Text style={styles.statLabel}>{t('kcal')}</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Ionicons name="speedometer-outline" size={24} color={branding.primary} />
-            <AnimatedText
-              text={animatedPaceText}
-              style={[styles.statValue, getNumberStyle(20)]}
-            />
-            <Text style={styles.statLabel}>{t('minPerKm')}</Text>
-          </View>
-
-          {(session?.machine?.sensor_id || sensorId) && (
-            <Animated.View style={[styles.statItem, rpmPulseStyle]}>
-              <View style={styles.rpmHeader}>
-                <Ionicons
-                  name="pulse-outline"
-                  size={24}
-                  color={bleConnected ? branding.primary : theme.colors.textSecondary}
-                />
-                {bleConnected && (
-                  <SignalIndicator status={signalStatus} />
-                )}
-              </View>
-              <AnimatedText
-                text={animatedRPMText}
-                style={[
-                  styles.statValue,
-                  getNumberStyle(20),
-                  rpmTextColorStyle,
-                ]}
-              />
-              <Text style={styles.statLabel}>{t('rpm')}</Text>
-            </Animated.View>
-          )}
-        </View>
-      )}
+      <WorkoutStatsGrid
+        machineType={machineType ?? ''}
+        duration={duration}
+        bleConnected={bleConnected}
+        signalStatus={signalStatus}
+        hasSensor={!!(session?.machine?.sensor_id || sensorId)}
+        animatedRPMText={animatedRPMText}
+        animatedCaloriesText={animatedCaloriesText}
+        animatedPaceText={animatedPaceText}
+        animatedSpeedText={animatedSpeedText}
+        animatedDistanceText={animatedDistanceText}
+        animatedInclineText={animatedInclineText}
+        rpmPulseStyle={rpmPulseStyle}
+        rpmTextColorStyle={rpmTextColorStyle}
+        distanceUnitLabel={ftmsTotalDistanceRef.current >= 1000 ? 'km' : 'm'}
+        primaryColor={branding.primary}
+        formatTime={formatTime}
+        labels={{
+          time: 'Time',
+          rpm: t('rpm'),
+          kcal: t('kcal'),
+          kmh: t('kmh'),
+          minPerKm: t('minPerKm'),
+          incline: t('incline'),
+        }}
+      />
 
       {/* Progress Bar + Goal Row */}
-      <View style={styles.progressBarContainer}>
-        {/* Goal label row */}
-        <View style={styles.goalRow}>
-          <View style={styles.goalLeft}>
-            <Ionicons name="water-outline" size={13} color="rgba(255,255,255,0.35)" />
-            <Text style={styles.goalLabel}>{t('goal')}</Text>
-          </View>
-          <Text style={[styles.goalProgress, getNumberStyle(13)]}>
-            <Text style={[styles.goalProgressCurrent, isOverachieved && { color: theme.colors.secondary }]}>
-              {parseInt(liquidGaugeValue || '0')}
-            </Text>
-            <Text style={styles.goalProgressSep}> / </Text>
-            <Text style={styles.goalProgressTarget}>{Math.round(sessionBase) + segmentTarget}</Text>
-          </Text>
-        </View>
-
-        {/* Thin progress bar */}
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressBarFill,
-              {
-                width: progressWidth as any,
-                backgroundColor: isOverachieved ? theme.colors.secondary : branding.primary,
-              },
-            ]}
-          />
-        </View>
-
-        {/* Bottom info row */}
-        <View style={styles.infoRow}>
-          {!isTrackingOnly && dailyRemaining > 0 ? (
-            <View style={styles.remainingPill}>
-              <Ionicons name="water" size={11} color={branding.primary} />
-              <Text style={[styles.remainingPillText, { color: branding.primary }]}>
-                {dailyRemaining}
-              </Text>
-              <Text style={styles.remainingPillSuffix}>{t('remainingToday')}</Text>
-            </View>
-          ) : isTrackingOnly ? (
-            <View style={styles.remainingPill}>
-              <Ionicons name="checkmark-circle" size={11} color="#4CD964" />
-              <Text style={[styles.remainingPillText, { color: 'rgba(255,255,255,0.30)' }]}>{t('limitReached')}</Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
+      <GoalProgressBar
+        currentDrops={parseInt(liquidGaugeValue || '0')}
+        sessionBase={sessionBase}
+        segmentTarget={segmentTarget}
+        progressWidth={progressWidth as string}
+        isOverachieved={isOverachieved}
+        isTrackingOnly={isTrackingOnly}
+        dailyRemaining={dailyRemaining}
+        primaryColor={branding.primary}
+        goalLabel={t('goal')}
+        remainingTodayLabel={t('remainingToday')}
+        limitReachedLabel={t('limitReached')}
+      />
 
       {/* Tier / daily-cap notification banner — fades in below progress bar */}
       {!!tierToast && (
@@ -4220,6 +3214,15 @@ export default function WorkoutScreen() {
               </>
             )}
           </TouchableOpacity>
+          {showForceFinishOption && (
+            <TouchableOpacity
+              style={[styles.resumeOverlayButton, { marginTop: 8, backgroundColor: theme.colors.error }]}
+              onPress={() => handleFinishWorkout()}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.resumeOverlayButtonText}>{t('endWorkout')}</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       )}
 
@@ -4234,47 +3237,7 @@ export default function WorkoutScreen() {
         </Animated.View>
       )}
 
-      {/* Sensor Asleep Overlay (when no data for 10+ seconds) */}
-      {showSensorAsleep && !isPaused && (session?.machine?.sensor_id || sensorId) && (
-        <Animated.View style={[styles.sensorAsleepOverlay, pausedOverlayStyle]}>
-          <Ionicons name="bluetooth-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={styles.sensorAsleepTitle}>{t('sensorAsleep')}</Text>
-          <Text style={styles.sensorAsleepText}>
-            {t('sensorAsleepText')}
-          </Text>
-          <TouchableOpacity
-            style={styles.reconnectButton}
-            onPress={async () => {
-              setIsReconnecting(true);
-              const activeSensorId = sensorId || session?.machine?.sensor_id;
-              if (activeSensorId) {
-                const reconnected = await bleService.reconnect();
-                if (reconnected) {
-                  // Success - no blocking alert, just update UI
-                  setShowSensorAsleep(false);
-                  setBleConnected(true);
-                  setBleStatus('');
-                  reconnectAttemptRef.current = 0; // Reset attempts
-                } else {
-                  // Failed - show persistent overlay, no blocking alert
-                  setBleStatus('Reconnection failed. Please check sensor.');
-                }
-              }
-              setIsReconnecting(false);
-            }}
-            disabled={isReconnecting}
-          >
-            {isReconnecting ? (
-              <ActivityIndicator size="small" color={theme.colors.background} />
-            ) : (
-              <>
-                <Ionicons name="refresh" size={20} color={theme.colors.background} />
-                <Text style={styles.reconnectButtonText}>{t('reconnect')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+      
 
       {/* BLE Connection Required Overlay */}
       {!showNoActivityCancelOverlay && !isPaused && !bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
@@ -4284,711 +3247,33 @@ export default function WorkoutScreen() {
           <Text style={styles.bleConnectionText}>
             {bleStatus || t('connectingSubtitle')}
           </Text>
+          {showConnectingCancel && (
+            <TouchableOpacity
+              style={[styles.reconnectButton, { marginTop: 16, backgroundColor: theme.colors.error }]}
+              onPress={() => handleFinishWorkout()}
+            >
+              <Text style={[styles.reconnectButtonText, { color: '#fff' }]}>{t('cancelWorkout')}</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       )}
 
       {/* Control Buttons */}
-      <View style={styles.controls}>
-        {/* Pause/Resume Button */}
-        <TouchableOpacity
-          style={[styles.controlButton, styles.pauseButton]}
-          onPress={() => {
-            if (isPaused) {
-              void resumeWorkout();
-            } else {
-              pauseWorkout();
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={isPaused ? 'play' : 'pause'}
-            size={24}
-            color={theme.colors.text}
-          />
-        </TouchableOpacity>
-
-        {/* Finish Button (Long Press) */}
-        <Pressable
-          style={styles.finishButtonContainer}
-          onPressIn={handleFinishPressIn}
-          onPressOut={handleFinishPressOut}
-        >
-          <View style={styles.finishButton}>
-            <Animated.View style={[styles.finishButtonFill, finishButtonStyle]} />
-            <Text style={styles.finishButtonText}>{t('finishWorkout')}</Text>
-          </View>
-        </Pressable>
-      </View>
+      <WorkoutControls
+        isPaused={isPaused}
+        onPauseResume={() => {
+          if (isPaused) {
+            void resumeWorkout();
+          } else {
+            pauseWorkout();
+          }
+        }}
+        onFinishPressIn={handleFinishPressIn}
+        onFinishPressOut={handleFinishPressOut}
+        finishButtonStyle={finishButtonStyle}
+        finishWorkoutLabel={t('finishWorkout')}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A0E1A', // Dark navy/charcoal
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  leftHeader: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  challengesButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  challengesBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  challengesBadgeText: {
-    ...fontStyles.heading,
-    fontSize: 12,
-  },
-  headerDrops: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.full,
-  },
-  headerDropsText: {
-    ...fontStyles.number,
-    color: theme.colors.primary,
-  },
-  bonusBanner: {
-    backgroundColor: theme.colors.primary + '20',
-    paddingVertical: theme.spacing.sm,
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.sm,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  bonusText: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 18,
-    textAlign: 'center',
-  },
-  waterContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: theme.spacing.xl,
-    position: 'relative',
-  },
-  trackingOnlyCircle: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 2,
-    borderColor: 'rgba(76,217,100,0.25)',
-    backgroundColor: 'rgba(76,217,100,0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  trackingOnlyInner: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  trackingOnlyHeading: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#4CD964',
-    textAlign: 'center',
-    letterSpacing: 0.3,
-    marginBottom: 6,
-  },
-  trackingOnlySubtext: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.45)',
-    textAlign: 'center',
-    lineHeight: 17,
-  },
-  gaugeBackgroundGlow: {
-    position: 'absolute',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: theme.colors.primary + '08', // Very subtle radial glow
-    opacity: 0.6,
-  },
-  circleWrapper: {
-    width: 280,
-    height: 280,
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...theme.shadows.md,
-  },
-  connectingCircle: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 2,
-    borderStyle: 'solid',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface + 'CC', // Semi-transparent background for better visibility
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  connectingText: {
-    ...fontStyles.bodySemiBold,
-    color: theme.colors.text,
-    fontSize: theme.typography.fontSize.lg,
-    textAlign: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    textShadowColor: 'rgba(0, 0, 0, 0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  explosionCircle: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    borderWidth: 3,
-    borderStyle: 'solid',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  premiumPulseRing: {
-    position: 'absolute',
-    borderWidth: 2,
-    borderStyle: 'solid',
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 15,
-    shadowOpacity: 0.6,
-    elevation: 8,
-  },
-  headerBlur: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  statCardBlur: {
-    borderRadius: theme.borderRadius.lg,
-    overflow: 'hidden',
-  },
-  fallingDropsContainer: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140, // 280 / 2 for perfect circle
-    overflow: 'hidden',
-    top: 0,
-    left: 0,
-    justifyContent: 'flex-start',
-  },
-  dropsLabelContainer: {
-    position: 'absolute',
-    bottom: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    width: '100%',
-  },
-  dropsLabel: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 18,
-    letterSpacing: 2,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-  },
-  overachievedText: {
-    ...fontStyles.bodySemiBold,
-    color: theme.colors.secondary,
-    fontSize: theme.typography.fontSize.sm,
-    marginTop: theme.spacing.xs,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-  },
-  statsGridTreadmill: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    paddingHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-    rowGap: theme.spacing.md,
-  },
-  statItemTreadmill: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    width: '33%',
-  },
-  rpmHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  statValue: {
-    ...fontStyles.number,
-    color: theme.colors.text,
-  },
-  statLabel: {
-    ...fontStyles.heading,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.sm,
-  },
-  progressBarContainer: {
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.sm,
-    marginBottom: theme.spacing.sm,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: theme.borderRadius.sm,
-  },
-  goalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  goalLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  goalLabel: {
-    ...fontStyles.body,
-    fontSize: 11,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.35)',
-  },
-  goalProgress: {
-    ...fontStyles.number,
-  },
-  goalProgressCurrent: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.90)',
-  },
-  goalProgressSep: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.25)',
-  },
-  goalProgressTarget: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.40)',
-  },
-  infoRow: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  remainingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  remainingPillText: {
-    ...fontStyles.number,
-    fontSize: 12,
-  },
-  remainingPillSuffix: {
-    ...fontStyles.body,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.30)',
-    marginLeft: 2,
-  },
-  tierBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.10)',
-    marginTop: 6,
-    marginBottom: 16,
-  },
-  tierBannerText: {
-    ...fontStyles.body,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
-    letterSpacing: 0.1,
-  },
-  inactivityOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.88)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 120,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  inactivityTitle: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 24,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  inactivityText: {
-    ...fontStyles.body,
-    color: '#FDE68A',
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  inactivityHint: {
-    ...fontStyles.body,
-    color: theme.colors.textSecondary,
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-  },
-  noActivityCancelOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 130,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  noActivityCancelTitle: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 24,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  noActivityCancelText: {
-    ...fontStyles.body,
-    color: '#FECACA',
-    fontSize: 16,
-    lineHeight: 24,
-    textAlign: 'center',
-    marginBottom: theme.spacing.xl,
-  },
-  noActivityCancelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
-  },
-  noActivityCancelButtonText: {
-    ...fontStyles.body,
-    color: theme.colors.background,
-    fontWeight: theme.typography.fontWeight.semibold,
-  },
-  pausedOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  pausedText: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 30,
-    letterSpacing: 4,
-  },
-  pausedSubtext: {
-    ...fontStyles.body,
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-    textAlign: 'center',
-    paddingHorizontal: theme.spacing.xl,
-  },
-  resumeOverlayButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    minWidth: 160,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: 12,
-    backgroundColor: theme.colors.primary,
-  },
-  resumeOverlayButtonDisabled: {
-    opacity: 0.6,
-  },
-  resumeOverlayButtonText: {
-    ...fontStyles.body,
-    color: theme.colors.background,
-    fontWeight: theme.typography.fontWeight.semibold,
-  },
-  autoPauseOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-    padding: theme.spacing.xl,
-  },
-  autoPauseTitle: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 22,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  autoPauseText: {
-    ...fontStyles.body,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.base,
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  sensorAsleepOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-    padding: theme.spacing.xl,
-  },
-  sensorAsleepTitle: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 22,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  sensorAsleepText: {
-    ...fontStyles.body,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.base,
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.xl,
-  },
-  reconnectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
-    marginTop: theme.spacing.md,
-  },
-  reconnectButtonText: {
-    ...fontStyles.heading,
-    color: theme.colors.background,
-    fontSize: 18,
-  },
-  bleConnectionOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-    padding: theme.spacing.xl,
-  },
-  bleConnectionTitle: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 22,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  bleConnectionText: {
-    ...fontStyles.body,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.fontSize.base,
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-  },
-  controlButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...theme.shadows.md,
-  },
-  pauseButton: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-  },
-  finishButtonContainer: {
-    flex: 1,
-  },
-  nextExerciseContainer: {
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-  },
-  nextExerciseContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  nextExerciseText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.lg,
-    flex: 1,
-  },
-  nextExerciseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-  },
-  nextExerciseButtonText: {
-    ...fontStyles.heading,
-    fontSize: 18,
-  },
-  finishButton: {
-    height: 56,
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    ...theme.shadows.md,
-  },
-  finishButtonFill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.secondary,
-    opacity: 0.8,
-  },
-  finishButtonText: {
-    ...fontStyles.heading,
-    color: theme.colors.text,
-    fontSize: 20,
-    zIndex: 1,
-  },
-  planCompletedOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  planCompletedContainer: {
-    padding: theme.spacing.xl,
-    borderRadius: theme.borderRadius.xl,
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    borderWidth: 2,
-    margin: theme.spacing.lg,
-  },
-  planCompletedTitle: {
-    ...fontStyles.heading,
-    fontSize: 26,
-    textAlign: 'center',
-  },
-  planCompletedSubtitle: {
-    ...fontStyles.body,
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-  },
-});
