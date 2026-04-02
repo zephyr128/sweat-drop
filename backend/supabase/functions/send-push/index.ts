@@ -2,6 +2,10 @@
 // Description: Sends Expo push notifications to an array of tokens.
 // Called by other Edge Functions and pg_cron jobs.
 //
+// AGENT NOTE: [2026-04-02] - supabase-dba — DeviceNotRegistered receipt handling:
+//   After each batch, tickets with details.error = 'DeviceNotRegistered' have their
+//   push token cleared from profiles. This is defense-in-depth for the mobile-side
+//   logout token clear (Bug #3, bugfix_transaction_list_cancel_redemption_push_notifications.md).
 // AGENT NOTE: [2026-03-27] - edge-function-agent — batch resilience, structured metrics, no secrets in logs.
 // AGENT NOTE: [2026-03-02] - supabase-dba (Phase 2, Task 2.6)
 //
@@ -16,12 +20,16 @@
 //     requested, valid_tokens, skipped_invalid, deduped_in_request,
 //     batches_attempted, batches_failed,
 //     batch_summaries: [...],
+//     tokens_cleared: number,   // DeviceNotRegistered tokens cleared from profiles
 //     result?: legacy raw batch payloads (omitted by default for size)
 //   }
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   EXPO_PUSH_BATCH_SIZE,
+  type ExpoPushApiResponse,
+  type ExpoTicket,
   isExpoPushToken,
   summarizeExpoTickets,
 } from '../_shared/expo-push.ts';
@@ -147,105 +155,154 @@ serve(async (req) => {
       });
     }
 
-    const batch_summaries: Array<Record<string, unknown>> = [];
-    const rawResults: unknown[] = [];
-    let receipt_ok = 0;
-    let receipt_error = 0;
-    let batches_failed = 0;
+  const batch_summaries: Array<Record<string, unknown>> = [];
+  const rawResults: unknown[] = [];
+  let receipt_ok = 0;
+  let receipt_error = 0;
+  let batches_failed = 0;
+  let tokens_cleared = 0;
 
-    for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
-      const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
-      const batchIndex = Math.floor(i / EXPO_PUSH_BATCH_SIZE);
+  // Supabase admin client for clearing stale push tokens (DeviceNotRegistered).
+  // Uses service-role key auto-injected by Supabase — no manual secrets needed.
+  const supabaseAdmin = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  );
 
+  for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
+    const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
+    const batchIndex = Math.floor(i / EXPO_PUSH_BATCH_SIZE);
+
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(batch),
+      });
+
+      const httpStatus = response.status;
+      const text = await response.text();
+      let expoJson: unknown;
       try {
-        const response = await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(batch),
-        });
-
-        const httpStatus = response.status;
-        const text = await response.text();
-        let expoJson: unknown;
-        try {
-          expoJson = JSON.parse(text);
-        } catch {
-          batches_failed++;
-          batch_summaries.push({
-            batch_index: batchIndex,
-            batch_size: batch.length,
-            http_status: httpStatus,
-            parse_error: true,
-            receipt_ok: 0,
-            receipt_error: batch.length,
-          });
-          receipt_error += batch.length;
-          continue;
-        }
-
-        if (include_raw_batches) {
-          rawResults.push(expoJson);
-        }
-
-        const ticketSummary = summarizeExpoTickets(expoJson);
-        const batchOk = ticketSummary.receipt_ok;
-        let batchErr = ticketSummary.receipt_error;
-        const unaccounted = batch.length - batchOk - batchErr;
-        if (unaccounted > 0) {
-          batchErr += unaccounted;
-        }
-
-        receipt_ok += batchOk;
-        receipt_error += batchErr;
-
-        if (!response.ok) {
-          batches_failed++;
-        }
-
+        expoJson = JSON.parse(text);
+      } catch {
+        batches_failed++;
         batch_summaries.push({
           batch_index: batchIndex,
           batch_size: batch.length,
           http_status: httpStatus,
-          receipt_ok: batchOk,
-          receipt_error: batchErr,
-          expo_errors_sample: ticketSummary.error_messages,
-          batch_failed_http: !response.ok,
-        });
-      } catch (e: unknown) {
-        batches_failed++;
-        const msg = e instanceof Error ? e.message : 'network_error';
-        batch_summaries.push({
-          batch_index: batchIndex,
-          batch_size: batch.length,
-          fetch_exception: msg.slice(0, 160),
+          parse_error: true,
           receipt_ok: 0,
           receipt_error: batch.length,
         });
         receipt_error += batch.length;
+        continue;
       }
+
+      if (include_raw_batches) {
+        rawResults.push(expoJson);
+      }
+
+      const ticketSummary = summarizeExpoTickets(expoJson);
+      const batchOk = ticketSummary.receipt_ok;
+      let batchErr = ticketSummary.receipt_error;
+      const unaccounted = batch.length - batchOk - batchErr;
+      if (unaccounted > 0) {
+        batchErr += unaccounted;
+      }
+
+      receipt_ok += batchOk;
+      receipt_error += batchErr;
+
+      if (!response.ok) {
+        batches_failed++;
+      }
+
+      // Clear stale tokens: Expo tickets map 1:1 by index to the batch messages sent.
+      // If a ticket has details.error = 'DeviceNotRegistered', the token is invalid.
+      // Clear it from profiles so we stop sending to this device.
+      const tickets = (expoJson as ExpoPushApiResponse)?.data;
+      if (Array.isArray(tickets)) {
+        const staleTokens: string[] = [];
+        for (let j = 0; j < tickets.length; j++) {
+          const ticket = tickets[j] as ExpoTicket;
+          if (
+            ticket?.status === 'error' &&
+            ticket?.details?.error === 'DeviceNotRegistered' &&
+            j < batch.length
+          ) {
+            staleTokens.push(batch[j].to);
+          }
+        }
+        if (staleTokens.length > 0) {
+          try {
+            const { count } = await supabaseAdmin
+              .from('profiles')
+              .update({ expo_push_token: null }, { count: 'exact' })
+              .in('expo_push_token', staleTokens);
+            tokens_cleared += count ?? 0;
+            console.log(JSON.stringify({
+              event: 'send-push:cleared_stale_tokens',
+              batch_index: batchIndex,
+              cleared: count ?? 0,
+            }));
+          } catch (clearErr) {
+            // Non-fatal — log and continue
+            const msg = clearErr instanceof Error ? clearErr.message : 'unknown';
+            console.error(JSON.stringify({
+              event: 'send-push:clear_tokens_error',
+              batch_index: batchIndex,
+              error: msg.slice(0, 160),
+            }));
+          }
+        }
+      }
+
+      batch_summaries.push({
+        batch_index: batchIndex,
+        batch_size: batch.length,
+        http_status: httpStatus,
+        receipt_ok: batchOk,
+        receipt_error: batchErr,
+        expo_errors_sample: ticketSummary.error_messages,
+        batch_failed_http: !response.ok,
+      });
+    } catch (e: unknown) {
+      batches_failed++;
+      const msg = e instanceof Error ? e.message : 'network_error';
+      batch_summaries.push({
+        batch_index: batchIndex,
+        batch_size: batch.length,
+        fetch_exception: msg.slice(0, 160),
+        receipt_ok: 0,
+        receipt_error: batch.length,
+      });
+      receipt_error += batch.length;
     }
+  }
 
-    const batches_attempted = batch_summaries.length;
-    const sent = valid_tokens;
-    const ok = valid_tokens === 0 || receipt_ok > 0;
+  const batches_attempted = batch_summaries.length;
+  const sent = valid_tokens;
+  const ok = valid_tokens === 0 || receipt_ok > 0;
 
-    const payload: Record<string, unknown> = {
-      ok,
-      version: '2',
-      sent,
-      receipt_ok,
-      receipt_error,
-      requested,
-      valid_tokens,
-      skipped_invalid,
-      deduped_in_request,
-      batches_attempted,
-      batches_failed,
-      batch_summaries,
-    };
+  const payload: Record<string, unknown> = {
+    ok,
+    version: '2',
+    sent,
+    receipt_ok,
+    receipt_error,
+    requested,
+    valid_tokens,
+    skipped_invalid,
+    deduped_in_request,
+    batches_attempted,
+    batches_failed,
+    batch_summaries,
+    tokens_cleared,
+  };
 
     if (include_raw_batches) {
       payload.result = rawResults;
@@ -265,6 +322,7 @@ serve(async (req) => {
       receipt_error,
       batches_attempted,
       batches_failed,
+      tokens_cleared,
     }));
 
     return new Response(JSON.stringify(payload), {
