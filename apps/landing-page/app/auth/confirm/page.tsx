@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
 type ConfirmState = 'loading' | 'success' | 'error';
 
@@ -18,6 +18,11 @@ export default function EmailConfirmPage() {
   const tokensRef = useRef<{ access: string | null; refresh: string | null }>({ access: null, refresh: null });
 
   useEffect(() => {
+    if (!hasSupabasePublicEnv || !supabase) {
+      setConfirmState('error');
+      return;
+    }
+
     const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
     const accessToken = params.get('access_token');

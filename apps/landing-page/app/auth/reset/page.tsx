@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
 type ResetState = 'loading' | 'form' | 'success' | 'error';
 
@@ -14,6 +14,12 @@ export default function PasswordResetPage() {
   const [fieldError, setFieldError] = useState('');
 
   useEffect(() => {
+    if (!hasSupabasePublicEnv || !supabase) {
+      setErrorMessage('Auth service is temporarily unavailable. Please try again later.');
+      setState('error');
+      return;
+    }
+
     // Supabase password reset links use a hash fragment:
     // #access_token=...&refresh_token=...&type=recovery
     const hash = window.location.hash.slice(1);
@@ -41,6 +47,11 @@ export default function PasswordResetPage() {
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
+    if (!hasSupabasePublicEnv || !supabase) {
+      setFieldError('Auth service is temporarily unavailable. Please try again later.');
+      return;
+    }
+
     e.preventDefault();
     setFieldError('');
 
