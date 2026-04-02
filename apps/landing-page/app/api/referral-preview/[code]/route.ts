@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 
 interface ReferralPreview {
   status: 'valid' | 'expired' | 'used' | 'invalid';
+  gym_id: string | null;
   referrer_name: string | null;
   gym_name: string | null;
   gym_city: string | null;
@@ -23,7 +24,7 @@ export async function GET(
 
     if (!normalizedCode || normalizedCode.length < 4) {
       return NextResponse.json(
-        { status: 'invalid', referrer_name: null, gym_name: null } satisfies Partial<ReferralPreview>,
+        { status: 'invalid', gym_id: null, referrer_name: null, gym_name: null } satisfies Partial<ReferralPreview>,
         { status: 200 }
       );
     }
@@ -46,6 +47,7 @@ export async function GET(
       return NextResponse.json(
         {
           status: 'invalid',
+          gym_id: null,
           referrer_name: null,
           gym_name: null,
           gym_city: null,
@@ -61,6 +63,7 @@ export async function GET(
       return NextResponse.json(
         {
           status: 'invalid',
+          gym_id: null,
           referrer_name: null,
           gym_name: null,
           gym_city: null,
@@ -76,6 +79,7 @@ export async function GET(
       return NextResponse.json(
         {
           status: 'expired',
+          gym_id: null,
           referrer_name: null,
           gym_name: null,
           gym_city: null,
@@ -91,6 +95,7 @@ export async function GET(
       return NextResponse.json(
         {
           status: 'used',
+          gym_id: null,
           referrer_name: null,
           gym_name: null,
           gym_city: null,
@@ -110,20 +115,31 @@ export async function GET(
         .single(),
       supabaseServer
         .from('gyms')
-        .select('name, city, logo_url, primary_color')
+        .select('name, city, owner_id')
         .eq('id', referral.gym_id)
         .single(),
     ]);
 
+    let gymLogoUrl: string | null = null;
+    let gymPrimaryColor: string | null = null;
+    if (gymRes.data?.owner_id) {
+      const brandingRes = await supabaseServer
+        .from('owner_branding')
+        .select('logo_url, primary_color')
+        .eq('owner_id', gymRes.data.owner_id)
+        .single();
+      gymLogoUrl = brandingRes.data?.logo_url || null;
+      gymPrimaryColor = brandingRes.data?.primary_color || null;
+    }
+
     const referrerName = profileRes.data?.full_name || profileRes.data?.username || null;
     const gymName = gymRes.data?.name || null;
     const gymCity = gymRes.data?.city || null;
-    const gymLogoUrl = gymRes.data?.logo_url || null;
-    const gymPrimaryColor = gymRes.data?.primary_color || null;
 
     return NextResponse.json(
       {
         status: 'valid',
+        gym_id: referral.gym_id,
         referrer_name: referrerName,
         gym_name: gymName,
         gym_city: gymCity,
@@ -143,6 +159,7 @@ export async function GET(
     return NextResponse.json(
       {
         status: 'invalid',
+        gym_id: null,
         referrer_name: null,
         gym_name: null,
         gym_city: null,
