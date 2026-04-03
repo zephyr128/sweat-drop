@@ -4,9 +4,26 @@
 [auth]
 enabled = true
 site_url = "https://www.sweat-drop.com"
-additional_redirect_urls = ["exp://localhost:8081", "sweatdrop://", "https://www.sweat-drop.com/auth/confirm"]
+additional_redirect_urls = [
+  "exp://localhost:8081",
+  "sweatdrop://",
+  "sweatdrop://auth/confirm",
+  "https://www.sweat-drop.com/auth/confirm",
+  "https://www.sweat-drop.com/auth/reset",
+]
 jwt_expiry = 3600
 enable_signup = true
+
+[auth.email]
+enable_confirmations = true
+
+[auth.email.template.confirmation]
+subject = "Confirm your SweatDrop email"
+content_path = "./templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your SweatDrop password"
+content_path = "./templates/reset_password.html"
 
 [api]
 enabled = true
