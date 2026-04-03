@@ -11,7 +11,6 @@ import { GymDataInitializer } from '@/components/GymDataInitializer';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { supabase } from '@/lib/supabase';
-import BleManager from 'react-native-ble-manager';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
@@ -295,13 +294,16 @@ export default function RootLayout() {
   // Initialize BLE Manager (Android)
   useEffect(() => {
     if (Platform.OS === 'android') {
-      BleManager.start({ showAlert: false })
-        .then(() => {
+      (async () => {
+        try {
+          const module = await import('react-native-ble-manager');
+          await module.default.start({ showAlert: false });
           log.debug('[App] BLE Manager initialized (Android)');
-        })
-        .catch((error: any) => {
+        } catch (error: unknown) {
+          // Keep startup resilient even if BLE native module is unavailable.
           log.error('[App] Failed to initialize BLE Manager:', error);
-        });
+        }
+      })();
     }
   }, []);
 
