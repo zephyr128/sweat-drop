@@ -29,6 +29,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.sweatdrop.app',
+      associatedDomains: ['applinks:www.sweat-drop.com'],
       infoPlist: {
         NSCameraUsageDescription:
           'SweatDrop uses the camera to scan QR codes on fitness equipment.',
@@ -47,6 +48,20 @@ module.exports = {
         backgroundColor: '#0A0E1A', // Dark navy background
       },
       package: 'com.sweatdrop.app',
+      intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            {
+              scheme: 'https',
+              host: 'www.sweat-drop.com',
+              pathPrefix: '/auth/confirm',
+            },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ],
       permissions: [
         'CAMERA',
         'android.permission.BLUETOOTH',

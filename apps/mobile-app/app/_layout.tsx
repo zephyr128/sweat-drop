@@ -129,6 +129,7 @@ function StackNavigator() {
       <Stack.Screen name="settings" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
+      <Stack.Screen name="auth/confirm" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="transactions" options={{ headerShown: false }} />
     </Stack>

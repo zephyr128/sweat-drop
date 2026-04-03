@@ -14,7 +14,6 @@ import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
 import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
-import { useAppModal } from '@/lib/stores/useAppModal';
 
 // ── Inline gym card designed for the home-gym picker ─────────────────────────
 
@@ -89,7 +88,7 @@ function HomeGymPickerCard({
 
             {/* CTA */}
             <View style={[styles.selectBtn, { backgroundColor: hexToRgba(brandColor, 0.15), borderColor: hexToRgba(brandColor, 0.3) }]}>
-              <Text style={[styles.selectBtnText, { color: brandColor }]}>Select</Text>
+              <Ionicons name="chevron-forward" size={16} color={brandColor} />
             </View>
           </View>
         </BlurView>
@@ -103,12 +102,10 @@ function HomeGymPickerCard({
 export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
-  const [settingGym, setSettingGym] = useState(false);
   const [showWaitlist, setShowWaitlist] = useState(false);
   const router = useRouter();
   const { theme: currentTheme } = useTheme();
   const { t } = useTranslation('onboarding');
-  const showModal = useAppModal((s) => s.showModal);
 
   useEffect(() => {
     loadGyms();
@@ -164,28 +161,6 @@ export default function HomeGymScreen() {
     }
   };
 
-  const handleSetHomeGym = async (gym: Gym) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.replace('/home');
-      return;
-    }
-
-    setSettingGym(true);
-    try {
-      await supabase
-        .from('profiles')
-        .update({ home_gym_id: gym.id })
-        .eq('id', user.id);
-
-      router.replace('/home');
-    } catch {
-      showModal({ title: t('homeGym.error'), body: t('homeGym.errorMsg') });
-    } finally {
-      setSettingGym(false);
-    }
-  };
-
   const handleSkip = () => {
     router.replace('/home');
   };
@@ -237,7 +212,7 @@ export default function HomeGymScreen() {
               key={gym.id}
               gym={gym}
               index={index}
-              onSelect={() => handleSetHomeGym(gym)}
+              onSelect={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
             />
           ))}
         </View>
@@ -268,18 +243,11 @@ export default function HomeGymScreen() {
             style={styles.skipButton}
             onPress={handleSkip}
             activeOpacity={0.7}
-            disabled={settingGym}
           >
             <Text style={styles.skipText}>{t('homeGym.skip')}</Text>
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
-
-      {settingGym && (
-        <View style={styles.overlay}>
-          <ActivityIndicator size="large" color={currentTheme.colors.primary} />
-        </View>
-      )}
 
       <WaitlistBottomSheet
         visible={showWaitlist}
@@ -411,16 +379,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     borderWidth: 1,
     flexShrink: 0,
-  },
-  selectBtnText: {
-    ...fontStyles.heading,
-    fontSize: 13,
-    letterSpacing: 0.8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // ── Suggest card ──
@@ -469,11 +434,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ── Overlay ──
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
 });

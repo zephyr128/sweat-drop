@@ -239,16 +239,21 @@ export default function WalletScreen() {
         ? Math.floor((Date.now() - new Date(lastCheckin.checked_in_at).getTime()) / 86400000)
         : 999;
 
-      if (row) {
-        setExpiry({
-          expiringIn7d: Number(row.expiring_in_7d ?? 0),
-          expiringIn30d: Number(row.expiring_in_30d ?? 0),
-          nextExpiryDate: row.next_expiry_date ?? null,
-          daysSinceLastVisit,
-        });
-      } else {
-        setExpiry({ expiringIn7d: 0, expiringIn30d: 0, nextExpiryDate: null, daysSinceLastVisit });
+      const expiringIn7d = Number(row?.expiring_in_7d ?? 0);
+      const expiringIn30d = Number(row?.expiring_in_30d ?? 0);
+
+      // Don't show expiry card at all if user has no drops at risk
+      if (!row || (expiringIn7d === 0 && expiringIn30d === 0 && daysSinceLastVisit === 999)) {
+        setExpiry(null);
+        return;
       }
+
+      setExpiry({
+        expiringIn7d,
+        expiringIn30d,
+        nextExpiryDate: row.next_expiry_date ?? null,
+        daysSinceLastVisit,
+      });
     } catch {
       setExpiry(null);
     }
@@ -559,8 +564,8 @@ export default function WalletScreen() {
           </Animated.View>
         )}
 
-        {/* ── Expiry card ── */}
-        {expiry && (
+        {/* ── Expiry card — only shown when there are drops that could actually expire ── */}
+        {expiry && (expiryState !== 'safe' ? dropsAtRisk > 0 : true) && (
           <Animated.View entering={FadeInDown.delay(260).duration(500)}>
             <ExpiryCard
               state={expiryState}

@@ -66,6 +66,13 @@ interface AuthState {
   isLoading: boolean;
   /** Set to true when Supabase fires PASSWORD_RECOVERY — _layout.tsx navigates to reset-password */
   pendingPasswordRecovery: boolean;
+  /**
+   * Temporary in-memory credentials stored after signUp when Supabase returns
+   * session: null (email confirmation required).  verify-email uses these to
+   * poll via signInWithPassword.  NEVER persisted to disk.
+   */
+  pendingVerificationEmail: string | null;
+  pendingVerificationPassword: string | null;
 
   // ── Actions ──
   initialize: () => () => void; // Returns cleanup (unsubscribe) function
@@ -78,6 +85,8 @@ interface AuthState {
   }) => Promise<{ success: boolean; error?: string }>;
   setOnboardingStep: (step: OnboardingStep) => void;
   clearPendingPasswordRecovery: () => void;
+  setPendingVerification: (email: string, password: string) => void;
+  clearPendingVerification: () => void;
   signOut: () => Promise<void>;
   reset: () => void;
 }
@@ -161,6 +170,8 @@ export const useAuthStore = create<AuthState>()(
       isInitialized: false,
       isLoading: false,
       pendingPasswordRecovery: false,
+      pendingVerificationEmail: null,
+      pendingVerificationPassword: null,
 
       // ────────────────────────────────────────────────────
       // initialize() — called ONCE in _layout.tsx
@@ -324,6 +335,14 @@ export const useAuthStore = create<AuthState>()(
         set({ pendingPasswordRecovery: false });
       },
 
+      setPendingVerification: (email: string, password: string) => {
+        set({ pendingVerificationEmail: email, pendingVerificationPassword: password });
+      },
+
+      clearPendingVerification: () => {
+        set({ pendingVerificationEmail: null, pendingVerificationPassword: null });
+      },
+
       // ────────────────────────────────────────────────────
       // signOut() — clean logout
       // ────────────────────────────────────────────────────
@@ -376,6 +395,8 @@ export const useAuthStore = create<AuthState>()(
           onboardingStep: 'auth',
           isLoading: false,
           pendingPasswordRecovery: false,
+          pendingVerificationEmail: null,
+          pendingVerificationPassword: null,
         });
       },
     }),

@@ -694,7 +694,7 @@ export default function HomeScreen() {
             transition={200}
           />
           <LinearGradient
-            colors={['rgba(0,0,0,0.55)', 'rgba(8,8,8,0.70)', 'rgba(0,0,0,0.80)']}
+            colors={['rgba(0,0,0,0.30)', 'rgba(8,8,8,0.50)', 'rgba(0,0,0,0.65)']}
             style={StyleSheet.absoluteFillObject}
           />
         </View>

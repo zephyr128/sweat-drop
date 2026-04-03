@@ -9,7 +9,8 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "development",
         "EXPO_PUBLIC_PUSH_ENABLED": "true",
-        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3"
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "preview": {
@@ -17,7 +18,8 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "preview",
         "EXPO_PUBLIC_PUSH_ENABLED": "true",
-        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3"
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
@@ -25,7 +27,8 @@
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_PUSH_ENABLED": "true",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3",
-        "EXPO_PUBLIC_SENTRY_DSN": ""
+        "EXPO_PUBLIC_SENTRY_DSN": "",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   }

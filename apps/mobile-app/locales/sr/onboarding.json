@@ -40,6 +40,10 @@
     "verifyRecheck": "Potvrdio/la sam — nastavi",
     "verifySignOut": "Odjavi se i koristi drugi nalog",
     "verifySessionHint": "Ako aplikacija javi da je sesija istekla, odjavi se i prijavi se ponovo nakon potvrde emaila.",
+    "openEmailApp": "Otvori email",
+    "noEmailAppTitle": "Nije pronađena email aplikacija",
+    "noEmailAppBody": "Nismo pronašli email aplikaciju na tvom uređaju. Otvori inbox ručno i klikni na link za potvrdu.",
+    "cancel": "Otkaži",
     "emailNotConfirmedBody": "Potvrdi email preko linka koji smo poslali, zatim pokušaj ponovo da se prijaviš. Ovde možeš zatražiti novi email.",
     "sessionExpiredRecovery": "Sesija se nije mogla osvežiti. Odjavi se i prijavi ponovo. Za email prijavu prvo potvrdi email.",
     "noIdTokenGoogle": "Nema ID tokena od Google-a",
@@ -77,7 +81,10 @@
     "resetPasswordSuccessBody": "Tvoja lozinka je uspešno promenjena. Možeš se prijaviti sa novom lozinkom.",
     "resetPasswordContinue": "Idi na SweatDrop",
     "newPasswordPlaceholder": "Nova lozinka",
-    "confirmPasswordPlaceholder": "Potvrdi novu lozinku"
+    "confirmPasswordPlaceholder": "Potvrdi novu lozinku",
+    "verifiedTitle": "Email Potvrđen!",
+    "verifiedSubtitle": "Tvoj email je potvrđen. Možeš da nastaviš.",
+    "verifiedContinue": "Nastavi"
   },
   "stepper": {
     "title": "Kako funkcioniše",

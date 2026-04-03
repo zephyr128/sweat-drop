@@ -415,6 +415,7 @@ export default function AuthScreen() {
 
         // Email confirmation required (no session returned)
         if (signUpData.user && !signUpData.session) {
+          useAuthStore.getState().setPendingVerification(email.trim(), password);
           router.replace('/(onboarding)/verify-email');
           return;
         }
