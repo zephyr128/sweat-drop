@@ -16,6 +16,8 @@ import {
   Save,
   Loader2,
   Info,
+  Play,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -23,6 +25,7 @@ import {
   getCurrentLeaderboard,
   getLeaderboardRewards,
   updateLeaderboardRewards,
+  distributeLeaderboardPrizesNow,
 } from '@/lib/actions/leaderboard-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
 
@@ -264,16 +267,61 @@ function PrizeConfig({
   );
 }
 
+function DistributeNowButton({ gymId, onDistributed }: { gymId: string; onDistributed: () => void }) {
+  const [distributing, setDistributing] = useState(false);
+  const [distributePeriod, setDistributePeriod] = useState<'weekly' | 'monthly'>('weekly');
+
+  const handleDistribute = async () => {
+    setDistributing(true);
+    try {
+      const result = await distributeLeaderboardPrizesNow(gymId, distributePeriod);
+      if (result.success) {
+        toast.success(`${distributePeriod === 'weekly' ? 'Weekly' : 'Monthly'} prizes distributed! ${result.winners ?? 0} winner(s).`);
+        onDistributed();
+      } else {
+        toast.error(result.error || 'Failed to distribute prizes');
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Distribution failed');
+    } finally {
+      setDistributing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={distributePeriod}
+        onChange={(e) => setDistributePeriod(e.target.value as 'weekly' | 'monthly')}
+        className="px-3 py-2 bg-[#0A0A0A] border border-[#333] rounded-lg text-sm text-white"
+      >
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+      <button
+        onClick={handleDistribute}
+        disabled={distributing}
+        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {distributing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+        {distributing ? 'Distributing...' : 'Distribute Now'}
+      </button>
+    </div>
+  );
+}
+
 function SnapshotHistory({ gymId }: { gymId: string }) {
   const [selectedPeriod, setSelectedPeriod] = useState<'weekly' | 'monthly' | 'all'>('all');
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const perPage = 10;
 
   const loadSnapshots = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     const result = await getLeaderboardSnapshots(
       gymId,
       selectedPeriod === 'all' ? undefined : selectedPeriod,
@@ -283,6 +331,8 @@ function SnapshotHistory({ gymId }: { gymId: string }) {
     if (result.success && result.data) {
       setSnapshots(result.data);
       setTotal(result.total ?? 0);
+    } else if (!result.success) {
+      setLoadError(result.error || 'Failed to load snapshots');
     }
     setLoading(false);
   }, [gymId, selectedPeriod, page]);
@@ -295,29 +345,39 @@ function SnapshotHistory({ gymId }: { gymId: string }) {
 
   return (
     <div>
-      <div className="flex gap-2 mb-6">
-        {(['all', 'weekly', 'monthly'] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => { setSelectedPeriod(p); setPage(1); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              selectedPeriod === p
-                ? 'bg-[#00E5FF] text-black'
-                : 'bg-[#0A0A0A] text-[#808080] hover:text-white border border-[#333]'
-            }`}
-          >
-            {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-6 gap-4">
+        <div className="flex gap-2">
+          {(['all', 'weekly', 'monthly'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => { setSelectedPeriod(p); setPage(1); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedPeriod === p
+                  ? 'bg-[#00E5FF] text-black'
+                  : 'bg-[#0A0A0A] text-[#808080] hover:text-white border border-[#333]'
+              }`}
+            >
+              {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
+            </button>
+          ))}
+        </div>
+        <DistributeNowButton gymId={gymId} onDistributed={loadSnapshots} />
       </div>
+
+      {loadError && (
+        <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {loadError}
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-8 text-[#808080]">Loading history...</div>
-      ) : snapshots.length === 0 ? (
+      ) : snapshots.length === 0 && !loadError ? (
         <div className="text-center py-12">
           <Calendar className="w-12 h-12 text-[#333] mx-auto mb-3" />
           <p className="text-[#808080]">No leaderboard snapshots yet</p>
-          <p className="text-xs text-[#555] mt-1">Snapshots are created at end of each period</p>
+          <p className="text-xs text-[#555] mt-1">Configure prizes above, then use &quot;Distribute Now&quot; or wait for the automated schedule</p>
         </div>
       ) : (
         <div className="space-y-4">

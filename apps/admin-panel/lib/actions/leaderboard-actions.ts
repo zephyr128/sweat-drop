@@ -198,6 +198,69 @@ export async function getLeaderboardRewards(
   }
 }
 
+export async function distributeLeaderboardPrizesNow(
+  gymId: string,
+  period: 'weekly' | 'monthly' = 'weekly'
+): Promise<{ success: boolean; winners?: number; error?: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { success: false, error: 'Not authenticated' };
+
+    if (!['superadmin', 'gym_owner', 'gym_admin'].includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) return { success: false, error: 'Admin client not available.' };
+
+    // Verify gym access for non-superadmin users
+    if (profile.role !== 'superadmin') {
+      const { data: gym } = await supabaseAdmin
+        .from('gyms')
+        .select('owner_id')
+        .eq('id', gymId)
+        .single();
+
+      if (!gym) return { success: false, error: 'Gym not found' };
+      const gymData = gym as { owner_id: string | null };
+      const ownsGym = gymData.owner_id === profile.id;
+      const isAssigned = profile.assigned_gym_id === gymId;
+      if (!ownsGym && !isAssigned) {
+        return { success: false, error: 'Unauthorized for this gym' };
+      }
+    }
+
+    // Verify gym has active rewards configured
+    const { data: rewards } = await supabaseAdmin
+      .from('leaderboard_rewards')
+      .select('id')
+      .eq('gym_id', gymId)
+      .eq('period', period)
+      .eq('is_active', true)
+      .limit(1);
+
+    if (!rewards || rewards.length === 0) {
+      return { success: false, error: `No active ${period} prizes configured. Save prizes first.` };
+    }
+
+    // Call distribute_leaderboard_prizes directly (service_role has EXECUTE grant).
+    // p_force=true bypasses the "wait for period end" guard so admin can distribute anytime.
+    const { data, error } = await (supabaseAdmin.rpc as any)('distribute_leaderboard_prizes', {
+      p_gym_id: gymId,
+      p_period: period,
+      p_force: true,
+    });
+
+    if (error) throw error;
+
+    const winners = (data as number) ?? 0;
+    return { success: true, winners };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to distribute prizes';
+    return { success: false, error: errMsg };
+  }
+}
+
 export async function updateLeaderboardRewards(input: {
   gymId: string;
   rank1: string;
