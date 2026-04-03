@@ -211,7 +211,7 @@ export default function PasswordResetPage() {
             </p>
 
             <button
-              onClick={() => { window.location.href = 'sweatdrop://home'; }}
+              onClick={() => { window.location.href = 'sweatdrop://'; }}
               className="w-full py-4 rounded-full bg-cyan-400 text-black font-bold text-lg tracking-wide uppercase transition-all hover:bg-cyan-300 hover:shadow-[0_0_30px_rgba(0,229,255,0.4)] active:scale-[0.98]"
               style={{ fontFamily: 'var(--font-display), sans-serif' }}
             >
