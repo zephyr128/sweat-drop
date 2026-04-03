@@ -73,8 +73,8 @@ export default function UserProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScreenHeader title={t('title')}  />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScreenHeader title={t('title')} insetHandled />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={branding.primary} />
         </View>
@@ -84,8 +84,8 @@ export default function UserProfileScreen() {
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScreenHeader title={t('title')}  />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScreenHeader title={t('title')} insetHandled />
         <View style={styles.center}>
           <Ionicons name="person-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('userNotFound')}</Text>
@@ -109,8 +109,8 @@ export default function UserProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScreenHeader title={t('title')}  />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScreenHeader title={t('title')} insetHandled />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
