@@ -264,22 +264,25 @@ export default function RedemptionsScreen() {
                             {t('showCodeToStaff')}
                           </Text>
                         </View>
-                        {/* Cancel button for pending redemptions */}
-                        <TouchableOpacity
-                          style={[styles.cancelBtn, { borderColor: hexToRgba('#f87171', 0.35) }]}
-                          onPress={() => handleCancelRedemption(redemption)}
-                          disabled={cancellingId === redemption.id}
-                        >
-                          {cancellingId === redemption.id ? (
-                            <ActivityIndicator size="small" color="#f87171" />
-                          ) : (
-                            <>
-                              <Ionicons name="close-circle-outline" size={15} color="#f87171" />
-                              <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
                       </View>
+                    )}
+
+                    {/* Cancel button — standalone at the bottom, only for pending */}
+                    {isPending && (
+                      <TouchableOpacity
+                        style={[styles.cancelBtn, { borderColor: hexToRgba('#f87171', 0.35) }]}
+                        onPress={() => handleCancelRedemption(redemption)}
+                        disabled={cancellingId === redemption.id}
+                      >
+                        {cancellingId === redemption.id ? (
+                          <ActivityIndicator size="small" color="#f87171" />
+                        ) : (
+                          <>
+                            <Ionicons name="close-circle-outline" size={15} color="#f87171" />
+                            <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
                     )}
 
                     {/* Prize Awarded label for claimed status (leaderboard/arena prizes) */}
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 4,
+    marginTop: 12,
     paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,

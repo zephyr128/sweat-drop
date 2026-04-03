@@ -532,22 +532,6 @@ export default function RewardDetailScreen() {
                   <Ionicons name="copy-outline" size={15} color="#fbbf24" />
                   <Text style={styles.copyCodeText}>Copy code</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={handleCancelRedemption}
-                  disabled={cancelling}
-                  activeOpacity={0.75}
-                >
-                  {cancelling ? (
-                    <ActivityIndicator size="small" color="#f87171" />
-                  ) : (
-                    <>
-                      <Ionicons name="close-circle-outline" size={16} color="#f87171" />
-                      <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
               </BlurView>
             </View>
           </Animated.View>
@@ -581,29 +565,21 @@ export default function RewardDetailScreen() {
               </Text>
             </View>
           ) : claimed && redemptionStatus === 'pending' ? (
-            <View style={styles.pendingRow}>
-              <View style={[styles.pendingBadge, { backgroundColor: 'rgba(251, 191, 36, 0.12)', borderColor: 'rgba(251, 191, 36, 0.3)' }]}>
-                <Ionicons name="time-outline" size={18} color="#fbbf24" />
-                <Text style={[styles.claimedButtonText, { color: '#fbbf24' }]}>
-                  {t('pendingPickup')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.cancelBarBtn}
-                onPress={handleCancelRedemption}
-                disabled={cancelling}
-                activeOpacity={0.75}
-              >
-                {cancelling ? (
-                  <ActivityIndicator size="small" color="#f87171" />
-                ) : (
-                  <>
-                    <Ionicons name="close-circle-outline" size={18} color="#f87171" />
-                    <Text style={styles.cancelBarBtnText}>{t('cancelRedemption')}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.cancelBarBtn}
+              onPress={handleCancelRedemption}
+              disabled={cancelling}
+              activeOpacity={0.75}
+            >
+              {cancelling ? (
+                <ActivityIndicator size="small" color="#f87171" />
+              ) : (
+                <>
+                  <Ionicons name="close-circle-outline" size={18} color="#f87171" />
+                  <Text style={styles.cancelBarBtnText}>{t('cancelRedemption')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
           ) : (
             <TouchableOpacity
               style={[
@@ -878,16 +854,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
     height: 54,
-    paddingHorizontal: 18,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(248, 113, 113, 0.35)',
+    backgroundColor: 'rgba(248, 113, 113, 0.06)',
   },
   cancelBarBtnText: {
     ...fontStyles.heading,
-    fontSize: 14,
+    fontSize: 17,
     color: '#f87171',
     letterSpacing: 0.3,
   },

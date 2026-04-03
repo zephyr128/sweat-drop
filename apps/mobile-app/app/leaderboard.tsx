@@ -254,25 +254,45 @@ export default function LeaderboardScreen() {
     return `#${rank}`;
   };
 
-  // Winner banner: check if current user was top 3 in any recent snapshot (uses weekly period as source)
-  const bannerSnapshots = periodStates['weekly'].snapshots;
-  const bannerRewards = periodStates['weekly'].rewards;
+  // Winner banner: check if current user was top 3 in any recent snapshot across ALL periods
+  const allSnapshots = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: any[] = [];
+    for (const p of PERIODS_LB) {
+      for (const s of periodStates[p].snapshots) {
+        if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); }
+      }
+    }
+    return merged;
+  }, [periodStates]);
+  const allRewards = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: LeaderboardReward[] = [];
+    for (const p of PERIODS_LB) {
+      for (const r of periodStates[p].rewards) {
+        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
+      }
+    }
+    return merged;
+  }, [periodStates]);
 
   useEffect(() => {
-    if (!session?.user?.id || bannerSnapshots.length === 0) {
+    if (!session?.user?.id || allSnapshots.length === 0) {
       setWinnerBanner(null);
       return;
     }
 
     (async () => {
-      for (const snapshot of bannerSnapshots) {
+      for (const snapshot of allSnapshots) {
         const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
         const userEntry = rankings.find(r => r.user_id === session.user.id && r.rank <= 3);
         if (userEntry) {
           const dismissed = await AsyncStorage.getItem(`dismissedWinBanner_${snapshot.id}`);
           if (dismissed) continue;
 
-          const matchingReward = bannerRewards.find((r: LeaderboardReward) => r.rank_position === userEntry.rank);
+          const matchingReward = allRewards.find((r: LeaderboardReward) =>
+            r.rank_position === userEntry.rank && r.period === snapshot.period,
+          );
           setWinnerBanner({
             rank: userEntry.rank,
             period: snapshot.period,
@@ -286,7 +306,7 @@ export default function LeaderboardScreen() {
       }
       setWinnerBanner(null);
     })();
-  }, [bannerSnapshots, session?.user?.id, bannerRewards]);
+  }, [allSnapshots, session?.user?.id, allRewards]);
 
   const dismissWinnerBanner = async () => {
     if (winnerBanner) {
