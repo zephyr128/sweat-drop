@@ -6,9 +6,15 @@ const nextConfig = {
     unoptimized: true, // For local images
   },
   typescript: {
-    // Skip type checking during build to avoid React type conflicts
-    // Type checking should still be done via `pnpm type-check`
     ignoreBuildErrors: true,
+  },
+  async headers() {
+    return [
+      {
+        source: '/.well-known/apple-app-site-association',
+        headers: [{ key: 'Content-Type', value: 'application/json' }],
+      },
+    ];
   },
 }
 

@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "BRR7885TWH.com.sweatdrop.app",
+        "paths": ["/auth/confirm*"]
+      }
+    ]
+  }
+}

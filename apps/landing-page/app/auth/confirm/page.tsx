@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import type { EmailOtpType } from '@supabase/supabase-js';
 import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
 type ConfirmState = 'loading' | 'success' | 'error';
+type OtpType = EmailOtpType;
 
-function buildAppDeepLink(accessToken: string | null, refreshToken: string | null): string {
+function buildAppDeepLink(accessToken: string | null, refreshToken: string | null, type: string = 'signup'): string {
   if (accessToken && refreshToken) {
-    return `sweatdrop://auth/confirm#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=signup`;
+    return `sweatdrop://auth/confirm#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=${encodeURIComponent(type)}`;
   }
   return 'sweatdrop://';
 }
@@ -16,6 +18,7 @@ export default function EmailConfirmPage() {
   const [confirmState, setConfirmState] = useState<ConfirmState>('loading');
   const [countdown, setCountdown] = useState(5);
   const tokensRef = useRef<{ access: string | null; refresh: string | null }>({ access: null, refresh: null });
+  const authTypeRef = useRef<string>('signup');
 
   useEffect(() => {
     if (!hasSupabasePublicEnv || !supabase) {
@@ -23,11 +26,52 @@ export default function EmailConfirmPage() {
       return;
     }
 
+    // Flow 1: token_hash in query params (new email template format)
+    const searchParams = new URLSearchParams(window.location.search);
+    const tokenHash = searchParams.get('token_hash');
+    const tokenType = searchParams.get('type') as OtpType | null;
+
+    if (tokenHash && tokenType) {
+      authTypeRef.current = tokenType;
+      supabase.auth
+        .verifyOtp({ token_hash: tokenHash, type: tokenType })
+        .then(({ data, error }) => {
+          if (error) {
+            setConfirmState('error');
+            return;
+          }
+
+          const s = data.session;
+
+          // Recovery flow: redirect to /auth/reset with session tokens
+          // so the user can set a new password in the browser.
+          if (tokenType === 'recovery' && s) {
+            window.location.href = `/auth/reset#access_token=${encodeURIComponent(s.access_token)}&refresh_token=${encodeURIComponent(s.refresh_token)}&type=recovery`;
+            return;
+          }
+
+          tokensRef.current = {
+            access: s?.access_token ?? null,
+            refresh: s?.refresh_token ?? null,
+          };
+          setConfirmState('success');
+        });
+      return;
+    }
+
+    // Flow 2 (legacy): access_token + refresh_token in hash fragment
     const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
     const type = params.get('type');
+    if (type) authTypeRef.current = type;
+
+    // Recovery via hash fragment: redirect to reset page directly
+    if (accessToken && type === 'recovery') {
+      window.location.href = `/auth/reset#${hash}`;
+      return;
+    }
 
     const isConfirmationType = type === 'signup' || type === 'email_change' || type === 'magiclink';
 
@@ -38,8 +82,6 @@ export default function EmailConfirmPage() {
           if (error) {
             setConfirmState('error');
           } else {
-            // Store fresh tokens from the established session so the deep link
-            // carries a valid (non-expired) pair to the mobile app.
             const s = data.session;
             tokensRef.current = {
               access: s?.access_token ?? accessToken,
@@ -63,7 +105,11 @@ export default function EmailConfirmPage() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          window.location.href = buildAppDeepLink(tokensRef.current.access, tokensRef.current.refresh);
+          window.location.href = buildAppDeepLink(
+            tokensRef.current.access,
+            tokensRef.current.refresh,
+            authTypeRef.current,
+          );
           return 0;
         }
         return prev - 1;
@@ -73,7 +119,11 @@ export default function EmailConfirmPage() {
   }, [confirmState]);
 
   const handleOpenApp = () => {
-    window.location.href = buildAppDeepLink(tokensRef.current.access, tokensRef.current.refresh);
+    window.location.href = buildAppDeepLink(
+      tokensRef.current.access,
+      tokensRef.current.refresh,
+      authTypeRef.current,
+    );
   };
 
   if (confirmState === 'loading') {
