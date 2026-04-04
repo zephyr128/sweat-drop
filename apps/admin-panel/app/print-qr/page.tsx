@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 
 function PrintQRContent() {
   const searchParams = useSearchParams();
@@ -15,7 +16,6 @@ function PrintQRContent() {
   const qrData = isCheckin
     ? `sweatdrop://checkin/${gymId}`
     : `sweatdrop://machine/${machineId}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrData)}`;
   const heading = isCheckin ? 'CHECK IN HERE' : 'SCAN TO TRAIN';
   const subtitle = isCheckin ? gymName : machineName;
 
@@ -34,14 +34,7 @@ function PrintQRContent() {
         </div>
 
         <div className="inline-block p-4 bg-white rounded-2xl mb-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={qrUrl}
-            alt="QR Code"
-            width={280}
-            height={280}
-            className="block"
-          />
+          <BrandedQRCode value={qrData} size={280} />
         </div>
 
         <h1 className="text-[28px] font-extrabold tracking-wider text-white mb-2">

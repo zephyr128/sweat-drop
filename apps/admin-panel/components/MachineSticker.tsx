@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { useReactToPrint } from 'react-to-print';
 import { Printer } from 'lucide-react';
 
@@ -73,14 +73,7 @@ export function MachineSticker({ machineName, qrUuid, gymName }: MachineStickerP
 
         {/* QR Code - White background for better camera scanning */}
         <div className="bg-white p-4 rounded-lg border-2 border-gray-200 mb-4">
-          <QRCodeSVG
-            value={qrUrl}
-            size={200}
-            level="H"
-            includeMargin={true}
-            bgColor="#FFFFFF"
-            fgColor="#000000"
-          />
+          <BrandedQRCode value={qrUrl} size={200} />
         </div>
 
         {/* UUID as backup */}

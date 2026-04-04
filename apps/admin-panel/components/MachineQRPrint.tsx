@@ -2,7 +2,8 @@
 
 import { useRef } from 'react';
 import { Printer } from 'lucide-react';
-import { toast } from 'sonner';
+import { useReactToPrint } from 'react-to-print';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 
 interface MachineQRPrintProps {
   machineName: string;
@@ -14,109 +15,65 @@ interface MachineQRPrintProps {
 export function MachineQRPrint({ machineName, qrUuid, machineType, gymName }: MachineQRPrintProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
-  // QR URL includes sensor type (CSC for Magene S3+)
   const qrUrl = `sweatdrop://machine/${qrUuid}?sensor=csc`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrUrl)}`;
 
-  const handlePrint = () => {
-    if (!printRef.current) return;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print the label');
-      return;
-    }
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Machine Label - ${machineName}</title>
-          <style>
-            @media print {
-              @page {
-                size: 4in 3in;
-                margin: 0.25in;
-              }
-            }
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 20px;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              min-height: 100vh;
-            }
-            .logo {
-              font-size: 24px;
-              font-weight: bold;
-              color: #00E5FF;
-              margin-bottom: 10px;
-            }
-            .machine-name {
-              font-size: 18px;
-              font-weight: bold;
-              margin: 10px 0;
-              text-align: center;
-            }
-            .machine-type {
-              font-size: 14px;
-              color: #666;
-              margin-bottom: 10px;
-            }
-            .qr-code {
-              margin: 20px 0;
-            }
-            .qr-code img {
-              width: 200px;
-              height: 200px;
-            }
-            .qr-url {
-              font-size: 10px;
-              color: #999;
-              word-break: break-all;
-              text-align: center;
-              margin-top: 10px;
-            }
-            .gym-name {
-              font-size: 12px;
-              color: #666;
-              margin-top: 10px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="logo">SweatDrop</div>
-          ${gymName ? `<div class="gym-name">${gymName}</div>` : ''}
-          <div class="machine-name">${machineName}</div>
-          <div class="machine-type">${machineType === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}</div>
-          <div class="qr-code">
-            <img src="${qrCodeUrl}" alt="QR Code" />
-          </div>
-          <div class="qr-url">${qrUrl}</div>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    printWindow.focus();
-    
-    // Wait for image to load before printing
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 500);
-  };
+  const handlePrint = useReactToPrint({
+    content: () => printRef.current,
+    documentTitle: `Machine Label - ${machineName}`,
+    pageStyle: `
+      @page { size: 4in 3in; margin: 0.25in; }
+      @media print {
+        body { margin: 0; padding: 0; }
+        .no-print { display: none !important; }
+      }
+    `,
+  });
 
   return (
-    <button
-      onClick={handlePrint}
-      className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
-      title="Print Label"
-    >
-      <Printer className="w-4 h-4" />
-    </button>
+    <>
+      <button
+        onClick={handlePrint}
+        className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
+        title="Print Label"
+      >
+        <Printer className="w-4 h-4" />
+      </button>
+
+      {/* Hidden printable content */}
+      <div style={{ display: 'none' }}>
+        <div
+          ref={printRef}
+          style={{
+            fontFamily: 'Arial, sans-serif',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '3in',
+            background: '#fff',
+          }}
+        >
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#00E5FF', marginBottom: 10 }}>
+            SweatDrop
+          </div>
+          {gymName && (
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>{gymName}</div>
+          )}
+          <div style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+            {machineName}
+          </div>
+          <div style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+            {machineType === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}
+          </div>
+          <div style={{ margin: '8px 0', background: '#fff', padding: 4, borderRadius: 8 }}>
+            <BrandedQRCode value={qrUrl} size={200} />
+          </div>
+          <div style={{ fontSize: 10, color: '#999', wordBreak: 'break-all', textAlign: 'center', marginTop: 10 }}>
+            {qrUrl}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

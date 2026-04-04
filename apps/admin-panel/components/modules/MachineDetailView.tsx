@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { QRCodeSVG } from 'qrcode.react';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { useReactToPrint } from 'react-to-print';
 import { toast } from 'sonner';
 import {
@@ -318,7 +318,7 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
             <h2 className="text-base font-semibold text-white mb-4">QR Code</h2>
             <div className="flex flex-col items-center gap-4">
               <div className="bg-white p-4 rounded-xl border-2 border-zinc-200">
-                <QRCodeSVG value={qrUrl} size={200} level="H" includeMargin bgColor="#FFFFFF" fgColor="#000000" />
+                <BrandedQRCode value={qrUrl} size={200} />
               </div>
               <p className="text-xs text-zinc-500 text-center">Scan with the SweatDrop app to start a workout</p>
             </div>
@@ -377,7 +377,7 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
                 {/* QR */}
                 <div className="flex justify-center px-6 py-4">
                   <div className="bg-white p-3 rounded-xl border-2 border-gray-100 shadow-sm">
-                    <QRCodeSVG value={qrUrl} size={180} level="H" includeMargin bgColor="#FFFFFF" fgColor="#000000" />
+                    <BrandedQRCode value={qrUrl} size={180} />
                   </div>
                 </div>
 

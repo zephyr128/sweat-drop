@@ -12,7 +12,7 @@ import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase-client';
 import { MachineQRPrint } from '@/components/MachineQRPrint';
-import { QRCodeSVG } from 'qrcode.react';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -991,13 +991,9 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
               {selectedMachineForQR.qr_uuid && (
                 <>
                   <div className="flex justify-center bg-white p-4 rounded-lg">
-                    <QRCodeSVG
+                    <BrandedQRCode
                       value={`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
                       size={256}
-                      level="H"
-                      includeMargin={true}
-                      bgColor="#FFFFFF"
-                      fgColor="#000000"
                     />
                   </div>
 

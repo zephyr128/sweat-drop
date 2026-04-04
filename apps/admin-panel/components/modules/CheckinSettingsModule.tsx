@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { MapPin, Printer, Navigation, ChevronDown, Droplet, Info, AlertTriangle } from 'lucide-react';
@@ -96,7 +97,7 @@ export function CheckinSettingsModule({ gymId, initialData }: CheckinSettingsMod
     }
   };
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`sweatdrop://checkin/${gymId}`)}`;
+  const checkinQrValue = `sweatdrop://checkin/${gymId}`;
 
   return (
     <div className="space-y-4">
@@ -144,9 +145,8 @@ export function CheckinSettingsModule({ gymId, initialData }: CheckinSettingsMod
 
           <div className="flex items-start gap-4">
             {checkinDrops > 0 && (
-              <div className="shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrUrl} alt="QR" className="w-24 h-24 rounded-lg border border-[#1A1A1A]" />
+              <div className="shrink-0 bg-white p-1 rounded-lg border border-[#1A1A1A]">
+                <BrandedQRCode value={checkinQrValue} size={88} />
               </div>
             )}
             <div className="flex-1 space-y-3">

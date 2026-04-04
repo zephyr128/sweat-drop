@@ -25,7 +25,7 @@ import { ActiveWorkoutsList } from './ActiveWorkoutsList';
 import { MachineQRPrint } from '@/components/MachineQRPrint';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { UserRole } from '@/lib/auth';
-import { QRCodeSVG } from 'qrcode.react';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import {
   X,
   BarChart3,
@@ -690,14 +690,7 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
                 </div>
 
                 <div className="flex justify-center bg-white p-4 rounded-lg">
-                  <QRCodeSVG
-                    value={qrUrl}
-                    size={256}
-                    level="H"
-                    includeMargin={true}
-                    bgColor="#FFFFFF"
-                    fgColor="#000000"
-                  />
+                  <BrandedQRCode value={qrUrl} size={256} />
                 </div>
 
                 <div>
