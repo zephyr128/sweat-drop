@@ -1,38 +1,77 @@
 #!/bin/sh
 set -e
 
-# ─────────────────────────────────────────────────────────────
-# SweatDrop — Xcode Cloud post-clone script
-#
-# Runs after Xcode Cloud clones the repo.  Installs Node,
-# pnpm, JS deps, and CocoaPods so xcodebuild can succeed.
-# ─────────────────────────────────────────────────────────────
-
 echo "──── SweatDrop CI: post-clone start ────"
 
-# ── 1. Install Node.js (Xcode Cloud has Homebrew pre-installed) ──
-brew install node
+# Pinned versions — must match local dev environment exactly
+NODE_VERSION="22.22.0"
+PNPM_VERSION="10.0.0"
+COCOAPODS_VERSION="1.16.2"
+
+# ── 1. Install exact Node.js version via nvm ──
+if ! command -v nvm >/dev/null 2>&1; then
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+  export NVM_DIR="$HOME/.nvm"
+  # shellcheck disable=SC1091
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+fi
+nvm install "$NODE_VERSION"
+nvm use "$NODE_VERSION"
+nvm alias default "$NODE_VERSION"
 echo "node $(node --version)  •  npm $(npm --version)"
 
-# ── 2. Install pnpm (matches packageManager in root package.json) ──
-npm install -g pnpm@10
+# ── 2. Install exact pnpm version ──
+npm install -g "pnpm@$PNPM_VERSION"
 echo "pnpm $(pnpm --version)"
 
-# ── 3. Install monorepo dependencies ──
+# ── 3. Generate .env from Xcode Cloud environment variables ──
+# These must be set in App Store Connect → Xcode Cloud → Workflow → Environment
+# Required: EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
+# Optional: all other EXPO_PUBLIC_* vars
+cd "$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app"
+
+if [ -z "$EXPO_PUBLIC_SUPABASE_URL" ] || [ -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY" ]; then
+  echo "ERROR: EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY must be set in Xcode Cloud environment variables."
+  exit 1
+fi
+
+cat > .env << ENV
+EXPO_PUBLIC_SUPABASE_URL=${EXPO_PUBLIC_SUPABASE_URL}
+EXPO_PUBLIC_SUPABASE_ANON_KEY=${EXPO_PUBLIC_SUPABASE_ANON_KEY}
+EXPO_PUBLIC_APP_ENV=${EXPO_PUBLIC_APP_ENV:-production}
+EXPO_PUBLIC_PUSH_ENABLED=${EXPO_PUBLIC_PUSH_ENABLED:-true}
+EXPO_PUBLIC_EAS_PROJECT_ID=${EXPO_PUBLIC_EAS_PROJECT_ID:-970c6ba3-aae9-4b7a-b014-74915fff4df3}
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=${EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:-}
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=${EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID:-}
+EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME=${EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME:-}
+EXPO_PUBLIC_SITE_URL=${EXPO_PUBLIC_SITE_URL:-https://www.sweat-drop.com}
+EXPO_PUBLIC_TERMS_URL=${EXPO_PUBLIC_TERMS_URL:-https://www.sweat-drop.com/terms}
+EXPO_PUBLIC_PRIVACY_URL=${EXPO_PUBLIC_PRIVACY_URL:-https://www.sweat-drop.com/privacy}
+EXPO_PUBLIC_SENTRY_DSN=${EXPO_PUBLIC_SENTRY_DSN:-}
+SENTRY_ORG=${SENTRY_ORG:-}
+SENTRY_PROJECT=${SENTRY_PROJECT:-}
+SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN:-}
+ENV
+
+echo ".env generated for Xcode Cloud build"
+
+# ── 4. Install monorepo dependencies ──
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 pnpm install --frozen-lockfile
 
-# ── 4. Install CocoaPods ──
+# ── 5. Install exact CocoaPods version and reinstall pods ──
+gem install cocoapods -v "$COCOAPODS_VERSION" --no-document
 cd "$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/ios"
-pod install
+rm -rf Pods
+pod cache clean --all 2>/dev/null || true
+pod _${COCOAPODS_VERSION}_ install --verbose
 
-# ── 5. Generate .xcode.env.local for Xcode build phases ──
-#    • Points NODE_BINARY to the Homebrew-installed node
-#    • Disables Sentry debug-symbol upload (avoids build failure
-#      when SENTRY_AUTH_TOKEN isn't configured yet)
-cat > .xcode.env.local << 'XCODE_ENV'
-export NODE_BINARY=$(command -v node)
+# ── 6. Generate .xcode.env.local for Xcode build phases ──
+NODE_PATH="$(command -v node)"
+cat > .xcode.env.local << XCODE_ENV
+export NODE_BINARY=${NODE_PATH}
 export SENTRY_DISABLE_AUTO_UPLOAD=true
 XCODE_ENV
 
 echo "──── SweatDrop CI: post-clone done ────"
+echo "Versions: node=$(node --version) pnpm=$(pnpm --version) pod=$(pod --version)"

@@ -78,6 +78,18 @@ echo -e "\n${BLUE}[3/4] Running expo prebuild...${NC}"
 cd "$ROOT_DIR"
 pnpm --filter sweatdrop-mobile-app exec expo prebuild --platform ios --clean
 
+# Step 3.5 — Restore ci_scripts (expo prebuild --clean deletes the ios/ folder)
+echo -e "\n${BLUE}[3/4] Restoring ci_scripts after prebuild...${NC}"
+mkdir -p "$IOS_DIR/ci_scripts"
+for script in ci_post_clone.sh ci_pre_xcodebuild.sh; do
+  if [ ! -f "$IOS_DIR/ci_scripts/$script" ]; then
+    git -C "$ROOT_DIR" checkout -- "apps/mobile-app/ios/ci_scripts/$script" 2>/dev/null || \
+      echo -e "${YELLOW}⚠️  Could not restore $script — commit it first${NC}"
+  fi
+done
+chmod +x "$IOS_DIR/ci_scripts/"*.sh 2>/dev/null || true
+echo -e "${GREEN}✅ ci_scripts restored${NC}"
+
 # Step 4 — CocoaPods
 echo -e "\n${BLUE}[4/4] Installing CocoaPods...${NC}"
 cd "$IOS_DIR"
