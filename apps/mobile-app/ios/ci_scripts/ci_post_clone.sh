@@ -60,7 +60,28 @@ cd "$CI_PRIMARY_REPOSITORY_PATH"
 pnpm install --frozen-lockfile
 
 # ── 5. Install exact CocoaPods version and reinstall pods ──
-gem install cocoapods -v "$COCOAPODS_VERSION" --no-document
+# Use Homebrew Ruby to avoid system Ruby permission issues on Xcode Cloud
+if command -v brew >/dev/null 2>&1; then
+  BREW_RUBY="$(brew --prefix)/opt/ruby/bin/ruby"
+  BREW_GEM="$(brew --prefix)/opt/ruby/bin/gem"
+  if [ -f "$BREW_GEM" ]; then
+    export PATH="$(brew --prefix)/opt/ruby/bin:$PATH"
+    export GEM_HOME="$HOME/.gem/ruby/$(ruby -e 'puts RUBY_VERSION')"
+    export PATH="$GEM_HOME/bin:$PATH"
+    "$BREW_GEM" install cocoapods -v "$COCOAPODS_VERSION" --no-document
+  else
+    brew install ruby
+    export PATH="$(brew --prefix)/opt/ruby/bin:$PATH"
+    export GEM_HOME="$HOME/.gem/ruby/$(ruby -e 'puts RUBY_VERSION')"
+    export PATH="$GEM_HOME/bin:$PATH"
+    gem install cocoapods -v "$COCOAPODS_VERSION" --no-document
+  fi
+else
+  gem install cocoapods -v "$COCOAPODS_VERSION" --no-document --user-install
+  export PATH="$HOME/.gem/bin:$PATH"
+fi
+
+echo "CocoaPods version: $(pod --version)"
 cd "$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/ios"
 rm -rf Pods
 pod cache clean --all 2>/dev/null || true
