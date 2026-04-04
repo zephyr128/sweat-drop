@@ -1,7 +1,4 @@
-import { initSentry } from '@/lib/sentry';
-initSentry();
-
-import '@/lib/i18n'; // Initialize i18n before anything else
+import '@/lib/i18n';
 import { Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useCallback } from 'react';
@@ -178,6 +175,14 @@ export default function RootLayout() {
   const coldStartReferralCode = useRef<string | null>(null);
   const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
   const hydratePendingReferral = usePendingReferralStore((s) => s.hydrate);
+
+  // Deferred Sentry init — avoids top-level TurboModule access that can
+  // throw native exceptions and corrupt Hermes GC in release builds.
+  useEffect(() => {
+    import('@/lib/sentry').then(({ initSentry }) => {
+      try { initSentry(); } catch { /* swallow — non-critical */ }
+    });
+  }, []);
 
   // Hydrate pending referral code from AsyncStorage on cold start
   useEffect(() => {

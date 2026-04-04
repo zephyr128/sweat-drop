@@ -1,45 +1,77 @@
-import * as Sentry from '@sentry/react-native';
+/**
+ * Lazy Sentry wrapper — the native @sentry/react-native TurboModule is loaded
+ * only when a DSN is configured. This prevents the native module from being
+ * initialised at import time, which can throw NSExceptions that corrupt the
+ * Hermes GC in release builds (see crash logs from Xcode Cloud / TestFlight).
+ */
+
+type SentryModule = typeof import('@sentry/react-native');
+
+let _sentry: SentryModule | null = null;
+let _initPromise: Promise<void> | null = null;
 
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
 
-export function initSentry() {
+async function loadSentry(): Promise<SentryModule | null> {
+  if (!SENTRY_DSN) return null;
+  try {
+    const mod = await import('@sentry/react-native');
+    return mod;
+  } catch (e) {
+    if (__DEV__) console.warn('[Sentry] Failed to load module:', e);
+    return null;
+  }
+}
+
+export function initSentry(): void {
   if (!SENTRY_DSN) {
     if (__DEV__) console.log('[Sentry] No DSN configured, skipping init');
     return;
   }
 
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    debug: __DEV__,
-    enabled: !__DEV__,
-    tracesSampleRate: 0.2,
-    environment: __DEV__ ? 'development' : 'production',
-  });
+  _initPromise = (async () => {
+    try {
+      _sentry = await loadSentry();
+      if (!_sentry) return;
+      _sentry.init({
+        dsn: SENTRY_DSN,
+        debug: __DEV__,
+        enabled: !__DEV__,
+        tracesSampleRate: 0.2,
+        environment: __DEV__ ? 'development' : 'production',
+      });
+    } catch (e) {
+      if (__DEV__) console.warn('[Sentry] init failed:', e);
+      _sentry = null;
+    }
+  })();
 }
 
-export function captureException(error: Error, context?: Record<string, any>) {
+export function captureException(error: Error, context?: Record<string, unknown>) {
   if (__DEV__) {
     console.error('[Sentry] Would capture:', error.message, context);
     return;
   }
+  if (!_sentry) return;
   if (context) {
-    Sentry.withScope((scope) => {
+    _sentry.withScope((scope) => {
       Object.entries(context).forEach(([key, value]) => {
         scope.setExtra(key, value);
       });
-      Sentry.captureException(error);
+      _sentry!.captureException(error);
     });
   } else {
-    Sentry.captureException(error);
+    _sentry.captureException(error);
   }
 }
 
 export function setUser(userId: string | null, email?: string) {
+  if (!_sentry) return;
   if (userId) {
-    Sentry.setUser({ id: userId, email });
+    _sentry.setUser({ id: userId, email });
   } else {
-    Sentry.setUser(null);
+    _sentry.setUser(null);
   }
 }
 
-export { Sentry };
+export { _sentry as Sentry };
