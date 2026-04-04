@@ -42,11 +42,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
 
-// Configure notification handler OUTSIDE of component (must run before any notification arrives)
-if (PUSH_NOTIFICATIONS_ENABLED) {
-  configureNotificationHandler();
-}
-
 // Inner component that uses theme (must be inside ThemeProvider)
 function StackNavigator() {
   const { branding } = useTheme();
@@ -310,6 +305,11 @@ export default function RootLayout() {
   // Push notifications — sync token only when permission is already granted.
   // IMPORTANT: Do NOT trigger permission prompt here. Permission is requested
   // exclusively from the dedicated notifications onboarding screen.
+  useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+    configureNotificationHandler();
+  }, []);
+
   useEffect(() => {
     if (!PUSH_NOTIFICATIONS_ENABLED) return;
     if (!session?.user?.id) {
