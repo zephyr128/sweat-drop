@@ -74,6 +74,7 @@ function StackNavigator() {
           headerShown: false,
           animation: 'fade' as any,
           animationDuration: 300,
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen name="wallet" options={{ headerShown: false }} />

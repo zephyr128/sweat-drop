@@ -80,6 +80,9 @@ export default function ResetPasswordScreen() {
   };
 
   const handleContinue = () => {
+    // Dismiss the entire onboarding/auth stack before navigating to home
+    // so swipe-back cannot return the user to the sign-in screen.
+    router.dismissAll();
     router.replace('/home');
   };
 
@@ -114,11 +117,14 @@ export default function ResetPasswordScreen() {
           {done ? (
             /* ── Success state ── */
             <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.successCard}>
-              <Ionicons name="checkmark-circle" size={48} color={theme.colors.primary} />
+              <View style={styles.successIconContainer}>
+                <View style={styles.successIconGlow} />
+                <Ionicons name="checkmark-circle" size={48} color={theme.colors.primary} />
+              </View>
               <Text style={styles.successTitle}>{t('auth.resetPasswordSuccess')}</Text>
               <Text style={styles.successBody}>{t('auth.resetPasswordSuccessBody')}</Text>
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[styles.primaryButton, styles.successButton]}
                 onPress={handleContinue}
                 activeOpacity={0.85}
               >
@@ -323,6 +329,24 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 8,
   },
+  successIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    marginBottom: 6,
+  },
+  successIconGlow: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.primary,
+    opacity: 0.20,
+    ...theme.shadows.glow,
+  },
   successTitle: {
     ...fontStyles.heading,
     fontSize: 22,
@@ -338,5 +362,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     letterSpacing: 0.2,
     marginBottom: 8,
+  },
+  successButton: {
+    alignSelf: 'stretch',
+    marginTop: 4,
   },
 });
