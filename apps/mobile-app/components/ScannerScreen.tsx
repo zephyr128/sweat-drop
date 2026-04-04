@@ -131,6 +131,7 @@ export function ScannerScreen() {
     subscriptionId?: string;
     planItemId?: string;
     exerciseIndex?: string;
+    autoQR?: string;
   }>();
   const { session } = useSession();
   const { updateHomeGym } = useGymData();
@@ -980,6 +981,20 @@ export function ScannerScreen() {
   // Store handler in ref so useCodeScanner always calls the latest version
   const handleQRCodeScannedRef = useRef(handleQRCodeScanned);
   handleQRCodeScannedRef.current = handleQRCodeScanned;
+
+  // Auto-process a QR URL passed via deep link (native camera cold/warm start).
+  // Skips the camera UI and processes the URL directly, same as a scan.
+  useEffect(() => {
+    if (!params.autoQR) return;
+    const qr = params.autoQR;
+    log.debug('[Scanner] autoQR param received, processing immediately:', qr);
+    const timer = setTimeout(() => {
+      if (!hasScannedRef.current) {
+        handleQRCodeScannedRef.current(qr);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [params.autoQR]);
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr'],

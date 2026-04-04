@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
+import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
 import { supabase } from '@/lib/supabase';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter } from 'expo-router';
@@ -176,6 +177,9 @@ export default function RootLayout() {
   const coldStartReferralCode = useRef<string | null>(null);
   const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
   const hydratePendingReferral = usePendingReferralStore((s) => s.hydrate);
+  const setPendingQR = usePendingQRStore((s) => s.setPendingQR);
+  // cold-start QR URL — stored here before auth is ready, consumed in effect below
+  const coldStartQRUrl = useRef<string | null>(null);
 
   // Deferred Sentry init — avoids top-level TurboModule access that can
   // throw native exceptions and corrupt Hermes GC in release builds.
@@ -191,9 +195,33 @@ export default function RootLayout() {
   }, []);
 
   // Deep link handler for sweatdrop:// URLs
-  // Handles: sweatdrop://join/<code> (referral), sweatdrop://auth/confirm#... (email verification tokens)
+  // Handles: sweatdrop://checkin/<gymId>, sweatdrop://machine/<uuid>,
+  //          sweatdrop://join/<code> (referral), sweatdrop://auth/confirm#... (email tokens)
   useEffect(() => {
     const processUrl = async (url: string, isWarmLaunch: boolean) => {
+      // QR deep links from native camera: checkin or machine scan
+      const isCheckin = url.indexOf('sweatdrop://checkin/') === 0;
+      const isMachine = url.indexOf('sweatdrop://machine/') === 0;
+      if (isCheckin || isMachine) {
+        log.debug('[App] QR deep link received:', url, 'warm:', isWarmLaunch);
+        if (isWarmLaunch) {
+          const currentSession = useAuthStore.getState().session;
+          if (!currentSession?.user) {
+            // Not logged in — send to welcome screen
+            router.replace('/(onboarding)/welcome');
+            return;
+          }
+          // Logged in — open scan screen with pre-loaded QR
+          setTimeout(() => {
+            router.push({ pathname: '/scan', params: { autoQR: url } });
+          }, 150);
+        } else {
+          // Cold start — store and handle once auth is ready
+          coldStartQRUrl.current = url;
+        }
+        return;
+      }
+
       // Auth tokens from landing page (email confirm / password reset)
       const tokens = parseAuthTokensFromUrl(url);
       if (tokens) {
@@ -237,6 +265,29 @@ export default function RootLayout() {
     });
     return () => sub.remove();
   }, []);
+
+  // Cold-start QR: once auth is initialized, route to appropriate screen.
+  // If user is logged in → save QR to store so index.tsx opens /scan with autoQR.
+  // If user is not logged in → index.tsx will route to welcome; QR is stored for
+  // after login (user will need to scan again — we show a hint via pendingQR store).
+  useEffect(() => {
+    if (!coldStartQRUrl.current) return;
+    if (!isInitialized) return;
+
+    const url = coldStartQRUrl.current;
+    coldStartQRUrl.current = null;
+
+    if (!session?.user) {
+      // Not logged in — save so index.tsx can show a hint after login
+      setPendingQR(url);
+      log.debug('[App] Cold-start QR — user not logged in, storing for later:', url);
+      return;
+    }
+
+    // Logged in — save to store, index.tsx will open /scan?autoQR=...
+    log.debug('[App] Cold-start QR — user logged in, routing to scan:', url);
+    setPendingQR(url);
+  }, [isInitialized, session?.user]);
 
   // Cold-start referral: once initial routing completes and user lands on a main
   // screen (home, wallet, etc.), auto-navigate to /invite-friend so they see the

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { log } from '@/lib/logger';
 
@@ -13,6 +14,7 @@ export default function Index() {
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const session = useAuthStore((s) => s.session);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
+  const consumePendingQR = usePendingQRStore((s) => s.consumePendingQR);
 
   const [hasNavigated, setHasNavigated] = useState(false);
 
@@ -28,11 +30,16 @@ export default function Index() {
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         if (!session) {
+          // If a QR deep link arrived while unauthenticated, we discard it here.
+          // The user must log in first; they can re-scan after.
+          consumePendingQR();
           router.replace('/(onboarding)/welcome');
         } else if (shouldRequireEmailVerification(session?.user)) {
+          consumePendingQR();
           router.replace('/(onboarding)/verify-email');
         } else if (onboardingStep !== 'done') {
           // Resume onboarding at the correct step
+          consumePendingQR();
           switch (onboardingStep) {
             case 'auth':
               router.replace('/(onboarding)/auth');
@@ -56,9 +63,20 @@ export default function Index() {
               router.replace('/home');
           }
         } else {
-          // onboarding_completed — go straight to home.
-          // Push token sync for returning users happens silently in _layout.tsx.
-          router.replace('/home');
+          // Logged in and onboarding done — check for pending QR from native camera
+          const pendingQR = consumePendingQR();
+          if (pendingQR) {
+            log.debug('[Index] Pending QR from cold-start deep link, opening scan:', pendingQR);
+            router.replace('/home');
+            // Small delay so home mounts before scan modal opens
+            setTimeout(() => {
+              router.push({ pathname: '/scan', params: { autoQR: pendingQR } });
+            }, 400);
+          } else {
+            // onboarding_completed — go straight to home.
+            // Push token sync for returning users happens silently in _layout.tsx.
+            router.replace('/home');
+          }
         }
 
         setHasNavigated(true);
