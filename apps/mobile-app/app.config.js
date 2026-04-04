@@ -30,6 +30,10 @@ module.exports = {
       supportsTablet: true,
       bundleIdentifier: 'com.sweatdrop.app',
       associatedDomains: ['applinks:www.sweat-drop.com'],
+      entitlements: {
+        'aps-environment': 'production',
+        'com.apple.developer.applesignin': ['Default'],
+      },
       infoPlist: {
         NSCameraUsageDescription:
           'SweatDrop uses the camera to scan QR codes on fitness equipment.',

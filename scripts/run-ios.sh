@@ -102,6 +102,14 @@ else
   echo -e "${GREEN}✅ CODE_SIGN_STYLE already present in project.pbxproj${NC}"
 fi
 
+# Patch aps-environment = development for local dev builds
+# (app.config.js sets production for CI; locally we need development to install on device)
+ENTITLEMENTS="$IOS_DIR/SweatDrop/SweatDrop.entitlements"
+if [ -f "$ENTITLEMENTS" ]; then
+  sed -i '' 's|<string>production</string>|<string>development</string>|g' "$ENTITLEMENTS"
+  echo -e "${GREEN}✅ aps-environment set to development for local build${NC}"
+fi
+
 # Step 4 — CocoaPods
 echo -e "\n${BLUE}[4/4] Installing CocoaPods...${NC}"
 cd "$IOS_DIR"
