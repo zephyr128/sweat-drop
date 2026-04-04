@@ -32,7 +32,8 @@ export function useNetworkStatus() {
     run();
 
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+      const prev = appState.current;
+      if ((prev === 'inactive' || prev === 'background') && nextState === 'active') {
         run();
       }
       appState.current = nextState;

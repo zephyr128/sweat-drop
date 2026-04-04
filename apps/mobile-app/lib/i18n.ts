@@ -164,9 +164,11 @@ i18n.use(initReactI18next).init({
     'transactions',
   ],
   interpolation: {
-    escapeValue: false, // React already escapes
+    escapeValue: false,
   },
-  compatibilityJSON: 'v4', // Required for i18next v23+ plural rules
+  // compatibilityJSON: 'v4' is intentionally removed — it triggers Intl.PluralRules
+  // string.match() chains that crash Hermes in release/TestFlight builds.
+  // i18next v25 uses Intl.PluralRules natively; 'v4' is a no-op and causes the crash.
 });
 
 export default i18n;

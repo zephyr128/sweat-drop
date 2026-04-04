@@ -1,7 +1,4 @@
-import { initSentry } from '@/lib/sentry';
-initSentry();
-
-import '@/lib/i18n'; // Initialize i18n before anything else
+import '@/lib/i18n';
 import { Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useCallback } from 'react';
@@ -11,7 +8,6 @@ import { GymDataInitializer } from '@/components/GymDataInitializer';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { supabase } from '@/lib/supabase';
-import BleManager from 'react-native-ble-manager';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
@@ -42,11 +38,6 @@ import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
-
-// Configure notification handler OUTSIDE of component (must run before any notification arrives)
-if (PUSH_NOTIFICATIONS_ENABLED) {
-  configureNotificationHandler();
-}
 
 // Inner component that uses theme (must be inside ThemeProvider)
 function StackNavigator() {
@@ -185,6 +176,14 @@ export default function RootLayout() {
   const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
   const hydratePendingReferral = usePendingReferralStore((s) => s.hydrate);
 
+  // Deferred Sentry init — avoids top-level TurboModule access that can
+  // throw native exceptions and corrupt Hermes GC in release builds.
+  useEffect(() => {
+    import('@/lib/sentry').then(({ initSentry }) => {
+      try { initSentry(); } catch { /* swallow — non-critical */ }
+    });
+  }, []);
+
   // Hydrate pending referral code from AsyncStorage on cold start
   useEffect(() => {
     hydratePendingReferral();
@@ -295,19 +294,27 @@ export default function RootLayout() {
   // Initialize BLE Manager (Android)
   useEffect(() => {
     if (Platform.OS === 'android') {
-      BleManager.start({ showAlert: false })
-        .then(() => {
+      (async () => {
+        try {
+          const module = await import('react-native-ble-manager');
+          await module.default.start({ showAlert: false });
           log.debug('[App] BLE Manager initialized (Android)');
-        })
-        .catch((error: any) => {
+        } catch (error: unknown) {
+          // Keep startup resilient even if BLE native module is unavailable.
           log.error('[App] Failed to initialize BLE Manager:', error);
-        });
+        }
+      })();
     }
   }, []);
 
   // Push notifications — sync token only when permission is already granted.
   // IMPORTANT: Do NOT trigger permission prompt here. Permission is requested
   // exclusively from the dedicated notifications onboarding screen.
+  useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+    configureNotificationHandler();
+  }, []);
+
   useEffect(() => {
     if (!PUSH_NOTIFICATIONS_ENABLED) return;
     if (!session?.user?.id) {

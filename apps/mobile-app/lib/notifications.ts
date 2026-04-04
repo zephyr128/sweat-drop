@@ -94,15 +94,17 @@ export function configureNotificationHandler(): void {
       log.debug('[Notifications] expo-notifications unavailable, handler not configured');
       return;
     }
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false, // We don't use badge count in MVP
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
+    try {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false, // We don't use badge count in MVP
+        }),
+      });
+    } catch (error) {
+      log.warn('[Notifications] Failed to set notification handler:', error);
+    }
   });
 }
 

@@ -1,9 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
 type ResetState = 'loading' | 'form' | 'success' | 'error';
+
+function buildAppDeepLink(accessToken: string | null, refreshToken: string | null): string {
+  if (accessToken && refreshToken) {
+    return `sweatdrop://auth/confirm#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=password_updated`;
+  }
+  return 'sweatdrop://';
+}
 
 export default function PasswordResetPage() {
   const [state, setState] = useState<ResetState>('loading');
@@ -12,6 +19,7 @@ export default function PasswordResetPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState('');
+  const tokensRef = useRef<{ access: string | null; refresh: string | null }>({ access: null, refresh: null });
 
   useEffect(() => {
     if (!hasSupabasePublicEnv || !supabase) {
@@ -66,6 +74,15 @@ export default function PasswordResetPage() {
 
     setIsSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password });
+
+    if (!error) {
+      const { data } = await supabase.auth.getSession();
+      tokensRef.current = {
+        access: data.session?.access_token ?? null,
+        refresh: data.session?.refresh_token ?? null,
+      };
+    }
+
     setIsSubmitting(false);
 
     if (error) {
@@ -211,7 +228,7 @@ export default function PasswordResetPage() {
             </p>
 
             <button
-              onClick={() => { window.location.href = 'sweatdrop://'; }}
+              onClick={() => { window.location.href = buildAppDeepLink(tokensRef.current.access, tokensRef.current.refresh); }}
               className="w-full py-4 rounded-full bg-cyan-400 text-black font-bold text-lg tracking-wide uppercase transition-all hover:bg-cyan-300 hover:shadow-[0_0_30px_rgba(0,229,255,0.4)] active:scale-[0.98]"
               style={{ fontFamily: 'var(--font-display), sans-serif' }}
             >

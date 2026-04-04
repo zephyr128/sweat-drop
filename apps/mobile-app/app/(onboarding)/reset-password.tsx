@@ -53,8 +53,22 @@ export default function ResetPasswordScreen() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
+
+      // The recovery session's refresh token is consumed after updateUser.
+      // Re-authenticate to get a fresh session with working refresh tokens,
+      // otherwise the next token refresh will fire SIGNED_OUT.
+      const email = useAuthStore.getState().session?.user?.email;
+      if (email) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) {
+          log.warn('[ResetPassword] Re-auth after password update failed:', signInError.message);
+        }
+      }
+
       setDone(true);
-      // Refresh profile so the store reflects the updated session
       await fetchProfile();
     } catch (err: unknown) {
       log.error('[ResetPassword] updateUser error:', err);
