@@ -20,8 +20,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { TabView, SceneRendererProps, NavigationState } from 'react-native-tab-view';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
@@ -87,69 +85,43 @@ const GlassTabBar: React.FC<
   });
 
   return (
-    <View
-      style={[
-        styles.outerContainer,
-        {
-          borderTopColor: hexToRgba(accent, 0.22),
-          borderLeftColor: hexToRgba(accent, 0.10),
-          borderRightColor: 'rgba(255,255,255,0.04)',
-          borderBottomColor: 'rgba(255,255,255,0.03)',
-        },
-        barStyle,
-      ]}
-    >
-      <BlurView intensity={50} tint="dark" style={styles.blur}>
-        <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View style={styles.trackOuter}>
-          {/* Animated indicator */}
-          <View style={styles.indicatorTrack} pointerEvents="none">
-            <Animated.View
-              style={[styles.indicator, { backgroundColor: accent }, indicatorStyle]}
-            />
-          </View>
-
-          {routes.map((route, idx) => {
-            const tab = tabs[idx];
-            const isActive = idx === activeIndex;
-            return (
-              <TouchableOpacity
-                key={route.key}
-                style={styles.tabItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  onTabPress(route.key);
-                }}
-                activeOpacity={0.75}
+    <View style={[styles.barContainer, barStyle]}>
+      <View style={styles.trackOuter}>
+        {routes.map((route, idx) => {
+          const tab = tabs[idx];
+          const isActive = idx === activeIndex;
+          return (
+            <TouchableOpacity
+              key={route.key}
+              style={styles.tabItem}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onTabPress(route.key);
+              }}
+              activeOpacity={0.75}
+            >
+              {tab?.icon && (
+                <Ionicons
+                  name={tab.icon}
+                  size={13}
+                  color={isActive ? accent : 'rgba(255,255,255,0.38)'}
+                  style={{ marginBottom: 1 }}
+                />
+              )}
+              <Text
+                style={[styles.tabLabel, { color: isActive ? accent : 'rgba(255,255,255,0.42)' }]}
+                numberOfLines={1}
               >
-                {tab?.icon && (
-                  <Ionicons
-                    name={tab.icon}
-                    size={13}
-                    color={isActive ? accent : 'rgba(255,255,255,0.38)'}
-                    style={{ marginBottom: 1 }}
-                  />
-                )}
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    { color: isActive ? accent : 'rgba(255,255,255,0.42)' },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {route.title}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </BlurView>
+                {route.title}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {/* Underline track */}
+      <View style={[styles.underlineTrack, { backgroundColor: hexToRgba(accent, 0.12) }]}>
+        <Animated.View style={[styles.underline, { backgroundColor: accent }, indicatorStyle]} />
+      </View>
     </View>
   );
 };
@@ -184,58 +156,39 @@ const ModeABar: React.FC<{
   });
 
   return (
-    <View
-      style={[
-        styles.outerContainer,
-        {
-          borderTopColor: hexToRgba(accent, 0.22),
-          borderLeftColor: hexToRgba(accent, 0.10),
-          borderRightColor: 'rgba(255,255,255,0.04)',
-          borderBottomColor: 'rgba(255,255,255,0.03)',
-        },
-        barStyle,
-      ]}
-    >
-      <BlurView intensity={50} tint="dark" style={styles.blur}>
-        <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View style={styles.trackOuter}>
-          <View style={styles.indicatorTrack} pointerEvents="none">
-            <Animated.View style={[styles.indicator, { backgroundColor: accent }, indicatorStyle]} />
-          </View>
-          {tabs.map((tab, idx) => {
-            const isActive = idx === safeIdx;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={styles.tabItem}
-                onPress={() => onTabPress(tab.key)}
-                activeOpacity={0.75}
+    <View style={[styles.barContainer, barStyle]}>
+      <View style={styles.trackOuter}>
+        {tabs.map((tab, idx) => {
+          const isActive = idx === safeIdx;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tabItem}
+              onPress={() => onTabPress(tab.key)}
+              activeOpacity={0.75}
+            >
+              {tab.icon && (
+                <Ionicons
+                  name={tab.icon}
+                  size={13}
+                  color={isActive ? accent : 'rgba(255,255,255,0.38)'}
+                  style={{ marginBottom: 1 }}
+                />
+              )}
+              <Text
+                style={[styles.tabLabel, { color: isActive ? accent : 'rgba(255,255,255,0.42)' }]}
+                numberOfLines={1}
               >
-                {tab.icon && (
-                  <Ionicons
-                    name={tab.icon}
-                    size={13}
-                    color={isActive ? accent : 'rgba(255,255,255,0.38)'}
-                    style={{ marginBottom: 1 }}
-                  />
-                )}
-                <Text
-                  style={[styles.tabLabel, { color: isActive ? accent : 'rgba(255,255,255,0.42)' }]}
-                  numberOfLines={1}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </BlurView>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {/* Underline track */}
+      <View style={[styles.underlineTrack, { backgroundColor: hexToRgba(accent, 0.12) }]}>
+        <Animated.View style={[styles.underline, { backgroundColor: accent }, indicatorStyle]} />
+      </View>
     </View>
   );
 };
@@ -360,36 +313,11 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
 };
 
 const styles = StyleSheet.create({
-  outerContainer: {
-    borderRadius: 16,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    overflow: 'hidden',
-  },
-  blur: {
-    borderRadius: 16,
-    overflow: 'hidden',
+  barContainer: {
+    // No background, no border, no blur — transparent
   },
   trackOuter: {
     flexDirection: 'row',
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-    position: 'relative',
-  },
-  indicatorTrack: {
-    position: 'absolute',
-    bottom: 5,
-    left: 4,
-    right: 4,
-    height: INDICATOR_HEIGHT,
-  },
-  indicator: {
-    height: INDICATOR_HEIGHT,
-    borderRadius: INDICATOR_HEIGHT / 2,
-    position: 'absolute',
-    bottom: 0,
   },
   tabItem: {
     flex: 1,
@@ -397,14 +325,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    paddingVertical: 9,
+    paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 11,
   },
   tabLabel: {
     ...fontStyles.heading,
     fontSize: 14,
     letterSpacing: 1.2,
+  },
+  underlineTrack: {
+    height: INDICATOR_HEIGHT,
+    borderRadius: INDICATOR_HEIGHT / 2,
+    position: 'relative',
+  },
+  underline: {
+    height: INDICATOR_HEIGHT,
+    borderRadius: INDICATOR_HEIGHT / 2,
+    position: 'absolute',
+    top: 0,
   },
   modeB: {
     flex: 1,

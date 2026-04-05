@@ -34,5 +34,17 @@
   "checkRedemptions": "Check redemptions →",
   "leaderboardPrize": "Leaderboard Prize",
   "arenaPrize": "Arena Prize",
-  "scoreExplanation": "Leaderboard ranks by earned drops. Spending rewards reduces wallet balance, not leaderboard score."
+  "scoreExplanation": "Leaderboard ranks by earned drops. Spending rewards reduces wallet balance, not leaderboard score.",
+  "infoSheetTitle": "How it works",
+  "infoSheetScoreRule": "Leaderboard ranks by earned drops. Spending rewards reduces your wallet balance — not your leaderboard score.",
+  "infoSheetPrizesTitle": "Prizes this period",
+  "infoSheetNoPrizes": "No prizes configured for this period.",
+  "infoSheetYourPosition": "Your position",
+  "infoSheetLeader": "You're the current leader! 🔥",
+  "infoSheetDropsToFirst": "{{drops}} drops to reach 1st place",
+  "infoSheetDropsToNext": "{{drops}} drops to reach {{rank}} place",
+  "infoSheetNotRanked": "Earn drops to appear on the leaderboard.",
+  "infoSheetClose": "Got it",
+  "seeAll": "See all",
+  "collapseList": "Show less"
 }

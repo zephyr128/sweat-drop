@@ -35,5 +35,17 @@
   "checkRedemptions": "Pogledaj nagrade →",
   "leaderboardPrize": "Nagrada sa leaderboarda",
   "arenaPrize": "Nagrada iz arene",
-  "scoreExplanation": "Leaderboard rangira po zarađenim drops. Trošenje nagrada smanjuje stanje novčanika, ne leaderboard skor."
+  "scoreExplanation": "Leaderboard rangira po zarađenim drops. Trošenje nagrada smanjuje stanje novčanika, ne leaderboard skor.",
+  "infoSheetTitle": "Kako funkcioniše",
+  "infoSheetScoreRule": "Leaderboard rangira po zarađenim drops. Trošenje nagrada smanjuje stanje novčanika — ne tvoj leaderboard skor.",
+  "infoSheetPrizesTitle": "Nagrade ovog perioda",
+  "infoSheetNoPrizes": "Nema nagrada za ovaj period.",
+  "infoSheetYourPosition": "Tvoja pozicija",
+  "infoSheetLeader": "Ti si trenutni lider! 🔥",
+  "infoSheetDropsToFirst": "{{drops}} drops do 1. mesta",
+  "infoSheetDropsToNext": "{{drops}} drops do {{rank}}. mesta",
+  "infoSheetNotRanked": "Zaradi drops da bi se pojavio na leaderboardu.",
+  "infoSheetClose": "Razumem",
+  "seeAll": "Prikaži sve",
+  "collapseList": "Sakrij"
 }
