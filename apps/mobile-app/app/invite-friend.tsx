@@ -642,37 +642,48 @@ export default function InviteFriendScreen() {
 
                     {/* Icon-only action row */}
                     <View style={styles.ctaRow}>
-                      {/* Share — filled pill */}
-                      <TouchableOpacity
-                        onPress={inviteCode ? onShare : onRefresh}
-                        activeOpacity={0.85}
-                        style={[styles.ctaBtn, !inviteCode && { opacity: 0.45 }]}
-                      >
-                        <LinearGradient
-                          colors={[branding.primary, branding.primaryDark]}
-                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                          style={styles.ctaBtnGradient}
-                        >
-                          <Ionicons
-                            name={inviteCode ? 'share-outline' : 'refresh-outline'}
-                            size={20}
-                            color={branding.onPrimary}
-                          />
-                        </LinearGradient>
-                      </TouchableOpacity>
-
-                      {/* Copy — outlined pill */}
-                      {inviteCode && (
+                      {inviteCode ? (
+                        <>
+                          {/* Share — filled pill */}
+                          <TouchableOpacity
+                            onPress={onShare}
+                            activeOpacity={0.85}
+                            style={styles.ctaBtn}
+                          >
+                            <LinearGradient
+                              colors={[branding.primary, branding.primaryDark]}
+                              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                              style={styles.ctaBtnGradient}
+                            >
+                              <Ionicons name="share-outline" size={20} color={branding.onPrimary} />
+                            </LinearGradient>
+                          </TouchableOpacity>
+                          {/* Copy — outlined pill */}
+                          <TouchableOpacity
+                            onPress={onCopy}
+                            activeOpacity={0.75}
+                            style={[styles.ctaBtn, styles.ctaBtnOutline, { borderColor: hexToRgba(branding.primary, 0.28) }]}
+                          >
+                            <Ionicons
+                              name={copied ? 'checkmark' : 'copy-outline'}
+                              size={20}
+                              color={copied ? '#4CD964' : branding.primary}
+                            />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
                         <TouchableOpacity
-                          onPress={onCopy}
-                          activeOpacity={0.75}
-                          style={[styles.ctaBtn, styles.ctaBtnOutline, { borderColor: hexToRgba(branding.primary, 0.28) }]}
+                          onPress={onRefresh}
+                          activeOpacity={0.85}
+                          style={[styles.ctaBtn, { opacity: 0.45 }]}
                         >
-                          <Ionicons
-                            name={copied ? 'checkmark' : 'copy-outline'}
-                            size={20}
-                            color={copied ? '#4CD964' : branding.primary}
-                          />
+                          <LinearGradient
+                            colors={[branding.primary, branding.primaryDark]}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                            style={styles.ctaBtnGradient}
+                          >
+                            <Ionicons name="refresh-outline" size={20} color={branding.onPrimary} />
+                          </LinearGradient>
                         </TouchableOpacity>
                       )}
                     </View>
