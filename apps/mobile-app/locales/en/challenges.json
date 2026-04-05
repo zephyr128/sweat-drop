@@ -37,6 +37,8 @@
   "unit_days": "days",
   "unit_drops": "drops",
   "unit_checkins": "check-ins",
+  "tabActive": "Active",
+  "tabCompleted": "Completed",
   "active": "Active Challenges",
   "completed": "Completed Challenges",
   "completedOn": "Completed {{date}}",

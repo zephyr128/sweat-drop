@@ -37,6 +37,8 @@
   "unit_days": "dana",
   "unit_drops": "drops",
   "unit_checkins": "check-in-ova",
+  "tabActive": "Aktivni",
+  "tabCompleted": "Završeni",
   "active": "Aktivni izazovi",
   "completed": "Završeni izazovi",
   "completedOn": "Završeno {{date}}",
