@@ -243,8 +243,8 @@ export async function fetchMyFriendInviteCode(gymId: string | null | undefined):
 
   const primary = await rpc('create_referral_invite', { p_gym_id: gymId });
   if (!primary.error) {
-    const result = parseInviteResult(primary.data);
     if (__DEV__) console.log('[InviteAPI] create_referral_invite →', JSON.stringify(primary.data));
+    const result = parseInviteResult(primary.data);
     return { ...result, unavailable: false, noGym: false };
   }
   if (__DEV__) console.warn('[InviteAPI] create_referral_invite error:', primary.error.message, primary.error.code);
