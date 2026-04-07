@@ -71,7 +71,7 @@ export default function HomeScreen() {
   });
   
   const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const hasLoadedOnce = useRef(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -345,21 +345,24 @@ export default function HomeScreen() {
       await Promise.all([
         loadData(true),
         activeGymId ? loadActiveGym(activeGymId) : Promise.resolve(),
+        refreshLocalDrops(),
+        loadCheckinStatus(),
+        ...(activeGymId
+          ? [
+              refreshChallenges?.() ?? Promise.resolve(),
+              refreshStats?.() ?? Promise.resolve(),
+              refreshArenas?.() ?? Promise.resolve(),
+              userRank.refresh(),
+              dropLimits.refresh(),
+            ]
+          : []),
       ]);
-      refreshLocalDrops();
-      loadCheckinStatus();
-      if (activeGymId) {
-        refreshChallenges?.();
-        refreshStats?.();
-        refreshArenas?.();
-        userRank.refresh();
-      }
     } catch (error) {
       log.error('Pull-to-refresh error:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [activeGymId, loadCheckinStatus]);
+  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, userRank, dropLimits]);
 
   const handleQRPress = async () => {
     router.push('/scan');
@@ -386,15 +389,8 @@ export default function HomeScreen() {
     });
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // No full-screen spinner — render the UI immediately.
+  // Individual sections handle their own loading states (skeletons / defaults).
 
   // ── Empty state for users with no home gym ──
   if (!homeGymId) {

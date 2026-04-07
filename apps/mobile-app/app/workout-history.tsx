@@ -89,37 +89,48 @@ export default function WorkoutHistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [profileStreakDays, setProfileStreakDays] = useState<number | null>(null);
 
   const loadSessions = useCallback(async () => {
     if (!session?.user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('sessions')
-        .select(`
-          id,
-          started_at,
-          ended_at,
-          duration_seconds,
-          drops_earned,
-          calories,
-          multiplier,
-          raw_metrics,
-          gym_id,
-          machines ( name, type ),
-          gyms ( name )
-        `)
-        .eq('user_id', session.user.id)
-        .eq('is_active', false)
-        .order('started_at', { ascending: false })
-        .limit(100);
+      const [sessionRes, profileRes] = await Promise.all([
+        supabase
+          .from('sessions')
+          .select(`
+            id,
+            started_at,
+            ended_at,
+            duration_seconds,
+            drops_earned,
+            calories,
+            multiplier,
+            raw_metrics,
+            gym_id,
+            machines ( name, type ),
+            gyms ( name )
+          `)
+          .eq('user_id', session.user.id)
+          .eq('is_active', false)
+          .order('started_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('profiles')
+          .select('streak_days')
+          .eq('id', session.user.id)
+          .single(),
+      ]);
 
-      if (error) {
-        log.error('[WorkoutHistory] Error loading sessions:', error);
-        return;
+      if (sessionRes.error) {
+        log.error('[WorkoutHistory] Error loading sessions:', sessionRes.error);
+      } else {
+        setSessions((sessionRes.data as unknown as SessionRow[]) || []);
       }
 
-      setSessions((data as unknown as SessionRow[]) || []);
+      if (!profileRes.error && profileRes.data) {
+        setProfileStreakDays(profileRes.data.streak_days ?? 0);
+      }
     } catch (err) {
       log.error('[WorkoutHistory] Error:', err);
     } finally {
@@ -439,18 +450,24 @@ export default function WorkoutHistoryScreen() {
                   />
                   {/* Top row: streak pair */}
                   <View style={styles.summaryTopRow}>
-                    {/* Current streak */}
-                    <View style={[styles.summaryStreakItem, { borderColor: streakInfo.current > 0 ? 'rgba(255,107,0,0.18)' : 'rgba(255,255,255,0.07)' }]}>
-                      <View style={[styles.summaryStreakIconBg, { backgroundColor: streakInfo.current > 0 ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.05)' }]}>
-                        <Ionicons name="flame" size={18} color={streakInfo.current > 0 ? '#FF6B00' : 'rgba(255,255,255,0.25)'} />
-                      </View>
-                      <View style={styles.summaryStreakText}>
-                        <Text style={[styles.summaryStreakValue, getNumberStyle(22), { color: streakInfo.current > 0 ? '#FF6B00' : 'rgba(255,255,255,0.5)' }]}>
-                          {streakInfo.current === 0 ? '—' : streakInfo.current}
-                        </Text>
-                        <Text style={styles.summaryStreakLabel}>{t('currentStreak')}</Text>
-                      </View>
-                    </View>
+                    {/* Current streak — uses server-authoritative streak_days from profile */}
+                    {(() => {
+                      const currentStreak = profileStreakDays ?? streakInfo.current;
+                      const active = currentStreak > 0;
+                      return (
+                        <View style={[styles.summaryStreakItem, { borderColor: active ? 'rgba(255,107,0,0.18)' : 'rgba(255,255,255,0.07)' }]}>
+                          <View style={[styles.summaryStreakIconBg, { backgroundColor: active ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.05)' }]}>
+                            <Ionicons name="flame" size={18} color={active ? '#FF6B00' : 'rgba(255,255,255,0.25)'} />
+                          </View>
+                          <View style={styles.summaryStreakText}>
+                            <Text style={[styles.summaryStreakValue, getNumberStyle(22), { color: active ? '#FF6B00' : 'rgba(255,255,255,0.5)' }]}>
+                              {currentStreak === 0 ? '—' : currentStreak}
+                            </Text>
+                            <Text style={styles.summaryStreakLabel}>{t('currentStreak')}</Text>
+                          </View>
+                        </View>
+                      );
+                    })()}
                     <View style={[styles.summaryStreakItem, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
                       <View style={[styles.summaryStreakIconBg, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
                         <Ionicons name="trophy" size={18} color={branding.primary} />
@@ -480,17 +497,6 @@ export default function WorkoutHistoryScreen() {
                     ))}
                   </View>
 
-                  {/* Hint */}
-                  <View style={[styles.summaryHintRow, { borderTopColor: hexToRgba(branding.primary, 0.06) }]}>
-                    <Ionicons
-                      name={streakInfo.current > 0 ? 'checkmark-circle' : 'information-circle-outline'}
-                      size={12}
-                      color={streakInfo.current > 0 ? '#4ade80' : 'rgba(255,255,255,0.28)'}
-                    />
-                    <Text style={styles.summaryHint}>
-                      {streakInfo.current > 0 ? t('streakActive') : t('streakInactive')}
-                    </Text>
-                  </View>
                 </BlurView>
               </View>
             </Animated.View>

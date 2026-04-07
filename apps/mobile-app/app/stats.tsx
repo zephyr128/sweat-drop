@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -510,18 +511,29 @@ export default function StatsScreen() {
 
       <ScreenHeader title={t('title')} />
 
-      {/* Scope Toggle: My Gym | Global (above the period tab bar) */}
+      {/* Scope Toggle: My Gym | Global */}
       {gymCount > 1 && (
         <View style={styles.scopeRow}>
-          <SliderTabs
-            tabs={[
-              { key: 'gym', label: t('myGym'), icon: 'location' },
-              { key: 'global', label: t('global'), icon: 'globe-outline' },
-            ]}
-            activeKey={scope}
-            onChange={(key) => setScope(key as ScopeType)}
-            accentColor={branding.primary}
-          />
+          {(['gym', 'global'] as ScopeType[]).map((s) => {
+            const isActive = scope === s;
+            const icon = s === 'gym' ? 'location' : 'globe-outline';
+            return (
+              <TouchableOpacity
+                key={s}
+                style={[
+                  styles.scopePill,
+                  isActive && { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.35) },
+                ]}
+                onPress={() => setScope(s)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name={icon} size={13} color={isActive ? branding.primary : 'rgba(255,255,255,0.38)'} />
+                <Text style={[styles.scopePillLabel, { color: isActive ? branding.primary : 'rgba(255,255,255,0.42)' }]}>
+                  {t(s === 'gym' ? 'myGym' : 'global')}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
@@ -566,8 +578,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#080808',
   },
   scopeRow: {
+    flexDirection: 'row',
+    gap: 8,
     paddingHorizontal: 16,
     marginBottom: 8,
+  },
+  scopePill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  scopePillLabel: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 0.8,
   },
   tabsWrapper: {
     flex: 1,
