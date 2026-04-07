@@ -29,32 +29,28 @@ export function useUserRank(gymId: string | null | undefined): UserRankState & {
     const userId = session.user.id;
 
     try {
-      for (const period of ['weekly', 'monthly'] as const) {
-        const { data } = await supabase.rpc('get_leaderboard', {
-          p_type: 'gym',
-          p_scope_id: gymId,
-          p_period: period,
-          p_limit: 200,
-          p_newcomer_only: false,
-        });
+      // Fire weekly + monthly in parallel
+      const [weeklyRes, monthlyRes] = await Promise.all([
+        supabase.rpc('get_leaderboard', {
+          p_type: 'gym', p_scope_id: gymId, p_period: 'weekly', p_limit: 200, p_newcomer_only: false,
+        }),
+        supabase.rpc('get_leaderboard', {
+          p_type: 'gym', p_scope_id: gymId, p_period: 'monthly', p_limit: 200, p_newcomer_only: false,
+        }),
+      ]);
 
-        const ranked = extractRank(data as any[] ?? [], userId);
-        if (ranked) {
-          setState(ranked);
-          return;
-        }
-      }
+      const weeklyRank = extractRank(weeklyRes.data as any[] ?? [], userId);
+      if (weeklyRank) { setState(weeklyRank); return; }
 
-      // Fallback: try local leaderboard (weekly)
+      const monthlyRank = extractRank(monthlyRes.data as any[] ?? [], userId);
+      if (monthlyRank) { setState(monthlyRank); return; }
+
+      // Fallback: local leaderboard
       const { data: fallback } = await supabase.rpc('get_local_leaderboard', {
-        p_gym_id: gymId,
-        p_period: 'weekly',
-        p_limit: 200,
-        p_newcomer_only: false,
+        p_gym_id: gymId, p_period: 'weekly', p_limit: 200, p_newcomer_only: false,
       });
 
-      const ranked = extractRank(fallback as any[] ?? [], userId);
-      setState(ranked ?? DEFAULTS);
+      setState(extractRank(fallback as any[] ?? [], userId) ?? DEFAULTS);
     } catch {
       // Non-critical
     }

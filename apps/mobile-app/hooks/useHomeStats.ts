@@ -80,17 +80,77 @@ export function useHomeStats(gymId: string | null) {
 
     try {
       const now = new Date();
-
-      // ── 1. Today's drops (earned only — excludes refunds) ──
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const { data: todayTx } = await supabase
-        .from('drops_transactions')
-        .select('amount, transaction_type')
-        .eq('user_id', userId)
-        .gte('created_at', todayStart.toISOString())
-        .gt('amount', 0)
-        .in('transaction_type', ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward']);
+      const EARNED_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
+      const dayOfWeek = now.getDay();
+      const monday = new Date(now);
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      monday.setDate(now.getDate() + diffToMonday);
+      monday.setHours(0, 0, 0, 0);
 
+      // Fire ALL queries in parallel — no waterfalls
+      const [todayTxRes, lastSessionRes, profileRes, weekTxRes, rewardsRes, redemptionsRes, membershipRes] = await Promise.all([
+        // 1. Today's drops
+        supabase
+          .from('drops_transactions')
+          .select('amount, transaction_type')
+          .eq('user_id', userId)
+          .gte('created_at', todayStart.toISOString())
+          .gt('amount', 0)
+          .in('transaction_type', EARNED_TYPES),
+        // 2. Last workout
+        supabase
+          .from('sessions')
+          .select('duration_seconds, drops_earned, ended_at')
+          .eq('user_id', userId)
+          .eq('is_active', false)
+          .order('ended_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        // 3. Streak from profile
+        supabase
+          .from('profiles')
+          .select('streak_days')
+          .eq('id', userId)
+          .single(),
+        // 4. Weekly activity
+        supabase
+          .from('drops_transactions')
+          .select('created_at, amount')
+          .eq('user_id', userId)
+          .gt('amount', 0)
+          .gte('created_at', monday.toISOString())
+          .in('transaction_type', EARNED_TYPES),
+        // 5. Rewards (gym-dependent, skipped if no gymId)
+        gymId
+          ? supabase
+              .from('rewards')
+              .select('id, name, price_drops, image_url, reward_type, redemption_limit, stock')
+              .eq('gym_id', gymId)
+              .eq('is_active', true)
+              .order('price_drops', { ascending: true })
+              .limit(20)
+          : Promise.resolve({ data: null }),
+        gymId
+          ? supabase
+              .from('redemptions')
+              .select('reward_id, created_at, status')
+              .eq('user_id', userId)
+              .eq('gym_id', gymId)
+              .in('status', ['pending', 'confirmed'])
+          : Promise.resolve({ data: null }),
+        gymId
+          ? supabase
+              .from('gym_memberships')
+              .select('local_drops_balance')
+              .eq('user_id', userId)
+              .eq('gym_id', gymId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      // Process today's drops
+      const todayTx = todayTxRes.data;
       const CAPPED_TYPES = new Set(['session', 'checkin']);
       let todayCappedDrops = 0;
       let todayBonusDrops = 0;
@@ -104,16 +164,8 @@ export function useHomeStats(gymId: string | null) {
       }
       const todayDrops = todayCappedDrops + todayBonusDrops;
 
-      // ── 2. Last workout ───────────────────────────
-      const { data: lastSession } = await supabase
-        .from('sessions')
-        .select('duration_seconds, drops_earned, ended_at')
-        .eq('user_id', userId)
-        .eq('is_active', false)
-        .order('ended_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
+      // Process last workout
+      const lastSession = lastSessionRes.data;
       const lastWorkout: HomeStats['lastWorkout'] = lastSession
         ? {
             durationSeconds: lastSession.duration_seconds || 0,
@@ -122,58 +174,25 @@ export function useHomeStats(gymId: string | null) {
           }
         : null;
 
-      // ── 3. Streak — use server-computed value (profiles.streak_days) ─
-      // The backend (award_drops + perform_checkin) maintains streak_days
-      // using Belgrade timezone and only counts sessions with drops_earned > 0.
-      // Client-side recomputation was buggy (counted 0-drop sessions).
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('streak_days')
-        .eq('id', userId)
-        .single();
+      // Process streak
+      const streak = profileRes.data?.streak_days ?? 0;
 
-      const streak = profileRow?.streak_days ?? 0;
-
-      // ── 4. Closest reward (excluding already-claimed) ──
+      // Process closest reward
       let closestReward: HomeStats['closestReward'] = null;
       if (gymId) {
-        const [{ data: rewards }, { data: redemptions }, { data: membership }] = await Promise.all([
-          supabase
-            .from('rewards')
-            .select('id, name, price_drops, image_url, reward_type, redemption_limit, stock')
-            .eq('gym_id', gymId)
-            .eq('is_active', true)
-            .order('price_drops', { ascending: true })
-            .limit(20),
-          supabase
-            .from('redemptions')
-            .select('reward_id, created_at, status')
-            .eq('user_id', userId)
-            .eq('gym_id', gymId)
-            .in('status', ['pending', 'confirmed']),
-          supabase
-            .from('gym_memberships')
-            .select('local_drops_balance')
-            .eq('user_id', userId)
-            .eq('gym_id', gymId)
-            .maybeSingle(),
-        ]);
-
-        const freshDrops = membership?.local_drops_balance ?? 0;
+        const rewards = rewardsRes.data;
+        const redemptions = redemptionsRes.data;
+        const freshDrops = (membershipRes.data as any)?.local_drops_balance ?? 0;
 
         if (rewards && rewards.length > 0) {
           const redeemed = redemptions || [];
-
           const available = rewards.filter((r) => {
             if (r.stock !== null && r.stock <= 0) return false;
-
             const limit: string = r.redemption_limit || 'unlimited';
             if (limit === 'unlimited') return true;
-
             const matching = redeemed.filter((rd) => rd.reward_id === r.id);
             if (matching.length === 0) return true;
             if (limit === 'once') return false;
-
             const periodStart = getPeriodStart(limit, now);
             return !matching.some((rd) => new Date(rd.created_at) >= periodStart);
           });
@@ -197,31 +216,16 @@ export function useHomeStats(gymId: string | null) {
         }
       }
 
-      // ── 5. Weekly activity (all drop sources, Mon–Sun) ──────────
+      // Process weekly activity
       const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
-      // Calculate Monday of this week
-      const monday = new Date(now);
-      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      monday.setDate(now.getDate() + diffToMonday);
-      monday.setHours(0, 0, 0, 0);
-
-      const { data: weekTx } = await supabase
-        .from('drops_transactions')
-        .select('created_at, amount')
-        .eq('user_id', userId)
-        .gt('amount', 0)
-        .gte('created_at', monday.toISOString())
-        .in('transaction_type', ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward']);
-
-      // Group by day index (0=Mon, 6=Sun)
+      const weekTx = weekTxRes.data;
       const dailyDrops: number[] = [0, 0, 0, 0, 0, 0, 0];
       if (weekTx) {
         for (const tx of weekTx) {
           if (tx.created_at) {
             const d = new Date(tx.created_at);
-            let idx = d.getDay() - 1; // Mon=0 .. Sat=5
-            if (idx < 0) idx = 6; // Sun=6
+            let idx = d.getDay() - 1;
+            if (idx < 0) idx = 6;
             dailyDrops[idx] += tx.amount || 0;
           }
         }

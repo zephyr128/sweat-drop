@@ -60,6 +60,38 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
     if (!authSession?.user || !gymId) return;
 
     try {
+      const todayStr = getBelgradeDateString(new Date());
+      const weekStart = new Date();
+      const dayOfWeek = weekStart.getDay();
+      const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      weekStart.setDate(weekStart.getDate() - weekOffset);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const EARNED_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      // Fire all 3 queries in parallel
+      const [limitsRes, sessionRes, txRes] = await Promise.all([
+        supabase.rpc('get_user_drop_limits', { p_gym_id: gymId }),
+        supabase
+          .from('sessions')
+          .select('started_at')
+          .eq('user_id', authSession.user.id)
+          .eq('is_active', false)
+          .gt('drops_earned', 0)
+          .gte('started_at', weekStart.toISOString())
+          .order('started_at', { ascending: false })
+          .limit(50),
+        supabase
+          .from('drops_transactions')
+          .select('created_at, amount')
+          .eq('user_id', authSession.user.id)
+          .in('transaction_type', EARNED_TYPES)
+          .gt('amount', 0)
+          .gte('created_at', weekStart.toISOString()),
+      ]);
+
       let maxSessionDrops = 120;
       let maxSession = 4;
       let maxDay = 300;
@@ -67,16 +99,12 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
       let capMode: RewardedSessionsCapMode = 'soft';
       let graceSec = 300;
 
-      const { data: rpcLimits } = await supabase.rpc('get_user_drop_limits', {
-        p_gym_id: gymId,
-      });
-      const rpcRow = Array.isArray(rpcLimits) ? rpcLimits[0] : rpcLimits;
+      const rpcRow = Array.isArray(limitsRes.data) ? limitsRes.data[0] : limitsRes.data;
       if (rpcRow) {
         maxSessionDrops = Math.max(1, Number(rpcRow.max_drops_per_session ?? 120));
         maxSession = Number(rpcRow.max_rewarded_sessions_per_day ?? 4);
         maxDay = Number(rpcRow.max_drops_per_day ?? 300);
         maxWeek = Number(rpcRow.max_drops_per_week ?? 1500);
-        // New fields from refactored RPC (graceful fallback for pre-migration backends)
         if (rpcRow.rewarded_sessions_cap_mode) {
           const mode = String(rpcRow.rewarded_sessions_cap_mode);
           if (mode === 'off' || mode === 'soft' || mode === 'hard') {
@@ -88,44 +116,13 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
         }
       }
 
-      // Fetch today's/week's rewarded session history (for session-count cap)
-      const todayStr = getBelgradeDateString(new Date());
-      const weekStart = new Date();
-      const dayOfWeek = weekStart.getDay();
-      const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      weekStart.setDate(weekStart.getDate() - weekOffset);
-      weekStart.setHours(0, 0, 0, 0);
-      const weekStartStr = weekStart.toISOString().slice(0, 10);
-
-      // Session count (for per-session cap) — still from sessions table
-      const { data: sessionRows } = await supabase
-        .from('sessions')
-        .select('started_at')
-        .eq('user_id', authSession.user.id)
-        .eq('is_active', false)
-        .gt('drops_earned', 0)
-        .gte('started_at', weekStart.toISOString())
-        .order('started_at', { ascending: false })
-        .limit(50);
-
       let rewardedToday = 0;
-      for (const row of sessionRows ?? []) {
+      for (const row of sessionRes.data ?? []) {
         const dateStr = getBelgradeDateString(new Date(row.started_at));
         if (dateStr === todayStr) rewardedToday += 1;
       }
 
-      // Drop totals — from drops_transactions so all sources are included
-      const EARNED_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
-      const { data: txRows } = await supabase
-        .from('drops_transactions')
-        .select('created_at, amount')
-        .eq('user_id', authSession.user.id)
-        .in('transaction_type', EARNED_TYPES)
-        .gt('amount', 0)
-        .gte('created_at', weekStart.toISOString());
+      const txRows = txRes.data;
 
       let dropsToday = 0;
       let dropsWeek = 0;
