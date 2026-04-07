@@ -10,6 +10,7 @@ interface WorkoutControlsProps {
   onFinishPressOut: () => void;
   finishButtonStyle: any;
   finishWorkoutLabel: string;
+  showPauseButton?: boolean;
 }
 
 export default function WorkoutControls({
@@ -19,20 +20,23 @@ export default function WorkoutControls({
   onFinishPressOut,
   finishButtonStyle,
   finishWorkoutLabel,
+  showPauseButton = true,
 }: WorkoutControlsProps) {
   return (
     <View style={styles.controls}>
-      <TouchableOpacity
-        style={[styles.controlButton, styles.pauseButton]}
-        onPress={onPauseResume}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={isPaused ? 'play' : 'pause'}
-          size={24}
-          color={theme.colors.text}
-        />
-      </TouchableOpacity>
+      {showPauseButton && (
+        <TouchableOpacity
+          style={[styles.controlButton, styles.pauseButton]}
+          onPress={onPauseResume}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={isPaused ? 'play' : 'pause'}
+            size={24}
+            color={theme.colors.text}
+          />
+        </TouchableOpacity>
+      )}
 
       <Pressable
         style={styles.finishButtonContainer}

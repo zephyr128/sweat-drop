@@ -300,14 +300,14 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
                     color={isLocked ? 'rgba(255,255,255,0.15)' : categoryColor}
                   />
                 )}
-
-                {/* Lock icon for locked */}
-                {isLocked && (
-                  <View style={styles.coinLock}>
-                    <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.5)" />
-                  </View>
-                )}
               </View>
+
+              {/* Lock icon — positioned on coinOuter (outside overflow:hidden coinInner) */}
+              {isLocked && (
+                <View style={styles.coinLock}>
+                  <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.7)" />
+                </View>
+              )}
             </View>
 
             {/* Earned checkmark */}
@@ -454,12 +454,14 @@ const styles = StyleSheet.create({
   },
   coinLock: {
     position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    bottom: 6,
+    right: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },

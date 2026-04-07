@@ -299,14 +299,6 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         </BlurView>
       </PressableCard>
 
-      {/* Prize hint */}
-      {hasPrizes && (
-        <View style={styles.prizeHint}>
-          <Text style={[styles.prizeHintText, { color: branding.primary }]}>
-            🏆 {t('winPrizesThisWeek')}
-          </Text>
-        </View>
-      )}
     </View>
   );
 };

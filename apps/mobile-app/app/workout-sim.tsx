@@ -766,6 +766,7 @@ export default function WorkoutSimScreen() {
         onFinishPressOut={handleFinishPressOut}
         finishButtonStyle={finishButtonStyle}
         finishWorkoutLabel={t('finishWorkout')}
+        showPauseButton={false}
       />
 
       {/* Finishing overlay */}

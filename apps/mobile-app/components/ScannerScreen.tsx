@@ -1035,6 +1035,14 @@ export function ScannerScreen() {
     };
   });
 
+  const openSettings = () => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
+    } else {
+      Linking.openSettings();
+    }
+  };
+
   if (!hasPermission) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -1052,21 +1060,9 @@ export function ScannerScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.permissionButton, { backgroundColor: branding.primary }]}
-            onPress={checkCameraPermission}
+            onPress={openSettings}
           >
-            <Text style={[styles.permissionButtonText, { color: branding.onPrimary }]}>{t('grantPermission')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.settingsButton, { borderColor: branding.primary }]}
-            onPress={() => {
-              if (Platform.OS === 'ios') {
-                Linking.openURL('app-settings:');
-              } else {
-                Linking.openSettings();
-              }
-            }}
-          >
-            <Text style={[styles.settingsButtonText, { color: branding.primary }]}>{t('openSettings')}</Text>
+            <Text style={[styles.permissionButtonText, { color: branding.onPrimary }]}>{t('openSettings')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

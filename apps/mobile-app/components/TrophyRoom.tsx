@@ -246,9 +246,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       {/* Hero Stats Banner */}
       <Animated.View entering={FadeInDown.delay(80).duration(400)}>
         <View style={styles.heroBanner}>
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
           <LinearGradient
-            colors={[hexToRgba(branding.primary, 0.10), 'transparent']}
+            colors={[hexToRgba(branding.primary, 0.18), 'rgba(255,255,255,0.04)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -275,12 +275,12 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       {/* Search */}
       <Animated.View entering={FadeInDown.delay(160).duration(400)}>
         <View style={styles.searchWrapper}>
-          <View style={[styles.searchBox, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
-            <Ionicons name="search" size={15} color="rgba(255,255,255,0.25)" />
+          <View style={[styles.searchBox, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
+            <Ionicons name="search" size={15} color="rgba(255,255,255,0.45)" />
             <TextInput
               style={styles.searchInput}
               placeholder={t('searchPlaceholder')}
-              placeholderTextColor="rgba(255,255,255,0.2)"
+              placeholderTextColor="rgba(255,255,255,0.35)"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255,255,255,0.15)',
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   heroLabel: {
     ...fontStyles.body,
     fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
+    color: 'rgba(255,255,255,0.5)',
     marginTop: 1,
     letterSpacing: 0.3,
   },
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 14,
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
   },
   searchInput: {
     flex: 1,
