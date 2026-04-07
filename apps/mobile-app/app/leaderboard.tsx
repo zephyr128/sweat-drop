@@ -241,6 +241,7 @@ export default function LeaderboardScreen() {
   const [newcomerOnly, setNewcomerOnly] = useState(false);
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
   const [arenasLoading, setArenasLoading] = useState(false);
+  const [arenasChecked, setArenasChecked] = useState(false);
   const [showPastWinners, setShowPastWinners] = useState(false);
   const [infoSheetVisible, setInfoSheetVisible] = useState(false);
   const [winnerBanner, setWinnerBanner] = useState<{
@@ -352,6 +353,7 @@ export default function LeaderboardScreen() {
       setArenas([]);
     } finally {
       setArenasLoading(false);
+      setArenasChecked(true);
     }
   }, [session?.user?.id]);
 
@@ -366,6 +368,12 @@ export default function LeaderboardScreen() {
       PERIODS_LB.forEach((p) => loadLeaderboard(p));
     }
   }, [session?.user?.id, activeTab, activeGymId, newcomerOnly]);
+
+  // Always load arenas on mount to determine whether to show the top tabs
+  useEffect(() => {
+    if (!session?.user || arenasChecked) return;
+    void loadArenas();
+  }, [session?.user?.id, arenasChecked]);
 
   const getRankDisplay = (rank: number) => {
     if (rank === 1) return { isTop: true };
@@ -675,41 +683,43 @@ export default function LeaderboardScreen() {
 
       <ScreenHeader title={t('title')} />
 
-      {/* Scope tabs — My Gym / Global / Arenas (always at top) */}
-      <View style={styles.scopeRowWrapper}>
-        <View style={styles.scopeRow}>
-          {([
-            { key: 'gym' as TabType, label: t('myGym'), icon: 'location' as const },
-            { key: 'global' as TabType, label: t('global'), icon: 'globe-outline' as const },
-            { key: 'arenas' as TabType, label: t('arenas'), icon: 'trophy' as const },
-          ]).map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[
-                  styles.scopeTab,
-                  isActive && { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.35) },
-                ]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setActiveTab(tab.key);
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={tab.icon}
-                  size={14}
-                  color={isActive ? branding.primary : 'rgba(255,255,255,0.38)'}
-                />
-                <Text style={[styles.scopeTabLabel, isActive && { color: branding.primary }]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+      {/* Scope tabs — hidden when there's only a single gym context and no active arenas */}
+      {(!arenasChecked || arenas.length > 0) && (
+        <View style={styles.scopeRowWrapper}>
+          <View style={styles.scopeRow}>
+            {([
+              { key: 'gym' as TabType, label: t('myGym'), icon: 'location' as const },
+              { key: 'global' as TabType, label: t('global'), icon: 'globe-outline' as const },
+              { key: 'arenas' as TabType, label: t('arenas'), icon: 'trophy' as const },
+            ]).map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.scopeTab,
+                    isActive && { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.35) },
+                  ]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setActiveTab(tab.key);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={tab.icon}
+                    size={14}
+                    color={isActive ? branding.primary : 'rgba(255,255,255,0.38)'}
+                  />
+                  <Text style={[styles.scopeTabLabel, isActive && { color: branding.primary }]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
 
       {activeTab === 'arenas' ? (
         arenasList
