@@ -218,10 +218,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10 - 5,
     borderWidth: 1,
+    // iOS: colored glow via shadow props. Android: elevation is omitted because
+    // it ignores shadowColor and renders a grey material shadow instead.
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.45,
     shadowRadius: 16,
-    elevation: 8,
   },
   badgeCircle: {
     alignItems: 'center',
@@ -266,7 +267,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.4,
     shadowRadius: 3,
-    elevation: 3,
   },
   badgeName: {
     fontSize: 11,

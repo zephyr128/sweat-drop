@@ -73,13 +73,21 @@ if ! command -v adb &> /dev/null; then
   exit 1
 fi
 
-if ! command -v java &> /dev/null; then
+# Resolve JAVA_HOME to a JDK 17+ (required by Gradle 8+)
+# Priority: existing JAVA_HOME → Homebrew openjdk@17 → Android Studio JBR → system default
+if [ -n "$JAVA_HOME" ] && "$JAVA_HOME/bin/java" -version 2>&1 | head -1 | grep -qE '"(1[7-9]|[2-9][0-9])'; then
+  : # existing JAVA_HOME is 17+, keep it
+elif [ -x "/opt/homebrew/opt/openjdk@17/bin/java" ]; then
+  export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+elif [ -x "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java" ]; then
+  export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+elif ! command -v java &> /dev/null; then
   echo -e "${RED}❌ Java not found${NC}"
   echo -e "${YELLOW}   brew install openjdk@17${NC}"
   exit 1
 fi
 
-JAVA_VERSION=$(java -version 2>&1 | head -n 1 | cut -d'"' -f2 | cut -d'.' -f1)
+JAVA_VERSION=$("${JAVA_HOME:-/usr}/bin/java" -version 2>&1 | head -n 1 | cut -d'"' -f2 | cut -d'.' -f1)
 if [ "$JAVA_VERSION" -lt 17 ]; then
   echo -e "${RED}❌ Java 17+ required (found Java $JAVA_VERSION)${NC}"
   echo -e "${YELLOW}   brew install openjdk@17${NC}"
@@ -87,7 +95,7 @@ if [ "$JAVA_VERSION" -lt 17 ]; then
   echo "     export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\""
   exit 1
 fi
-echo -e "${GREEN}✅ Java $JAVA_VERSION${NC}"
+echo -e "${GREEN}✅ Java $JAVA_VERSION — JAVA_HOME=$JAVA_HOME${NC}"
 
 # Step 2 — Install dependencies
 echo -e "\n${BLUE}[2/4] Installing dependencies...${NC}"
@@ -101,7 +109,7 @@ fi
 
 # Step 3 — Check / start device
 echo -e "\n${BLUE}[3/4] Checking for connected devices...${NC}"
-DEVICES=$(adb devices | grep -v "List" | grep "device$" | wc -l | xargs)
+DEVICES=$(adb devices | awk 'NR>1 && $2=="device" {count++} END {print count+0}')
 
 if [ "$DEVICES" -eq 0 ]; then
   echo -e "${YELLOW}⚠️  No devices connected — starting emulator...${NC}"
@@ -131,7 +139,20 @@ fi
 # Step 4 — Build and run
 echo -e "\n${BLUE}[4/4] Building and running...${NC}"
 cd "$ROOT_DIR"
-export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
+
+NODE_BIN=$(which node 2>/dev/null || echo "/usr/local/bin/node")
+export NODE_BINARY="$NODE_BIN"
+echo -e "${GREEN}✅ NODE_BINARY=$NODE_BIN${NC}"
+
+# Expo's autolinking Kotlin plugin calls bare "node" via Gradle's providers.exec.
+# A long-running Gradle daemon may have been started with a PATH that doesn't
+# include node (e.g. from Android Studio). Stop any stale daemon so a fresh one
+# inherits our current PATH.
+GRADLEW="$MOBILE_APP_DIR/android/gradlew"
+if [ -x "$GRADLEW" ]; then
+  "$GRADLEW" --stop >/dev/null 2>&1 || true
+fi
 
 pnpm --filter sweatdrop-mobile-app android
 

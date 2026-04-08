@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -467,11 +467,11 @@ export default function HomeScreen() {
                   { icon: 'time-outline' as const, label: t('statsLast') },
                 ].map((item, i) => (
                   <View key={i} style={es.statPill}>
-                    <BlurView intensity={30} tint="dark" style={es.statPillBlur}>
+                    <PlatformBlur intensity={30} tint="dark" style={es.statPillBlur} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name={item.icon} size={18} color="rgba(255,255,255,0.15)" />
                       <Text style={es.statPillValue}>—</Text>
                       <Text style={es.statPillLabel}>{item.label}</Text>
-                    </BlurView>
+                    </PlatformBlur>
                   </View>
                 ))}
               </View>
@@ -480,7 +480,7 @@ export default function HomeScreen() {
             {/* ─── SECTION 4 — MAIN CTA CARD ─── */}
             <Animated.View entering={FadeInDown.delay(200).duration(500)}>
               <View style={es.ctaCardOuter}>
-                <BlurView intensity={50} tint="dark" style={es.ctaCardBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={es.ctaCardBlur} androidColor="rgba(20,20,30,0.97)">
                   {/* QR icon with glow */}
                   <View style={es.ctaIconWrapper}>
                     <View style={es.ctaIconGlow} />
@@ -517,7 +517,7 @@ export default function HomeScreen() {
                       <Text style={es.stepLabel}>{t('step3')}</Text>
                     </View>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
@@ -528,7 +528,7 @@ export default function HomeScreen() {
                 onPress={() => router.push('/invite-friend')}
                 activeOpacity={0.7}
               >
-                <BlurView intensity={35} tint="dark" style={es.referralBannerBlur}>
+                <PlatformBlur intensity={35} tint="dark" style={es.referralBannerBlur} androidColor="rgba(14,15,26,0.96)">
                   <View style={[es.referralIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
                     <Ionicons name="ticket-outline" size={20} color={branding.primary} />
                   </View>
@@ -537,7 +537,7 @@ export default function HomeScreen() {
                     <Text style={es.referralSub}>{t('referralBanner.subtitle')}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
-                </BlurView>
+                </PlatformBlur>
               </TouchableOpacity>
             </Animated.View>
 
@@ -563,7 +563,7 @@ export default function HomeScreen() {
                           activeOpacity={0.75}
                           onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
                         >
-                          <BlurView intensity={50} tint="dark" style={[es.gymCard, { borderColor: hexToRgba(gymColor, 0.18) }]}>
+                          <PlatformBlur intensity={50} tint="dark" style={[es.gymCard, { borderColor: hexToRgba(gymColor, 0.18) }]} androidColor="rgba(14,14,24,0.97)">
                             {/* Top accent line */}
                             <View style={[es.gymCardAccent, { backgroundColor: hexToRgba(gymColor, 0.5) }]} />
                             <View style={es.gymCardInner}>
@@ -592,7 +592,7 @@ export default function HomeScreen() {
                                 <Text style={[es.gymSelectBtnText, { color: gymColor }]}>{t('viewGym')}</Text>
                               </View>
                             </View>
-                          </BlurView>
+                          </PlatformBlur>
                         </TouchableOpacity>
                       );
                     })}
@@ -620,28 +620,28 @@ export default function HomeScreen() {
                 <Text style={es.previewTitle}>{t('whatsWaiting')}</Text>
                 <View style={es.previewGrid}>
                   <View style={es.previewRow}>
-                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                    <PlatformBlur intensity={30} tint="dark" style={es.previewCard} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name="podium-outline" size={24} color="rgba(255,255,255,0.25)" />
                       <Text style={es.previewCardTitle}>{t('leaderboard')}</Text>
                       <Text style={es.previewCardSub}>{t('leaderboardSub')}</Text>
-                    </BlurView>
-                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                    </PlatformBlur>
+                    <PlatformBlur intensity={30} tint="dark" style={es.previewCard} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name="gift-outline" size={24} color="rgba(255,255,255,0.25)" />
                       <Text style={es.previewCardTitle}>{t('rewards')}</Text>
                       <Text style={es.previewCardSub}>{t('rewardsSub')}</Text>
-                    </BlurView>
+                    </PlatformBlur>
                   </View>
                   <View style={es.previewRow}>
-                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                    <PlatformBlur intensity={30} tint="dark" style={es.previewCard} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name="flame-outline" size={24} color="rgba(255,255,255,0.25)" />
                       <Text style={es.previewCardTitle}>{t('challenges')}</Text>
                       <Text style={es.previewCardSub}>{t('challengesSub')}</Text>
-                    </BlurView>
-                    <BlurView intensity={30} tint="dark" style={es.previewCard}>
+                    </PlatformBlur>
+                    <PlatformBlur intensity={30} tint="dark" style={es.previewCard} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name="trophy-outline" size={24} color="rgba(255,255,255,0.25)" />
                       <Text style={es.previewCardTitle}>{t('arenas')}</Text>
                       <Text style={es.previewCardSub}>{t('arenasSub')}</Text>
-                    </BlurView>
+                    </PlatformBlur>
                   </View>
                 </View>
               </View>
@@ -762,7 +762,6 @@ export default function HomeScreen() {
             totalGymDrops={localDrops}
             size={290}
             focusKey={ringFocusKey}
-            gymName={activeGym?.name}
             onPress={() => router.push('/wallet')}
           />
           {activeGym && (
@@ -792,6 +791,9 @@ export default function HomeScreen() {
           gymName={activeGym?.name ?? ''}
           onCheckinPress={() => router.push('/scan')}
           nextRewardName={homeStats.closestReward?.name ?? null}
+          nextRewardImageUrl={homeStats.closestReward?.imageUrl ?? null}
+          nextRewardPriceDrops={homeStats.closestReward?.priceDrops ?? 0}
+          localDropsBalance={localDrops}
           dropsToNextReward={homeStats.closestReward?.dropsAway ?? 0}
           onRewardPress={() => router.push('/store')}
           nextHappyHour={(() => {
@@ -839,11 +841,6 @@ export default function HomeScreen() {
           )}
 
           {/* ═══════════════════════════════════════════ */}
-          {/* NEXT BADGE — above fold, motivational hook  */}
-          {/* ═══════════════════════════════════════════ */}
-          {isUnlocked && <ProgressWidget />}
-
-          {/* ═══════════════════════════════════════════ */}
           {/* LEADERBOARD PREVIEW                         */}
           {/* ═══════════════════════════════════════════ */}
           <LeaderboardPreview gymId={activeGymId} isUnlocked={isUnlocked} />
@@ -856,7 +853,7 @@ export default function HomeScreen() {
               style={styles.inviteCta}
               onPress={() => router.push('/invite-friend')}
             >
-              <BlurView intensity={50} tint="dark" style={styles.inviteCtaBlur}>
+              <PlatformBlur intensity={50} tint="dark" style={styles.inviteCtaBlur} androidColor="rgba(12,12,22,0.97)">
                 <LinearGradient
                   colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
                   start={{ x: 0, y: 0 }}
@@ -874,7 +871,7 @@ export default function HomeScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
                 </LinearGradient>
-              </BlurView>
+              </PlatformBlur>
             </PressableCard>
           )}
 
@@ -1069,7 +1066,7 @@ export default function HomeScreen() {
                         }}
                         disabled={!isUnlocked}
                       >
-                        <BlurView intensity={40} tint="dark" style={styles.challengeBlur}>
+                        <PlatformBlur intensity={40} tint="dark" style={styles.challengeBlur} androidColor="rgba(12,12,22,0.97)">
                           <LinearGradient
                             colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.07), 'rgba(12,12,22,0.0)']}
                             start={{ x: 0, y: 0 }}
@@ -1155,7 +1152,7 @@ export default function HomeScreen() {
                               </View>
                             </View>
                           </LinearGradient>
-                        </BlurView>
+                        </PlatformBlur>
                       </PressableCard>
                     </View>
                   );
@@ -1168,14 +1165,19 @@ export default function HomeScreen() {
           {/* No Active Challenges — slim empty state */}
           {!challengesLoading && displayedChallenges.length === 0 && activeGymId && (
             <View style={styles.emptyChallengesBanner}>
-              <BlurView intensity={50} tint="dark" style={styles.emptyChallengesBlur}>
+              <PlatformBlur intensity={50} tint="dark" style={styles.emptyChallengesBlur} androidColor="rgba(18,18,28,0.97)">
                 <Ionicons name="trophy-outline" size={20} color={hexToRgba(branding.primary, 0.5)} />
                 <Text style={styles.emptyChallengesText}>
                   {t('noChallenges')}
                 </Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
           )}
+
+          {/* ═══════════════════════════════════════════ */}
+          {/* NEXT BADGE — motivational hook               */}
+          {/* ═══════════════════════════════════════════ */}
+          {isUnlocked && <ProgressWidget />}
 
           {/* ═══════════════════════════════════════════ */}
           {/* SWEAT ARENAS CAROUSEL                       */}
@@ -1231,7 +1233,7 @@ export default function HomeScreen() {
                           ]}
                           onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
                         >
-                          <BlurView intensity={40} tint="dark" style={styles.challengeBlur}>
+                          <PlatformBlur intensity={40} tint="dark" style={styles.challengeBlur} androidColor="rgba(12,12,22,0.97)">
                             <LinearGradient
                               colors={['rgba(255,255,255,0.10)', hexToRgba(arenaPrimary, 0.10), arenaGradientEnd]}
                               start={{ x: 0, y: 0 }}
@@ -1299,7 +1301,7 @@ export default function HomeScreen() {
                                 </View>
                               </View>
                             </LinearGradient>
-                          </BlurView>
+                          </PlatformBlur>
                         </PressableCard>
                       </View>
                     );
@@ -1318,7 +1320,7 @@ export default function HomeScreen() {
                   ]}
                   onPress={() => router.push('/arenas')}
                 >
-                  <BlurView intensity={40} tint="dark" style={styles.arenaEmptyBlur}>
+                  <PlatformBlur intensity={40} tint="dark" style={styles.arenaEmptyBlur} androidColor="rgba(12,12,22,0.97)">
                     <LinearGradient
                       colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.07), 'rgba(12,12,22,0.0)']}
                       start={{ x: 0, y: 0 }}
@@ -1336,7 +1338,7 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
-                  </BlurView>
+                  </PlatformBlur>
                 </PressableCard>
               )}
             </View>
@@ -1363,7 +1365,7 @@ export default function HomeScreen() {
                 activeOpacity={isUnlocked ? 0.9 : 1}
                 disabled={!isUnlocked}
               >
-                <BlurView intensity={50} tint="dark" style={styles.smartCoachBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.smartCoachBlur} androidColor="rgba(18,18,28,0.97)">
                   <LinearGradient
                     colors={[hexToRgba(branding.primary, 0.1), hexToRgba(branding.primary, 0.05), hexToRgba(branding.primary, 0.08)]}
                     start={{ x: 0, y: 0 }}
@@ -1389,7 +1391,7 @@ export default function HomeScreen() {
                       </View>
                     </View>
                   </LinearGradient>
-                </BlurView>
+                </PlatformBlur>
               </TouchableOpacity>
             </View>
           )}
@@ -1405,7 +1407,7 @@ export default function HomeScreen() {
                 onPress={() => router.push('/store')}
                 disabled={!isUnlocked}
               >
-                <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.featureCardBlur} androidColor="rgba(12,12,22,0.97)">
                   <LinearGradient
                     colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
                     start={{ x: 0, y: 0 }}
@@ -1428,7 +1430,7 @@ export default function HomeScreen() {
                     <Text style={[styles.cardAction, { color: branding.primary }]}>{t('viewStore')}</Text>
                     <Ionicons name="arrow-forward" size={16} color={branding.primary} />
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </PressableCard>
             </View>
 
@@ -1439,7 +1441,7 @@ export default function HomeScreen() {
                 onPress={() => router.push('/trophy-room')}
                 disabled={!isUnlocked}
               >
-                <BlurView intensity={50} tint="dark" style={styles.featureCardBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.featureCardBlur} androidColor="rgba(12,12,22,0.97)">
                   <LinearGradient
                     colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
                     start={{ x: 0, y: 0 }}
@@ -1462,7 +1464,7 @@ export default function HomeScreen() {
                     <Text style={[styles.cardAction, { color: branding.primary }]}>{t('viewBadges')}</Text>
                     <Ionicons name="arrow-forward" size={16} color={branding.primary} />
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </PressableCard>
             </View>
           </View>
@@ -2245,7 +2247,6 @@ const es = StyleSheet.create({
     shadowRadius: 20,
     shadowOpacity: 0.4,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
   },
   ctaIconCircle: {
     width: 64,

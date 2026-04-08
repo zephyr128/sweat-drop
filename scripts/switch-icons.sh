@@ -85,6 +85,12 @@ if [ -d "$ANDROID_RES" ] && [ -d "$ANDROID_SRC" ]; then
     SRC_DENSITY="$ANDROID_SRC/$density"
     DST_DENSITY="$ANDROID_RES/$density"
     if [ -d "$SRC_DENSITY" ] && [ -d "$DST_DENSITY" ]; then
+      # For each .png we're about to copy, remove any same-name .webp to
+      # avoid Android's "Duplicate resources" error.
+      for png in "$SRC_DENSITY"/*.png; do
+        base=$(basename "$png" .png)
+        rm -f "$DST_DENSITY/${base}.webp" 2>/dev/null || true
+      done
       cp "$SRC_DENSITY"/*.png "$DST_DENSITY/" 2>/dev/null || true
     fi
   done

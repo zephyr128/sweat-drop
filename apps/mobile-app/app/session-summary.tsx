@@ -1,10 +1,10 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Svg, {
   Circle,
   Defs,
@@ -94,6 +94,7 @@ export default function SessionSummaryScreen() {
   const router = useRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
+  const insets = useSafeAreaInsets();
   const { activeGym } = useTheme();
   const dropLimit = useDropLimitStatus(gymId || null);
   const dropsNum = resolvedDrops ?? parseInt(drops || '0');
@@ -733,7 +734,7 @@ export default function SessionSummaryScreen() {
         {happyHourBreakdown && !wasTrackingOnly && (
           <Animated.View entering={FadeInDown.delay(510).duration(350)}>
             <View style={[styles.glassCard, { borderColor: 'rgba(255,214,0,0.22)' }]}>
-              <BlurView intensity={50} tint="dark" style={styles.glassCardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.glassCardBlur}>
                 <View style={[styles.glassCardIcon, { backgroundColor: 'rgba(255,214,0,0.12)' }]}>
                   <Ionicons name="flash" size={18} color="#FFD700" />
                 </View>
@@ -756,7 +757,7 @@ export default function SessionSummaryScreen() {
                 <View style={[styles.multiplierPill, { backgroundColor: 'rgba(255,214,0,0.12)' }]}>
                   <Text style={styles.multiplierPillText}>x{happyHourBreakdown.multiplier}</Text>
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -765,7 +766,7 @@ export default function SessionSummaryScreen() {
         {wasTrackingOnly && (
           <Animated.View entering={FadeInDown.delay(520).duration(400)}>
             <View style={styles.trackingOnlyCard}>
-              <BlurView intensity={40} tint="dark" style={styles.trackingOnlyCardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={styles.trackingOnlyCardBlur}>
                 <View style={[styles.glassCardIcon, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
                   <Ionicons name="analytics-outline" size={18} color="rgba(255,255,255,0.5)" />
                 </View>
@@ -773,7 +774,7 @@ export default function SessionSummaryScreen() {
                   <Text style={styles.trackingOnlyCardTitle}>{t('summary.trackingOnlyTitle')}</Text>
                   <Text style={styles.trackingOnlyCardBody}>{t('summary.trackingOnlyBody')}</Text>
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -784,7 +785,7 @@ export default function SessionSummaryScreen() {
             <View style={styles.challengeRewardSection}>
               {completedChallenges.map((challenge) => (
                 <View key={challenge.challenge_id} style={[styles.glassCard, { borderColor: 'rgba(76,217,100,0.22)' }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.glassCardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.glassCardBlur}>
                     <View style={[styles.glassCardIcon, { backgroundColor: 'rgba(76,217,100,0.12)' }]}>
                       <Ionicons name="checkmark-circle" size={18} color="#4CD964" />
                     </View>
@@ -796,7 +797,7 @@ export default function SessionSummaryScreen() {
                       <Ionicons name="water" size={11} color="#4CD964" />
                       <Text style={[styles.rewardDropsPillText, { color: '#4CD964' }]}>+{challenge.reward_drops}</Text>
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               ))}
             </View>
@@ -808,7 +809,7 @@ export default function SessionSummaryScreen() {
           <View style={styles.statsRow}>
             {/* Duration */}
             <View style={styles.statPillWrapper}>
-              <BlurView intensity={50} tint="dark" style={styles.statPill}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.statPill}>
                 <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                   <Ionicons name="time-outline" size={16} color={branding.primary} />
                 </View>
@@ -818,12 +819,12 @@ export default function SessionSummaryScreen() {
                   </Text>
                   <Text style={styles.statPillLabel}>{t('summary.duration')}</Text>
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
 
             {/* Streak */}
             <View style={styles.statPillWrapper}>
-              <BlurView intensity={50} tint="dark" style={styles.statPill}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.statPill}>
                 <View style={[styles.statPillIconBg, { backgroundColor: streakDays > 0 ? hexToRgba('#FF6B35', 0.2) : hexToRgba(branding.primary, 0.1) }]}>
                   <Ionicons name="flame" size={16} color={streakDays > 0 ? '#FF6B35' : '#808080'} />
                 </View>
@@ -833,13 +834,13 @@ export default function SessionSummaryScreen() {
                   </Text>
                   <Text style={styles.statPillLabel}>Streak</Text>
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
 
             {/* Rank or Percentile (whichever is available) */}
             {userRank !== null ? (
               <View style={styles.statPillWrapper}>
-                <BlurView intensity={50} tint="dark" style={styles.statPill}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.statPill}>
                   <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
                     <Ionicons
                       name={userRank <= 3 ? 'medal' : 'podium-outline'}
@@ -853,11 +854,11 @@ export default function SessionSummaryScreen() {
                     </Text>
                     <Text style={styles.statPillLabel}>{t('summary.rank') || 'Rang'}</Text>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </View>
             ) : percentile !== null ? (
               <View style={styles.statPillWrapper}>
-                <BlurView intensity={50} tint="dark" style={styles.statPill}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.statPill}>
                   <View style={[styles.statPillIconBg, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                     <Ionicons name="stats-chart-outline" size={16} color={branding.primary} />
                   </View>
@@ -867,7 +868,7 @@ export default function SessionSummaryScreen() {
                     </Text>
                     <Text style={styles.statPillLabel}>{t('summary.today') || 'Danas'}</Text>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </View>
             ) : null}
           </View>
@@ -877,7 +878,7 @@ export default function SessionSummaryScreen() {
         {earnedBadges.length > 0 && (
           <Animated.View entering={FadeInDown.delay(700).duration(400)}>
             <View style={[styles.badgesSection, { borderColor: hexToRgba('#FFD700', 0.22) }]}>
-              <BlurView intensity={50} tint="dark" style={styles.badgesSectionBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.badgesSectionBlur}>
                 <Animated.View style={[styles.badgesHeader, trophyAnimStyle]}>
                   <View style={styles.badgesHeaderIconWrap}>
                     <Ionicons name="trophy" size={18} color="#FFD700" />
@@ -924,7 +925,7 @@ export default function SessionSummaryScreen() {
                     </Animated.View>
                   ))}
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -933,7 +934,7 @@ export default function SessionSummaryScreen() {
         {challengeProgress.length > 0 && !wasTrackingOnly && (
           <Animated.View entering={FadeInDown.delay(850).duration(400)}>
             <View style={[styles.challengeSection, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
-              <BlurView intensity={50} tint="dark" style={styles.challengeSectionBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.challengeSectionBlur}>
               <View style={styles.challengeHeader}>
                 <Ionicons name="flag-outline" size={16} color={branding.primary} />
                 <Text style={styles.challengeSectionTitle}>{t('summary.challengeProgress')}</Text>
@@ -1005,61 +1006,67 @@ export default function SessionSummaryScreen() {
                   </Animated.View>
                 );
               })}
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
 
-        {/* Action Button */}
-        <Animated.View entering={FadeInDown.delay(1000).duration(400)}>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: branding.primary }]}
-            onPress={async () => {
-              try {
-                const { useGymStore } = await import('@/lib/stores/useGymStore');
-                const { useAuthStore } = await import('@/lib/stores/authStore');
-
-                const currentHomeGymId = useGymStore.getState().homeGymId;
-
-                // If user still has no home gym (first workout), use the session's gym
-                if (!currentHomeGymId && gymId) {
-                  log.debug('[SessionSummary] No home gym in store — setting from session:', gymId);
-                  useGymStore.getState().setHomeGymId(gymId);
-                  try {
-                    const { data: { session: authSession } } = await supabase.auth.getSession();
-                    if (authSession?.user) {
-                      await supabase
-                        .from('profiles')
-                        .update({ home_gym_id: gymId })
-                        .eq('id', authSession.user.id);
-                    }
-                  } catch (dbErr) {
-                    log.warn('[SessionSummary] Failed to persist home gym to DB:', dbErr);
-                  }
-                }
-
-                await useAuthStore.getState().refreshProfile();
-
-                const latestProfile = useAuthStore.getState().profile;
-                if (latestProfile?.home_gym_id) {
-                  useGymStore.getState().setHomeGymId(latestProfile.home_gym_id);
-                }
-              } catch (e) {
-                log.warn('[SessionSummary] Failed to sync state:', e);
-              }
-
-              if (router.canDismiss()) {
-                router.dismissAll();
-              } else {
-                router.replace('/home');
-              }
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.buttonText, { color: branding.onPrimary }]}>{t('summary.collectAndClose')}</Text>
-          </TouchableOpacity>
-        </Animated.View>
       </ScrollView>
+
+      {/* ── Fixed bottom bar: Collect & Close ── */}
+      <Animated.View entering={FadeInDown.delay(1000).duration(400)} style={styles.bottomBar}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.bottomBarBlur}>
+          <View style={[styles.bottomBarContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: branding.primary }]}
+              onPress={async () => {
+                try {
+                  const { useGymStore } = await import('@/lib/stores/useGymStore');
+                  const { useAuthStore } = await import('@/lib/stores/authStore');
+
+                  const currentHomeGymId = useGymStore.getState().homeGymId;
+
+                  // If user still has no home gym (first workout), use the session's gym
+                  if (!currentHomeGymId && gymId) {
+                    log.debug('[SessionSummary] No home gym in store — setting from session:', gymId);
+                    useGymStore.getState().setHomeGymId(gymId);
+                    try {
+                      const { data: { session: authSession } } = await supabase.auth.getSession();
+                      if (authSession?.user) {
+                        await supabase
+                          .from('profiles')
+                          .update({ home_gym_id: gymId })
+                          .eq('id', authSession.user.id);
+                      }
+                    } catch (dbErr) {
+                      log.warn('[SessionSummary] Failed to persist home gym to DB:', dbErr);
+                    }
+                  }
+
+                  await useAuthStore.getState().refreshProfile();
+
+                  const latestProfile = useAuthStore.getState().profile;
+                  if (latestProfile?.home_gym_id) {
+                    useGymStore.getState().setHomeGymId(latestProfile.home_gym_id);
+                  }
+                } catch (e) {
+                  log.warn('[SessionSummary] Failed to sync state:', e);
+                }
+
+                if (router.canDismiss()) {
+                  router.dismissAll();
+                } else {
+                  router.replace('/home');
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark-circle" size={20} color={branding.onPrimary} />
+              <Text style={[styles.buttonText, { color: branding.onPrimary }]}>{t('summary.collectAndClose')}</Text>
+            </TouchableOpacity>
+          </View>
+        </PlatformBlur>
+      </Animated.View>
 
       {/* ── Badge Detail Modal (same as TrophyRoom) ── */}
       <BadgeDetailModal
@@ -1091,8 +1098,21 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: theme.spacing.md,
-    paddingBottom: theme.spacing['2xl'],
+    paddingBottom: 120,
     gap: 8,
+  },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  bottomBarBlur: {
+    overflow: 'hidden',
+  },
+  bottomBarContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
   },
   /* Header */
   celebrationHeader: {
@@ -1250,7 +1270,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 30,
-    elevation: 16,
   },
   ringContainer: {
     justifyContent: 'center',
@@ -1543,13 +1562,17 @@ const styles = StyleSheet.create({
   },
   /* Button */
   button: {
-    padding: theme.spacing.lg,
-    borderRadius: theme.borderRadius.xl,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: theme.spacing.sm,
+    justifyContent: 'center',
+    gap: 8,
+    height: 54,
+    borderRadius: 16,
+    marginBottom: theme.spacing.sm,
   },
   buttonText: {
     ...fontStyles.heading,
-    fontSize: 20,
+    fontSize: 17,
+    letterSpacing: 0.3,
   },
 });

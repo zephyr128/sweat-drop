@@ -57,14 +57,18 @@ function StackNavigator() {
         contentStyle: {
           backgroundColor: '#000000',
         },
+        // Default slide animation for all screens — overridden per-screen below.
+        // This eliminates the Android white-flash + material scale transition.
+        animation: 'slide_from_right',
+        animationDuration: 280,
       }}
     >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="index" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen
         name="(onboarding)"
         options={{
           headerShown: false,
-          animation: 'fade' as any,
+          animation: 'fade',
           animationDuration: 300,
           gestureEnabled: false,
         }}
@@ -73,7 +77,7 @@ function StackNavigator() {
         name="home"
         options={{
           headerShown: false,
-          animation: 'fade' as any,
+          animation: 'fade',
           animationDuration: 300,
           gestureEnabled: false,
         }}
@@ -85,7 +89,7 @@ function StackNavigator() {
       <Stack.Screen name="challenges" options={{ headerShown: false }} />
       <Stack.Screen name="challenge-detail" options={{ headerShown: false }} />
       <Stack.Screen name="redemptions" options={{ headerShown: false }} />
-      <Stack.Screen name="gym-detail" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="gym-detail" options={{ headerShown: false }} />
       <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
       <Stack.Screen name="smartcoach" options={{ headerShown: false }} />
       <Stack.Screen name="trophy-room" options={{ headerShown: false }} />
@@ -95,7 +99,9 @@ function StackNavigator() {
         name="scan"
         options={{
           headerShown: false,
-          presentation: 'modal',
+          presentation: 'transparentModal',
+          animation: 'fade',
+          animationDuration: 200,
           gestureEnabled: false,
         }}
       />
@@ -103,13 +109,13 @@ function StackNavigator() {
         name="gym-welcome"
         options={{
           headerShown: false,
-          presentation: 'modal',
+          presentation: 'transparentModal',
           animation: 'fade',
           animationDuration: 400,
           gestureEnabled: false,
         }}
       />
-      <Stack.Screen name="checkin-result" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
+      <Stack.Screen name="checkin-result" options={{ headerShown: false, presentation: 'transparentModal', animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="workout" options={{ headerShown: false }} />
       <Stack.Screen name="workout-sim" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="session-summary" options={{ headerShown: false }} />
@@ -119,7 +125,7 @@ function StackNavigator() {
       <Stack.Screen name="gyms" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
-      <Stack.Screen name="settings" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
       <Stack.Screen name="auth/confirm" options={{ headerShown: false, animation: 'none' }} />

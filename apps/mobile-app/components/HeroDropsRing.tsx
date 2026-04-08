@@ -315,7 +315,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 35,
-    elevation: 18,
+    // elevation omitted: Android ignores shadowColor on elevation and renders
+    // a grey material shadow instead of the colored glow.
   },
   ringContainer: {
     justifyContent: 'center',

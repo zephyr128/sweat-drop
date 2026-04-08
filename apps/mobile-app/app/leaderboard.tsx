@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
@@ -30,6 +30,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 // ── Types (mirrored from backend/types/sweatdrop.ts) ──
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'all_time';
 
@@ -401,7 +402,7 @@ export default function LeaderboardScreen() {
       const fmt = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}`;
       return `${t('weekly')} · ${fmt(start)} - ${fmt(end)}`;
     }
-    const monthName = start.toLocaleDateString(i18n.language === 'sr' ? 'sr-RS' : 'en-US', { month: 'long' });
+    const monthName = fmtDate(start, { month: 'long' });
     return `${t('monthly')} · ${monthName}`;
   };
 
@@ -617,7 +618,7 @@ export default function LeaderboardScreen() {
               onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
               activeOpacity={0.8}
             >
-              <BlurView intensity={50} tint="dark" style={styles.arenaCardBlur}>
+              <PlatformBlur intensity={50} tint="dark" style={styles.arenaCardBlur} androidColor="rgba(12,12,22,0.97)">
                 <LinearGradient
                   colors={[hexToRgba(branding.primary, 0.08), 'rgba(255,255,255,0.02)', 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -654,7 +655,7 @@ export default function LeaderboardScreen() {
                     </View>
                   )}
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </TouchableOpacity>
           );
         })}
@@ -1125,11 +1126,11 @@ export default function LeaderboardScreen() {
 
                 {pageCurrentUserEntry && ps.currentUserRank != null && ps.currentUserRank > 50 && (
                   <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-                    <BlurView intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                    <PlatformBlur intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]} androidColor="rgba(20,20,30,0.97)">
                       <Text style={styles.stickyFooterRank}>#{pageCurrentUserEntry.rank}</Text>
                       <Text style={styles.stickyFooterName}>{pageCurrentUserEntry.username}</Text>
                       <Text style={[styles.scoreLabel, { color: branding.primary }]}>{cleanScore(pageCurrentUserEntry.score_label)}</Text>
-                    </BlurView>
+                    </PlatformBlur>
                   </View>
                 )}
                 {activeTab === 'gym' && p !== 'all_time' && (
@@ -1150,7 +1151,7 @@ export default function LeaderboardScreen() {
                 )}
                 {activeTab === 'gym' && showPastWinners && ps.snapshots.length > 0 && (
                   <View style={[styles.pastWinnersContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                    <BlurView intensity={50} tint="dark" style={[styles.pastWinnersBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                    <PlatformBlur intensity={50} tint="dark" style={[styles.pastWinnersBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]} androidColor="rgba(20,20,30,0.97)">
                       {ps.snapshots.map((snapshot, idx) => {
                         const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
                         const top3 = rankings.filter(r => r.rank <= 3).sort((a, b) => a.rank - b.rank);
@@ -1171,7 +1172,7 @@ export default function LeaderboardScreen() {
                           </View>
                         );
                       })}
-                    </BlurView>
+                    </PlatformBlur>
                   </View>
                 )}
               </>
@@ -1350,7 +1351,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
+    // elevation is intentionally omitted: on Android it ignores shadowColor and
+    // renders a grey material shadow behind the ring, ruining the glow effect.
   },
   podiumAvatarInner: {
     backgroundColor: 'rgba(255,255,255,0.07)',

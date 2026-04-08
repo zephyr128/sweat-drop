@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
@@ -1199,33 +1199,33 @@ export function ScannerScreen() {
         )}
       </View>
 
-      {/* Premium Close Button with BlurView */}
+      {/* Premium Close Button with PlatformBlur */}
       <TouchableOpacity
         style={styles.closeButton}
         onPress={() => router.back()}
         activeOpacity={0.7}
       >
-        <BlurView intensity={80} tint="dark" style={styles.buttonBlur}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.buttonBlur}>
           <View style={styles.buttonBorder} />
           <Ionicons name="close" size={24} color={theme.colors.text} />
-        </BlurView>
+        </PlatformBlur>
       </TouchableOpacity>
 
-      {/* Premium Flash Button with BlurView */}
+      {/* Premium Flash Button with PlatformBlur */}
       {device?.hasTorch && (
         <TouchableOpacity
           style={styles.flashButton}
           onPress={() => setTorchEnabled(!torchEnabled)}
           activeOpacity={0.7}
         >
-          <BlurView intensity={80} tint="dark" style={styles.buttonBlur}>
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.buttonBlur}>
             <View style={styles.buttonBorder} />
             <Ionicons
               name={torchEnabled ? 'flash' : 'flash-outline'}
               size={24}
               color={torchEnabled ? branding.primary : theme.colors.text}
             />
-          </BlurView>
+          </PlatformBlur>
         </TouchableOpacity>
       )}
 
@@ -1527,7 +1527,6 @@ const styles = StyleSheet.create({
     height: 3,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    elevation: 10,
   },
   laserGradient: {
     width: '100%',

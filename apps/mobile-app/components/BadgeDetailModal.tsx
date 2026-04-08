@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   Modal,
+  Platform,
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
@@ -22,12 +23,13 @@ import Animated, {
   runOnJS,
   interpolate,
 } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
 import { UserBadge } from '@/hooks/useUserBadges';
 import { useSession } from '@/hooks/useSession';
 import { supabase } from '@/lib/supabase';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { ShareableBadgeCard, ShareableBadgeData } from './ShareableBadgeCard';
 import { log } from '@/lib/logger';
 
@@ -167,12 +169,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return fmtDate(dateString, { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   // Animated styles
@@ -227,8 +224,10 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
     >
       {/* Backdrop */}
       <Animated.View style={[styles.overlay, backdropAnimStyle]}>
-        <BlurView intensity={40} style={StyleSheet.absoluteFill} tint="dark" />
-        <View style={styles.darkOverlay} />
+        {Platform.OS === 'ios' ? (
+          <PlatformBlur intensity={40} style={StyleSheet.absoluteFill} tint="dark" androidColor="rgba(0,0,0,0.85)" />
+        ) : null}
+        <View style={[styles.darkOverlay, Platform.OS === 'android' && styles.androidBackdrop]} />
       </Animated.View>
 
       {/* Tap-to-close layer + Centered content */}
@@ -416,6 +415,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
+  androidBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.88)',
+  },
   contentLayer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -441,7 +443,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 24,
-    elevation: 12,
   },
   coinInner: {
     borderWidth: 2.5,

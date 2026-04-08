@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
@@ -239,14 +239,16 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         ) : (
           <BackButton />
         )}
-        <Text style={styles.headerTitle}>{t('title')}</Text>
+        <View pointerEvents="none" style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{t('title')}</Text>
+        </View>
         <View style={styles.headerSpacer} />
       </Animated.View>
 
       {/* Hero Stats Banner */}
       <Animated.View entering={FadeInDown.delay(80).duration(400)}>
         <View style={styles.heroBanner}>
-          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
           <LinearGradient
             colors={[hexToRgba(branding.primary, 0.18), 'rgba(255,255,255,0.04)']}
             start={{ x: 0, y: 0 }}
@@ -418,16 +420,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 20,
     ...fontStyles.heading,
     color: theme.colors.text,
-    position: 'absolute',
-    left: 0,
-    right: 0,
     textAlign: 'center',
     letterSpacing: 1,
-    pointerEvents: 'none',
   },
   headerSpacer: {
     width: 40,
