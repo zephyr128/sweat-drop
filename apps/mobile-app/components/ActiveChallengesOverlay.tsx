@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
@@ -30,7 +30,7 @@ export const ActiveChallengesOverlay: React.FC<ActiveChallengesOverlayProps> = (
 
   return (
     <View style={styles.overlay}>
-      <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
+      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
       <LinearGradient
         colors={['rgba(0, 0, 0, 0.95)', 'rgba(10, 14, 26, 0.98)', 'rgba(0, 0, 0, 0.95)']}
         style={StyleSheet.absoluteFill}

@@ -31,11 +31,49 @@ export interface Achievements {
   bestStreak: number;
   happyHoursUsed: number;
   challengesCompleted: number;
+  memberSince: string | null;
+}
+
+export interface PeriodAchievements {
+  bestSessionDrops: number;
+  bestSessionDate: string | null;
+  happyHoursUsed: number;
+  challengesCompleted: number;
 }
 
 export interface WeekDay {
   dayLabel: string;
   active: boolean;
+  drops: number;
+}
+
+// Shape matching WeeklyActivityChart's DayData — used for all activity viz in My Stats
+export interface ChartBarData {
+  day: string;     // label shown below bar (Mon, W1, Jan…)
+  drops: number;
+  isToday: boolean;
+}
+
+export interface WeeklyTrend {
+  weekLabel: string;
+  drops: number;
+  sessions: number;
+  activeDays: number;
+}
+
+export interface TodaySession {
+  id: string;
+  startedAt: string;
+  durationSeconds: number;
+  dropsEarned: number;
+  machineType: string | null;
+}
+
+export interface MonthTrend {
+  month: string;
+  label: string;
+  drops: number;
+  sessions: number;
 }
 
 export interface PeriodStats {
@@ -44,6 +82,10 @@ export interface PeriodStats {
   sessions: number;
   hours: number;
   totalDrops: number;
+  activeDays: number;
+  totalDaysInPeriod: number;
+  avgDropsPerSession: number;
+  periodBestStreak: number; // longest consecutive-day streak within this period only
 }
 
 export interface MyStatsState {
@@ -52,23 +94,45 @@ export interface MyStatsState {
   origin: DropsOrigin;
   weekDays: WeekDay[];
   weekActive: number;
+  weeklyTrend: WeeklyTrend[];
+  todaySessions: TodaySession[];
+  monthlyTrend: MonthTrend[];
+  // Unified bar chart data for WeeklyActivityChart component
+  activityChart: ChartBarData[];    // week: 7 bars (days), month: 4-5 bars (weeks), all: 6 bars (months)
+  activityChartActive: number;      // count of bars with drops > 0
   machines: MachineStats[];
   achievements: Achievements;
+  periodAchievements: PeriodAchievements;
   loading: boolean;
 }
 
+const EMPTY_ACHIEVEMENTS: Achievements = {
+  bestSessionDrops: 0, bestSessionDate: null, bestStreak: 0,
+  happyHoursUsed: 0, challengesCompleted: 0, memberSince: null,
+};
+const EMPTY_PERIOD_ACHIEVEMENTS: PeriodAchievements = {
+  bestSessionDrops: 0, bestSessionDate: null, happyHoursUsed: 0, challengesCompleted: 0,
+};
+
 const EMPTY: MyStatsState = {
-  periodStats: { rank: 0, streak: 0, sessions: 0, hours: 0, totalDrops: 0 },
+  periodStats: { rank: 0, streak: 0, sessions: 0, hours: 0, totalDrops: 0, activeDays: 0, totalDaysInPeriod: 1, avgDropsPerSession: 0, periodBestStreak: 0 },
   breakdown: { today: 0, week: 0, month: 0, all: 0 },
   origin: { session: 0, challenge: 0, checkin: 0, bonus: 0 },
   weekDays: [],
   weekActive: 0,
+  weeklyTrend: [],
+  todaySessions: [],
+  monthlyTrend: [],
+  activityChart: [],
+  activityChartActive: 0,
   machines: [],
-  achievements: { bestSessionDrops: 0, bestSessionDate: null, bestStreak: 0, happyHoursUsed: 0, challengesCompleted: 0 },
+  achievements: EMPTY_ACHIEVEMENTS,
+  periodAchievements: EMPTY_PERIOD_ACHIEVEMENTS,
   loading: true,
 };
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function startOfToday(): Date {
   const d = new Date();
@@ -86,13 +150,11 @@ function startOfMonth(): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-// Cache per gymId+period so switching tabs never blanks content
 const cache = new Map<string, MyStatsState>();
 
 export function useMyStats(gymId: string | null | undefined) {
   const { session } = useSession();
 
-  // Initialize from cache if available
   const [states, setStates] = useState<Record<StatsPeriod, MyStatsState>>(() => ({
     today: { ...EMPTY, loading: false },
     week:  { ...EMPTY, loading: false },
@@ -100,24 +162,23 @@ export function useMyStats(gymId: string | null | undefined) {
     all:   { ...EMPTY, loading: false },
   }));
 
-  // For backwards-compat: expose the active period's state
   const [activePeriod, setActivePeriod] = useState<StatsPeriod>('week');
   const state = states[activePeriod];
 
-  const load = useCallback(async (period: StatsPeriod) => {
+  const load = useCallback(async (period: StatsPeriod, forceRefresh = false) => {
     if (!session?.user) return;
     setActivePeriod(period);
 
     const cacheKey = `${gymId ?? 'global'}:${period}`;
     const cached = cache.get(cacheKey);
 
-    // If we have cached data, show it immediately and refresh silently
-    if (cached) {
+    // Return immediately from cache unless explicitly refreshing
+    if (cached && !forceRefresh) {
       setStates((prev) => ({ ...prev, [period]: { ...cached, loading: false } }));
-    } else {
-      // Only show loading spinner on the very first load of this period
-      setStates((prev) => ({ ...prev, [period]: { ...prev[period], loading: true } }));
+      return;
     }
+
+    setStates((prev) => ({ ...prev, [period]: { ...prev[period], loading: true } }));
     const userId = session.user.id;
 
     try {
@@ -134,7 +195,7 @@ export function useMyStats(gymId: string | null | undefined) {
       // ── 1. Sessions for the selected period ──
       let sessionsQuery = supabase
         .from('sessions')
-        .select('id, duration_seconds, drops_earned, started_at, machine_id, multiplier')
+        .select('id, duration_seconds, drops_earned, started_at, machine_id, multiplier, raw_metrics')
         .eq('user_id', userId)
         .eq('is_active', false)
         .gt('drops_earned', 0);
@@ -147,68 +208,56 @@ export function useMyStats(gymId: string | null | undefined) {
       const totalSeconds = sessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0);
       const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
       const totalDropsSessions = sessions.reduce((s, r) => s + (r.drops_earned ?? 0), 0);
+      const avgDropsPerSession = totalSessions > 0 ? Math.round(totalDropsSessions / totalSessions) : 0;
 
-      // ── 2. Profile for streak ──
+      // ── 2. Profile ──
       const { data: profileRow } = await supabase
         .from('profiles')
         .select('streak_days, total_drops, created_at')
         .eq('id', userId)
         .single();
       const streak = profileRow?.streak_days ?? 0;
+      const memberSince = profileRow?.created_at ?? null;
 
-      // ── 3. Rank (weekly — consistent with leaderboard) ──
+      // ── 3. Rank ──
+      // today  → use weekly rank (no meaningful daily rank exists)
+      // week   → weekly
+      // month  → monthly
+      // all    → all_time
       let rank = 0;
       if (gymId) {
+        const rpcPeriod =
+          period === 'month' ? 'monthly' :
+          period === 'all'   ? 'all_time' :
+          'weekly'; // covers both 'today' and 'week'
         try {
           const { data: lb } = await supabase.rpc('get_leaderboard', {
             p_type: 'gym',
             p_scope_id: gymId,
-            p_period: period === 'all' ? 'weekly' : period === 'month' ? 'monthly' : 'weekly',
+            p_period: rpcPeriod,
             p_limit: 200,
             p_newcomer_only: false,
           });
           if (lb && Array.isArray(lb)) {
             const idx = lb.findIndex((e: any) => e.user_id === userId);
-            rank = idx >= 0 ? idx + 1 : lb.length + 1;
+            rank = idx >= 0 ? idx + 1 : 0; // 0 = not ranked (outside top 200)
           }
         } catch { /* non-critical */ }
       }
 
-      // ── 4. Drops breakdown (all 4 periods at once) ──
+      // ── 4 + 5. Drops origin + period total — single query, single source of truth ──
+      // Using one query for both breakdown and totalDrops guarantees they are always
+      // consistent (origin.session + origin.challenge + origin.checkin + origin.bonus === periodDrops).
+      // limit(5000) avoids the default PostgREST 1000-row cap for heavy users.
       const earnedTypes = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
 
-      const fetchDropsSum = async (from?: string) => {
-        let q = supabase
-          .from('drops_transactions')
-          .select('amount')
-          .eq('user_id', userId)
-          .gt('amount', 0)
-          .in('transaction_type', earnedTypes);
-        if (from) q = q.gte('created_at', from);
-        if (gymId) q = q.eq('gym_id', gymId);
-        const { data } = await q;
-        return data?.reduce((s, t) => s + (t.amount ?? 0), 0) ?? 0;
-      };
-
-      const [dropsToday, dropsWeek, dropsMonth, dropsAll] = await Promise.all([
-        fetchDropsSum(todayISO),
-        fetchDropsSum(weekISO),
-        fetchDropsSum(monthISO),
-        gymId ? fetchDropsSum() : Promise.resolve(profileRow?.total_drops ?? 0),
-      ]);
-
-      const periodDrops =
-        period === 'today' ? dropsToday
-        : period === 'week' ? dropsWeek
-        : period === 'month' ? dropsMonth
-        : dropsAll;
-
-      // ── 5. Drops origin (for current period) ──
       let originQuery = supabase
         .from('drops_transactions')
-        .select('amount, transaction_type')
+        .select('amount, transaction_type, created_at')
         .eq('user_id', userId)
-        .gt('amount', 0);
+        .gt('amount', 0)
+        .in('transaction_type', earnedTypes)
+        .limit(5000);
       if (gymId) originQuery = originQuery.eq('gym_id', gymId);
       if (periodStart) originQuery = originQuery.gte('created_at', periodStart);
       const { data: originRows } = await originQuery;
@@ -223,55 +272,199 @@ export function useMyStats(gymId: string | null | undefined) {
         else origin.bonus += a;
       }
 
-      // ── 6. This-week day activity ──
-      const weekStart = startOfWeek();
-      const { data: weekSessions } = await supabase
-        .from('sessions')
-        .select('started_at')
-        .eq('user_id', userId)
-        .eq('is_active', false)
-        .gt('drops_earned', 0)
-        .gte('started_at', weekStart.toISOString());
+      // Total for this period = sum of all origin buckets (guaranteed consistent)
+      const periodDrops = origin.session + origin.challenge + origin.checkin + origin.bonus;
 
-      const { data: weekCheckins } = await supabase
+      // Breakdown by time window — needed for stats.tsx breakdown card & chart
+      // We still need today/week/month sums for the non-'all' periods shown in breakdown card.
+      // Compute them cheaply from the same originRows (already in memory, no extra DB calls).
+      const sumFrom = (from: Date) => {
+        const fromMs = from.getTime();
+        return (originRows ?? [])
+          .filter(r => r.created_at && new Date(r.created_at).getTime() >= fromMs)
+          .reduce((s, r) => s + (r.amount ?? 0), 0);
+      };
+      const dropsToday = sumFrom(startOfToday());
+      const dropsWeek  = sumFrom(startOfWeek());
+      const dropsMonth = sumFrom(startOfMonth());
+      const dropsAll   = periodDrops;
+
+      // ── 6. Period checkins (for activity viz + activeDays) ──
+      let checkinsQuery = supabase
         .from('gym_checkins')
         .select('checked_in_at')
-        .eq('user_id', userId)
-        .gte('checked_in_at', weekStart.toISOString());
+        .eq('user_id', userId);
+      if (gymId) checkinsQuery = checkinsQuery.eq('gym_id', gymId);
+      if (periodStart) checkinsQuery = checkinsQuery.gte('checked_in_at', periodStart);
+      const { data: periodCheckinRows } = await checkinsQuery;
 
-      const activeDaySet = new Set<number>();
-      for (const s of weekSessions ?? []) {
-        if (s.started_at) {
+      // Active days (distinct dates with session or checkin)
+      const activeDateStrings = new Set<string>();
+      for (const s of sessions) {
+        if (s.started_at) activeDateStrings.add(new Date(s.started_at).toISOString().slice(0, 10));
+      }
+      for (const c of periodCheckinRows ?? []) {
+        if (c.checked_in_at) activeDateStrings.add(new Date(c.checked_in_at).toISOString().slice(0, 10));
+      }
+      const activeDays = activeDateStrings.size;
+
+      // Per-period best streak (consecutive active days within this period's sessions/checkins)
+      const periodBestStreak = (() => {
+        if (activeDateStrings.size === 0) return 0;
+        const sorted = [...activeDateStrings].sort();
+        let best = 1;
+        let cur = 1;
+        for (let i = 1; i < sorted.length; i++) {
+          const prev = new Date(sorted[i - 1]);
+          const curr = new Date(sorted[i]);
+          const diff = (curr.getTime() - prev.getTime()) / 86400000;
+          if (diff === 1) { cur++; best = Math.max(best, cur); }
+          else if (diff > 1) { cur = 1; }
+        }
+        return best;
+      })();
+
+      let totalDaysInPeriod = 1;
+      if (period === 'today') totalDaysInPeriod = 1;
+      else if (period === 'week') totalDaysInPeriod = 7;
+      else if (period === 'month') totalDaysInPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      else {
+        const memberDate = memberSince ? new Date(memberSince) : now;
+        totalDaysInPeriod = Math.max(1, Math.ceil((now.getTime() - memberDate.getTime()) / 86400000));
+      }
+
+      // ── 7. Period-specific visualizations ──
+
+      // Build a per-date map of drops+activity for reuse across all viz
+      const dateDropMap = new Map<string, { drops: number; active: boolean }>();
+      for (const s of sessions) {
+        if (!s.started_at) continue;
+        const key = new Date(s.started_at).toISOString().slice(0, 10);
+        const existing = dateDropMap.get(key) ?? { drops: 0, active: false };
+        existing.drops += s.drops_earned ?? 0;
+        existing.active = true;
+        dateDropMap.set(key, existing);
+      }
+      for (const c of periodCheckinRows ?? []) {
+        if (!c.checked_in_at) continue;
+        const key = new Date(c.checked_in_at).toISOString().slice(0, 10);
+        const existing = dateDropMap.get(key) ?? { drops: 0, active: false };
+        existing.active = true;
+        dateDropMap.set(key, existing);
+      }
+
+      // Week dots (week tab only) — still kept for backward compat if needed
+      let weekDays: WeekDay[] = [];
+      let weekActive = 0;
+      if (period === 'week') {
+        const weekStart = startOfWeek();
+        weekDays = DAY_LABELS.map((label, i) => {
+          const d = new Date(weekStart);
+          d.setDate(d.getDate() + i);
+          const key = d.toISOString().slice(0, 10);
+          const data = dateDropMap.get(key);
+          return { dayLabel: label, active: !!data?.active, drops: data?.drops ?? 0 };
+        });
+        weekActive = weekDays.filter((d) => d.active).length;
+      }
+
+      // ── Unified activity chart data (WeeklyActivityChart format) ──
+      // Always built from drops_transactions (originRows) so chart matches the
+      // totalDrops hero number and origin breakdown — includes all earn types.
+      let activityChart: ChartBarData[] = [];
+      let activityChartActive = 0;
+
+      const txRows = originRows ?? [];
+
+      if (period === 'week') {
+        // 7 bars: Mon–Sun, each = one day's total earned drops
+        const todayStr = startOfToday().toISOString().slice(0, 10);
+        const weekStart = startOfWeek();
+        const dayDropMap = new Map<string, number>();
+        for (const tx of txRows) {
+          if (!tx.created_at) continue;
+          const key = new Date(tx.created_at).toISOString().slice(0, 10);
+          dayDropMap.set(key, (dayDropMap.get(key) ?? 0) + (tx.amount ?? 0));
+        }
+        activityChart = DAY_LABELS.map((label, i) => {
+          const d = new Date(weekStart);
+          d.setDate(d.getDate() + i);
+          const key = d.toISOString().slice(0, 10);
+          return { day: label, drops: dayDropMap.get(key) ?? 0, isToday: key === todayStr };
+        });
+        activityChartActive = activityChart.filter((b) => b.drops > 0).length;
+
+      } else if (period === 'month') {
+        // 4–5 bars: W1–W5, each = total earned drops for that week of the month
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const totalWeeks = Math.ceil(daysInMonth / 7);
+        const weekBuckets = new Map<number, number>();
+        for (const tx of txRows) {
+          if (!tx.created_at) continue;
+          const d = new Date(tx.created_at);
+          // Only include transactions from the current calendar month
+          if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) continue;
+          const weekNum = Math.ceil(d.getDate() / 7);
+          weekBuckets.set(weekNum, (weekBuckets.get(weekNum) ?? 0) + (tx.amount ?? 0));
+        }
+        const todayWeekNum = Math.ceil(now.getDate() / 7);
+        activityChart = [];
+        for (let w = 1; w <= totalWeeks; w++) {
+          activityChart.push({ day: `W${w}`, drops: weekBuckets.get(w) ?? 0, isToday: w === todayWeekNum });
+        }
+        activityChartActive = activityChart.filter((b) => b.drops > 0).length;
+
+      } else if (period === 'all') {
+        // 6 bars: last 6 calendar months, each = total earned drops for that month
+        const monthDropMap = new Map<string, number>();
+        for (const tx of txRows) {
+          if (!tx.created_at) continue;
+          const d = new Date(tx.created_at);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          monthDropMap.set(key, (monthDropMap.get(key) ?? 0) + (tx.amount ?? 0));
+        }
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        activityChart = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          activityChart.push({ day: MONTH_LABELS[d.getMonth()], drops: monthDropMap.get(key) ?? 0, isToday: key === currentMonthKey });
+        }
+        activityChartActive = activityChart.filter((b) => b.drops > 0).length;
+      }
+
+      // Weekly trend (kept for backward compat)
+      let weeklyTrend: WeeklyTrend[] = [];
+
+      // Monthly trend (all tab only — kept for backward compat, uses tx data for consistency)
+      let monthlyTrend: MonthTrend[] = [];
+      if (period === 'all') {
+        const sessionCountMap = new Map<string, number>();
+        for (const s of sessions) {
+          if (!s.started_at) continue;
           const d = new Date(s.started_at);
-          const dow = d.getDay();
-          activeDaySet.add(dow === 0 ? 6 : dow - 1);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          sessionCountMap.set(key, (sessionCountMap.get(key) ?? 0) + 1);
         }
-      }
-      for (const c of weekCheckins ?? []) {
-        if (c.checked_in_at) {
-          const d = new Date(c.checked_in_at);
-          const dow = d.getDay();
-          activeDaySet.add(dow === 0 ? 6 : dow - 1);
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          // drops from chart (already tx-based) — reuse activityChart[5-i]
+          const chartBar = activityChart[5 - i];
+          monthlyTrend.push({ month: key, label: MONTH_LABELS[d.getMonth()], drops: chartBar?.drops ?? 0, sessions: sessionCountMap.get(key) ?? 0 });
         }
       }
 
-      const todayDow = now.getDay();
-      const todayIdx = todayDow === 0 ? 6 : todayDow - 1;
-      const weekDays: WeekDay[] = DAY_LABELS.map((label, i) => ({
-        dayLabel: label,
-        active: activeDaySet.has(i),
-      }));
-
-      // ── 7. Machines breakdown ──
+      // ── 8. Machines breakdown ──
       const machineIds = [...new Set(sessions.filter((s) => s.machine_id).map((s) => s.machine_id!))];
       let machines: MachineStats[] = [];
+      const machineTypeMap = new Map<string, string>();
       if (machineIds.length > 0) {
         const { data: machineRows } = await supabase
           .from('machines')
           .select('id, type')
           .in('id', machineIds);
 
-        const machineTypeMap = new Map<string, string>();
         for (const m of machineRows ?? []) machineTypeMap.set(m.id, m.type);
 
         const grouped = new Map<string, { count: number; totalMin: number }>();
@@ -288,18 +481,99 @@ export function useMyStats(gymId: string | null | undefined) {
           .sort((a, b) => b.sessions - a.sessions);
       }
 
-      // ── 8. Achievements ──
-      const { data: bestSession } = await supabase
-        .from('sessions')
-        .select('drops_earned, started_at')
-        .eq('user_id', userId)
-        .eq('is_active', false)
-        .gt('drops_earned', 0)
-        .order('drops_earned', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Today sessions (today tab only)
+      let todaySessions: TodaySession[] = [];
+      if (period === 'today') {
+        todaySessions = sessions
+          .map(s => ({
+            id: s.id,
+            startedAt: s.started_at!,
+            durationSeconds: s.duration_seconds ?? 0,
+            dropsEarned: s.drops_earned ?? 0,
+            machineType: s.machine_id ? (machineTypeMap.get(s.machine_id) ?? null) : null,
+          }))
+          .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      }
 
-      // Best streak: compute from historical session + checkin dates
+      // ── 9. Period achievements ──
+      const periodBest = sessions.reduce<{ drops: number; date: string | null }>(
+        (best, s) => {
+          const drops = s.drops_earned ?? 0;
+          return drops > best.drops ? { drops, date: s.started_at ?? null } : best;
+        },
+        { drops: 0, date: null },
+      );
+
+      const periodHappyHours = sessions.filter(s => {
+        try {
+          const m = s.raw_metrics as any;
+          return m?.drop_calc_v2?.happy_hour?.active === true;
+        } catch { return false; }
+      }).length;
+
+      let periodChallengesQuery = supabase
+        .from('challenge_progress')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('is_completed', true);
+      if (periodStart) periodChallengesQuery = periodChallengesQuery.gte('completed_at', periodStart);
+      const { data: periodCompletedChallenges } = await periodChallengesQuery;
+      const periodChallengesCompleted = periodCompletedChallenges?.length ?? 0;
+
+      const periodAchievements: PeriodAchievements = {
+        bestSessionDrops: periodBest.drops,
+        bestSessionDate: periodBest.date,
+        happyHoursUsed: periodHappyHours,
+        challengesCompleted: periodChallengesCompleted,
+      };
+
+      // ── 10. Lifetime achievements ──
+      // When viewing 'all', period data IS lifetime — avoid duplicate queries
+      let lifetimeBestDrops: number;
+      let lifetimeBestDate: string | null;
+      let happyHoursUsed: number;
+      let challengesCompleted: number;
+
+      if (period === 'all') {
+        lifetimeBestDrops = periodBest.drops;
+        lifetimeBestDate = periodBest.date;
+        happyHoursUsed = periodHappyHours;
+        challengesCompleted = periodChallengesCompleted;
+      } else {
+        const { data: bestSession } = await supabase
+          .from('sessions')
+          .select('drops_earned, started_at')
+          .eq('user_id', userId)
+          .eq('is_active', false)
+          .gt('drops_earned', 0)
+          .order('drops_earned', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        lifetimeBestDrops = bestSession?.drops_earned ?? 0;
+        lifetimeBestDate = bestSession?.started_at ?? null;
+
+        const { data: hhSessions } = await supabase
+          .from('sessions')
+          .select('id, raw_metrics')
+          .eq('user_id', userId)
+          .eq('is_active', false)
+          .gt('drops_earned', 0);
+        happyHoursUsed = (hhSessions ?? []).filter((s) => {
+          try {
+            const m = s.raw_metrics as any;
+            return m?.drop_calc_v2?.happy_hour?.active === true;
+          } catch { return false; }
+        }).length;
+
+        const { data: allCompleted } = await supabase
+          .from('challenge_progress')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('is_completed', true);
+        challengesCompleted = allCompleted?.length ?? 0;
+      }
+
+      // Best streak (always all-time)
       let bestStreak = streak;
       try {
         const { data: allDates } = await supabase
@@ -336,42 +610,31 @@ export function useMyStats(gymId: string | null | undefined) {
         bestStreak = Math.max(maxStreak, streak);
       } catch { /* non-critical */ }
 
-      // Happy hours used: sessions where raw_metrics.drop_calc_v2.happy_hour.active = true
-      const { data: hhSessions } = await supabase
-        .from('sessions')
-        .select('id, raw_metrics')
-        .eq('user_id', userId)
-        .eq('is_active', false)
-        .gt('drops_earned', 0);
-      const happyHoursUsed = (hhSessions ?? []).filter((s) => {
-        try {
-          const m = s.raw_metrics as any;
-          return m?.drop_calc_v2?.happy_hour?.active === true;
-        } catch { return false; }
-      }).length;
-
-      // Challenges completed
-      const { data: completedChallenges } = await supabase
-        .from('challenge_progress')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('is_completed', true);
-      const challengesCompleted = completedChallenges?.length ?? 0;
-
       const newState: MyStatsState = {
-        periodStats: { rank, streak, sessions: totalSessions, hours: totalHours, totalDrops: periodDrops },
+        periodStats: {
+          rank, streak,
+          sessions: totalSessions, hours: totalHours, totalDrops: periodDrops,
+          activeDays, totalDaysInPeriod, avgDropsPerSession, periodBestStreak,
+        },
         breakdown: { today: dropsToday, week: dropsWeek, month: dropsMonth, all: dropsAll },
         origin,
         weekDays,
-        weekActive: activeDaySet.size,
+        weekActive,
+        weeklyTrend,
+        todaySessions,
+        monthlyTrend,
+        activityChart,
+        activityChartActive,
         machines,
         achievements: {
-          bestSessionDrops: bestSession?.drops_earned ?? 0,
-          bestSessionDate: bestSession?.started_at ?? null,
+          bestSessionDrops: lifetimeBestDrops,
+          bestSessionDate: lifetimeBestDate,
           bestStreak,
           happyHoursUsed,
           challengesCompleted,
+          memberSince,
         },
+        periodAchievements,
         loading: false,
       };
 
@@ -383,5 +646,22 @@ export function useMyStats(gymId: string | null | undefined) {
     }
   }, [session?.user?.id, gymId]);
 
-  return { state, states, load }; // state kept for backwards-compat with other callers
+  // Load only if not already cached — use for lazy background loading of non-active tabs
+  const loadIfNeeded = useCallback((period: StatsPeriod) => {
+    const cacheKey = `${gymId ?? 'global'}:${period}`;
+    if (!cache.has(cacheKey)) load(period);
+  }, [load, gymId]);
+
+  // Force-refresh current period (used by pull-to-refresh)
+  const refresh = useCallback((period: StatsPeriod) => load(period, true), [load]);
+
+  // Invalidate all cache entries for this gymId (e.g. when scope changes)
+  const invalidateCache = useCallback(() => {
+    const prefix = `${gymId ?? 'global'}:`;
+    for (const key of cache.keys()) {
+      if (key.startsWith(prefix)) cache.delete(key);
+    }
+  }, [gymId]);
+
+  return { state, states, load, loadIfNeeded, refresh, invalidateCache };
 }

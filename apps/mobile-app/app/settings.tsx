@@ -16,10 +16,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
@@ -398,7 +399,7 @@ export default function SettingsScreen() {
     const age = Math.floor(
       (Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000),
     );
-    return `${d.toLocaleDateString(i18n.language === 'sr' ? 'sr-RS' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })} (${age})`;
+    return `${fmtDate(d, { day: 'numeric', month: 'short', year: 'numeric' })} (${age})`;
   };
 
   const formatFitnessGoal = (goal: string | null) => {
@@ -477,7 +478,7 @@ export default function SettingsScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.cardBlur}>
                 <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Email row (read-only) */}
                 <View style={styles.row}>
@@ -561,7 +562,7 @@ export default function SettingsScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.2)" />
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 
@@ -591,7 +592,7 @@ export default function SettingsScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.cardBlur}>
                 <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Gender */}
                 <View style={styles.row}>
@@ -680,7 +681,7 @@ export default function SettingsScreen() {
                     <Text style={[styles.rowMissing, { color: theme.colors.textTertiary }]}>—</Text>
                   )}
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 
@@ -697,7 +698,7 @@ export default function SettingsScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.cardBlur}>
                 <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Home gym */}
                 <View style={styles.row}>
@@ -728,7 +729,7 @@ export default function SettingsScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.2)" />
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 
@@ -745,7 +746,7 @@ export default function SettingsScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.cardBlur}>
                 <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Language toggle */}
                 <View style={styles.row}>
@@ -827,7 +828,7 @@ export default function SettingsScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.2)" />
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 
@@ -844,7 +845,7 @@ export default function SettingsScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.cardBlur}>
                 <LinearGradient colors={['rgba(255,255,255,0.05)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Terms of Service */}
                 <TouchableOpacity
@@ -895,7 +896,7 @@ export default function SettingsScreen() {
                   </View>
                   <Ionicons name="open-outline" size={16} color="rgba(255,255,255,0.2)" />
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 
@@ -912,7 +913,7 @@ export default function SettingsScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={42} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.cardBlur}>
                 <LinearGradient colors={['rgba(255,82,82,0.06)','transparent']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {/* Logout */}
                 <TouchableOpacity style={styles.row} onPress={handleLogout} activeOpacity={0.7}>
@@ -944,7 +945,7 @@ export default function SettingsScreen() {
                   </View>
                   {!isDeleting && <Ionicons name="chevron-forward" size={16} color="rgba(255, 82, 82, 0.3)" />}
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 

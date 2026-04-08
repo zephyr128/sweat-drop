@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -107,7 +107,7 @@ export default function ArenaGymBreakdown({
     <Animated.View entering={FadeInDown.delay(delay).duration(400)}>
       <Text style={styles.sectionTitle}>{t('breakdownTitle')}</Text>
       <View style={[styles.card, { borderColor: hexToRgba(primary, 0.15) }]}>
-        <BlurView intensity={50} tint="dark" style={[styles.blur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.blur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
           {/* Total score header */}
           <View style={styles.totalRow}>
             <View style={styles.totalLabelRow}>
@@ -189,7 +189,7 @@ export default function ArenaGymBreakdown({
               {t('breakdownSessions', { count: sorted.reduce((s, e) => s + e.sessions, 0) })}
             </Text>
           </View>
-        </BlurView>
+        </PlatformBlur>
       </View>
     </Animated.View>
   );

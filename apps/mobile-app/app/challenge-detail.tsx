@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -297,7 +297,7 @@ export default function ChallengeDetailScreen() {
             borderRightColor: 'rgba(255,255,255,0.05)',
             borderBottomColor: 'rgba(255,255,255,0.03)',
           }]}>
-            <BlurView intensity={55} tint="dark" style={styles.heroBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={55} tint="dark" style={styles.heroBlur}>
               <LinearGradient
                 colors={isCompleted
                   ? ['rgba(74,222,128,0.08)', 'transparent']
@@ -376,14 +376,14 @@ export default function ChallengeDetailScreen() {
                   <Text style={[styles.infoPillText, { color: theme.colors.text }]}>{t('dropsReward', { count: rewardDrops })}</Text>
                 </View>
               </View>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
         {/* ── Progress card ────────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(200).duration(380)}>
           <View style={[styles.card, { borderTopColor: hexToRgba(branding.primary, 0.2), borderLeftColor: hexToRgba(branding.primary, 0.1), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' }]}>
-            <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
               <LinearGradient
                 colors={[hexToRgba(branding.primary, 0.05), 'transparent']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -451,14 +451,14 @@ export default function ChallengeDetailScreen() {
                   </View>
                 </Animated.View>
               )}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
         {/* ── How to participate ───────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(340).duration(380)}>
           <View style={[styles.card, { borderTopColor: hexToRgba(branding.primary, 0.15), borderLeftColor: hexToRgba(branding.primary, 0.08), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' }]}>
-            <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
 
               <View style={styles.howToHeader}>
                 <View style={[styles.howToIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
@@ -494,7 +494,7 @@ export default function ChallengeDetailScreen() {
                   </Animated.View>
                 ))}
               </View>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 

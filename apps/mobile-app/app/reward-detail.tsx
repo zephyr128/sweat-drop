@@ -7,7 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { log } from '@/lib/logger';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
@@ -17,6 +17,7 @@ import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { classifyRewardClaimError } from '@/lib/security/reward-claim-errors';
 
 type RedemptionLimit = 'unlimited' | 'once' | 'once_per_day' | 'once_per_week' | 'once_per_month';
@@ -390,7 +391,7 @@ export default function RewardDetailScreen() {
         {/* Info Cards */}
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <View style={[styles.infoCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.infoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.infoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               {/* Price */}
               <View style={styles.infoRow}>
                 <View style={styles.infoLabel}>
@@ -496,17 +497,17 @@ export default function RewardDetailScreen() {
                       color: expired ? '#f87171' : notYetAvailable ? '#fbbf24' : theme.colors.text,
                     }]}>
                       {expired
-                        ? t('expiredOn', { date: new Date(reward.available_until).toLocaleDateString() })
+                        ? t('expiredOn', { date: fmtDate(reward.available_until) })
                         : notYetAvailable
-                          ? t('notAvailableYet', { date: new Date(reward.available_from).toLocaleDateString() })
+                          ? t('notAvailableYet', { date: fmtDate(reward.available_from) })
                           : reward.available_until
-                            ? t('availableUntil', { date: new Date(reward.available_until).toLocaleDateString() })
+                            ? t('availableUntil', { date: fmtDate(reward.available_until) })
                             : t('available')}
                     </Text>
                   </View>
                 </>
               )}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -514,7 +515,7 @@ export default function RewardDetailScreen() {
         {redemptionStatus === 'pending' && lastCode && (
           <Animated.View entering={FadeInDown.delay(350).duration(400)}>
             <View style={[styles.codeCard, { borderColor: 'rgba(251, 191, 36, 0.3)' }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.codeBlur, { backgroundColor: 'rgba(30, 25, 15, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.codeBlur, { backgroundColor: 'rgba(30, 25, 15, 0.75)' }]}>
                 <Ionicons name="time-outline" size={32} color="#fbbf24" />
                 <Text style={[styles.codeTitle, { color: '#fbbf24' }]}>{t('pendingPickup')}</Text>
                 <Text style={[styles.codeValue, getNumberStyle(36)]}>
@@ -532,7 +533,7 @@ export default function RewardDetailScreen() {
                   <Ionicons name="copy-outline" size={15} color="#fbbf24" />
                   <Text style={styles.copyCodeText}>Copy code</Text>
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -541,11 +542,11 @@ export default function RewardDetailScreen() {
         {redemptionStatus === 'confirmed' && (
           <Animated.View entering={FadeInDown.delay(350).duration(400)}>
             <View style={[styles.codeCard, { borderColor: 'rgba(74, 222, 128, 0.3)' }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.codeBlur, { backgroundColor: 'rgba(20, 30, 20, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.codeBlur, { backgroundColor: 'rgba(20, 30, 20, 0.75)' }]}>
                 <Ionicons name="checkmark-circle" size={32} color="#4ade80" />
                 <Text style={[styles.codeTitle, { color: '#4ade80' }]}>{t('confirmedClaimed')}</Text>
                 <Text style={styles.codeHint}>{t('confirmedHint')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -556,7 +557,7 @@ export default function RewardDetailScreen() {
 
       {/* Bottom Action Button */}
       <View style={styles.bottomBar}>
-        <BlurView intensity={80} tint="dark" style={styles.bottomBlur}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.bottomBlur}>
           {claimed && redemptionStatus === 'confirmed' ? (
             <View style={[styles.claimedButton, { backgroundColor: 'rgba(74, 222, 128, 0.12)', borderColor: 'rgba(74, 222, 128, 0.3)' }]}>
               <Ionicons name="checkmark-circle" size={22} color="#4ade80" />
@@ -613,7 +614,7 @@ export default function RewardDetailScreen() {
               )}
             </TouchableOpacity>
           )}
-        </BlurView>
+        </PlatformBlur>
       </View>
     </SafeAreaView>
   );

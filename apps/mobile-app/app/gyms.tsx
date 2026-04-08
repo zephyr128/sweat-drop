@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
@@ -256,7 +256,7 @@ export default function GymsScreen() {
       {/* ── Active gym indicator ──────────────── */}
       {activeGym && (
         <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.activeGymBanner}>
-          <BlurView intensity={40} tint="dark" style={styles.activeGymBlur}>
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={styles.activeGymBlur}>
             <View style={styles.activeGymContent}>
               <View style={[styles.activeGymDot, { backgroundColor: branding.primary }]} />
               <Text style={styles.activeGymLabel}>{t('currently_active')}</Text>
@@ -264,7 +264,7 @@ export default function GymsScreen() {
                 {activeGym.name}
               </Text>
             </View>
-          </BlurView>
+          </PlatformBlur>
         </Animated.View>
       )}
 

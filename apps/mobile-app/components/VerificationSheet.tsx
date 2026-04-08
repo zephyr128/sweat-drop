@@ -7,7 +7,7 @@ import {
   Pressable,
   Dimensions,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -125,7 +125,7 @@ export function VerificationSheet({ visible, onClose, brandColor = theme.colors.
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
           <View style={[styles.sheet, { borderColor: hexToRgba(brandColor, 0.20) }]}>
-            <BlurView intensity={55} tint="dark" style={styles.blurContainer}>
+            <PlatformBlur intensity={55} tint="dark" style={styles.blurContainer} androidColor="rgba(12,15,24,0.98)">
               <LinearGradient
                 colors={['rgba(255,255,255,0.10)', hexToRgba(brandColor, 0.06), 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }}
@@ -185,7 +185,7 @@ export function VerificationSheet({ visible, onClose, brandColor = theme.colors.
                   <Text style={[styles.closeButtonText, { color: brandColor }]}>{tCommon('gotIt')}</Text>
                 </Pressable>
               </View>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
       </GestureDetector>

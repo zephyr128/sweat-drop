@@ -12,7 +12,7 @@ import { useAppModal } from '@/lib/stores/useAppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -254,13 +254,13 @@ export default function ChallengeFriendScreen() {
             {listUnavailable && invitations.length === 0 && (
               <Animated.View entering={FadeInDown.delay(80).duration(400)}>
                 <View style={[styles.banner, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                  <BlurView intensity={40} tint="dark" style={styles.bannerBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={styles.bannerBlur}>
                     <Ionicons name="flash-outline" size={22} color={branding.primary} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.bannerTitle}>{t('backendUnavailableTitle')}</Text>
                       <Text style={styles.bannerBody}>{t('challengeBackendUnavailableBody')}</Text>
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -274,7 +274,7 @@ export default function ChallengeFriendScreen() {
             <Animated.View entering={FadeInDown.delay(100).duration(400)}>
               <Text style={styles.sectionLabel}>{t('createSection')}</Text>
               <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-                <BlurView intensity={45} tint="dark" style={styles.cardBlur}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={45} tint="dark" style={styles.cardBlur}>
                   <Text style={styles.fieldLabel}>{t('challengeType')}</Text>
                   <View style={styles.chipRow}>
                     {challengeTypes.map((ct) => {
@@ -442,7 +442,7 @@ export default function ChallengeFriendScreen() {
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
@@ -450,7 +450,7 @@ export default function ChallengeFriendScreen() {
               <Animated.View entering={FadeInDown.delay(180).duration(400)}>
                 <Text style={styles.sectionLabel}>{t('incomingSection')}</Text>
                 <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-                  <BlurView intensity={45} tint="dark" style={styles.cardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={45} tint="dark" style={styles.cardBlur}>
                     {invitations.length === 0 ? (
                       <Text style={styles.empty}>{t('incomingEmpty')}</Text>
                     ) : (
@@ -504,7 +504,7 @@ export default function ChallengeFriendScreen() {
                         </View>
                       ))
                     )}
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}

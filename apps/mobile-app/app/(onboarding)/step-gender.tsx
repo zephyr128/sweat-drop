@@ -9,6 +9,7 @@ import { useOnboardingWizard, type Gender } from '@/hooks/useOnboardingWizard';
 import { useAuthStore } from '@/lib/stores/authStore';
 import OnboardingStepLayout from '@/components/OnboardingStep';
 import { useAppModal } from '@/lib/stores/useAppModal';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -17,6 +18,7 @@ export default function StepGenderScreen() {
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const isEdit = edit === 'true';
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const showModal = useAppModal((s) => s.showModal);
   const { data, setField, setEditMode, initializeFromProfile, skip, reset } = useOnboardingWizard();
   const profile = useAuthStore((s) => s.profile);
@@ -94,8 +96,8 @@ export default function StepGenderScreen() {
               style={[
                 styles.card,
                 selected && {
-                  borderColor: theme.colors.primary,
-                  backgroundColor: hexToRgba(theme.colors.primary, 0.10),
+                  borderColor: branding.primary,
+                  backgroundColor: hexToRgba(branding.primary, 0.10),
                 },
               ]}
               onPress={() => handleSelect(card.value)}

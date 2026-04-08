@@ -110,7 +110,7 @@ export function useHomeStats(gymId: string | null) {
         // 3. Streak from profile
         supabase
           .from('profiles')
-          .select('streak_days')
+          .select('streak_days, last_visit_date')
           .eq('id', userId)
           .single(),
         // 4. Weekly activity
@@ -174,8 +174,23 @@ export function useHomeStats(gymId: string | null) {
           }
         : null;
 
-      // Process streak
-      const streak = profileRes.data?.streak_days ?? 0;
+      // Process streak — validate against last_visit_date to avoid stale values
+      // when the user hasn't worked out for >1 day (backend only updates on workout)
+      const rawStreak = profileRes.data?.streak_days ?? 0;
+      const lastVisitStr = profileRes.data?.last_visit_date;
+      let streak = rawStreak;
+      if (lastVisitStr && rawStreak > 0) {
+        // Use Belgrade timezone to match backend logic (UTC+1/UTC+2)
+        const belgradeTodayStr = new Date().toLocaleDateString('sv-SE', {
+          timeZone: 'Europe/Belgrade',
+        });
+        const belgradeTodayMs = new Date(belgradeTodayStr + 'T00:00:00').getTime();
+        const lastVisitMs = new Date(lastVisitStr + 'T00:00:00').getTime();
+        const diffDays = Math.floor((belgradeTodayMs - lastVisitMs) / (1000 * 60 * 60 * 24));
+        if (diffDays > 1) {
+          streak = 0;
+        }
+      }
 
       // Process closest reward
       let closestReward: HomeStats['closestReward'] = null;

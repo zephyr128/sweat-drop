@@ -8,7 +8,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Gym, GymWorkingHours } from '@/lib/stores/useGymStore';
 import { theme, fontStyles } from '@/lib/theme';
 
@@ -66,7 +66,7 @@ export const GymCard: React.FC<GymCardProps> = ({
           />
         </View>
       ) : (
-        <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
           <CardContent
             gym={gym}
             brandColor={brandColor}
@@ -76,7 +76,7 @@ export const GymCard: React.FC<GymCardProps> = ({
             onDetails={onDetails}
             variant={variant}
           />
-        </BlurView>
+        </PlatformBlur>
       )}
     </View>
   );

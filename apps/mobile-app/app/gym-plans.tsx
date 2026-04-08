@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
@@ -154,7 +154,7 @@ export default function GymPlansScreen() {
                   onPress={() => handlePlanPress(plan.id)}
                   activeOpacity={0.8}
                 >
-                  <BlurView intensity={50} tint="dark" style={[styles.planBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.planBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     <View style={styles.planCardHeader}>
                       <View style={styles.planCardInfo}>
                         <Text style={styles.planName}>{plan.name}</Text>
@@ -200,7 +200,7 @@ export default function GymPlansScreen() {
                       </View>
                       <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </TouchableOpacity>
               </Animated.View>
             ))}

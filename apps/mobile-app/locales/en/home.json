@@ -119,6 +119,7 @@
     "today": "Today",
     "toReward": "{{drops}} to {{reward}}",
     "toUnlock": "to unlock",
+    "canAfford": "Ready to redeem!",
     "dailyMax": "Daily max reached! Streak continues",
     "perfectWeek": "Perfect week!",
     "onFire": "On fire!",
@@ -143,5 +144,6 @@
     "hhToday": "Today",
     "hhTomorrow": "Tomorrow"
   },
+  "nextAward": "Next Award",
   "foundingPartner": "Founding Partner"
 }

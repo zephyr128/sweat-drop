@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -459,7 +459,7 @@ export default function InviteFriendScreen() {
             {noGym && (
               <Animated.View entering={FadeInDown.delay(80).duration(400)}>
                 <View style={[styles.banner, { borderColor: hexToRgba(branding.primary, 0.22) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.bannerBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.bannerBlur}>
                     <View style={[styles.noGymIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
                       <Ionicons name="qr-code-outline" size={22} color={branding.primary} />
                     </View>
@@ -475,7 +475,7 @@ export default function InviteFriendScreen() {
                         </View>
                       )}
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -483,13 +483,13 @@ export default function InviteFriendScreen() {
             {loadError && (
               <Animated.View entering={FadeInDown.delay(80).duration(400)}>
                 <View style={[styles.banner, { borderColor: hexToRgba('#E57373', 0.2) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.bannerBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.bannerBlur}>
                     <Ionicons name="alert-circle-outline" size={22} color="#E57373" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.bannerTitle}>{t('loadError')}</Text>
                       <Text style={styles.bannerBody}>{loadError}</Text>
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -497,13 +497,13 @@ export default function InviteFriendScreen() {
             {fullUnavailable && !loadError && (
               <Animated.View entering={FadeInDown.delay(80).duration(400)}>
                 <View style={[styles.banner, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.bannerBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.bannerBlur}>
                     <Ionicons name="cloud-offline-outline" size={22} color={branding.primary} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.bannerTitle}>{t('backendUnavailableTitle')}</Text>
                       <Text style={styles.bannerBody}>{t('backendUnavailableBody')}</Text>
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -512,7 +512,7 @@ export default function InviteFriendScreen() {
             {receivedReferral && (
               <Animated.View entering={FadeInDown.delay(120).duration(400)}>
                 <View style={[styles.receivedCard, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.receivedCardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.receivedCardBlur}>
                     <LinearGradient
                       colors={[hexToRgba(branding.primary, 0.08), 'transparent']}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -604,7 +604,7 @@ export default function InviteFriendScreen() {
                         </View>
                       ))}
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -612,7 +612,7 @@ export default function InviteFriendScreen() {
             {/* ── Your code + Share CTA ── */}
             <Animated.View entering={FadeInDown.delay(160).duration(400)}>
               <View style={[styles.codeCard, { borderColor: hexToRgba(branding.primary, 0.20) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.codeCardBlur}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.codeCardBlur}>
                   <LinearGradient
                     colors={[hexToRgba(branding.primary, 0.09), hexToRgba(branding.primary, 0.02)]}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -688,14 +688,14 @@ export default function InviteFriendScreen() {
                       )}
                     </View>
                   </LinearGradient>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
             {/* ── Have a friend's code? (prominent secondary CTA) ── */}
             <Animated.View entering={FadeInDown.delay(200).duration(400)}>
               <View style={[styles.applySpotlightCard, { borderColor: hexToRgba(branding.primary, 0.22) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.applySpotlightBlur}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.applySpotlightBlur}>
                   <View style={styles.applySpotlightHeader}>
                     <View style={[styles.applySpotlightIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.16) }]}>
                       <Ionicons name="ticket-outline" size={16} color={branding.primary} />
@@ -747,7 +747,7 @@ export default function InviteFriendScreen() {
                       </TouchableOpacity>
                     </Animated.View>
                   )}
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
@@ -755,7 +755,7 @@ export default function InviteFriendScreen() {
             {monthlyStats && hasEngagedReferrals && (
               <Animated.View entering={FadeInDown.delay(220).duration(400)}>
                 <View style={[styles.capCard, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.capCardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.capCardBlur}>
                     <View style={styles.capRow}>
                       <View style={[styles.capIconCircle, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
                         <Ionicons name="gift" size={18} color={branding.primary} />
@@ -789,7 +789,7 @@ export default function InviteFriendScreen() {
                         />
                       ))}
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -799,7 +799,7 @@ export default function InviteFriendScreen() {
               <Animated.View entering={FadeInDown.delay(250).duration(400)}>
                 <Text style={styles.sectionLabel}>{t('funnelTitle')}</Text>
                 <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.16) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
                     <View style={styles.funnelGrid}>
                       <View style={styles.funnelItem}>
                         <Text style={styles.funnelValue}>{referralKpis.invited}</Text>
@@ -818,7 +818,7 @@ export default function InviteFriendScreen() {
                         <Text style={styles.funnelLabel}>{t('funnelRewarded')}</Text>
                       </View>
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -858,7 +858,7 @@ export default function InviteFriendScreen() {
                   ))}
                 </View>
                 <View style={[styles.card, { borderColor: hexToRgba(branding.primary, 0.18) }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
                     {filteredStatusItems.map((row, idx) => {
                       const { icon, color } = timelineStateForRow(row);
                       return (
@@ -956,7 +956,7 @@ export default function InviteFriendScreen() {
                         <Text style={styles.filterEmptyText}>{t('emptyFiltered')}</Text>
                       </View>
                     )}
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -965,11 +965,11 @@ export default function InviteFriendScreen() {
             {!hasEngagedReferrals && !receivedReferral && statusItems.length === 0 && (
               <Animated.View entering={FadeInDown.delay(320).duration(400)}>
                 <View style={[styles.emptyCard, { borderColor: 'rgba(255,255,255,0.08)' }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.emptyCardBlur}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.emptyCardBlur}>
                     <Ionicons name="people-outline" size={36} color="rgba(255,255,255,0.2)" />
                     <Text style={styles.emptyTitle}>{t('emptyTitle')}</Text>
                     <Text style={styles.emptyDesc}>{t('emptyDesc')}</Text>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -991,7 +991,7 @@ export default function InviteFriendScreen() {
               {learnOpen && (
                 <Animated.View entering={FadeInDown.duration(250)}>
                   <View style={[styles.card, { borderColor: 'rgba(255,255,255,0.08)' }]}>
-                    <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+                    <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
                       <Text style={styles.sectionInlineLabel}>{t('howItWorks')}</Text>
                       {HOW_IT_WORKS_STEPS.map((step, idx) => (
                         <View key={step.titleKey} style={styles.howRow}>
@@ -1044,7 +1044,7 @@ export default function InviteFriendScreen() {
                           )}
                         </View>
                       ))}
-                    </BlurView>
+                    </PlatformBlur>
                   </View>
                 </Animated.View>
               )}

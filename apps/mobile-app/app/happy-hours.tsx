@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, ActivityI
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -14,14 +14,10 @@ import ScreenHeader from '@/components/ScreenHeader';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { log } from '@/lib/logger';
+import { formatTime as fmtTime, formatDate as fmtDate } from '@/lib/utils/formatDate';
 
 function formatTimeShort(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  } catch {
-    return '--:--';
-  }
+  return fmtTime(iso, { hour: '2-digit', minute: '2-digit', hour12: false }) || '--:--';
 }
 
 function formatDateLabel(iso: string, isToday: boolean, t: (k: string) => string): string {
@@ -32,7 +28,7 @@ function formatDateLabel(iso: string, isToday: boolean, t: (k: string) => string
     const tomorrow = new Date(now);
     tomorrow.setDate(now.getDate() + 1);
     if (d.toDateString() === tomorrow.toDateString()) return t('happyHours:tomorrow');
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    return fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' });
   } catch {
     return '';
   }
@@ -122,13 +118,13 @@ export default function HappyHoursScreen() {
           {/* Explanation card */}
           <Animated.View entering={FadeInDown.delay(100).duration(400)}>
             <View style={[styles.explainCard, { borderColor: hexToRgba('#FFD700', 0.18) }]}>
-              <BlurView intensity={50} tint="dark" style={styles.explainBlur}>
+              <PlatformBlur intensity={50} tint="dark" style={styles.explainBlur} androidColor="rgba(18,18,28,0.97)">
                 <View style={styles.explainIconWrap}>
                   <Ionicons name="flash" size={22} color={GOLD} />
                 </View>
                 <Text style={styles.explainTitle}>{t('whatIsTitle')}</Text>
                 <Text style={styles.explainBody}>{t('whatIsBody')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 
@@ -136,7 +132,7 @@ export default function HappyHoursScreen() {
           {liveWindow && (
             <Animated.View entering={FadeInDown.delay(150).duration(400)}>
               <View style={[styles.liveCard, { borderColor: hexToRgba('#FFD700', 0.35) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.liveBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.liveBlur} androidColor="rgba(18,18,28,0.97)">
                   <View style={styles.liveHeader}>
                     <View style={styles.livePill}>
                       <View style={styles.liveDot} />
@@ -148,7 +144,7 @@ export default function HappyHoursScreen() {
                   <Text style={styles.liveTime}>
                     {formatTimeShort(liveWindow.startAt)} – {formatTimeShort(liveWindow.endAt)}
                   </Text>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
           )}
@@ -160,14 +156,14 @@ export default function HappyHoursScreen() {
               <ActivityIndicator color={branding.primary} style={{ marginTop: 24 }} />
             ) : windows.length === 0 ? (
               <View style={[styles.emptyCard, { borderColor: 'rgba(255,255,255,0.08)' }]}>
-                <BlurView intensity={50} tint="dark" style={styles.emptyBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.emptyBlur} androidColor="rgba(18,18,28,0.97)">
                   <Ionicons name="flash-off-outline" size={28} color="rgba(255, 215, 0, 0.3)" />
                   <Text style={styles.emptyText}>{t('noUpcoming')}</Text>
-                </BlurView>
+                </PlatformBlur>
               </View>
             ) : (
               <View style={[styles.listCard, { borderColor: hexToRgba('#FFD700', 0.15) }]}>
-                <BlurView intensity={50} tint="dark" style={styles.listBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.listBlur} androidColor="rgba(18,18,28,0.97)">
                   {windows.map((w, i) => {
                     const isLive = new Date(w.startAt) <= now && new Date(w.endAt) > now;
                     return (
@@ -191,7 +187,7 @@ export default function HappyHoursScreen() {
                       </View>
                     );
                   })}
-                </BlurView>
+                </PlatformBlur>
               </View>
             )}
           </Animated.View>
@@ -200,7 +196,7 @@ export default function HappyHoursScreen() {
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
             <Text style={styles.sectionTitle}>{t('remindersTitle')}</Text>
             <View style={[styles.settingsCard, { borderColor: 'rgba(255,255,255,0.10)' }]}>
-              <BlurView intensity={50} tint="dark" style={styles.settingsBlur}>
+              <PlatformBlur intensity={50} tint="dark" style={styles.settingsBlur} androidColor="rgba(18,18,28,0.97)">
                 {/* Toggle */}
                 <View style={styles.settingsRow}>
                   <View style={[styles.settingsIcon, { backgroundColor: 'rgba(255, 215, 0, 0.10)' }]}>
@@ -250,7 +246,7 @@ export default function HappyHoursScreen() {
                     </View>
                   </>
                 )}
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
 

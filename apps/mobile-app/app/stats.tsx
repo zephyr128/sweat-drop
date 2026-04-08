@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { formatDate as fmtDate, formatTime as fmtTime } from '@/lib/utils/formatDate';
 import {
   View,
   Text,
@@ -8,7 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -19,16 +20,19 @@ import Animated, {
   withTiming,
   cancelAnimation,
   Easing,
+  FadeInDown,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { useBranding } from '@/lib/hooks/useBranding';
-import { fontStyles, getNumberStyle, theme as appTheme, hexToRgba} from '@/lib/theme';
+import { fontStyles, getNumberStyle, theme as appTheme, hexToRgba } from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
 import { SliderTabs } from '@/components/SliderTabs';
+import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
 import { useMyStats, StatsPeriod } from '@/hooks/useMyStats';
+import type { TodaySession, MyStatsState } from '@/hooks/useMyStats';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { useSession } from '@/hooks/useSession';
 import { supabase } from '@/lib/supabase';
@@ -36,9 +40,8 @@ import { supabase } from '@/lib/supabase';
 // ── Animation config ────────────────────────────────────────────────────────
 const NUM_DURATION = 520;
 const BAR_DURATION = 480;
-const NUM_EASING = Easing.out(Easing.cubic);
 
-// ── useCountUp: animates a displayed integer from prev → next value ─────────
+// ── useCountUp ──────────────────────────────────────────────────────────────
 function useCountUp(target: number, format: (n: number) => string): string {
   const displayed = useSharedValue(target);
   const [text, setText] = useState(format(target));
@@ -49,7 +52,6 @@ function useCountUp(target: number, format: (n: number) => string): string {
     prevTarget.current = target;
     if (from === target) return;
 
-    // Run a JS-side interval for cross-platform reliability
     const steps = 24;
     const duration = NUM_DURATION;
     const stepMs = duration / steps;
@@ -70,7 +72,7 @@ function useCountUp(target: number, format: (n: number) => string): string {
   return text;
 }
 
-// ── AnimatedBar: smoothly transitions width% ────────────────────────────────
+// ── AnimatedBar (horizontal) ────────────────────────────────────────────────
 const AnimatedBar: React.FC<{ pct: number; color: string }> = ({ pct, color }) => {
   const width = useSharedValue(0);
 
@@ -92,7 +94,7 @@ const AnimatedBar: React.FC<{ pct: number; color: string }> = ({ pct, color }) =
   );
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function formatNumber(n: number): string {
   if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`;
   if (n >= 1_000) return n.toLocaleString('en-US');
@@ -100,13 +102,7 @@ function formatNumber(n: number): string {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    return `${d.getDate()}. ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
-  } catch {
-    return '—';
-  }
+  return fmtDate(iso, { day: 'numeric', month: 'short' });
 }
 
 function machineLabel(type: string): string {
@@ -167,13 +163,10 @@ const SkeletonBlock: React.FC<{ width?: number | string; height?: number; border
   );
 };
 
-// ── Stats skeleton ─────────────────────────────────────────────────────────
-
 const StatsSkeleton: React.FC<{ primary: string }> = ({ primary }) => (
   <View style={{ gap: 16 }}>
-    {/* Hero */}
     <View style={[skeletonStyles.heroCard]}>
-      <BlurView intensity={50} tint="dark" style={skeletonStyles.heroBlur}>
+      <PlatformBlur intensity={50} tint="dark" style={skeletonStyles.heroBlur} androidColor="rgba(18,18,28,0.97)">
         <LinearGradient
           colors={[hexToRgba(primary, 0.12), hexToRgba(primary, 0.04)]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -182,29 +175,25 @@ const StatsSkeleton: React.FC<{ primary: string }> = ({ primary }) => (
           <SkeletonBlock width={80} height={48} borderRadius={12} style={{ alignSelf: 'center' }} />
           <SkeletonBlock width={100} height={12} borderRadius={6} style={{ alignSelf: 'center', marginTop: 8 }} />
         </LinearGradient>
-      </BlurView>
-    </View>
-
-    {/* Stat row */}
-    <View style={{ flexDirection: 'row', gap: 8 }}>
-      {[0, 1, 2, 3].map((i) => (
-        <View key={i} style={[skeletonStyles.statCard, { borderColor: hexToRgba(primary, 0.12) }]}>
-          <BlurView intensity={50} tint="dark" style={skeletonStyles.statBlur}>
+          </PlatformBlur>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={[skeletonStyles.statCard, { borderColor: hexToRgba(primary, 0.12) }]}>
+              <PlatformBlur intensity={50} tint="dark" style={skeletonStyles.statBlur} androidColor="rgba(18,18,28,0.97)">
             <SkeletonBlock width={22} height={22} borderRadius={11} style={{ alignSelf: 'center' }} />
             <SkeletonBlock width={32} height={14} borderRadius={6} style={{ alignSelf: 'center', marginTop: 6 }} />
             <SkeletonBlock width={40} height={10} borderRadius={5} style={{ alignSelf: 'center', marginTop: 4 }} />
-          </BlurView>
+          </PlatformBlur>
         </View>
       ))}
     </View>
-
-    {/* Section cards */}
     {[120, 100, 80].map((h, i) => (
       <View key={i} style={[skeletonStyles.sectionCard, { borderColor: 'rgba(255,255,255,0.12)' }]}>
-        <BlurView intensity={50} tint="dark" style={skeletonStyles.sectionBlur}>
+        <PlatformBlur intensity={50} tint="dark" style={skeletonStyles.sectionBlur} androidColor="rgba(18,18,28,0.97)">
           <SkeletonBlock width={120} height={13} borderRadius={6} style={{ marginBottom: 14 }} />
           <SkeletonBlock height={h} borderRadius={10} />
-        </BlurView>
+        </PlatformBlur>
       </View>
     ))}
   </View>
@@ -220,25 +209,28 @@ const skeletonStyles = StyleSheet.create({
   sectionBlur: { padding: 16, backgroundColor: GLASS_BG, borderRadius: 16, overflow: 'hidden' },
 });
 
-// ── Per-period page — stays mounted, animates numbers in-place ─────────────
+// ── Per-period page ─────────────────────────────────────────────────────────
 
 interface PeriodPageProps {
   p: StatsPeriod;
-  periodState: import('@/hooks/useMyStats').MyStatsState;
+  periodState: MyStatsState;
   branding: { primary: string };
   t: TFunction<'stats'>;
 }
 
-const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => {
-  const { periodStats, origin, weekDays, weekActive, machines, achievements } = periodState;
+const PeriodPage: React.FC<PeriodPageProps> = ({ p, periodState, branding, t }) => {
+  const {
+    periodStats, origin,
+    todaySessions, activityChart, activityChartActive,
+    machines, achievements, periodAchievements,
+  } = periodState;
   const isLoading = periodState.loading && periodStats.totalDrops === 0;
 
   const originTotal = origin.session + origin.challenge + origin.checkin + origin.bonus;
   const originPct = (val: number) => (originTotal > 0 ? Math.round((val / originTotal) * 100) : 0);
 
+  // Animated values
   const heroText           = useCountUp(periodStats.totalDrops, formatNumber);
-  const rankText           = useCountUp(periodStats.rank,       (n) => n > 0 ? `#${n}` : '—');
-  const streakText         = useCountUp(periodStats.streak,     (n) => n > 0 ? `${n}d` : '—');
   const sessionsText       = useCountUp(periodStats.sessions,   (n) => n > 0 ? String(n) : '—');
   const hoursText          = useCountUp(periodStats.hours,      (n) => n > 0 ? `${n}h` : '—');
   const sessionCountText   = useCountUp(origin.session,         formatNumber);
@@ -246,15 +238,50 @@ const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => 
   const checkinCountText   = useCountUp(origin.checkin,         formatNumber);
   const bonusCountText     = useCountUp(origin.bonus,           formatNumber);
 
+  // Active days for week/month/all — formatted as X/total
+  const activeDaysText = useCountUp(
+    periodStats.activeDays,
+    (n) => `${n}/${periodStats.totalDaysInPeriod}`,
+  );
+
+  const rankText    = useCountUp(periodStats.rank, (n) => n > 0 ? `#${n}` : '—');
+  const avgText     = useCountUp(periodStats.avgDropsPerSession, (n) => n > 0 ? String(n) : '—');
+
   if (isLoading) {
     return <StatsSkeleton primary={branding.primary} />;
   }
+
+  // Build the stat row cards — all use branding.primary accent for visual consistency
+  type StatCard = { icon: React.ComponentProps<typeof Ionicons>['name']; value: string; label: string };
+  const statCards: StatCard[] =
+    p === 'today'
+      ? [
+          { icon: 'podium-outline',   value: rankText,       label: t('rank')         },
+          { icon: 'flash-outline',    value: avgText,        label: t('avgPerSession') },
+          { icon: 'barbell-outline',  value: sessionsText,   label: t('sessions')     },
+          { icon: 'time-outline',     value: hoursText,      label: t('time')         },
+        ]
+      : [
+          { icon: 'podium-outline',   value: rankText,       label: t('rank')         },
+          { icon: 'calendar-outline', value: activeDaysText, label: t('activeDays')   },
+          { icon: 'barbell-outline',  value: sessionsText,   label: t('sessions')     },
+          { icon: 'time-outline',     value: hoursText,      label: t('time')         },
+        ];
+
+  const hasOrigin = originTotal > 0;
+  // Show period highlights only for scoped periods — on 'all', Personal Records already shows lifetime data
+  const showBestStreak = p !== 'today' && periodStats.periodBestStreak > 0;
+  const hasHighlights =
+    periodAchievements.bestSessionDrops > 0
+    || periodAchievements.happyHoursUsed > 0
+    || periodAchievements.challengesCompleted > 0
+    || showBestStreak;
 
   return (
     <>
       {/* ── Hero card ── */}
       <View style={[styles.heroCardOuter, { borderTopColor: hexToRgba(branding.primary, 0.40) }]}>
-        <BlurView intensity={50} tint="dark" style={styles.heroCardBlur}>
+        <PlatformBlur intensity={50} tint="dark" style={styles.heroCardBlur} androidColor="rgba(18,18,28,0.97)">
           <LinearGradient
             colors={[hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -265,39 +292,34 @@ const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => 
             </Text>
             <Text style={styles.heroLabel}>{t('totalDrops')}</Text>
           </LinearGradient>
-        </BlurView>
+        </PlatformBlur>
       </View>
 
-      {/* ── 4-stat row ── */}
+      {/* ── Stat row (period-contextual) ── */}
       <View style={styles.statRow}>
-        {([
-          { icon: 'podium-outline' as const,  value: rankText,     label: t('rank'),     accent: branding.primary },
-          { icon: 'flame-outline' as const,   value: streakText,   label: t('streak'),   accent: '#FF6B00' },
-          { icon: 'barbell-outline' as const, value: sessionsText, label: t('sessions'), accent: branding.primary },
-          { icon: 'time-outline' as const,    value: hoursText,    label: t('time'),     accent: branding.primary },
-        ]).map((s, i) => (
-          <View key={i} style={[styles.statCardOuter, { borderTopColor: hexToRgba(s.accent, 0.30) }]}>
-            <BlurView intensity={50} tint="dark" style={styles.statCardBlur}>
+        {statCards.map((s, i) => (
+          <View key={i} style={[styles.statCardOuter, { borderTopColor: hexToRgba(branding.primary, 0.30) }]}>
+            <PlatformBlur intensity={50} tint="dark" style={styles.statCardBlur} androidColor="rgba(18,18,28,0.97)">
               <LinearGradient
-                colors={[hexToRgba(s.accent, 0.08), 'rgba(255,255,255,0.01)']}
+                colors={[hexToRgba(branding.primary, 0.08), 'rgba(255,255,255,0.01)']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={styles.statCardGradient}
               >
-                <Ionicons name={s.icon} size={17} color={s.accent} />
+                <Ionicons name={s.icon} size={17} color={branding.primary} />
                 <Text style={[styles.statValue, getNumberStyle(16), { color: '#FFFFFF' }]}>{s.value}</Text>
                 <Text style={styles.statLabel}>{s.label}</Text>
               </LinearGradient>
-            </BlurView>
+            </PlatformBlur>
           </View>
         ))}
       </View>
 
       {/* ── Drops Origin ── */}
-      {originTotal > 0 && (
+      {hasOrigin && (
         <View>
           <Text style={styles.sectionTitle}>{t('dropsOrigin')}</Text>
           <View style={styles.sectionCardOuter}>
-            <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
+            <PlatformBlur intensity={50} tint="dark" style={styles.sectionCardBlur} androidColor="rgba(18,18,28,0.97)">
               {([
                 { key: 'workout',    pct: originPct(origin.session),   countText: sessionCountText,   icon: 'barbell-outline' as const, color: branding.primary },
                 { key: 'challenges', pct: originPct(origin.challenge), countText: challengeCountText, icon: 'trophy-outline' as const,  color: '#FFD700' },
@@ -322,45 +344,47 @@ const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => 
                   <Text style={[styles.originPct, getNumberStyle(11)]}>{row.pct}%</Text>
                 </View>
               ))}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </View>
       )}
 
-      {/* ── Streak / This week ── */}
-      {weekDays.length > 0 && (
-        <View>
-          <Text style={styles.sectionTitle}>{t('streakHistory')}</Text>
-          <View style={styles.sectionCardOuter}>
-            <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-              <View style={styles.weekHeaderRow}>
-                <Text style={styles.weekSummary}>{t('thisWeek')}</Text>
-                <Text style={[styles.weekActivePill, { color: branding.primary }]}>
-                  {weekActive}/7 {t('days')}
-                </Text>
-              </View>
-              <View style={styles.weekRow}>
-                {weekDays.map((d, i) => (
-                  <View key={i} style={styles.weekDayCol}>
-                    <View
-                      style={[
-                        styles.weekDayDot,
-                        d.active
-                          ? { backgroundColor: branding.primary, borderColor: 'transparent' }
-                          : { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.12)' },
-                      ]}
-                    >
-                      {d.active && <Ionicons name="checkmark" size={13} color="#000" />}
-                    </View>
-                    <Text style={[styles.weekDayLabel, d.active && { color: branding.primary }]}>
-                      {d.dayLabel}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </BlurView>
-          </View>
-        </View>
+      {/* ── Activity Visualization (period-specific) ── */}
+      {p === 'today' && (
+        <TodayTimeline sessions={todaySessions} branding={branding} t={t} />
+      )}
+      {p === 'week' && activityChart.length > 0 && (
+        <WeeklyActivityChart
+          data={activityChart}
+          activeDays={activityChartActive}
+          totalSlots={7}
+          brandPrimary={branding.primary}
+          title={t('thisWeek')}
+          activeSuffix={t('days')}
+          showDropLabels
+        />
+      )}
+      {p === 'month' && activityChart.length > 0 && (
+        <WeeklyActivityChart
+          data={activityChart}
+          activeDays={activityChartActive}
+          totalSlots={activityChart.length}
+          brandPrimary={branding.primary}
+          title={t('monthActivity')}
+          activeSuffix={t('weeks')}
+          showDropLabels
+        />
+      )}
+      {p === 'all' && activityChart.length > 0 && (
+        <WeeklyActivityChart
+          data={activityChart}
+          activeDays={activityChartActive}
+          totalSlots={6}
+          brandPrimary={branding.primary}
+          title={t('monthlyTrend')}
+          activeSuffix={t('months')}
+          showDropLabels
+        />
       )}
 
       {/* ── Machines ── */}
@@ -368,7 +392,7 @@ const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => 
         <View>
           <Text style={styles.sectionTitle}>{t('machines')}</Text>
           <View style={styles.sectionCardOuter}>
-            <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
+            <PlatformBlur intensity={50} tint="dark" style={styles.sectionCardBlur} androidColor="rgba(18,18,28,0.97)">
               {machines.map((m, i) => (
                 <View
                   key={i}
@@ -388,66 +412,143 @@ const PeriodPage: React.FC<PeriodPageProps> = ({ periodState, branding, t }) => 
                   </View>
                 </View>
               ))}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </View>
       )}
 
-      {/* ── Achievements ── */}
-      <View>
-        <Text style={styles.sectionTitle}>{t('achievements')}</Text>
-        <View style={styles.sectionCardOuter}>
-          <BlurView intensity={50} tint="dark" style={styles.sectionCardBlur}>
-            {([
-              {
-                icon: 'podium' as const,
-                color: '#FFD700',
-                label: t('bestSession'),
-                value: achievements.bestSessionDrops > 0
-                  ? `${achievements.bestSessionDrops} drops (${formatDate(achievements.bestSessionDate)})`
-                  : '—',
-              },
-              {
-                icon: 'flame' as const,
-                color: '#FF6B00',
-                label: t('bestStreak'),
-                value: achievements.bestStreak > 0 ? `${achievements.bestStreak} ${t('days')}` : '—',
-              },
-              {
-                icon: 'flash' as const,
-                color: '#FFD700',
-                label: t('happyHours'),
-                value: achievements.happyHoursUsed > 0 ? `${achievements.happyHoursUsed} ${t('used')}` : '—',
-              },
-              {
-                icon: 'trophy' as const,
-                color: '#C0C0C0',
-                label: t('challengesDone'),
-                value: achievements.challengesCompleted > 0 ? `${achievements.challengesCompleted} ${t('completed')}` : '—',
-              },
-            ]).map((a, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.achieveRow,
-                  i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
-                ]}
-              >
-                <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba(a.color, 0.12) }]}>
-                  <Ionicons name={a.icon} size={15} color={a.color} />
-                </View>
-                <Text style={styles.achieveLabel}>{a.label}</Text>
-                <Text style={[styles.achieveValue, getNumberStyle(13)]}>{a.value}</Text>
-              </View>
-            ))}
-          </BlurView>
+      {/* ── Highlights (all periods) ── */}
+      {hasHighlights && (
+        <View>
+          <Text style={styles.sectionTitle}>{t('periodHighlights')}</Text>
+          <View style={styles.sectionCardOuter}>
+            <PlatformBlur intensity={50} tint="dark" style={styles.sectionCardBlur} androidColor="rgba(18,18,28,0.97)">
+              {(() => {
+                const rows: React.ReactNode[] = [];
+                let idx = 0;
+
+                if (periodAchievements.bestSessionDrops > 0) {
+                  rows.push(
+                    <View key="bestSession" style={[styles.achieveRow, idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' }]}>
+                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
+                        <Ionicons name="podium" size={15} color="#FFD700" />
+                      </View>
+                      <Text style={styles.achieveLabel}>{t('bestSession')}</Text>
+                      <Text style={[styles.achieveValue, getNumberStyle(13)]}>
+                        {periodAchievements.bestSessionDrops} {t('drops')}
+                      </Text>
+                    </View>
+                  );
+                  idx++;
+                }
+
+                if (periodAchievements.happyHoursUsed > 0) {
+                  rows.push(
+                    <View key="happyHours" style={[styles.achieveRow, idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' }]}>
+                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
+                        <Ionicons name="flash" size={15} color="#FFD700" />
+                      </View>
+                      <Text style={styles.achieveLabel}>{t('happyHours')}</Text>
+                      <Text style={[styles.achieveValue, getNumberStyle(13)]}>
+                        {periodAchievements.happyHoursUsed} {t('used')}
+                      </Text>
+                    </View>
+                  );
+                  idx++;
+                }
+
+                if (periodAchievements.challengesCompleted > 0) {
+                  rows.push(
+                    <View key="challenges" style={[styles.achieveRow, idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' }]}>
+                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba('#C0C0C0', 0.12) }]}>
+                        <Ionicons name="trophy" size={15} color="#C0C0C0" />
+                      </View>
+                      <Text style={styles.achieveLabel}>{t('challengesDone')}</Text>
+                      <Text style={[styles.achieveValue, getNumberStyle(13)]}>
+                        {periodAchievements.challengesCompleted} {t('completed')}
+                      </Text>
+                    </View>
+                  );
+                  idx++;
+                }
+
+                if (showBestStreak) {
+                  rows.push(
+                    <View key="bestStreak" style={[styles.achieveRow, idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' }]}>
+                      <View style={[styles.achieveIconWrap, { backgroundColor: hexToRgba('#FF6B00', 0.12) }]}>
+                        <Ionicons name="flame" size={15} color="#FF6B00" />
+                      </View>
+                      <Text style={styles.achieveLabel}>{t('bestStreak')}</Text>
+                      <Text style={[styles.achieveValue, getNumberStyle(13), { color: '#FF6B00' }]}>
+                        {periodStats.periodBestStreak} {t('days')}
+                      </Text>
+                    </View>
+                  );
+                }
+
+                return rows;
+              })()}
+            </PlatformBlur>
+          </View>
         </View>
-      </View>
+      )}
     </>
   );
 };
 
-// ── Main screen ────────────────────────────────────────────────────────────
+// ── Today Timeline ──────────────────────────────────────────────────────────
+
+const TodayTimeline: React.FC<{
+  sessions: TodaySession[];
+  branding: { primary: string };
+  t: TFunction<'stats'>;
+}> = ({ sessions, branding, t }) => {
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>{t('todaySessions')}</Text>
+      <View style={styles.sectionCardOuter}>
+        <PlatformBlur intensity={50} tint="dark" style={styles.sectionCardBlur} androidColor="rgba(18,18,28,0.97)">
+          {sessions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="fitness-outline" size={32} color="rgba(255,255,255,0.15)" />
+              <Text style={styles.emptyStateText}>{t('noSessionsToday')}</Text>
+            </View>
+          ) : (
+            sessions.map((s, i) => {
+              const time = fmtTime(s.startedAt, { hour: '2-digit', minute: '2-digit' });
+              const mins = Math.round(s.durationSeconds / 60);
+              return (
+                <Animated.View
+                  key={s.id}
+                  entering={FadeInDown.delay(60 * i).duration(300)}
+                  style={[
+                    styles.timelineRow,
+                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
+                  ]}
+                >
+                  <Text style={styles.timelineTime}>{time}</Text>
+                  <View style={styles.timelineDot}>
+                    <View style={[styles.timelineDotInner, { backgroundColor: branding.primary }]} />
+                  </View>
+                  <View style={styles.timelineContent}>
+                    <Text style={[styles.timelineDrops, { color: branding.primary }]}>
+                      {s.dropsEarned} {t('drops')}
+                    </Text>
+                    <Text style={styles.timelineMeta}>
+                      {mins} min{s.machineType ? ` · ${machineLabel(s.machineType)}` : ''}
+                    </Text>
+                  </View>
+                </Animated.View>
+              );
+            })
+          )}
+        </PlatformBlur>
+      </View>
+    </View>
+  );
+};
+
+// ── Main screen ─────────────────────────────────────────────────────────────
 
 export default function StatsScreen() {
   const { t } = useTranslation('stats');
@@ -471,7 +572,7 @@ export default function StatsScreen() {
   type ScopeType = 'gym' | 'global';
   const [scope, setScope] = useState<ScopeType>('gym');
   const selectedGymId = scope === 'gym' ? activeGymId : null;
-  const { states, load } = useMyStats(selectedGymId);
+  const { states, load, loadIfNeeded, refresh, invalidateCache } = useMyStats(selectedGymId);
 
   const { period: periodParam } = useLocalSearchParams<{ period?: string }>();
   const initialPeriod: StatsPeriod =
@@ -481,28 +582,33 @@ export default function StatsScreen() {
   const [period, setPeriod] = useState<StatsPeriod>(initialPeriod);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Switch tab: load from cache instantly, then lazy-load remaining tabs in background
   const handlePeriodChange = useCallback((p: StatsPeriod) => {
     setPeriod(p);
-    load(p);
-  }, [load]);
+    loadIfNeeded(p);
+  }, [loadIfNeeded]);
 
-  // On focus, reload just the active period
-  useFocusEffect(useCallback(() => { load(period); }, []));
+  // On focus: only load active period if not cached — avoids re-fetches on every tab switch
+  useFocusEffect(useCallback(() => {
+    loadIfNeeded(period);
+  }, [period, loadIfNeeded]));
 
-  // Preload all periods on first mount
+  // When scope changes: invalidate cache then reload active period first, lazy-load rest
   useEffect(() => {
-    PERIODS.forEach((p) => load(p));
-  }, [scope]);
+    invalidateCache();
+    load(period);
+    PERIODS.filter((p) => p !== period).forEach((p) => loadIfNeeded(p));
+  }, [scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pull-to-refresh: force-refresh only the visible period
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load(period);
+    await refresh(period);
     setRefreshing(false);
-  }, [period, load]);
+  }, [period, refresh]);
 
   return (
     <View style={styles.container}>
-      {/* Background — bleeds under status bar */}
       <LinearGradient
         colors={['#080808', '#0A0E1A', '#080808']}
         start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
@@ -511,7 +617,6 @@ export default function StatsScreen() {
 
       <ScreenHeader title={t('title')} />
 
-      {/* Scope Toggle: My Gym | Global */}
       {gymCount > 1 && (
         <View style={styles.scopeRow}>
           {(['gym', 'global'] as ScopeType[]).map((s) => {
@@ -537,7 +642,6 @@ export default function StatsScreen() {
         </View>
       )}
 
-      {/* Period TabView — pages stay mounted, data updates in background */}
       <View style={styles.tabsWrapper}>
         <SliderTabs
           tabs={PERIODS.map((p) => ({ key: p, label: t(`period.${p}`) }))}
@@ -570,7 +674,7 @@ export default function StatsScreen() {
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────
+// ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -612,7 +716,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 8,
   },
-
 
   // ── Hero card ──
   heroCardOuter: {
@@ -741,10 +844,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     overflow: 'hidden',
   },
-  originBarInner: {
-    height: '100%',
-    borderRadius: 2,
-  },
   originCount: {
     width: 38,
     textAlign: 'right',
@@ -758,49 +857,54 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 
-  // ── Streak week ──
-  weekHeaderRow: {
+  // ── Today timeline ──
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  emptyStateText: {
+    ...fontStyles.body,
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 13,
+    marginTop: 8,
+  },
+  timelineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingVertical: 12,
+    gap: 12,
   },
-  weekSummary: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.60)',
-  },
-  weekActivePill: {
+  timelineTime: {
     ...fontStyles.bodySemiBold,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.55)',
-    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.45)',
+    width: 48,
   },
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  weekDayCol: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  weekDayDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
   },
-  weekDayLabel: {
+  timelineDotInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  timelineContent: {
+    flex: 1,
+  },
+  timelineDrops: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+  },
+  timelineMeta: {
     ...fontStyles.body,
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.28)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  weekDayLabelActive: {
-    color: 'rgba(255,255,255,0.80)',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.38)',
+    marginTop: 2,
   },
 
   // ── Machines ──
@@ -831,7 +935,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Achievements ──
+  // ── Achievements / Highlights ──
   achieveRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -857,4 +961,5 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flexShrink: 1,
   },
+
 });

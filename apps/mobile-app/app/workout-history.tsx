@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, Pressable, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
+import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
@@ -14,6 +15,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
+import { formatDate as fmtDate, formatTime as fmtTime, formatMonthYear } from '@/lib/utils/formatDate';
 
 // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.5)
 // Workout History screen with calendar dots and session cards.
@@ -22,6 +24,12 @@ import i18n from '@/lib/i18n';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Days of week will be localized in the component
 const CELL_SIZE = Math.floor((SCREEN_WIDTH - 48 - 6 * 8) / 7); // 48=padding, 6*8=gaps
+interface HappyHourInfo {
+  active: boolean;
+  multiplier: number;
+  rule_name?: string | null;
+}
+
 interface RawMetrics {
   avg_cadence?: number | null;
   avg_speed_kmh?: number | null;
@@ -32,6 +40,10 @@ interface RawMetrics {
   device_calories?: number | null;
   calories_source?: string;
   ble_protocol?: string;
+  drop_calc_v2?: {
+    happy_hour?: HappyHourInfo;
+    applied_multiplier?: number;
+  };
 }
 
 interface SessionRow {
@@ -64,15 +76,11 @@ function formatDuration(seconds: number | null): string {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const locale = i18n.language === 'sr' ? 'sr-RS' : 'en-US';
-  return d.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
+  return fmtDate(iso, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const locale = i18n.language === 'sr' ? 'sr-RS' : 'en-US';
-  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: i18n.language !== 'sr' });
+  return fmtTime(iso, { hour: '2-digit', minute: '2-digit', hour12: i18n.language !== 'sr' });
 }
 
 export default function WorkoutHistoryScreen() {
@@ -88,8 +96,10 @@ export default function WorkoutHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [profileStreakDays, setProfileStreakDays] = useState<number | null>(null);
+  const [maxDropsPerDay, setMaxDropsPerDay] = useState<number>(300);
 
   const loadSessions = useCallback(async () => {
     if (!session?.user) return;
@@ -117,10 +127,21 @@ export default function WorkoutHistoryScreen() {
           .limit(100),
         supabase
           .from('profiles')
-          .select('streak_days')
+          .select('streak_days, last_visit_date, home_gym_id')
           .eq('id', session.user.id)
           .single(),
       ]);
+
+      // Fetch daily drop limit from the user's home gym
+      if (!profileRes.error && profileRes.data?.home_gym_id) {
+        const limitsRes = await supabase.rpc('get_user_drop_limits', {
+          p_gym_id: profileRes.data.home_gym_id,
+        });
+        const row = Array.isArray(limitsRes.data) ? limitsRes.data[0] : limitsRes.data;
+        if (row?.max_drops_per_day) {
+          setMaxDropsPerDay(Number(row.max_drops_per_day));
+        }
+      }
 
       if (sessionRes.error) {
         log.error('[WorkoutHistory] Error loading sessions:', sessionRes.error);
@@ -129,7 +150,21 @@ export default function WorkoutHistoryScreen() {
       }
 
       if (!profileRes.error && profileRes.data) {
-        setProfileStreakDays(profileRes.data.streak_days ?? 0);
+        const rawStreak = profileRes.data.streak_days ?? 0;
+        const lastVisitStr = profileRes.data.last_visit_date;
+        let displayStreak = rawStreak;
+        if (lastVisitStr && rawStreak > 0) {
+          const belgradeTodayStr = new Date().toLocaleDateString('sv-SE', {
+            timeZone: 'Europe/Belgrade',
+          });
+          const belgradeTodayMs = new Date(belgradeTodayStr + 'T00:00:00').getTime();
+          const lastVisitMs = new Date(lastVisitStr + 'T00:00:00').getTime();
+          const diffDays = Math.floor((belgradeTodayMs - lastVisitMs) / (1000 * 60 * 60 * 24));
+          if (diffDays > 1) {
+            displayStreak = 0;
+          }
+        }
+        setProfileStreakDays(displayStreak);
       }
     } catch (err) {
       log.error('[WorkoutHistory] Error:', err);
@@ -168,6 +203,17 @@ export default function WorkoutHistoryScreen() {
     return set;
   }, [sessions]);
 
+  // drops earned per calendar day (for progress ring)
+  const dropsPerDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sessions) {
+      if (!s.started_at) continue;
+      const key = toLocalDate(new Date(s.started_at));
+      map.set(key, (map.get(key) ?? 0) + (s.drops_earned ?? 0));
+    }
+    return map;
+  }, [sessions]);
+
   const calendarDays = useMemo(() => {
     const year = selectedMonth.getFullYear();
     const month = selectedMonth.getMonth();
@@ -179,11 +225,11 @@ export default function WorkoutHistoryScreen() {
     let startOffset = firstDay.getDay() - 1;
     if (startOffset < 0) startOffset = 6;
 
-    const days: { date: number | null; dateStr: string; hasWorkout: boolean; isToday: boolean }[] = [];
+    const days: { date: number | null; dateStr: string; hasWorkout: boolean; isToday: boolean; drops: number }[] = [];
 
     // Empty leading cells
     for (let i = 0; i < startOffset; i++) {
-      days.push({ date: null, dateStr: '', hasWorkout: false, isToday: false });
+      days.push({ date: null, dateStr: '', hasWorkout: false, isToday: false, drops: 0 });
     }
 
     const todayStr = toLocalDate(new Date());
@@ -195,28 +241,34 @@ export default function WorkoutHistoryScreen() {
         dateStr,
         hasWorkout: workoutDates.has(dateStr),
         isToday: dateStr === todayStr,
+        drops: dropsPerDay.get(dateStr) ?? 0,
       });
     }
 
     return days;
-  }, [selectedMonth, workoutDates]);
+  }, [selectedMonth, workoutDates, dropsPerDay]);
 
-  const monthLabel = selectedMonth.toLocaleDateString(
-    i18n.language === 'sr' ? 'sr-RS' : 'en-US',
-    { month: 'long', year: 'numeric' }
-  );
+  const monthLabel = formatMonthYear(selectedMonth);
   const today = new Date();
   const canGoForward = selectedMonth.getFullYear() < today.getFullYear() ||
     (selectedMonth.getFullYear() === today.getFullYear() && selectedMonth.getMonth() < today.getMonth());
 
   const prevMonth = () => {
+    setSelectedDate(null);
     setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   };
 
   const nextMonth = () => {
     if (canGoForward) {
+      setSelectedDate(null);
       setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
     }
+  };
+
+  const handleDayPress = (dateStr: string, hasWorkout: boolean) => {
+    if (!hasWorkout) return;
+    setSelectedDate(prev => prev === dateStr ? null : dateStr);
+    setExpandedSessionId(null);
   };
 
   // ── Filtered sessions for selected month ──
@@ -229,11 +281,15 @@ export default function WorkoutHistoryScreen() {
     });
   }, [sessions, selectedMonth]);
 
-  // ── Group sessions by day ──
+  // ── Group sessions by day (optionally filtered to selectedDate) ──
   const groupedByDay = useMemo(() => {
+    const source = selectedDate
+      ? filteredSessions.filter(s => toLocalDate(new Date(s.started_at)) === selectedDate)
+      : filteredSessions;
+
     const groups: { dateStr: string; label: string; sessions: SessionRow[] }[] = [];
     const map = new Map<string, SessionRow[]>();
-    for (const s of filteredSessions) {
+    for (const s of source) {
       const d = new Date(s.started_at);
       const key = toLocalDate(d);
       if (!map.has(key)) map.set(key, []);
@@ -249,11 +305,48 @@ export default function WorkoutHistoryScreen() {
         ? t('today')
         : isYesterday
         ? t('yesterday')
-        : d.toLocaleDateString(i18n.language === 'sr' ? 'sr-RS' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+        : fmtDate(d, { weekday: 'long', day: 'numeric', month: 'long' });
       groups.push({ dateStr, label, sessions: daySessions });
     }
     return groups;
-  }, [filteredSessions]);
+  }, [filteredSessions, selectedDate]);
+
+  // ── Day summary (when a date is selected) ──
+  const daySummary = useMemo(() => {
+    if (!selectedDate) return null;
+    const daySessions = filteredSessions.filter(s => toLocalDate(new Date(s.started_at)) === selectedDate);
+    const drops = daySessions.reduce((acc, s) => acc + (s.drops_earned || 0), 0);
+    const duration = daySessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+    return { count: daySessions.length, drops, duration };
+  }, [filteredSessions, selectedDate]);
+
+  // ── Month-specific longest streak ──
+  const monthStreak = useMemo(() => {
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth();
+    const monthDates = Array.from(workoutDates)
+      .filter(d => {
+        const parsed = new Date(d + 'T12:00:00');
+        return parsed.getFullYear() === year && parsed.getMonth() === month;
+      })
+      .sort();
+
+    if (monthDates.length === 0) return 0;
+    let best = 1;
+    let streak = 1;
+    for (let i = 1; i < monthDates.length; i++) {
+      const prev = new Date(monthDates[i - 1] + 'T12:00:00');
+      const curr = new Date(monthDates[i] + 'T12:00:00');
+      const diff = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+      if (diff === 1) {
+        streak++;
+        best = Math.max(best, streak);
+      } else {
+        streak = 1;
+      }
+    }
+    return best;
+  }, [workoutDates, selectedMonth]);
 
   // ── Streak calculations (current + max) ──
   const streakInfo = useMemo(() => {
@@ -378,7 +471,7 @@ export default function WorkoutHistoryScreen() {
                 borderRightColor: 'rgba(255,255,255,0.05)',
                 borderBottomColor: 'rgba(255,255,255,0.04)',
               }]}>
-                <BlurView intensity={55} tint="dark" style={styles.calendarBlur}>
+                <PlatformBlur intensity={55} tint="dark" style={styles.calendarBlur} androidColor="rgba(12,12,22,0.97)">
                   <LinearGradient
                     colors={[hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)', 'rgba(12,12,22,0.0)']}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -406,30 +499,96 @@ export default function WorkoutHistoryScreen() {
                   </View>
 
                   <View style={styles.calendarGrid}>
-                    {calendarDays.map((cell, i) => (
-                      <View key={i} style={styles.calendarCell}>
-                        {cell.date !== null ? (
-                          <View style={[
-                            styles.dateCircle,
-                            cell.isToday && { borderColor: branding.primary, borderWidth: 1.5 },
-                            cell.hasWorkout && { backgroundColor: hexToRgba(branding.primary, 0.22) },
-                          ]}>
-                            <Text style={[
-                              styles.dateText,
-                              cell.isToday && { color: branding.primary, ...fontStyles.bodySemiBold },
-                              cell.hasWorkout && { color: '#FFFFFF' },
-                            ]}>
-                              {cell.date}
-                            </Text>
-                            {cell.hasWorkout && (
-                              <View style={[styles.workoutDot, { backgroundColor: branding.primary }]} />
-                            )}
-                          </View>
-                        ) : null}
-                      </View>
-                    ))}
+                    {calendarDays.map((cell, i) => {
+                      const isSelected = cell.dateStr === selectedDate;
+                      const cappedPercent = maxDropsPerDay > 0
+                        ? Math.min(cell.drops / maxDropsPerDay, 1)
+                        : 0;
+                      const ringFull = cappedPercent >= 1;
+                      const arcColor = ringFull ? '#4CD964' : hexToRgba(branding.primary, 0.85);
+                      const trackColor = hexToRgba(ringFull ? '#4CD964' : branding.primary, 0.15);
+
+                      // SVG ring geometry
+                      const cellPx = CELL_SIZE;
+                      const strokeW = 2.5;
+                      const radius = (cellPx - strokeW) / 2;
+                      const circ = 2 * Math.PI * radius;
+                      const dash = cappedPercent * circ;
+
+                      return (
+                        <Pressable
+                          key={i}
+                          style={styles.calendarCell}
+                          onPress={() => cell.date !== null ? handleDayPress(cell.dateStr, cell.hasWorkout) : undefined}
+                        >
+                          {cell.date !== null ? (
+                            <View style={styles.cellWrapper}>
+                              {/* Progress ring SVG — only when there are drops */}
+                              {cell.drops > 0 && !isSelected && (
+                                <Svg
+                                  width={cellPx}
+                                  height={cellPx}
+                                  style={StyleSheet.absoluteFillObject}
+                                >
+                                  {/* Track */}
+                                  <Circle
+                                    cx={cellPx / 2}
+                                    cy={cellPx / 2}
+                                    r={radius}
+                                    stroke={trackColor}
+                                    strokeWidth={strokeW}
+                                    fill="none"
+                                  />
+                                  {/* Fill arc — starts at top (-90deg = rotate -90) */}
+                                  <Circle
+                                    cx={cellPx / 2}
+                                    cy={cellPx / 2}
+                                    r={radius}
+                                    stroke={arcColor}
+                                    strokeWidth={strokeW}
+                                    fill="none"
+                                    strokeDasharray={`${dash} ${circ}`}
+                                    strokeLinecap="round"
+                                    rotation={-90}
+                                    origin={`${cellPx / 2}, ${cellPx / 2}`}
+                                  />
+                                </Svg>
+                              )}
+
+                              <View style={[
+                                styles.dateCircle,
+                                cell.isToday && !isSelected && { borderColor: branding.primary, borderWidth: 1.5 },
+                                cell.hasWorkout && !isSelected && { backgroundColor: hexToRgba(branding.primary, 0.18) },
+                                isSelected && { backgroundColor: branding.primary },
+                              ]}>
+                                <Text style={[
+                                  styles.dateText,
+                                  cell.isToday && !isSelected && { color: branding.primary, ...fontStyles.bodySemiBold },
+                                  cell.hasWorkout && !isSelected && { color: '#FFFFFF' },
+                                  isSelected && { color: '#000000', ...fontStyles.bodySemiBold },
+                                ]}>
+                                  {cell.date}
+                                </Text>
+                              </View>
+                            </View>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                </BlurView>
+
+                  {/* Selected date clear pill */}
+                  {selectedDate && (
+                    <TouchableOpacity
+                      style={[styles.clearDayPill, { borderColor: hexToRgba(branding.primary, 0.35) }]}
+                      onPress={() => setSelectedDate(null)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="close-circle" size={14} color={branding.primary} />
+                      <Text style={[styles.clearDayLabel, { color: branding.primary }]}>{t('showAllMonth')}</Text>
+                    </TouchableOpacity>
+                  )}
+                </PlatformBlur>
               </View>
             </Animated.View>
 
@@ -441,7 +600,7 @@ export default function WorkoutHistoryScreen() {
                 borderRightColor: 'rgba(255,255,255,0.05)',
                 borderBottomColor: 'rgba(255,255,255,0.03)',
               }]}>
-                <BlurView intensity={50} tint="dark" style={styles.summaryBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.summaryBlur} androidColor="rgba(12,12,22,0.97)">
                   <LinearGradient
                     colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)']}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -481,23 +640,29 @@ export default function WorkoutHistoryScreen() {
                     </View>
                   </View>
 
-                  {/* Bottom row: month stats */}
+                  {/* Bottom row: stats — switches to day view when a date is selected */}
                   <View style={[styles.summaryBottomRow, { borderTopColor: hexToRgba(branding.primary, 0.08) }]}>
-                    {[
-                      { icon: 'barbell' as const,      value: monthStats.workouts.toString(),                           label: t('workouts') },
-                      { icon: 'water' as const,         value: monthStats.totalDrops === 0 ? '—' : monthStats.totalDrops.toLocaleString(), label: t('drops') },
-                      { icon: 'time-outline' as const,  value: formatDuration(monthStats.totalDuration) || '—',          label: t('total') },
-                    ].map((s, i) => (
+                    {(daySummary ? [
+                      { icon: 'barbell' as const,     value: daySummary.count.toString(),                                                label: t('workouts') },
+                      { icon: 'water' as const,        value: daySummary.drops === 0 ? '—' : daySummary.drops.toLocaleString(),          label: t('drops') },
+                      { icon: 'time-outline' as const, value: formatDuration(daySummary.duration) || '—',                                label: t('total') },
+                      { icon: 'calendar-outline' as const, value: fmtDate(selectedDate!, { day: 'numeric', month: 'short' }),            label: t('day') },
+                    ] : [
+                      { icon: 'barbell' as const,     value: monthStats.workouts.toString(),                                              label: t('workouts') },
+                      { icon: 'water' as const,        value: monthStats.totalDrops === 0 ? '—' : monthStats.totalDrops.toLocaleString(), label: t('drops') },
+                      { icon: 'time-outline' as const, value: formatDuration(monthStats.totalDuration) || '—',                            label: t('total') },
+                      { icon: 'flame' as const,        value: monthStreak === 0 ? '—' : `${monthStreak}d`,                               label: t('monthStreak') },
+                    ]).map((s, i) => (
                       <View key={i} style={styles.summaryMonthItem}>
                         {i > 0 && <View style={[styles.summaryMonthDivider, { backgroundColor: hexToRgba(branding.primary, 0.10) }]} />}
-                        <Ionicons name={s.icon} size={13} color={branding.primary} />
+                        <Ionicons name={s.icon} size={13} color={daySummary ? hexToRgba(branding.primary, 0.85) : branding.primary} />
                         <Text style={[styles.summaryMonthValue, getNumberStyle(16), { color: '#FFFFFF' }]}>{s.value}</Text>
                         <Text style={styles.summaryMonthLabel}>{s.label}</Text>
                       </View>
                     ))}
                   </View>
 
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
           </>
@@ -505,8 +670,8 @@ export default function WorkoutHistoryScreen() {
         ListEmptyComponent={
           <Animated.View entering={FadeIn.delay(300).duration(400)} style={styles.emptyContainer}>
             <Ionicons name="fitness-outline" size={48} color={hexToRgba(branding.primary, 0.3)} />
-            <Text style={styles.emptyTitle}>{t('noWorkoutsThisMonth')}</Text>
-            <Text style={styles.emptySubtitle}>{t('scanQrToStart')}</Text>
+            <Text style={styles.emptyTitle}>{selectedDate ? t('noWorkoutsThisDay') : t('noWorkoutsThisMonth')}</Text>
+            <Text style={styles.emptySubtitle}>{selectedDate ? t('tapDayAgain') : t('scanQrToStart')}</Text>
           </Animated.View>
         }
         renderSectionHeader={({ section }) => (
@@ -541,7 +706,7 @@ export default function WorkoutHistoryScreen() {
                   borderBottomColor: 'rgba(255,255,255,0.03)',
                 }]}
               >
-                <BlurView intensity={45} tint="dark" style={styles.sessionCardBlur}>
+                <PlatformBlur intensity={45} tint="dark" style={styles.sessionCardBlur} androidColor="rgba(12,12,22,0.97)">
                   <LinearGradient
                     colors={isExpanded
                       ? [hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)', 'transparent']
@@ -585,27 +750,33 @@ export default function WorkoutHistoryScreen() {
                     </View>
                   </View>
 
-                  {/* Inline chips: calories + multiplier */}
-                  {(s.calories || (s.multiplier && s.multiplier > 1)) && (
-                    <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.07) }]}>
-                      {s.calories ? (
-                        <View style={[styles.detailChip, { backgroundColor: 'rgba(255,145,0,0.10)', borderColor: 'rgba(255,145,0,0.18)' }]}>
-                          <Ionicons name="flame-outline" size={11} color={theme.colors.secondary} />
-                          <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
-                            ~{Math.round(Number(s.calories))} {t('cal')}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {s.multiplier && s.multiplier > 1 ? (
-                        <View style={[styles.detailChip, { backgroundColor: hexToRgba(branding.primary, 0.10), borderColor: hexToRgba(branding.primary, 0.22) }]}>
-                          <Ionicons name="flash" size={11} color={branding.primary} />
-                          <Text style={[styles.detailChipText, { color: branding.primary }]}>
-                            ×{s.multiplier.toFixed(1)} {t('multiplier')}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
+                  {/* Inline chips: calories + happy hour */}
+                  {(() => {
+                    const happyHour = metrics?.drop_calc_v2?.happy_hour;
+                    const hhActive = happyHour?.active && (happyHour?.multiplier ?? 1) > 1;
+                    const hasChips = !!(s.calories || hhActive);
+                    if (!hasChips) return null;
+                    return (
+                      <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.07) }]}>
+                        {s.calories ? (
+                          <View style={[styles.detailChip, { backgroundColor: 'rgba(255,145,0,0.10)', borderColor: 'rgba(255,145,0,0.18)' }]}>
+                            <Ionicons name="flame-outline" size={11} color={theme.colors.secondary} />
+                            <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
+                              ~{Math.round(Number(s.calories))} {t('cal')}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {hhActive ? (
+                          <View style={[styles.detailChip, { backgroundColor: 'rgba(255,215,0,0.12)', borderColor: 'rgba(255,215,0,0.30)' }]}>
+                            <Ionicons name="flash" size={11} color="#FFD700" />
+                            <Text style={[styles.detailChipText, { color: '#FFD700' }]}>
+                              ×{happyHour!.multiplier.toFixed(1)} Happy Hour
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
 
                   {/* Expanded metrics grid */}
                   {isExpanded && (
@@ -671,7 +842,7 @@ export default function WorkoutHistoryScreen() {
                       )}
                     </View>
                   )}
-                </BlurView>
+                </PlatformBlur>
               </TouchableOpacity>
             </Animated.View>
           );
@@ -767,10 +938,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  cellWrapper: {
+    width: CELL_SIZE,
+    height: CELL_SIZE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
   dateCircle: {
-    width: CELL_SIZE - 6,
-    height: CELL_SIZE - 6,
-    borderRadius: (CELL_SIZE - 6) / 2,
+    width: CELL_SIZE - 8,
+    height: CELL_SIZE - 8,
+    borderRadius: (CELL_SIZE - 8) / 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -779,12 +957,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
   },
-  workoutDot: {
-    position: 'absolute',
-    bottom: 3,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+  clearDayPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 5,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  clearDayLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
+  daySummaryStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  daySummaryText: {
+    ...fontStyles.body,
+    fontSize: 12,
+    letterSpacing: 0.2,
+    flex: 1,
   },
 
   // ── Summary card (streak + month stats merged) ──

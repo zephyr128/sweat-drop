@@ -38,6 +38,12 @@
   "sun": "Ned",
   "currentStreak": "Trenutni niz",
   "maxStreak": "Najbolji niz",
+  "monthStreak": "Mesečni niz",
+  "workout": "trening",
+  "day": "dan",
+  "showAllMonth": "Prikaži ceo mesec",
+  "noWorkoutsThisDay": "Nema treninga ovog dana",
+  "tapDayAgain": "Pritisni datum ponovo da vidiš sve",
   "days": "dana",
   "streakActive": "U vatri si! Nastavi tako.",
   "streakInactive": "Treniraj danas da započneš novi niz!"

@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -188,7 +188,7 @@ export function ReferralAcceptSheet({
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
             <View style={[styles.sheet, { borderColor: hexToRgba(accent, 0.22) }]}>
-              <BlurView intensity={55} tint="dark" style={styles.blurContainer}>
+              <PlatformBlur intensity={55} tint="dark" style={styles.blurContainer} androidColor="rgba(12,15,24,0.98)">
                 <LinearGradient
                   colors={['rgba(255,255,255,0.08)', hexToRgba(accent, 0.05), 'rgba(12,12,22,0.0)']}
                   start={{ x: 0, y: 0 }}
@@ -316,7 +316,7 @@ export function ReferralAcceptSheet({
                     </Pressable>
                   </View>
                 )}
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         </GestureDetector>

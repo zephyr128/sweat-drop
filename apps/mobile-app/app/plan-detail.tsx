@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
@@ -246,7 +246,7 @@ export default function PlanDetailScreen() {
         {/* Plan Info Card */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <View style={[styles.planInfoCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.planInfoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.planInfoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               {plan.description && (
                 <Text style={styles.planDescription}>{plan.description}</Text>
               )}
@@ -271,7 +271,7 @@ export default function PlanDetailScreen() {
                   </View>
                 )}
               </View>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -291,7 +291,7 @@ export default function PlanDetailScreen() {
                 {plan.items.map((item, index) => (
                   <Animated.View key={item.id} entering={FadeInDown.delay(300 + index * 60).duration(400)}>
                     <View style={[styles.exerciseItem, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-                      <BlurView intensity={50} tint="dark" style={[styles.exerciseBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.exerciseBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                         <View style={[styles.exerciseNumber, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                           <Text style={[styles.exerciseNumberText, getNumberStyle(14), { color: branding.primary }]}>
                             {index + 1}
@@ -314,7 +314,7 @@ export default function PlanDetailScreen() {
                             </View>
                           )}
                         </View>
-                      </BlurView>
+                      </PlatformBlur>
                     </View>
                   </Animated.View>
                 ))}

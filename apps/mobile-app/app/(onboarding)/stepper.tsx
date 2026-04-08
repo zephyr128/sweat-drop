@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { theme, fontStyles } from '@/lib/theme';
@@ -66,7 +66,8 @@ export default function StepperScreen() {
               entering={FadeInDown.delay((index + 1) * 200).duration(500)}
             >
               <View style={styles.stepCard}>
-                <BlurView
+                <PlatformBlur
+                  androidColor="rgba(12,12,22,0.97)"
                   intensity={40}
                   tint="dark"
                   style={styles.stepCardBlur}
@@ -90,7 +91,7 @@ export default function StepperScreen() {
                       <Text style={styles.stepDesc}>{step.description}</Text>
                     </View>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
           ))}

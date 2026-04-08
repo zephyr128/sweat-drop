@@ -1,7 +1,7 @@
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { theme, fontStyles } from '@/lib/theme';
+import { PlatformBlur } from '@/components/PlatformBlur';
 
 export function AppModal() {
   const { visible, title, body, buttons, hideModal } = useAppModal();
@@ -25,7 +25,7 @@ export function AppModal() {
         }}
       >
         <View style={styles.card}>
-          <BlurView intensity={75} tint="dark" style={styles.blur}>
+          <PlatformBlur intensity={75} tint="dark" style={styles.blur} androidColor="rgba(14,16,26,0.98)">
             <Text style={styles.title}>{title}</Text>
             {!!body && <Text style={styles.body}>{body}</Text>}
 
@@ -61,7 +61,7 @@ export function AppModal() {
                 );
               })}
             </View>
-          </BlurView>
+          </PlatformBlur>
         </View>
       </TouchableOpacity>
     </Modal>

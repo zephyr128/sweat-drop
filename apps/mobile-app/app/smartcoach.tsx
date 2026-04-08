@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
@@ -214,7 +214,7 @@ export default function SmartCoachScreen() {
                   onPress={() => handleGymPress(gym.id)}
                   activeOpacity={0.8}
                 >
-                  <BlurView intensity={50} tint="dark" style={[styles.gymCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.gymCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     <View style={styles.gymCardContent}>
                       {gym.logo_url ? (
                         <Image
@@ -242,7 +242,7 @@ export default function SmartCoachScreen() {
 
                       <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                     </View>
-                  </BlurView>
+                  </PlatformBlur>
                 </TouchableOpacity>
               </Animated.View>
             ))}
@@ -254,11 +254,11 @@ export default function SmartCoachScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('findFreelanceCoach')}</Text>
             <View style={[styles.comingSoonCard, { borderColor: hexToRgba(branding.primary, 0.1) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.comingSoonBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.comingSoonBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="person-outline" size={32} color={theme.colors.textSecondary} />
                 <Text style={styles.comingSoonText}>{t('comingSoon')}</Text>
                 <Text style={styles.comingSoonSubtext}>{t('connectWithTrainers')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </View>
         </Animated.View>

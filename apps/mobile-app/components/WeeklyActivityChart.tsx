@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { fontStyles, hexToRgba } from '@/lib/theme';
 import { PressableCard } from '@/components/PressableCard';
@@ -12,6 +12,12 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 
+/* ── Helpers ──────────────────────────────────────── */
+function fmtDrops(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
 /* ── Types ────────────────────────────────────────── */
 interface DayData {
   day: string;
@@ -22,7 +28,11 @@ interface DayData {
 interface WeeklyActivityChartProps {
   data: DayData[];
   activeDays: number;
+  totalSlots?: number;  // denominator for "X/Y days/weeks/months"
   brandPrimary: string;
+  title?: string;
+  activeSuffix?: string; // e.g. 'days', 'weeks', 'months'
+  showDropLabels?: boolean; // show drops count above each bar
   onPress?: () => void;
 }
 
@@ -76,13 +86,18 @@ const AnimatedBar: React.FC<{
 export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
   data,
   activeDays,
+  totalSlots,
   brandPrimary,
+  title = 'This Week',
+  activeSuffix = 'days',
+  showDropLabels = false,
   onPress,
 }) => {
   const maxDrops = Math.max(...data.map((d) => d.drops), 1);
+  const denominator = totalSlots ?? data.length;
 
   const inner = (
-    <BlurView intensity={50} tint="dark" style={styles.blur}>
+    <PlatformBlur intensity={50} tint="dark" style={styles.blur} androidColor="rgba(12,12,22,0.97)">
       <LinearGradient
         colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
         start={{ x: 0, y: 0 }}
@@ -92,18 +107,29 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
       />
       {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={styles.title}>This Week</Text>
+        <Text style={styles.title}>{title}</Text>
         <Text style={[styles.activeDaysText, { color: brandPrimary }]}>
-          {activeDays}/7 days
+          {activeDays}/{denominator} {activeSuffix}
         </Text>
       </View>
 
       {/* Bars */}
-      <View style={styles.chartRow}>
+      <View style={[styles.chartRow, showDropLabels && styles.chartRowTall]}>
         {data.map((d, i) => {
           const pct = d.drops > 0 ? Math.max((d.drops / maxDrops) * 100, 8) : 0;
           return (
             <View key={d.day} style={styles.barCol}>
+              {showDropLabels && (
+                <Text
+                  style={[
+                    styles.dropsLabel,
+                    { color: d.drops > 0 ? (d.isToday ? brandPrimary : hexToRgba(brandPrimary, 0.75)) : 'transparent' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {d.drops > 0 ? fmtDrops(d.drops) : '·'}
+                </Text>
+              )}
               <View style={styles.barContainer}>
                 <AnimatedBar
                   heightPercent={pct}
@@ -125,7 +151,7 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
           );
         })}
       </View>
-    </BlurView>
+    </PlatformBlur>
   );
 
   if (onPress) {
@@ -177,10 +203,20 @@ const styles = StyleSheet.create({
     height: 56,
     gap: 6,
   },
+  chartRowTall: {
+    height: 80,
+  },
   barCol: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+  },
+  dropsLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 9,
+    letterSpacing: 0.2,
+    textAlign: 'center',
+    minHeight: 13,
   },
   barContainer: {
     flex: 1,

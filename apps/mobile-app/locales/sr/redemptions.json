@@ -1,7 +1,20 @@
 {
   "title": "Moja otkupljenja",
+  "filterAll": "Sve",
+  "filterConfirmed": "Potvrđeno",
+  "filterCancelled": "Otkazano",
+  "filterExpired": "Isteklo",
+  "filterBy": "Filtriraj po statusu",
+  "filterAllDesc": "Prikaži sve",
+  "filterPendingDesc": "Čeka potvrdu",
+  "filterConfirmedDesc": "Spremo za preuzimanje",
+  "filterClaimedDesc": "Nagrada već primljena",
+  "filterCancelledDesc": "Otkazano od strane korisnika",
+  "filterExpiredDesc": "Vreme je isteklo",
   "noRedemptions": "Nema otkupljenja",
   "noRedemptionsDesc": "Otkupi nagrade iz prodavnice da ih vidiš ovde",
+  "noRedemptionsFiltered": "Nema rezultata",
+  "noRedemptionsFilteredDesc": "Nema otkupljenja za ovaj filter",
   "code": "Kod",
   "dropsSpent": "Potrošeno drops",
   "date": "Datum",
@@ -30,5 +43,6 @@
   "cancelSuccess": "Otkupljenje otkazano",
   "cancelSuccessDesc": "{{drops}} drops je vraćeno na tvoj balans.",
   "cancelError": "Neuspešno otkazivanje",
-  "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo."
+  "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo.",
+  "loadMore": "Učitaj još"
 }

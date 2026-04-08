@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PressableCard } from '@/components/PressableCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -159,12 +159,12 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
           <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
         <View style={styles.card}>
-          <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <View style={styles.row}>
               <Text style={[styles.username, { color: theme.colors.textSecondary }]}>Loading...</Text>
             </View>
-          </BlurView>
+          </PlatformBlur>
         </View>
       </View>
     );
@@ -177,12 +177,12 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
           <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
         </View>
         <View style={styles.card}>
-          <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <View style={styles.row}>
               <Text style={[styles.username, { color: theme.colors.textSecondary }]}>{t('noLeaderboardData')}</Text>
             </View>
-          </BlurView>
+          </PlatformBlur>
         </View>
       </View>
     );
@@ -226,7 +226,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
         onPress={() => { if (isUnlocked) router.push('/leaderboard'); }}
         disabled={!isUnlocked}
       >
-        <BlurView intensity={50} tint="dark" style={styles.blurContainer}>
+        <PlatformBlur intensity={50} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
           <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           {topUsers.map((entry, index) => {
             const isMe = isCurrentUser(entry.user_id);
@@ -296,7 +296,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
               </View>
             </>
           )}
-        </BlurView>
+        </PlatformBlur>
       </PressableCard>
 
     </View>

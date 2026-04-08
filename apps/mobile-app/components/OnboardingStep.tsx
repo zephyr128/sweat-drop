@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 interface OnboardingStepProps {
   step: number;
@@ -20,7 +21,7 @@ interface OnboardingStepProps {
   children: React.ReactNode;
 }
 
-function ProgressDots({ step, total }: { step: number; total: number }) {
+function ProgressDots({ step, total, primaryColor }: { step: number; total: number; primaryColor: string }) {
   return (
     <View style={dotStyles.container}>
       {Array.from({ length: total }).map((_, i) => (
@@ -30,7 +31,7 @@ function ProgressDots({ step, total }: { step: number; total: number }) {
             dotStyles.dot,
             {
               width: i === step - 1 ? 24 : 8,
-              backgroundColor: i < step ? theme.colors.primary : 'rgba(255,255,255,0.15)',
+              backgroundColor: i < step ? primaryColor : 'rgba(255,255,255,0.15)',
             },
           ]}
         />
@@ -66,6 +67,7 @@ export default function OnboardingStepLayout({
   children,
 }: OnboardingStepProps) {
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const label = nextLabel ?? (step === totalSteps ? t('profileSetup.finish') : t('profileSetup.next'));
 
   return (
@@ -108,7 +110,7 @@ export default function OnboardingStepLayout({
         >
           {/* Progress + step label */}
           <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.progressSection}>
-            <ProgressDots step={step} total={totalSteps} />
+            <ProgressDots step={step} total={totalSteps} primaryColor={branding.primary} />
             <Text style={styles.stepLabel}>
               {t('profileSetup.stepOf', { step, total: totalSteps })}
             </Text>
@@ -129,7 +131,11 @@ export default function OnboardingStepLayout({
         {/* Bottom button */}
         <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.bottomSection}>
           <TouchableOpacity
-            style={[styles.nextButton, nextDisabled && styles.nextButtonDisabled]}
+            style={[
+              styles.nextButton,
+              !nextDisabled && { backgroundColor: branding.primary, shadowColor: branding.primary },
+              nextDisabled && styles.nextButtonDisabled,
+            ]}
             onPress={onNext}
             disabled={nextDisabled}
             activeOpacity={0.8}

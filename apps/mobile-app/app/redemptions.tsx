@@ -1,29 +1,184 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Clipboard } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Clipboard,
+  RefreshControl,
+  ScrollView,
+} from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
-import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import i18n from '@/lib/i18n';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
+import { useFocusEffect } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { BottomSheet } from '@/components/BottomSheet';
 
-const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; bgAlpha: number }> = {
-  pending: { color: '#fbbf24', icon: 'time-outline', bgAlpha: 0.1 },
-  confirmed: { color: '#4ade80', icon: 'checkmark-circle', bgAlpha: 0.1 },
-  cancelled: { color: '#f87171', icon: 'close-circle', bgAlpha: 0.08 },
-  expired: { color: '#94a3b8', icon: 'alert-circle-outline', bgAlpha: 0.08 },
-  claimed: { color: '#60a5fa', icon: 'gift-outline', bgAlpha: 0.1 },
+const PAGE_SIZE = 20;
+
+type StatusFilter = 'all' | 'pending' | 'confirmed' | 'claimed' | 'cancelled' | 'expired';
+
+const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  pending:   { color: '#fbbf24', icon: 'time-outline'         },
+  confirmed: { color: '#4ade80', icon: 'checkmark-circle'     },
+  cancelled: { color: '#f87171', icon: 'close-circle'         },
+  expired:   { color: '#94a3b8', icon: 'alert-circle-outline' },
+  claimed:   { color: '#60a5fa', icon: 'gift-outline'         },
 };
+
+const FILTER_OPTIONS: {
+  key: StatusFilter;
+  labelKey: string;
+  descKey: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+}[] = [
+  { key: 'all',       labelKey: 'filterAll',       descKey: 'filterAllDesc',       icon: 'list-outline',        color: '#FFFFFF'  },
+  { key: 'pending',   labelKey: 'pending',          descKey: 'filterPendingDesc',   icon: 'time-outline',        color: '#fbbf24'  },
+  { key: 'confirmed', labelKey: 'filterConfirmed',  descKey: 'filterConfirmedDesc', icon: 'checkmark-circle',    color: '#4ade80'  },
+  { key: 'claimed',   labelKey: 'claimed',          descKey: 'filterClaimedDesc',   icon: 'gift-outline',        color: '#60a5fa'  },
+  { key: 'cancelled', labelKey: 'filterCancelled',  descKey: 'filterCancelledDesc', icon: 'close-circle',        color: '#f87171'  },
+  { key: 'expired',   labelKey: 'filterExpired',    descKey: 'filterExpiredDesc',   icon: 'alert-circle-outline',color: '#94a3b8'  },
+];
+
+interface TabState {
+  data: any[];
+  loading: boolean;
+  refreshing: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  page: number;
+}
+
+const defaultTabState = (): TabState => ({
+  data: [], loading: false, refreshing: false, loadingMore: false, hasMore: true, page: 0,
+});
+
+// ── Filter Sheet ─────────────────────────────────────────────────────────────
+
+interface FilterSheetProps {
+  visible: boolean;
+  activeFilter: StatusFilter;
+  onSelect: (f: StatusFilter) => void;
+  onClose: () => void;
+  branding: { primary: string };
+  t: (key: string) => string;
+  bottomInset: number;
+}
+
+function FilterSheet({ visible, activeFilter, onSelect, onClose, branding, t, bottomInset }: FilterSheetProps) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} accentColor={branding.primary}>
+      <Text style={filterStyles.title}>{t('filterBy')}</Text>
+      <View style={[filterStyles.optionsWrap, { paddingBottom: bottomInset + 8 }]}>
+        {FILTER_OPTIONS.map((opt, i) => {
+          const isActive = activeFilter === opt.key;
+          const color = opt.key === 'all' ? branding.primary : opt.color;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              style={[
+                filterStyles.optionRow,
+                i < FILTER_OPTIONS.length - 1 && filterStyles.optionDivider,
+                isActive && { backgroundColor: hexToRgba(color, 0.08) },
+              ]}
+              onPress={() => { onSelect(opt.key); onClose(); }}
+              activeOpacity={0.7}
+            >
+              <View style={[filterStyles.iconBubble, { backgroundColor: hexToRgba(color, isActive ? 0.20 : 0.10) }]}>
+                <Ionicons name={opt.icon} size={18} color={isActive ? color : hexToRgba(color, 0.65)} />
+              </View>
+              <View style={filterStyles.optionText}>
+                <Text style={[filterStyles.optionLabel, isActive && { color }]}>{t(opt.labelKey)}</Text>
+                <Text style={filterStyles.optionDesc}>{t(opt.descKey)}</Text>
+              </View>
+              {isActive && (
+                <View style={[filterStyles.checkBadge, { backgroundColor: hexToRgba(color, 0.15), borderColor: hexToRgba(color, 0.45) }]}>
+                  <Ionicons name="checkmark" size={13} color={color} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </BottomSheet>
+  );
+}
+
+const filterStyles = StyleSheet.create({
+  title: {
+    ...fontStyles.heading,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.35)',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  optionsWrap: {
+    paddingBottom: 4,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    gap: 14,
+  },
+  optionDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  iconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  optionText: {
+    flex: 1,
+    gap: 2,
+  },
+  optionLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  optionDesc: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.35)',
+  },
+  checkBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+});
+
+// ── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function RedemptionsScreen() {
   const { t } = useTranslation('redemptions');
@@ -33,60 +188,98 @@ export default function RedemptionsScreen() {
   const { getActiveGymId } = useGymStore();
   const branding = useBranding();
   const activeGymId = getActiveGymId();
-  const [redemptions, setRedemptions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (session?.user) {
-      loadRedemptions();
-    }
-  }, [session, activeGymId]);
+  const [activeFilter, setActiveFilter] = useState<StatusFilter>('all');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  const loadRedemptions = async () => {
+  const [tabStates, setTabStates] = useState<Record<StatusFilter, TabState>>(() => {
+    const init = {} as Record<StatusFilter, TabState>;
+    FILTER_OPTIONS.forEach((f) => { init[f.key] = defaultTabState(); });
+    return init;
+  });
+
+  const setTab = useCallback((filter: StatusFilter, patch: Partial<TabState>) => {
+    setTabStates((prev) => ({ ...prev, [filter]: { ...prev[filter], ...patch } }));
+  }, []);
+
+  const fetchPage = useCallback(async (filter: StatusFilter, page: number, append: boolean) => {
     if (!session?.user) return;
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
 
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('redemptions')
-        .select(`
-          *,
-          rewards:reward_id (id, name, reward_type, price_drops, image_url),
-          gyms:gym_id (id, name)
-        `)
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
+    let query = supabase
+      .from('redemptions')
+      .select(`*, rewards:reward_id (id, name, reward_type, price_drops, image_url), gyms:gym_id (id, name)`)
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-      if (error) {
-        log.error('Error loading redemptions:', error);
-      } else {
-        setRedemptions(data || []);
-      }
-    } catch (error) {
-      log.error('Error in loadRedemptions:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (filter !== 'all') query = query.eq('status', filter);
 
-  const getRedemptionName = (redemption: any) => {
-    if (redemption.source_type === 'leaderboard_prize') {
-      return redemption.description || t('leaderboardPrize');
+    const { data, error } = await query;
+    if (error) { log.error('[Redemptions] fetch error:', error); return; }
+
+    const rows = data || [];
+    if (append) {
+      setTabStates((prev) => ({
+        ...prev,
+        [filter]: { ...prev[filter], data: [...prev[filter].data, ...rows], hasMore: rows.length === PAGE_SIZE, page },
+      }));
+    } else {
+      setTab(filter, { data: rows, hasMore: rows.length === PAGE_SIZE, page: 0 });
     }
-    if (redemption.source_type === 'arena_prize') {
-      return redemption.description || t('arenaPrize');
-    }
-    return redemption.rewards?.name || t('unknownReward');
+  }, [session?.user?.id]);
+
+  const load = useCallback(async (filter: StatusFilter) => {
+    setTab(filter, { loading: true });
+    try { await fetchPage(filter, 0, false); }
+    finally { setTab(filter, { loading: false }); }
+  }, [fetchPage]);
+
+  const onRefresh = useCallback(async () => {
+    setTab(activeFilter, { refreshing: true });
+    try { await fetchPage(activeFilter, 0, false); }
+    finally { setTab(activeFilter, { refreshing: false }); }
+  }, [fetchPage, activeFilter]);
+
+  const onLoadMore = useCallback(async () => {
+    const ts = tabStates[activeFilter];
+    if (ts.loadingMore || !ts.hasMore) return;
+    setTab(activeFilter, { loadingMore: true });
+    try { await fetchPage(activeFilter, ts.page + 1, true); }
+    finally { setTab(activeFilter, { loadingMore: false }); }
+  }, [tabStates, fetchPage, activeFilter]);
+
+  const handleFilterSelect = useCallback((filter: StatusFilter) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveFilter(filter);
+    void load(filter);
+  }, [load]);
+
+  useFocusEffect(useCallback(() => {
+    void load(activeFilter);
+  }, [activeGymId, session?.user?.id]));
+
+  // ── Active filter display props ──
+  const activeOpt = FILTER_OPTIONS.find((f) => f.key === activeFilter)!;
+  const activeColor = activeFilter === 'all' ? branding.primary : activeOpt.color;
+  const ts = tabStates[activeFilter];
+
+  // ── Helpers ──
+  const getRedemptionName = (r: any) => {
+    if (r.source_type === 'leaderboard_prize') return r.description || t('leaderboardPrize');
+    if (r.source_type === 'arena_prize') return r.description || t('arenaPrize');
+    return r.rewards?.name || t('unknownReward');
   };
 
   const getRewardIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
-      case 'coffee': return 'cafe-outline';
-      case 'protein': return 'nutrition-outline';
+      case 'coffee':   return 'cafe-outline';
+      case 'protein':  return 'nutrition-outline';
       case 'discount': return 'pricetag-outline';
-      case 'merch': return 'shirt-outline';
-      default: return 'gift-outline';
+      case 'merch':    return 'shirt-outline';
+      default:         return 'gift-outline';
     }
   };
 
@@ -96,8 +289,6 @@ export default function RedemptionsScreen() {
     return null;
   };
 
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-
   const copyCode = (code: string) => {
     Clipboard.setString(code);
     showModal({ title: t('copied'), body: t('codeCopied') });
@@ -106,20 +297,14 @@ export default function RedemptionsScreen() {
   const doCancel = async (redemption: any) => {
     setCancellingId(redemption.id);
     try {
-      const { data, error } = await supabase.rpc('cancel_own_redemption', {
-        p_redemption_id: redemption.id,
-      });
-
+      const { data, error } = await supabase.rpc('cancel_own_redemption', { p_redemption_id: redemption.id });
       if (error) {
         showModal({ title: t('cancelError'), body: error.message });
       } else {
         const result = Array.isArray(data) ? data[0] : data;
         if (result?.success) {
-          showModal({
-            title: t('cancelSuccess'),
-            body: t('cancelSuccessDesc', { drops: redemption.drops_spent }),
-          });
-          await loadRedemptions();
+          showModal({ title: t('cancelSuccess'), body: t('cancelSuccessDesc', { drops: redemption.drops_spent }) });
+          void load(activeFilter);
         } else {
           showModal({ title: t('cancelError'), body: result?.error_message || t('cancelErrorDesc') });
         }
@@ -138,185 +323,238 @@ export default function RedemptionsScreen() {
       body: t('cancelConfirm', { drops: redemption.drops_spent }),
       buttons: [
         { label: t('cancelNo'), style: 'cancel' },
-        {
-          label: t('cancelYes'),
-          style: 'destructive',
-          onPress: () => doCancel(redemption),
-        },
+        { label: t('cancelYes'), style: 'destructive', onPress: () => doCancel(redemption) },
       ],
     });
   };
 
-  if (loading) {
+  const renderCard = useCallback(({ item: redemption, index }: { item: any; index: number }) => {
+    const status = STATUS_CONFIG[redemption.status] || STATUS_CONFIG.cancelled;
+    const imageUrl = redemption.rewards?.image_url;
+    const sourceIcon = getSourceIcon(redemption.source_type);
+    const isPending = redemption.status === 'pending';
+
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFillObject} />
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={branding.primary} />
+      <Animated.View entering={FadeInDown.delay(30 + index * 40).duration(320)}>
+        <View style={[styles.card, {
+          borderTopColor:    hexToRgba(status.color, 0.30),
+          borderLeftColor:   hexToRgba(status.color, 0.12),
+          borderRightColor:  'rgba(255,255,255,0.04)',
+          borderBottomColor: 'rgba(255,255,255,0.03)',
+        }]}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlur} androidColor="rgba(12,12,22,0.97)">
+            <LinearGradient
+              colors={[hexToRgba(status.color, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <View style={styles.cardRow}>
+              {imageUrl ? (
+                <Image
+                  source={imageUrl}
+                  style={[styles.itemImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={[styles.itemIconBox, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                  {sourceIcon ? (
+                    <Text style={styles.sourceEmoji}>{sourceIcon}</Text>
+                  ) : (
+                    <Ionicons name={getRewardIcon(redemption.rewards?.reward_type || '')} size={24} color={branding.primary} />
+                  )}
+                </View>
+              )}
+
+              <View style={styles.cardInfo}>
+                <Text style={styles.itemName} numberOfLines={1}>{getRedemptionName(redemption)}</Text>
+                <Text style={styles.itemGym} numberOfLines={1}>{redemption.gyms?.name || t('unknownGym')}</Text>
+                <Text style={styles.itemDate}>
+                  {fmtDate(redemption.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}
+                </Text>
+              </View>
+
+              <View style={[styles.statusPill, { backgroundColor: status.color + '18' }]}>
+                <Ionicons name={status.icon} size={14} color={status.color} />
+                <Text style={[styles.statusLabel, { color: status.color }]}>{t(redemption.status)}</Text>
+              </View>
+            </View>
+
+            {isPending && redemption.redemption_code && (
+              <View style={styles.codeSection}>
+                <View style={[styles.codeBanner, { backgroundColor: hexToRgba(status.color, 0.06), borderColor: hexToRgba(status.color, 0.15) }]}>
+                  <View style={styles.codeLeft}>
+                    <Text style={styles.codeLabel}>{t('code')}</Text>
+                    <Text style={[styles.codeText, getNumberStyle(20), { color: branding.primary }]}>
+                      {redemption.redemption_code}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.copyBtn, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}
+                    onPress={() => copyCode(redemption.redemption_code)}
+                  >
+                    <Ionicons name="copy-outline" size={16} color={branding.primary} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.hintRow}>
+                  <Ionicons name="information-circle-outline" size={14} color={status.color} />
+                  <Text style={[styles.hintText, { color: status.color }]}>{t('showCodeToStaff')}</Text>
+                </View>
+              </View>
+            )}
+
+            {isPending && (
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: hexToRgba('#f87171', 0.35) }]}
+                onPress={() => handleCancelRedemption(redemption)}
+                disabled={cancellingId === redemption.id}
+              >
+                {cancellingId === redemption.id ? (
+                  <ActivityIndicator size="small" color="#f87171" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={15} color="#f87171" />
+                    <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {redemption.status === 'claimed' && (
+              <View style={[styles.prizeRow, { backgroundColor: hexToRgba('#60a5fa', 0.07) }]}>
+                <Text style={styles.prizeEmoji}>🎖️</Text>
+                <Text style={[styles.prizeLabel, { color: '#60a5fa' }]}>{t('prizeAwarded')}</Text>
+              </View>
+            )}
+
+            {redemption.status === 'expired' && (
+              <View style={[styles.expiredRow, { backgroundColor: hexToRgba('#94a3b8', 0.07) }]}>
+                <Ionicons name="alert-circle-outline" size={14} color="#94a3b8" />
+                <Text style={[styles.expiredLabel, { color: '#94a3b8' }]}>{t('expiredDesc')}</Text>
+              </View>
+            )}
+
+            {redemption.drops_spent > 0 && (
+              <View style={styles.dropsRow}>
+                <Ionicons name="water" size={14} color={branding.primary} />
+                <Text style={[styles.dropsText, getNumberStyle(13), { color: branding.primary }]}>
+                  {redemption.drops_spent} drops
+                </Text>
+              </View>
+            )}
+          </PlatformBlur>
         </View>
-      </View>
+      </Animated.View>
     );
-  }
+  }, [branding.primary, cancellingId, t]);
 
   return (
     <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
       <ScreenHeader title={t('title')} />
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
-        {redemptions.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>{t('noRedemptions')}</Text>
-            <Text style={styles.emptySubtext}>{t('noRedemptionsDesc')}</Text>
+      {/* ── Filter trigger button ── */}
+      <View style={styles.filterBarWrapper}>
+        <TouchableOpacity
+          style={[styles.filterTrigger, { borderColor: hexToRgba(activeColor, 0.30) }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setDropdownOpen(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <PlatformBlur intensity={50} tint="dark" style={styles.filterTriggerBlur} androidColor="rgba(12,12,22,0.97)">
+            <LinearGradient
+              colors={[hexToRgba(activeColor, 0.10), 'rgba(255,255,255,0.02)']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={[styles.filterTriggerDot, { backgroundColor: activeColor }]} />
+            <Ionicons name={activeOpt.icon} size={15} color={activeColor} />
+            <Text style={[styles.filterTriggerLabel, { color: activeColor }]}>
+              {t(activeOpt.labelKey)}
+            </Text>
+            <View style={styles.filterTriggerSpacer} />
+            <Ionicons name="chevron-down" size={14} color={hexToRgba(activeColor, 0.6)} />
+          </PlatformBlur>
+        </TouchableOpacity>
+
+        {/* Result count badge */}
+        {!ts.loading && ts.data.length > 0 && (
+          <View style={[styles.countBadge, { backgroundColor: hexToRgba(activeColor, 0.12), borderColor: hexToRgba(activeColor, 0.25) }]}>
+            <Text style={[styles.countBadgeText, { color: hexToRgba(activeColor, 0.85) }]}>
+              {ts.data.length}{ts.hasMore ? '+' : ''}
+            </Text>
           </View>
-        ) : (
-          redemptions.map((redemption, index) => {
-            const status = STATUS_CONFIG[redemption.status] || STATUS_CONFIG.cancelled;
-            const rewardType = redemption.rewards?.reward_type || '';
-            const imageUrl = redemption.rewards?.image_url;
-            const sourceIcon = getSourceIcon(redemption.source_type);
-            const isPending = redemption.status === 'pending';
-
-            return (
-              <Animated.View key={redemption.id} entering={FadeInDown.delay(80 + index * 60).duration(400)}>
-                <View style={[styles.card, {
-                  borderTopColor: hexToRgba(status.color, 0.30),
-                  borderLeftColor: hexToRgba(status.color, 0.12),
-                  borderRightColor: 'rgba(255,255,255,0.04)',
-                  borderBottomColor: 'rgba(255,255,255,0.03)',
-                }]}>
-                  <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
-                    <LinearGradient
-                      colors={[hexToRgba(status.color, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                      pointerEvents="none"
-                    />
-                    <View style={styles.cardRow}>
-                      {/* Image / Icon */}
-                      {imageUrl ? (
-                        <Image
-                          source={imageUrl}
-                          style={[styles.itemImage, { borderColor: hexToRgba(branding.primary, 0.12) }]}
-                          contentFit="cover"
-                          transition={200}
-                        />
-                      ) : (
-                        <View style={[styles.itemIconBox, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
-                          {sourceIcon ? (
-                            <Text style={styles.sourceEmoji}>{sourceIcon}</Text>
-                          ) : (
-                            <Ionicons name={getRewardIcon(rewardType)} size={24} color={branding.primary} />
-                          )}
-                        </View>
-                      )}
-
-                      {/* Info */}
-                      <View style={styles.cardInfo}>
-                        <Text style={styles.itemName} numberOfLines={1}>{getRedemptionName(redemption)}</Text>
-                        <Text style={styles.itemGym} numberOfLines={1}>
-                          {redemption.gyms?.name || t('unknownGym')}
-                        </Text>
-                        <Text style={styles.itemDate}>
-                          {new Date(redemption.created_at).toLocaleDateString(
-                            i18n.language === 'sr' ? 'sr-RS' : 'en-US',
-                            { day: 'numeric', month: 'short', year: 'numeric' }
-                          )}
-                        </Text>
-                      </View>
-
-                      {/* Status Badge */}
-                      <View style={[styles.statusPill, { backgroundColor: status.color + '18' }]}>
-                        <Ionicons name={status.icon} size={14} color={status.color} />
-                        <Text style={[styles.statusLabel, { color: status.color }]}>
-                          {t(redemption.status)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Code + Details (only for pending) */}
-                    {isPending && redemption.redemption_code && (
-                      <View style={styles.codeSection}>
-                        <View style={[styles.codeBanner, { backgroundColor: hexToRgba(status.color, 0.06), borderColor: hexToRgba(status.color, 0.15) }]}>
-                          <View style={styles.codeLeft}>
-                            <Text style={styles.codeLabel}>{t('code')}</Text>
-                            <Text style={[styles.codeText, getNumberStyle(20), { color: branding.primary }]}>
-                              {redemption.redemption_code}
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={[styles.copyBtn, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}
-                            onPress={() => copyCode(redemption.redemption_code)}
-                          >
-                            <Ionicons name="copy-outline" size={16} color={branding.primary} />
-                          </TouchableOpacity>
-                        </View>
-                        <View style={styles.hintRow}>
-                          <Ionicons name="information-circle-outline" size={14} color={status.color} />
-                          <Text style={[styles.hintText, { color: status.color }]}>
-                            {t('showCodeToStaff')}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-
-                    {/* Cancel button — standalone at the bottom, only for pending */}
-                    {isPending && (
-                      <TouchableOpacity
-                        style={[styles.cancelBtn, { borderColor: hexToRgba('#f87171', 0.35) }]}
-                        onPress={() => handleCancelRedemption(redemption)}
-                        disabled={cancellingId === redemption.id}
-                      >
-                        {cancellingId === redemption.id ? (
-                          <ActivityIndicator size="small" color="#f87171" />
-                        ) : (
-                          <>
-                            <Ionicons name="close-circle-outline" size={15} color="#f87171" />
-                            <Text style={styles.cancelBtnText}>{t('cancelRedemption')}</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    )}
-
-                    {/* Prize Awarded label for claimed status (leaderboard/arena prizes) */}
-                    {redemption.status === 'claimed' && (
-                      <View style={[styles.prizeRow, { backgroundColor: hexToRgba('#60a5fa', 0.07) }]}>
-                        <Text style={styles.prizeEmoji}>🎖️</Text>
-                        <Text style={[styles.prizeLabel, { color: '#60a5fa' }]}>{t('prizeAwarded')}</Text>
-                      </View>
-                    )}
-
-                    {/* Expired badge */}
-                    {redemption.status === 'expired' && (
-                      <View style={[styles.expiredRow, { backgroundColor: hexToRgba('#94a3b8', 0.07) }]}>
-                        <Ionicons name="alert-circle-outline" size={14} color="#94a3b8" />
-                        <Text style={[styles.expiredLabel, { color: '#94a3b8' }]}>{t('expiredDesc')}</Text>
-                      </View>
-                    )}
-
-                    {/* Drops spent row */}
-                    {redemption.drops_spent > 0 && (
-                      <View style={styles.dropsRow}>
-                        <Ionicons name="water" size={14} color={branding.primary} />
-                        <Text style={[styles.dropsText, getNumberStyle(13), { color: branding.primary }]}>
-                          {redemption.drops_spent} drops
-                        </Text>
-                      </View>
-                    )}
-                  </BlurView>
-                </View>
-              </Animated.View>
-            );
-          })
         )}
-      </ScrollView>
+      </View>
+
+      {/* ── Content ── */}
+      {ts.loading ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={branding.primary} />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 32 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={ts.refreshing} onRefresh={onRefresh} tintColor={branding.primary} />
+          }
+        >
+          {ts.data.length === 0 ? (
+            <Animated.View entering={FadeIn.delay(100).duration(400)} style={styles.emptyState}>
+              <Ionicons name="receipt-outline" size={60} color={hexToRgba(activeColor, 0.25)} />
+              <Text style={styles.emptyText}>
+                {activeFilter === 'all' ? t('noRedemptions') : t('noRedemptionsFiltered')}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {activeFilter === 'all' ? t('noRedemptionsDesc') : t('noRedemptionsFilteredDesc')}
+              </Text>
+            </Animated.View>
+          ) : (
+            <>
+              {ts.data.map((item, index) => (
+                <View key={item.id}>{renderCard({ item, index })}</View>
+              ))}
+              {ts.hasMore && (
+                <TouchableOpacity
+                  style={[styles.loadMoreBtn, { borderColor: hexToRgba(branding.primary, 0.20) }]}
+                  onPress={onLoadMore}
+                  disabled={ts.loadingMore}
+                >
+                  {ts.loadingMore ? (
+                    <ActivityIndicator size="small" color={branding.primary} />
+                  ) : (
+                    <>
+                      <Ionicons name="chevron-down-outline" size={14} color={branding.primary} />
+                      <Text style={[styles.loadMoreLabel, { color: branding.primary }]}>{t('loadMore')}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── Filter bottom sheet ── */}
+      <FilterSheet
+        visible={dropdownOpen}
+        activeFilter={activeFilter}
+        onSelect={handleFilterSelect}
+        onClose={() => setDropdownOpen(false)}
+        branding={branding}
+        t={t}
+        bottomInset={insets.bottom}
+      />
     </View>
   );
 }
@@ -328,18 +566,155 @@ const styles = StyleSheet.create({
   },
   centerContent: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    padding: theme.spacing.lg,
-    paddingBottom: 40,
+
+  // ── Filter trigger ──
+  filterBarWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  filterTrigger: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    height: 44,
+  },
+  filterTriggerBlur: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  filterTriggerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  filterTriggerLabel: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 0.6,
+  },
+  filterTriggerSpacer: {
+    flex: 1,
+  },
+  countBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  countBadgeText: {
+    ...getNumberStyle(12),
+    fontWeight: '600',
+  },
+
+  // ── Dropdown sheet ──
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+  },
+  sheetBlur: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    paddingTop: 12,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  sheetTitle: {
+    ...fontStyles.heading,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.35)',
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    gap: 14,
+  },
+  optionDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  optionIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  optionText: {
+    flex: 1,
+    gap: 2,
+  },
+  optionLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  optionDesc: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 0.2,
+  },
+  optionCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  // ── List ──
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
   },
   emptyState: {
-    padding: theme.spacing['3xl'],
+    paddingVertical: 64,
     alignItems: 'center',
     gap: theme.spacing.md,
   },
@@ -348,14 +723,33 @@ const styles = StyleSheet.create({
     ...fontStyles.heading,
     color: theme.colors.text,
     letterSpacing: 0.3,
+    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  loadMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  loadMoreLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
     letterSpacing: 0.3,
   },
 
+  // ── Cards ──
   card: {
     borderRadius: 18,
     overflow: 'hidden',
@@ -429,7 +823,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-
   codeSection: {
     marginTop: 12,
     gap: 8,
@@ -443,9 +836,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  codeLeft: {
-    gap: 2,
-  },
+  codeLeft: { gap: 2 },
   codeLabel: {
     ...fontStyles.body,
     fontSize: 11,
@@ -474,7 +865,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.2,
   },
-
   dropsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -484,9 +874,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  dropsText: {
-    ...fontStyles.number,
-  },
+  dropsText: { ...fontStyles.number },
   cancelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -512,9 +900,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
   },
-  prizeEmoji: {
-    fontSize: 16,
-  },
+  prizeEmoji: { fontSize: 16 },
   prizeLabel: {
     ...fontStyles.bodySemiBold,
     fontSize: 13,

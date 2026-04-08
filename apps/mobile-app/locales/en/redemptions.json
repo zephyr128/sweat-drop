@@ -1,7 +1,20 @@
 {
   "title": "My redemptions",
+  "filterAll": "All",
+  "filterConfirmed": "Confirmed",
+  "filterCancelled": "Cancelled",
+  "filterExpired": "Expired",
+  "filterBy": "Filter by status",
+  "filterAllDesc": "Show everything",
+  "filterPendingDesc": "Awaiting confirmation",
+  "filterConfirmedDesc": "Ready to collect",
+  "filterClaimedDesc": "Prize already received",
+  "filterCancelledDesc": "You cancelled these",
+  "filterExpiredDesc": "Time ran out",
   "noRedemptions": "No redemptions yet",
   "noRedemptionsDesc": "Redeem rewards from the store to see them here",
+  "noRedemptionsFiltered": "Nothing here",
+  "noRedemptionsFilteredDesc": "No redemptions match this filter",
   "code": "Code",
   "dropsSpent": "Drops spent",
   "date": "Date",
@@ -30,5 +43,6 @@
   "cancelSuccess": "Redemption cancelled",
   "cancelSuccessDesc": "{{drops}} drops have been refunded to your balance.",
   "cancelError": "Could not cancel",
-  "cancelErrorDesc": "Something went wrong. Please try again."
+  "cancelErrorDesc": "Something went wrong. Please try again.",
+  "loadMore": "Load more"
 }

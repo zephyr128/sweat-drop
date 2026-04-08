@@ -119,6 +119,7 @@
     "today": "Danas",
     "toReward": "{{drops}} do {{reward}}",
     "toUnlock": "do nagrade",
+    "canAfford": "Spreman za otkup!",
     "dailyMax": "Dnevni maksimum! Streak nastavlja",
     "perfectWeek": "Savršena nedelja!",
     "onFire": "U vatri!",
@@ -143,5 +144,6 @@
     "hhToday": "Danas",
     "hhTomorrow": "Sutra"
   },
+  "nextAward": "Sledeća nagrada",
   "foundingPartner": "Osnivački partner"
 }

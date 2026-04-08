@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState, useMemo } from 'react';
 import Animated, {
@@ -329,7 +329,8 @@ export default function GymWelcomeScreen() {
           entering={FadeInDown.delay(950).duration(400)}
           style={[styles.infoCard, { borderColor: hexToRgba(brandPrimary, 0.12) }]}
         >
-          <BlurView
+          <PlatformBlur
+            androidColor="rgba(12,12,22,0.97)"
             intensity={50}
             tint="dark"
             style={styles.infoCardBlur}
@@ -357,7 +358,7 @@ export default function GymWelcomeScreen() {
                 <Text style={styles.infoLabel}>{t('inGym')}</Text>
               </View>
             </View>
-          </BlurView>
+          </PlatformBlur>
         </Animated.View>
 
         {/* ── CTA BUTTON ──────────────────────────── */}

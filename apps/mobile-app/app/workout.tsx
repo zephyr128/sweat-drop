@@ -24,7 +24,7 @@ import Animated, {
   cancelAnimation,
   FadeInDown,
 } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
@@ -2838,9 +2838,9 @@ export default function WorkoutScreen() {
         />
       )}
       {/* Blurred dark overlay for contrast */}
-      <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
+      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
-      </BlurView>
+      </PlatformBlur>
 
       {/* Header with Gym Info + Status Badges */}
       <View style={styles.header}>

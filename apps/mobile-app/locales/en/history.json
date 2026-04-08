@@ -38,6 +38,12 @@
   "sun": "Sun",
   "currentStreak": "Current streak",
   "maxStreak": "Best streak",
+  "monthStreak": "Month best",
+  "workout": "workout",
+  "day": "day",
+  "showAllMonth": "Show all month",
+  "noWorkoutsThisDay": "No workouts on this day",
+  "tapDayAgain": "Tap the date again to show all",
   "days": "days",
   "streakActive": "You're on fire! Keep it going.",
   "streakInactive": "Train today to start a new streak!"

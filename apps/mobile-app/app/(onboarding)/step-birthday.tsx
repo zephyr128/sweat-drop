@@ -6,6 +6,7 @@ import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import OnboardingStepLayout from '@/components/OnboardingStep';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 const YEAR_QUICK = [2000, 1998, 1995, 1990, 1985, 1980];
 
@@ -31,6 +32,7 @@ function calculateAge(dateStr: string): number {
 export default function StepBirthdayScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const { data, setField, isEdit } = useOnboardingWizard();
 
   const [day, setDay] = useState('');
@@ -142,7 +144,7 @@ export default function StepBirthdayScreen() {
 
         {/* Age display */}
         {age !== null && age >= 13 && (
-          <Text style={styles.ageDisplay}>
+          <Text style={[styles.ageDisplay, { color: branding.primary }]}>
             {t('profileSetup.birthday.ageDisplay', { age })}
           </Text>
         )}
@@ -160,7 +162,7 @@ export default function StepBirthdayScreen() {
               key={y}
               style={[
                 styles.quickChip,
-                year === String(y) && { borderColor: theme.colors.primary, backgroundColor: 'rgba(0,229,255,0.1)' },
+                year === String(y) && { borderColor: branding.primary, backgroundColor: 'rgba(0,229,255,0.1)' },
               ]}
               onPress={() => handleYearQuick(y)}
               activeOpacity={0.7}
@@ -168,7 +170,7 @@ export default function StepBirthdayScreen() {
               <Text
                 style={[
                   styles.quickChipText,
-                  year === String(y) && { color: theme.colors.primary },
+                  year === String(y) && { color: branding.primary },
                 ]}
               >
                 {y}

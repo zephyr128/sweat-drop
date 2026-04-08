@@ -29,7 +29,6 @@ export interface ActivityRingsProps {
   totalGymDrops: number;
   size?: number;
   focusKey?: number;
-  gymName?: string;
   onPress?: () => void;
 }
 
@@ -63,7 +62,6 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
   totalGymDrops,
   size = 290,
   focusKey = 0,
-  gymName,
   onPress,
 }) => {
   const { t } = useTranslation('home');
@@ -324,15 +322,7 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
             >
               {formatDrops(totalGymDrops)}
             </Text>
-            {overCap && todayBonusDrops > 0 ? (
-              <View style={styles.centerBonusRow}>
-                <Text style={styles.centerBonus}>+{todayBonusDrops}</Text>
-              </View>
-            ) : null}
             <Text style={styles.centerLabel}>{t('rings.drops')}</Text>
-            {gymName ? (
-              <Text style={styles.centerGymName} numberOfLines={1}>{gymName}</Text>
-            ) : null}
           </Animated.View>
         </Animated.View>
       </Animated.View>
@@ -363,16 +353,6 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     textAlign: 'center',
   },
-  centerBonusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  centerBonus: {
-    ...fontStyles.number,
-    fontSize: 11,
-    color: 'rgba(76, 217, 100, 0.9)',
-  },
   centerLabel: {
     ...fontStyles.heading,
     fontSize: 11,
@@ -380,13 +360,5 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
     marginTop: 4,
-  },
-  centerGymName: {
-    ...fontStyles.body,
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.22)',
-    letterSpacing: 0.5,
-    marginTop: 2,
-    textAlign: 'center',
   },
 });

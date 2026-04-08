@@ -5,9 +5,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { formatMonthYear } from '@/lib/utils/formatDate';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
@@ -26,9 +27,7 @@ interface PublicProfile {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'];
-  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+  return formatMonthYear(iso);
 }
 
 export default function UserProfileScreen() {
@@ -120,7 +119,7 @@ export default function UserProfileScreen() {
         {/* Hero section */}
         <Animated.View entering={FadeInDown.duration(400)}>
           <View style={[styles.heroCard, { borderColor: hexToRgba(branding.primary, 0.2) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.heroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.heroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               <LinearGradient
                 colors={[hexToRgba(branding.primary, 0.08), 'transparent']}
                 start={{ x: 0.5, y: 0 }}
@@ -144,7 +143,7 @@ export default function UserProfileScreen() {
                   {t('memberSince', { date: formatDate(profile.created_at) })}
                 </Text>
               </LinearGradient>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -152,33 +151,33 @@ export default function UserProfileScreen() {
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="water" size={20} color={branding.primary} />
                 <Text style={[styles.statValue, getNumberStyle(20), { color: branding.primary }]}>
                   {profile.total_drops.toLocaleString()}
                 </Text>
                 <Text style={styles.statLabel}>{t('totalDrops')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
 
             <View style={[styles.statCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="flame" size={20} color="#FF6B35" />
                 <Text style={[styles.statValue, getNumberStyle(20)]}>
                   {profile.streak_days}
                 </Text>
                 <Text style={styles.statLabel}>{t('streak')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
 
             <View style={[styles.statCard, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="ribbon" size={20} color="#FFD700" />
                 <Text style={[styles.statValue, getNumberStyle(20)]}>
                   {badges.length}
                 </Text>
                 <Text style={styles.statLabel}>{t('badges')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </View>
         </Animated.View>
@@ -186,7 +185,7 @@ export default function UserProfileScreen() {
         {/* Badges section */}
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
           <View style={[styles.badgesSection, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.badgesSectionBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.badgesSectionBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               <View style={styles.badgesSectionHeader}>
                 <Ionicons name="trophy" size={18} color={branding.primary} />
                 <Text style={[styles.badgesSectionTitle, { color: branding.primary }]}>
@@ -222,7 +221,7 @@ export default function UserProfileScreen() {
                   ))}
                 </View>
               )}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
       </ScrollView>

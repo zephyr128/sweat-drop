@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 
@@ -54,7 +54,7 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
     <View style={styles.row}>
       {/* 🔥 Streak */}
       <TouchableOpacity style={styles.pillWrapper} onPress={onStreakPress} activeOpacity={onStreakPress ? 0.7 : 1}>
-        <BlurView intensity={50} tint="dark" style={styles.pill}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.pill}>
           <View style={[styles.pillIconBg, { backgroundColor: streakActive ? hexToRgba('#FF6B35', 0.2) : hexToRgba(brandPrimary, 0.1) }]}>
             <Ionicons
               name="flame"
@@ -68,12 +68,12 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
             </Text>
             <Text style={styles.pillLabel}>Streak</Text>
           </View>
-        </BlurView>
+        </PlatformBlur>
       </TouchableOpacity>
 
       {/* 💧 Today's drops */}
       <View style={styles.pillWrapper}>
-        <BlurView intensity={50} tint="dark" style={styles.pill}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.pill}>
           <View style={[styles.pillIconBg, { backgroundColor: hexToRgba(brandPrimary, 0.15) }]}>
             <Ionicons name="water" size={16} color={brandPrimary} />
           </View>
@@ -83,12 +83,12 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
             </Text>
             <Text style={styles.pillLabel}>Today</Text>
           </View>
-        </BlurView>
+        </PlatformBlur>
       </View>
 
       {/* ⏱ Last workout */}
       <View style={styles.pillWrapper}>
-        <BlurView intensity={50} tint="dark" style={styles.pill}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.pill}>
           <View style={[styles.pillIconBg, { backgroundColor: hexToRgba(brandPrimary, 0.1) }]}>
             <Ionicons name="time-outline" size={16} color="#B0B0B0" />
           </View>
@@ -100,7 +100,7 @@ export const QuickStatsRow: React.FC<QuickStatsRowProps> = ({
               {lastSublabel}
             </Text>
           </View>
-        </BlurView>
+        </PlatformBlur>
       </View>
     </View>
   );

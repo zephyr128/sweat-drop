@@ -8,6 +8,7 @@ import { useOnboardingWizard, type FitnessGoal } from '@/hooks/useOnboardingWiza
 import { useAuthStore } from '@/lib/stores/authStore';
 import OnboardingStepLayout from '@/components/OnboardingStep';
 import { useAppModal } from '@/lib/stores/useAppModal';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -21,6 +22,7 @@ const GOALS: { value: FitnessGoal; icon: IoniconName; color: string; labelKey: s
 export default function StepGoalScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const showModal = useAppModal((s) => s.showModal);
   const { data, setField, submit, isEdit } = useOnboardingWizard();
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
@@ -65,8 +67,8 @@ export default function StepGoalScreen() {
               style={[
                 styles.card,
                 selected && {
-                  borderColor: theme.colors.primary,
-                  backgroundColor: hexToRgba(theme.colors.primary, 0.12),
+                  borderColor: branding.primary,
+                  backgroundColor: hexToRgba(branding.primary, 0.12),
                 },
               ]}
               onPress={() => handleSelect(goal.value)}
@@ -75,7 +77,7 @@ export default function StepGoalScreen() {
               <View style={[styles.cardIconBox, selected && { backgroundColor: hexToRgba(goal.color, 0.15) }]}>
                 <Ionicons name={goal.icon} size={28} color={selected ? goal.color : theme.colors.textSecondary} />
               </View>
-              <Text style={[styles.cardLabel, selected && { color: theme.colors.primary }]}>
+              <Text style={[styles.cardLabel, selected && { color: branding.primary }]}>
                 {t(goal.labelKey)}
               </Text>
               <Text style={styles.cardDesc} numberOfLines={2}>{t(goal.descKey)}</Text>

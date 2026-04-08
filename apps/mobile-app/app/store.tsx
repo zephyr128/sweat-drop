@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
@@ -213,7 +213,7 @@ export default function StoreScreen() {
               borderRightColor: 'rgba(255,255,255,0.05)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={50} tint="dark" style={styles.balanceBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.balanceBlur}>
                 <LinearGradient
                   colors={[hexToRgba(branding.primary, 0.12), 'rgba(255,255,255,0.02)', 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -225,7 +225,7 @@ export default function StoreScreen() {
                   {localDrops.toLocaleString()} drops
                 </Text>
                 <Text style={styles.balanceLabel}>{t('availableAtGym')}</Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         }
@@ -265,7 +265,7 @@ export default function StoreScreen() {
                 onPress={() => router.push({ pathname: '/reward-detail', params: { rewardId: reward.id, gymId: activeGymId || '' } })}
                 activeOpacity={0.8}
               >
-                <BlurView intensity={50} tint="dark" style={styles.rewardBlur}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.rewardBlur}>
                   {!disabled && (
                     <LinearGradient
                       colors={[hexToRgba(branding.primary, 0.08), 'rgba(255,255,255,0.02)', 'transparent']}
@@ -339,7 +339,7 @@ export default function StoreScreen() {
                       ) : null}
                     </View>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </TouchableOpacity>
             </Animated.View>
           );

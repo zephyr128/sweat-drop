@@ -6,12 +6,14 @@ import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import OnboardingStepLayout from '@/components/OnboardingStep';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 const QUICK_VALUES = [50, 60, 70, 80, 90, 100];
 
 export default function StepWeightScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const { data, setField, isEdit } = useOnboardingWizard();
   const [text, setText] = useState(data.weight_kg ? String(data.weight_kg) : '');
 
@@ -71,7 +73,7 @@ export default function StepWeightScreen() {
               key={v}
               style={[
                 styles.quickChip,
-                data.weight_kg === v && { borderColor: theme.colors.primary, backgroundColor: 'rgba(0,229,255,0.1)' },
+                data.weight_kg === v && { borderColor: branding.primary, backgroundColor: 'rgba(0,229,255,0.1)' },
               ]}
               onPress={() => handleQuick(v)}
               activeOpacity={0.7}
@@ -79,7 +81,7 @@ export default function StepWeightScreen() {
               <Text
                 style={[
                   styles.quickChipText,
-                  data.weight_kg === v && { color: theme.colors.primary },
+                  data.weight_kg === v && { color: branding.primary },
                 ]}
               >
                 {v}

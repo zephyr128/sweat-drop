@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlurOverlay } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme, getNumberStyle, fontStyles } from '@/lib/theme';
@@ -47,8 +47,8 @@ export default function WorkoutSummaryModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <BlurView intensity={80} style={StyleSheet.absoluteFill}>
-        <View style={styles.container}>
+      <PlatformBlurOverlay blurIntensity={80} opacity={0.85} />
+      <View style={[StyleSheet.absoluteFillObject, styles.container]}>
           <LinearGradient
             colors={[branding.primaryLight, theme.colors.surface]}
             start={{ x: 0, y: 0 }}
@@ -121,7 +121,6 @@ export default function WorkoutSummaryModal({
             </ScrollView>
           </LinearGradient>
         </View>
-      </BlurView>
     </Modal>
   );
 }

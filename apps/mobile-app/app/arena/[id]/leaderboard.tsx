@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
@@ -202,7 +202,7 @@ export default function ArenaLeaderboardScreen() {
             {/* Full List */}
             <Animated.View entering={FadeInDown.delay(250).duration(400)}>
               <View style={[styles.listContainer, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.listBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.listBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                   {leaderboard.map((entry, index) => {
                     const rank = getRankDisplay(entry.rank);
                     const isCurrent = isCurrentUser(entry.user_id);
@@ -253,7 +253,7 @@ export default function ArenaLeaderboardScreen() {
                       </TouchableOpacity>
                     );
                   })}
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
@@ -261,11 +261,11 @@ export default function ArenaLeaderboardScreen() {
             {currentUserEntry && currentUserEntry.rank > 50 && (
               <Animated.View entering={FadeInDown.delay(350).duration(400)}>
                 <View style={[styles.stickyFooter, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-                  <BlurView intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.stickyFooterBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     <Text style={[styles.stickyRank, { color: branding.primary }]}>#{currentUserEntry.rank}</Text>
                     <Text style={styles.stickyName}>{currentUserEntry.username}</Text>
                     <Text style={[styles.scoreLabel, { color: branding.primary }]}>{currentUserEntry.score_label}</Text>
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}

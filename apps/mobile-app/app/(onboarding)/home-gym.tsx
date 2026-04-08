@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -53,7 +53,8 @@ function HomeGymPickerCard({
           </>
         )}
 
-        <BlurView
+        <PlatformBlur
+          androidColor="rgba(12,12,22,0.97)"
           intensity={gym.background_url ? 0 : 50}
           tint="dark"
           style={styles.cardBlur}
@@ -91,7 +92,7 @@ function HomeGymPickerCard({
               <Ionicons name="chevron-forward" size={16} color={brandColor} />
             </View>
           </View>
-        </BlurView>
+        </PlatformBlur>
       </TouchableOpacity>
     </Animated.View>
   );

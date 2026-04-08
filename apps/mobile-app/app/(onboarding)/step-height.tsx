@@ -6,12 +6,14 @@ import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import OnboardingStepLayout from '@/components/OnboardingStep';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 
 const QUICK_VALUES = [160, 165, 170, 175, 180, 185, 190];
 
 export default function StepHeightScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const { data, setField, isEdit } = useOnboardingWizard();
   const [text, setText] = useState(data.height_cm ? String(data.height_cm) : '');
 
@@ -71,7 +73,7 @@ export default function StepHeightScreen() {
               key={v}
               style={[
                 styles.quickChip,
-                data.height_cm === v && { borderColor: theme.colors.primary, backgroundColor: 'rgba(0,229,255,0.1)' },
+                data.height_cm === v && { borderColor: branding.primary, backgroundColor: 'rgba(0,229,255,0.1)' },
               ]}
               onPress={() => handleQuick(v)}
               activeOpacity={0.7}
@@ -79,7 +81,7 @@ export default function StepHeightScreen() {
               <Text
                 style={[
                   styles.quickChipText,
-                  data.height_cm === v && { color: theme.colors.primary },
+                  data.height_cm === v && { color: branding.primary },
                 ]}
               >
                 {v}

@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -389,7 +389,7 @@ export default function WalletScreen() {
         {/* ── Hero balance card ── */}
         <Animated.View entering={FadeInDown.delay(80).duration(500)}>
           <View style={[styles.heroOuter, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
-            <BlurView intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={glassCard.blur} tint="dark" style={styles.heroBlur}>
               <LinearGradient
                 colors={[
                   hexToRgba(branding.primary, 0.14),
@@ -429,14 +429,14 @@ export default function WalletScreen() {
                   </TouchableOpacity>
                 )}
               </LinearGradient>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
         {/* ── Unified Earned / Spent summary card ── */}
         <Animated.View entering={FadeInDown.delay(160).duration(500)}>
           <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-            <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
 
               {/* Period selector tabs — flush to the card top edge, full width */}
               <SliderTabs
@@ -522,7 +522,7 @@ export default function WalletScreen() {
                 </View>
               </View>
 
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -530,7 +530,7 @@ export default function WalletScreen() {
         {scope === 'global' && userGyms.length > 0 && (
           <Animated.View entering={FadeInDown.delay(220).duration(500)}>
             <View style={[styles.sectionCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}>
-              <BlurView intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={glassCard.blur} tint="dark" style={styles.sectionBlur}>
                 <View style={styles.sectionInner}>
                   <Text style={styles.sectionTitle}>{t('balanceByGym')}</Text>
                   {(() => {
@@ -559,7 +559,7 @@ export default function WalletScreen() {
                     ));
                   })()}
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -588,7 +588,7 @@ export default function WalletScreen() {
             }}
             activeOpacity={0.75}
           >
-            <BlurView intensity={glassCard.blur} tint="dark" style={styles.historyCtaBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={glassCard.blur} tint="dark" style={styles.historyCtaBlur}>
               <View style={[styles.historyCtaIcon, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
                 <Ionicons name="receipt-outline" size={20} color={branding.primary} />
               </View>
@@ -597,7 +597,7 @@ export default function WalletScreen() {
                 <Text style={styles.historyCtaSub}>{t('transactionHistorySub')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
-            </BlurView>
+            </PlatformBlur>
           </TouchableOpacity>
         </Animated.View>
 

@@ -28,7 +28,7 @@ import Animated, {
   cancelAnimation,
   FadeInDown,
 } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -621,9 +621,9 @@ export default function WorkoutSimScreen() {
           pointerEvents="none"
         />
       )}
-      <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
+      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
-      </BlurView>
+      </PlatformBlur>
 
       {/* Header — simulation badge left, drops right */}
       <View style={workoutStyles.header}>

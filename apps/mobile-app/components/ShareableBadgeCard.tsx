@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 
 // AGENT NOTE: [2026-03-03] - mobile-coder
 // Shareable badge card for social sharing — 1:1 square format.
@@ -25,12 +26,7 @@ export interface ShareableBadgeData {
 }
 
 function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return fmtDate(dateString, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 // Badge category color mapping (matches BadgeCard)

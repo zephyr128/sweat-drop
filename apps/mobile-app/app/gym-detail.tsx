@@ -15,7 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, {
   FadeInDown,
   useSharedValue,
@@ -401,7 +401,7 @@ export default function GymDetailScreen() {
       <View style={[styles.floatingHeader, { paddingTop: insets.top }]}>
         {/* Blur background fades in as cover scrolls away */}
         <Animated.View style={[StyleSheet.absoluteFillObject, headerBgStyle]} pointerEvents="none">
-          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
           <LinearGradient
             colors={['rgba(0,0,0,0.75)', 'rgba(0,0,0,0.0)']}
             style={StyleSheet.absoluteFillObject}
@@ -508,7 +508,7 @@ export default function GymDetailScreen() {
             borderRightColor: 'rgba(255,255,255,0.05)',
             borderBottomColor: 'rgba(255,255,255,0.04)',
           }]}>
-            <BlurView intensity={55} tint="dark" style={styles.heroBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={55} tint="dark" style={styles.heroBlur}>
               <LinearGradient
                 colors={[hexToRgba(brandColor, 0.14), 'rgba(255,255,255,0.03)', 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -588,7 +588,7 @@ export default function GymDetailScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -601,7 +601,7 @@ export default function GymDetailScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
                 <LinearGradient
                   colors={[hexToRgba(brandColor, 0.08), 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -638,7 +638,7 @@ export default function GymDetailScreen() {
                     );
                   })}
                 </View>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -652,7 +652,7 @@ export default function GymDetailScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
                 <LinearGradient
                   colors={[hexToRgba(brandColor, 0.08), 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -694,7 +694,7 @@ export default function GymDetailScreen() {
                     <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.25)" />
                   </TouchableOpacity>
                 )}
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -708,7 +708,7 @@ export default function GymDetailScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={50} tint="dark" style={styles.cardBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
                 <LinearGradient
                   colors={[hexToRgba(brandColor, 0.08), 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -743,7 +743,7 @@ export default function GymDetailScreen() {
                     </View>
                   </React.Fragment>
                 ))}
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -755,7 +755,7 @@ export default function GymDetailScreen() {
       {/* Sticky CTA */}
       {!isHome && session && (
         <View style={styles.bottomBar}>
-          <BlurView intensity={80} tint="dark" style={styles.bottomBlur}>
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.bottomBlur}>
             <TouchableOpacity
               style={[styles.ctaButton, { backgroundColor: brandColor }]}
               onPress={handleSetHomeGym}
@@ -771,7 +771,7 @@ export default function GymDetailScreen() {
                 </>
               )}
             </TouchableOpacity>
-          </BlurView>
+          </PlatformBlur>
         </View>
       )}
 

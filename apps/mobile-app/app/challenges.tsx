@@ -13,7 +13,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
@@ -24,6 +24,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 
 // ── Helper functions (module-level, no hooks) ────────────────────────────────
 
@@ -178,6 +179,7 @@ export default function ChallengesScreen() {
           current_drops: isStreak ? (c.progress.current_streak_days || 0) : (c.progress.current_drops || 0),
           current_streak_days: c.progress.current_streak_days || 0,
           is_completed: c.progress.is_completed || false,
+          completed_at: c.progress.completed_at || null,
           updated_at: c.progress.updated_at || null,
         };
       }
@@ -226,10 +228,7 @@ export default function ChallengesScreen() {
 
   const formatCompletedDate = (dateStr: string | null) => {
     if (!dateStr) return '';
-    return new Date(dateStr).toLocaleDateString(
-      i18n.language === 'sr' ? 'sr-RS' : 'en-US',
-      { month: 'short', day: 'numeric' },
-    );
+    return fmtDate(dateStr, { month: 'short', day: 'numeric' });
   };
 
   // ── Card helpers ─────────────────────────────────────────────────────────
@@ -314,7 +313,7 @@ export default function ChallengesScreen() {
                 onPress={() => router.push({ pathname: '/challenge-detail', params: { challengeId: challenge.id, gymId: challenge.gym_id } })}
                 activeOpacity={0.8}
               >
-                <BlurView intensity={50} tint="dark" style={styles.activeBlur}>
+                <PlatformBlur intensity={50} tint="dark" style={styles.activeBlur} androidColor="rgba(16,16,28,0.97)">
                   <LinearGradient
                     colors={isCompleted
                       ? ['rgba(74,222,128,0.06)', 'transparent']
@@ -412,7 +411,7 @@ export default function ChallengesScreen() {
                       </View>
                     )}
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </TouchableOpacity>
             </Animated.View>
           );
@@ -448,7 +447,7 @@ export default function ChallengesScreen() {
                 onPress={() => router.push({ pathname: '/challenge-detail', params: { challengeId: challenge.id, gymId: challenge.gym_id } })}
                 activeOpacity={0.8}
               >
-                <BlurView intensity={40} tint="dark" style={styles.completedBlur}>
+                <PlatformBlur intensity={40} tint="dark" style={styles.completedBlur} androidColor="rgba(16,16,28,0.97)">
                   <LinearGradient
                     colors={['rgba(74,222,128,0.05)', 'transparent']}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -472,7 +471,7 @@ export default function ChallengesScreen() {
                       </Text>
                       <Text style={styles.completedName} numberOfLines={1}>{challenge.name}</Text>
                       <Text style={styles.completedDate}>
-                        {t('completedOn', { date: formatCompletedDate(userProgress?.updated_at || challenge.updated_at) })}
+                        {t('completedOn', { date: formatCompletedDate(userProgress?.completed_at || userProgress?.updated_at || challenge.updated_at) })}
                       </Text>
                     </View>
 
@@ -486,7 +485,7 @@ export default function ChallengesScreen() {
                       <Text style={styles.completedDropsLabel}>drops</Text>
                     </View>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </TouchableOpacity>
             </Animated.View>
           );

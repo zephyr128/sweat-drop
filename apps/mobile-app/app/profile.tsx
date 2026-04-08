@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
@@ -24,6 +24,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { formatMonthYear } from '@/lib/utils/formatDate';
 import { log } from '@/lib/logger';
 
 function SectionLabel({ label }: { label: string }) {
@@ -63,10 +64,8 @@ interface UserGym {
   isHome: boolean;
 }
 
-function formatMemberSince(iso: string, lang: string = 'sr'): string {
-  const d = new Date(iso);
-  const locale = lang === 'sr' ? 'sr-RS' : 'en-US';
-  return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+function formatMemberSince(iso: string): string {
+  return formatMonthYear(iso);
 }
 
 export default function ProfileScreen() {
@@ -278,7 +277,7 @@ export default function ProfileScreen() {
             borderRightColor: 'rgba(255,255,255,0.05)',
             borderBottomColor: 'rgba(255,255,255,0.04)',
           }]}>
-            <BlurView intensity={55} tint="dark" style={styles.heroBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={55} tint="dark" style={styles.heroBlur}>
               <LinearGradient
                 colors={[hexToRgba(branding.primary, 0.12), 'rgba(255,255,255,0.03)', 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -348,7 +347,7 @@ export default function ProfileScreen() {
                   <View style={styles.heroMeta}>
                     <Ionicons name="calendar-outline" size={11} color="rgba(255,255,255,0.35)" />
                     <Text style={styles.heroMetaText}>
-                      {profile ? formatMemberSince(profile.created_at, i18n.language) : ''}
+                      {profile ? formatMemberSince(profile.created_at) : ''}
                     </Text>
                     {profile?.is_newcomer && (
                       <View style={styles.newcomerDot}>
@@ -421,7 +420,7 @@ export default function ProfileScreen() {
                 </Text>
                 <Ionicons name="chevron-forward" size={12} color={hexToRgba(branding.primary, 0.35)} />
               </TouchableOpacity>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -437,7 +436,7 @@ export default function ProfileScreen() {
                   onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } } as any)}
                   activeOpacity={0.7}
                 >
-                  <BlurView intensity={30} tint="dark" style={[styles.gymCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={30} tint="dark" style={[styles.gymCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
                     {gym.logo_url ? (
                       <Image source={gym.logo_url} style={styles.gymLogo} transition={200} />
                     ) : (
@@ -457,7 +456,7 @@ export default function ProfileScreen() {
                         <Text style={[styles.homeBadgeText, { color: branding.primary }]}>{t('homeGymBadge')}</Text>
                       </View>
                     )}
-                  </BlurView>
+                  </PlatformBlur>
                 </TouchableOpacity>
               ))}
             </View>
@@ -474,7 +473,7 @@ export default function ProfileScreen() {
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
-              <BlurView intensity={50} tint="dark" style={styles.achieveBlur}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.achieveBlur}>
                 <LinearGradient
                   colors={[hexToRgba('#FFD700', 0.07), 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -509,7 +508,7 @@ export default function ProfileScreen() {
                     <Text style={[styles.achieveCountText, { color: '#FFD700' }]}>{badges.length}</Text>
                   </View>
                 </TouchableOpacity>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -518,7 +517,7 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(400).duration(300)}>
           <SectionLabel label={t('sections.activity')} />
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
               {activityLinks.map((link, i) => {
                 const isDisabled = link.key === 'leaderboard' && !hasGym;
                 return (
@@ -542,7 +541,7 @@ export default function ProfileScreen() {
                   </View>
                 );
               })}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -550,7 +549,7 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(430).duration(300)}>
           <SectionLabel label={t('sections.social')} />
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
               {socialLinks.map((link, i) => {
                 const isDisabled = !hasGym;
                 return (
@@ -574,7 +573,7 @@ export default function ProfileScreen() {
                   </View>
                 );
               })}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -582,7 +581,7 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(460).duration(300)}>
           <SectionLabel label={t('sections.rewards')} />
           <View style={[styles.linksCard, { borderColor: hexToRgba(branding.primary, 0.08) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.linksBlur, { backgroundColor: 'rgba(20, 20, 30, 0.7)' }]}>
               {rewardsLinks.map((link, i) => {
                 const isDisabled = !hasGym;
                 return (
@@ -606,7 +605,7 @@ export default function ProfileScreen() {
                   </View>
                 );
               })}
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 

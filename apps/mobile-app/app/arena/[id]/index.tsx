@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo, type ComponentProps } from '
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useSession } from '@/hooks/useSession';
@@ -14,6 +14,7 @@ import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { AvailableArena } from '@/hooks/useAvailableArenas';
 import ArenaGymBreakdown from '@/components/ArenaGymBreakdown';
 import { useAppModal } from '@/lib/stores/useAppModal';
@@ -373,7 +374,7 @@ export default function ArenaDetailScreen() {
               <View style={styles.countdownTextContainer}>
                 <Text style={[styles.countdownLabel, { color: arenaColors.primary }]}>
                   {countdown.days > 30
-                    ? `${t('startsOn')} ${new Date(arena.start_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`
+                    ? `${t('startsOn')} ${fmtDate(arena.start_date, { month: 'long', day: 'numeric' })}`
                     : countdown.days === 0 && countdown.hours === 0
                       ? t('startingNow')
                       : `${t('startsIn')} ${t('countdownDays', { days: countdown.days, hours: countdown.hours })}`}
@@ -387,7 +388,7 @@ export default function ArenaDetailScreen() {
         {/* Arena Hero */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <View style={[styles.heroCard, { borderColor: hexToRgba(arenaColors.primary, 0.2) }]}>
-            <BlurView intensity={50} tint="dark" style={[styles.heroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.heroBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
               <View style={styles.heroTop}>
                 {arena.sponsor_logo ? (
                   <Image source={arena.sponsor_logo} style={styles.heroSponsorLogo} contentFit="contain" transition={200} />
@@ -449,7 +450,7 @@ export default function ArenaDetailScreen() {
                   </>
                 )}
               </View>
-            </BlurView>
+            </PlatformBlur>
           </View>
         </Animated.View>
 
@@ -458,7 +459,7 @@ export default function ArenaDetailScreen() {
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <Text style={styles.sectionTitle}>{t('prizes')}</Text>
             <View style={[styles.prizesCard, { borderColor: hexToRgba(arenaColors.primary, 0.15) }]}>
-              <BlurView intensity={50} tint="dark" style={[styles.prizesBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.prizesBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 {arena.prizes
                   .sort((a, b) => a.rank - b.rank)
                   .map((prize) => {
@@ -479,7 +480,7 @@ export default function ArenaDetailScreen() {
                       </View>
                     );
                   })}
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         )}
@@ -490,19 +491,19 @@ export default function ArenaDetailScreen() {
             {/* Ended banner */}
             <Animated.View entering={FadeInDown.delay(200).duration(400)}>
               <View style={[styles.endedBanner, { borderColor: hexToRgba(arenaColors.primary, 0.12) }]}>
-                <BlurView intensity={40} tint="dark" style={[styles.endedBannerBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.endedBannerBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                   <Ionicons name="flag" size={18} color={theme.colors.textTertiary} />
                   <Text style={styles.endedBannerText}>
-                    {t('endedOn', { date: new Date(arena.end_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) })}
+                    {t('endedOn', { date: fmtDate(arena.end_date, { month: 'long', day: 'numeric', year: 'numeric' }) })}
                   </Text>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
             {/* Final rank + score card */}
             <Animated.View entering={FadeInDown.delay(260).duration(400)}>
               <View style={[styles.resultCard, { borderColor: hexToRgba(arenaColors.primary, 0.2) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.resultCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.resultCardBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                   <View style={styles.resultRankRow}>
                     <View style={[styles.resultRankCircle, { backgroundColor: hexToRgba(arenaColors.primary, 0.12), borderColor: hexToRgba(arenaColors.primary, 0.3) }]}>
                       <Text style={[styles.resultRankNumber, getNumberStyle(32), { color: arenaColors.primary }]}>
@@ -525,7 +526,7 @@ export default function ArenaDetailScreen() {
                       </Text>
                     </View>
                   </View>
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
 
@@ -534,7 +535,7 @@ export default function ArenaDetailScreen() {
               <Animated.View entering={FadeInDown.delay(320).duration(400)}>
                 <Text style={styles.sectionTitle}>🏆 {t('yourPrize')}</Text>
                 <View style={[styles.prizeWonCard, { borderColor: hexToRgba(arenaColors.primary, 0.25) }]}>
-                  <BlurView intensity={50} tint="dark" style={[styles.prizeWonBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.prizeWonBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     <Text style={[styles.prizeWonText, { color: arenaColors.primary }]}>
                       {arenaResult.prize_description}
                     </Text>
@@ -566,7 +567,7 @@ export default function ArenaDetailScreen() {
                         </Text>
                       </View>
                     )}
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -576,7 +577,7 @@ export default function ArenaDetailScreen() {
               <Animated.View entering={FadeInDown.delay(380).duration(400)}>
                 <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
                 <View style={[styles.lbContainer, { borderColor: hexToRgba(arenaColors.primary, 0.15) }]}>
-                  <BlurView intensity={50} tint="dark" style={[styles.lbBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.lbBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                     {arenaResult.top_participants.map((entry, index) => {
                       const isCurrent = entry.rank === arenaResult.final_rank;
                       const medal = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : null;
@@ -606,7 +607,7 @@ export default function ArenaDetailScreen() {
                         </View>
                       );
                     })}
-                  </BlurView>
+                  </PlatformBlur>
                 </View>
               </Animated.View>
             )}
@@ -615,12 +616,12 @@ export default function ArenaDetailScreen() {
           /* Arena ended but no results yet (not participated or results not available) */
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <View style={[styles.endedBanner, { borderColor: hexToRgba(arenaColors.primary, 0.12) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.endedBannerBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.endedBannerBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="flag" size={18} color={theme.colors.textTertiary} />
                 <Text style={styles.endedBannerText}>
-                  {t('endedOn', { date: new Date(arena.end_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) })}
+                  {t('endedOn', { date: fmtDate(arena.end_date, { month: 'long', day: 'numeric', year: 'numeric' }) })}
                 </Text>
-              </BlurView>
+              </PlatformBlur>
             </View>
             <View style={styles.noResultsBox}>
               <Ionicons name="hourglass-outline" size={28} color={theme.colors.textTertiary} />
@@ -631,7 +632,7 @@ export default function ArenaDetailScreen() {
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
             {/* Opt-in requirement info box */}
             <View style={[styles.optInInfoBox, { borderColor: hexToRgba(arenaColors.primary, 0.15) }]}>
-              <BlurView intensity={40} tint="dark" style={[styles.optInInfoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+              <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.optInInfoBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <View style={styles.optInInfoRow}>
                   <Ionicons
                     name={arena.opt_in_type === 'free' ? 'checkmark-circle' : 'information-circle'}
@@ -659,7 +660,7 @@ export default function ArenaDetailScreen() {
                 {!canOptIn.allowed && (
                   <Text style={styles.optInErrorText}>{canOptIn.reason}</Text>
                 )}
-              </BlurView>
+              </PlatformBlur>
             </View>
 
             <TouchableOpacity
@@ -723,7 +724,7 @@ export default function ArenaDetailScreen() {
               </View>
 
               <View style={[styles.lbContainer, { borderColor: hexToRgba(arenaColors.primary, 0.15) }]}>
-                <BlurView intensity={50} tint="dark" style={[styles.lbBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
+                <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.lbBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                   {miniLeaderboard.length === 0 ? (
                     <View style={styles.lbEmpty}>
                       <Text style={styles.lbEmptyText}>{t('noParticipants')}</Text>
@@ -756,7 +757,7 @@ export default function ArenaDetailScreen() {
                       );
                     })
                   )}
-                </BlurView>
+                </PlatformBlur>
               </View>
             </Animated.View>
           </>

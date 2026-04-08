@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -163,7 +163,7 @@ export function LeaderboardInfoSheet({
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
             <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.25) }]}>
-              <BlurView intensity={60} tint="dark" style={styles.blurContainer}>
+              <PlatformBlur intensity={60} tint="dark" style={styles.blurContainer} androidColor="rgba(12,15,24,0.98)">
                 <LinearGradient
                   colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
                   start={{ x: 0, y: 0 }}
@@ -296,7 +296,7 @@ export function LeaderboardInfoSheet({
                     <Text style={styles.closeButtonText}>{t('infoSheetClose')}</Text>
                   </Pressable>
                 </ScrollView>
-              </BlurView>
+              </PlatformBlur>
             </View>
           </Animated.View>
         </GestureDetector>

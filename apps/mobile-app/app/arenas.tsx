@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, type ComponentProps } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { useAvailableArenas, AvailableArena } from '@/hooks/useAvailableArenas';
 import { useSession } from '@/hooks/useSession';
 
@@ -116,7 +117,7 @@ export default function ArenasScreen() {
         activeOpacity={0.8}
         style={{ flex: 1 }}
       >
-        <BlurView intensity={50} tint="dark" style={styles.arenaCardBlur}>
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.arenaCardBlur}>
           {/* Opt-in requirement badge — top-right corner */}
           {optInBadge && (
             <View style={[styles.optInBadge, { backgroundColor: hexToRgba(colors.primary, 0.15) }]}>
@@ -133,7 +134,7 @@ export default function ArenasScreen() {
               <Ionicons name="time-outline" size={14} color={colors.primary} />
               <Text style={[styles.upcomingBannerText, { color: colors.primary }]}>
                 {daysUntilStart > 30
-                  ? `${t('startsOn')} ${new Date(arena.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                  ? `${t('startsOn')} ${fmtDate(arena.start_date, { month: 'short', day: 'numeric' })}`
                   : daysUntilStart === 0
                     ? t('startingNow')
                     : `${t('startsIn')} ${daysUntilStart} ${daysUntilStart === 1 ? t('day') : t('days')}`}
@@ -217,7 +218,7 @@ export default function ArenasScreen() {
               })}
             </View>
           )}
-        </BlurView>
+        </PlatformBlur>
       </TouchableOpacity>
     );
 
@@ -239,7 +240,7 @@ export default function ArenasScreen() {
   const renderCompletedCard = (arena: AvailableArena, index: number) => {
     const colors = getArenaColors(arena, branding.primary);
     const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
-    const endedDate = new Date(arena.end_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const endedDate = fmtDate(arena.end_date, { month: 'short', day: 'numeric' });
 
     return (
       <Animated.View key={arena.arena_id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
@@ -249,7 +250,7 @@ export default function ArenasScreen() {
             activeOpacity={0.8}
             style={{ flex: 1 }}
           >
-            <BlurView intensity={50} tint="dark" style={styles.arenaCardBlur}>
+            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.arenaCardBlur}>
               {/* ENDED badge — top-right */}
               <View style={[styles.endedBadge, { backgroundColor: 'rgba(255, 255, 255, 0.06)' }]}>
                 <Ionicons name="flag" size={11} color={theme.colors.textTertiary} />
@@ -324,7 +325,7 @@ export default function ArenasScreen() {
                   })}
                 </View>
               )}
-            </BlurView>
+            </PlatformBlur>
           </TouchableOpacity>
         </View>
       </Animated.View>

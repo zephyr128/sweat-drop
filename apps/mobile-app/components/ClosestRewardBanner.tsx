@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
@@ -56,7 +56,7 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
       onPress={onPress}
       activeOpacity={0.85}
     >
-      <BlurView intensity={50} tint="dark" style={styles.blur}>
+      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.blur}>
         <View style={[styles.iconBg, { backgroundColor: canAfford ? 'rgba(76, 175, 80, 0.15)' : hexToRgba(brandPrimary, 0.12) }]}>
           <Ionicons
             name={icon}
@@ -87,7 +87,7 @@ export const ClosestRewardBanner: React.FC<ClosestRewardBannerProps> = ({
           size={16}
           color={canAfford ? '#4CAF50' : hexToRgba(brandPrimary, 0.6)}
         />
-      </BlurView>
+      </PlatformBlur>
     </TouchableOpacity>
   );
 };

@@ -1,20 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
 import type { HappyHourWindow } from '@/hooks/useUpcomingHappyHours';
+import { formatTime as fmtTime } from '@/lib/utils/formatDate';
 
 function formatTimeShort(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  } catch {
-    return '--:--';
-  }
+  return fmtTime(iso, { hour: '2-digit', minute: '2-digit', hour12: false }) || '--:--';
 }
 
 function formatStartsIn(minutes: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
@@ -63,14 +59,14 @@ export function UpcomingHappyHoursCard({ windows, liveWindow }: Props) {
           activeOpacity={0.7}
           onPress={goToDetail}
         >
-          <BlurView intensity={35} tint="dark" style={[styles.blur, { backgroundColor: 'rgba(30, 28, 15, 0.65)' }]}>
+          <PlatformBlur intensity={35} tint="dark" style={[styles.blur, { backgroundColor: 'rgba(30, 28, 15, 0.65)' }]} androidColor="rgba(20,18,8,0.97)">
             <View style={styles.headerRow}>
               <Ionicons name="flash-outline" size={16} color="rgba(255, 215, 0, 0.5)" />
               <Text style={styles.headerTitle}>{t('home:happyHour.title')}</Text>
               <Ionicons name="chevron-forward" size={16} color="rgba(255, 215, 0, 0.35)" />
             </View>
             <Text style={styles.emptyText}>{t('home:happyHour.noUpcoming')}</Text>
-          </BlurView>
+          </PlatformBlur>
         </TouchableOpacity>
       </Animated.View>
     );
@@ -83,7 +79,7 @@ export function UpcomingHappyHoursCard({ windows, liveWindow }: Props) {
         activeOpacity={0.7}
         onPress={goToDetail}
       >
-        <BlurView intensity={40} tint="dark" style={[styles.blur, { backgroundColor: 'rgba(30, 28, 15, 0.70)' }]}>
+        <PlatformBlur intensity={40} tint="dark" style={[styles.blur, { backgroundColor: 'rgba(30, 28, 15, 0.70)' }]} androidColor="rgba(20,18,8,0.97)">
           {/* Header */}
           <View style={styles.headerRow}>
             <Text style={styles.headerEmoji}>⚡</Text>
@@ -122,7 +118,7 @@ export function UpcomingHappyHoursCard({ windows, liveWindow }: Props) {
               </View>
             );
           })}
-        </BlurView>
+        </PlatformBlur>
       </TouchableOpacity>
     </Animated.View>
   );

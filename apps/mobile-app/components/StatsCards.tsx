@@ -1,11 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
 import { PressableCard } from '@/components/PressableCard';
+import { ProgressCard } from '@/components/ProgressCard';
 
 function getStreakColor(streak: number, primary: string): string {
   if (streak >= 60) return '#FFD700';
@@ -52,6 +53,9 @@ export interface StatsCardsProps {
   gymName: string;
   onCheckinPress: () => void;
   nextRewardName: string | null;
+  nextRewardImageUrl?: string | null;
+  nextRewardPriceDrops?: number;
+  localDropsBalance?: number;
   dropsToNextReward: number;
   onRewardPress: () => void;
   nextHappyHour: HappyHourSlot | null;
@@ -78,6 +82,9 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   gymName,
   onCheckinPress,
   nextRewardName,
+  nextRewardImageUrl,
+  nextRewardPriceDrops = 0,
+  localDropsBalance = 0,
   dropsToNextReward,
   onRewardPress,
   nextHappyHour,
@@ -109,7 +116,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
 
         {/* Today drops */}
         <PressableCard style={styles.statPill} onPress={onTodayPress}>
-          <BlurView intensity={50} tint="dark" style={styles.statPillBlur}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.statPillBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
               colors={SHIMMER}
               start={{ x: 0, y: 0 }}
@@ -133,12 +140,12 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
                 <Text style={styles.statLabel}>{t('rings.today')}</Text>
               )}
             </LinearGradient>
-          </BlurView>
+          </PlatformBlur>
         </PressableCard>
 
         {/* Streak */}
         <PressableCard style={styles.statPill} onPress={onStreakPress}>
-          <BlurView intensity={50} tint="dark" style={styles.statPillBlur}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.statPillBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
               colors={SHIMMER}
               start={{ x: 0, y: 0 }}
@@ -149,12 +156,12 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
               <Text style={[styles.statValue, { color: streakColor }]}>{streakDays}d</Text>
               <Text style={styles.statLabel} numberOfLines={1}>{streakLabel}</Text>
             </LinearGradient>
-          </BlurView>
+          </PlatformBlur>
         </PressableCard>
 
         {/* Weekly drops */}
         <PressableCard style={styles.statPill} onPress={onWeeklyPress}>
-          <BlurView intensity={50} tint="dark" style={styles.statPillBlur}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.statPillBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
               colors={SHIMMER}
               start={{ x: 0, y: 0 }}
@@ -167,7 +174,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
               </Text>
               <Text style={styles.statLabel}>{t('rings.week')}</Text>
             </LinearGradient>
-          </BlurView>
+          </PlatformBlur>
         </PressableCard>
       </View>
 
@@ -180,7 +187,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
           onPress={isCheckedIn ? undefined : onCheckinPress}
           disabled={isCheckedIn}
         >
-          <BlurView intensity={50} tint="dark" style={styles.actionCardBlur}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.actionCardBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
               colors={SHIMMER}
               start={{ x: 0, y: 0 }}
@@ -207,7 +214,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
                 <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.22)" />
               )}
             </LinearGradient>
-          </BlurView>
+          </PlatformBlur>
         </PressableCard>
 
         {/* Happy Hour */}
@@ -215,7 +222,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
           style={styles.actionCard}
           onPress={onHappyHourPress}
         >
-          <BlurView intensity={50} tint="dark" style={styles.actionCardBlur}>
+          <PlatformBlur intensity={50} tint="dark" style={styles.actionCardBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
               colors={SHIMMER}
               start={{ x: 0, y: 0 }}
@@ -256,34 +263,26 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
                 )}
               </View>
             </LinearGradient>
-          </BlurView>
+          </PlatformBlur>
         </PressableCard>
       </View>
 
       {/* Full-width: Next reward card */}
-      {nextRewardName && dropsToNextReward > 0 ? (
-        <PressableCard style={styles.rewardCard} onPress={onRewardPress}>
-          <BlurView intensity={50} tint="dark" style={styles.rewardCardBlur}>
-            <LinearGradient
-              colors={SHIMMER}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.rewardCardGradient}
-            >
-              <Ionicons name="gift-outline" size={18} color={primaryColor} />
-              <View style={styles.rewardCardInfo}>
-                <Text style={styles.rewardCardTitle} numberOfLines={1}>{nextRewardName}</Text>
-                <View style={styles.rewardCardSubRow}>
-                  <Ionicons name="water" size={11} color={hexToRgba(primaryColor, 0.75)} />
-                  <Text style={[styles.rewardCardSub, { color: hexToRgba(primaryColor, 0.85) }]}>
-                    {dropsToNextReward} {t('rings.toUnlock')}
-                  </Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={hexToRgba(primaryColor, 0.45)} />
-            </LinearGradient>
-          </BlurView>
-        </PressableCard>
+      {nextRewardName ? (
+        <ProgressCard
+          eyebrow={t('nextAward')}
+          title={nextRewardName}
+          progressPercent={nextRewardPriceDrops > 0
+            ? Math.min((localDropsBalance / nextRewardPriceDrops) * 100, 100)
+            : 0}
+          progressLabel={dropsToNextReward > 0
+            ? `${dropsToNextReward} ${t('rings.toUnlock')}`
+            : t('rings.canAfford')}
+          imageUrl={nextRewardImageUrl}
+          fallbackIcon="gift-outline"
+          primary={primaryColor}
+          onPress={onRewardPress}
+        />
       ) : null}
     </View>
   );
@@ -391,46 +390,4 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  /* Reward card — glass */
-  rewardCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: GLASS_BG,
-    borderWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.22)',
-    borderLeftColor: 'rgba(255,255,255,0.10)',
-    borderRightColor: 'rgba(255,255,255,0.06)',
-    borderBottomColor: 'rgba(255,255,255,0.04)',
-  },
-  rewardCardBlur: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  rewardCardGradient: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  rewardCardInfo: {
-    flex: 1,
-  },
-  rewardCardTitle: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
-  rewardCardSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 3,
-  },
-  rewardCardSub: {
-    ...fontStyles.body,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
-  },
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { theme as baseTheme, fontStyles } from '@/lib/theme';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,10 +31,11 @@ export const LockedOverlay: React.FC<LockedOverlayProps> = ({
       {/* Semi-transparent background to allow gym colors to show through */}
       <View style={styles.overlayBackground} />
       
-      <BlurView 
-        intensity={30} 
+      <PlatformBlur
+        intensity={30}
         style={styles.blurView}
         tint="dark"
+        androidColor="rgba(8,10,18,0.94)"
       >
         <View style={[styles.lockedContent, compact && styles.lockedContentCompact]}>
           {/* Centered Lock Icon and Title */}
@@ -87,7 +88,7 @@ export const LockedOverlay: React.FC<LockedOverlayProps> = ({
             </View>
           )}
         </View>
-      </BlurView>
+      </PlatformBlur>
     </View>
   );
 };

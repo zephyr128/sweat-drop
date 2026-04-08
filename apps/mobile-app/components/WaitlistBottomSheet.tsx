@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -103,7 +103,7 @@ export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.color
         <Pressable style={styles.backdrop} onPress={Keyboard.dismiss} />
 
         <Animated.View entering={FadeInDown.duration(350)} exiting={FadeOut.duration(200)} style={styles.sheet}>
-          <BlurView intensity={60} tint="dark" style={styles.sheetBlur}>
+          <PlatformBlur intensity={60} tint="dark" style={styles.sheetBlur} androidColor="rgba(14,16,26,0.98)">
             {/* Handle bar */}
             <View style={styles.handleBar} />
 
@@ -210,7 +210,7 @@ export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.color
                 </TouchableOpacity>
               </Animated.View>
             )}
-          </BlurView>
+          </PlatformBlur>
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
