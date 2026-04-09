@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -90,6 +91,5 @@ export default function Index() {
     navigate();
   }, [isInitialized, session, onboardingStep, hasNavigated, router]);
 
-  // Render nothing — splash screen is visible until navigation
-  return null;
+  return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
 }

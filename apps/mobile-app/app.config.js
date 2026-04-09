@@ -17,7 +17,7 @@ module.exports = {
     owner: 'zephyr23',
     version: '1.0.0',
     orientation: 'portrait',
-    userInterfaceStyle: 'automatic',
+    userInterfaceStyle: 'dark',
     platforms: ['ios', 'android'],
     icon: './assets/icon.png', // App icon (1024x1024)
     splash: {

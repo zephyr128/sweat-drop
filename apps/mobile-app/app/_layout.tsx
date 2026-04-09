@@ -3,7 +3,7 @@ import { Stack, useSegments } from 'expo-router';
 import { ThemeProvider as NavigationThemeProvider, DarkTheme } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useCallback } from 'react';
-import { Platform, Linking } from 'react-native';
+import { Platform, Linking, View } from 'react-native';
 import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -442,9 +442,8 @@ export default function RootLayout() {
     router.replace('/(onboarding)/reset-password');
   }, [pendingPasswordRecovery, clearPendingPasswordRecovery, router]);
 
-  // Block render until custom fonts are loaded
   if (!fontsLoaded && !fontError) {
-    return null;
+    return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
   }
 
   return (

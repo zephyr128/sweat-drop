@@ -395,7 +395,7 @@ export default function HomeScreen() {
   // ── Empty state for users with no home gym ──
   if (!homeGymId) {
     return (
-      <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]}>
+      <Animated.View style={[{ flex: 1, backgroundColor: '#000000' }, fadeAnimatedStyle]}>
         <SafeAreaView style={styles.container} edges={['top']}>
           <LinearGradient
             colors={['#000000', '#0A0E1A', '#000000'] as any}
@@ -678,7 +678,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]}>
+    <Animated.View style={[{ flex: 1, backgroundColor: '#000000' }, fadeAnimatedStyle]}>
       <SafeAreaView style={styles.container} edges={['top']}>
       {/* Dynamic background */}
       {activeGym?.background_url ? (
