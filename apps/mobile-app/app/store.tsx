@@ -107,12 +107,11 @@ export default function StoreScreen() {
   const loadRedemptions = useCallback(async () => {
     if (!session?.user || !activeGymId) return;
     try {
-      const { data } = await supabase
-        .from('redemptions')
-        .select('reward_id, created_at, status')
-        .eq('user_id', session.user.id)
-        .eq('gym_id', activeGymId)
-        .in('status', ['pending', 'confirmed']);
+      const { data } = await supabase.rpc('get_my_redemptions', {
+        p_gym_id: activeGymId,
+        p_statuses: ['pending', 'confirmed'],
+        p_limit: null,
+      });
 
       if (data) setRedemptions(data);
     } catch (err) {

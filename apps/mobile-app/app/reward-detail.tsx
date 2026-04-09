@@ -80,13 +80,13 @@ export default function RewardDetailScreen() {
   const checkClaimed = useCallback(async () => {
     if (!session?.user || !rewardId || !activeGymId) return;
 
-    const { data } = await supabase
-      .from('redemptions')
-      .select('id, reward_id, created_at, status, redemption_code, drops_spent')
-      .eq('user_id', session.user.id)
-      .eq('reward_id', rewardId)
-      .in('status', ['pending', 'confirmed'])
-      .order('created_at', { ascending: false });
+    const { data: rpcData } = await supabase.rpc('get_my_redemptions', {
+      p_gym_id: activeGymId,
+      p_statuses: ['pending', 'confirmed'],
+      p_limit: null,
+    });
+    const data = (rpcData ?? []).filter((r: any) => r.reward_id === rewardId)
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     if (!data || data.length === 0 || !reward) {
       setClaimed(false);
@@ -98,14 +98,14 @@ export default function RewardDetailScreen() {
     let matchingRedemption: typeof data[0] | null = null;
 
     if (limit === 'unlimited') {
-      matchingRedemption = data.find(r => r.status === 'pending') || null;
+      matchingRedemption = data.find((r: any) => r.status === 'pending') || null;
       isClaimed = !!matchingRedemption;
     } else if (limit === 'once') {
       isClaimed = data.length > 0;
       matchingRedemption = data[0] || null;
     } else {
       const periodStart = getPeriodStart(limit, new Date());
-      matchingRedemption = data.find(r => new Date(r.created_at) >= periodStart) || null;
+      matchingRedemption = data.find((r: any) => new Date(r.created_at) >= periodStart) || null;
       isClaimed = !!matchingRedemption;
     }
 

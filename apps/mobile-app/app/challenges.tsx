@@ -140,49 +140,46 @@ export default function ChallengesScreen() {
     const gymId = profileData?.home_gym_id;
     if (!gymId) { setChallenges([]); return; }
 
-    const today = new Date().toISOString().split('T')[0];
-    const { data: challengesData, error } = await supabase
-      .from('gym_challenges')
-      .select(`
-        id, name, description, challenge_type, target_drops,
-        milestone_threshold, reward_drops, streak_days,
-        start_date, end_date, gym_id, badge_image_url
-      `)
-      .eq('gym_id', gymId)
-      .eq('is_active', true)
-      .lte('start_date', today)
-      .or(`end_date.gte.${today},end_date.is.null`);
+    const { data: rpcData, error } = await supabase.rpc('get_my_challenges', {
+      p_gym_id: gymId,
+    });
 
     if (error) { log.error('Error loading challenges:', error); setChallenges([]); return; }
-    if (!challengesData || challengesData.length === 0) { setChallenges([]); return; }
+    if (!rpcData || rpcData.length === 0) { setChallenges([]); return; }
 
-    const challengeIds = challengesData.map((c) => c.id);
-    const { data: progressData } = await supabase
-      .from('challenge_progress')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .eq('gym_id', gymId)
-      .in('challenge_id', challengeIds);
-
-    const merged = challengesData.map((c) => ({
-      ...c,
-      progress: progressData?.find((p) => p.challenge_id === c.id) ?? null,
+    const merged = rpcData.map((c: any) => ({
+      id: c.challenge_id,
+      name: c.challenge_name,
+      challenge_type: c.challenge_type,
+      target_drops: c.target_drops,
+      milestone_threshold: c.milestone_threshold,
+      reward_drops: c.reward_drops,
+      streak_days: c.streak_days,
+      start_date: c.start_date,
+      end_date: c.end_date,
+      gym_id: gymId,
+      badge_image_url: c.badge_image_url,
+      progress: {
+        current_drops: c.current_drops ?? 0,
+        current_streak_days: c.current_streak_days ?? 0,
+        is_completed: c.is_completed ?? false,
+        completed_at: c.completed_at ?? null,
+        tier_achieved: c.tier_achieved ?? null,
+        drops_awarded: c.drops_awarded ?? 0,
+      },
     }));
     setChallenges(merged);
 
-    // Build progress map
     const map: Record<string, any> = {};
-    merged.forEach((c) => {
-      if (c.progress) {
-        const isStreak = c.challenge_type === 'streak' || c.challenge_type === 'checkin_streak';
-        map[c.id] = {
-          current_drops: isStreak ? (c.progress.current_streak_days || 0) : (c.progress.current_drops || 0),
-          current_streak_days: c.progress.current_streak_days || 0,
-          is_completed: c.progress.is_completed || false,
-          completed_at: c.progress.completed_at || null,
-          updated_at: c.progress.updated_at || null,
-        };
-      }
+    merged.forEach((c: any) => {
+      const isStreak = c.challenge_type === 'streak' || c.challenge_type === 'checkin_streak';
+      map[c.id] = {
+        current_drops: isStreak ? (c.progress.current_streak_days || 0) : (c.progress.current_drops || 0),
+        current_streak_days: c.progress.current_streak_days || 0,
+        is_completed: c.progress.is_completed || false,
+        completed_at: c.progress.completed_at || null,
+        updated_at: null,
+      };
     });
     setProgress(map);
   }, [session?.user?.id]);
@@ -696,7 +693,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,229,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     marginLeft: 'auto',
   },
   rewardPillText: {

@@ -134,17 +134,13 @@ export default function WalletScreen() {
 
       const EARN_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak'];
 
-      let query = supabase
-        .from('drops_transactions')
-        .select('amount, created_at')
-        .eq('user_id', userId)
-        .gt('amount', 0)
-        .in('transaction_type', EARN_TYPES)
-        .order('created_at', { ascending: false })
-        .limit(500);
-      if (selectedGymId) query = query.eq('gym_id', selectedGymId);
-
-      const { data: txRows } = await query;
+      const { data: rpcDrops } = await supabase.rpc('get_my_drops', {
+        p_gym_id: selectedGymId ?? null,
+        p_types: EARN_TYPES,
+        p_since: null,
+        p_limit: 500,
+      });
+      const txRows = (rpcDrops ?? []).filter((d: any) => (d.amount ?? 0) > 0);
 
       let today = 0;
       let week = 0;
@@ -227,13 +223,12 @@ export default function WalletScreen() {
       }
       const row = Array.isArray(data) ? data[0] : data;
 
-      const { data: lastCheckin } = await supabase
-        .from('gym_checkins')
-        .select('checked_in_at')
-        .eq('user_id', session.user.id)
-        .order('checked_in_at', { ascending: false })
-        .limit(1)
-        .single();
+      const { data: checkinRows } = await supabase.rpc('get_my_checkins', {
+        p_gym_id: null,
+        p_since: null,
+        p_limit: 1,
+      });
+      const lastCheckin = checkinRows?.[0] ?? null;
 
       const daysSinceLastVisit = lastCheckin?.checked_in_at
         ? Math.floor((Date.now() - new Date(lastCheckin.checked_in_at).getTime()) / 86400000)

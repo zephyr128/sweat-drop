@@ -54,10 +54,12 @@ interface SessionRow {
   drops_earned: number;
   calories: number | null;
   multiplier: number | null;
+  is_active: boolean;
   raw_metrics: RawMetrics | null;
   gym_id: string;
-  machines: { name: string; type: string } | null;
-  gyms: { name: string } | null;
+  machine_name: string | null;
+  machine_type: string | null;
+  gym_name: string | null;
 }
 
 const MACHINE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -106,25 +108,12 @@ export default function WorkoutHistoryScreen() {
 
     try {
       const [sessionRes, profileRes] = await Promise.all([
-        supabase
-          .from('sessions')
-          .select(`
-            id,
-            started_at,
-            ended_at,
-            duration_seconds,
-            drops_earned,
-            calories,
-            multiplier,
-            raw_metrics,
-            gym_id,
-            machines ( name, type ),
-            gyms ( name )
-          `)
-          .eq('user_id', session.user.id)
-          .eq('is_active', false)
-          .order('started_at', { ascending: false })
-          .limit(100),
+        supabase.rpc('get_my_sessions', {
+          p_gym_id: null,
+          p_active_only: false,
+          p_since: null,
+          p_limit: 100,
+        }),
         supabase
           .from('profiles')
           .select('streak_days, last_visit_date, home_gym_id')
@@ -146,7 +135,10 @@ export default function WorkoutHistoryScreen() {
       if (sessionRes.error) {
         log.error('[WorkoutHistory] Error loading sessions:', sessionRes.error);
       } else {
-        setSessions((sessionRes.data as unknown as SessionRow[]) || []);
+        const completed = ((sessionRes.data ?? []) as unknown as SessionRow[])
+          .filter((s) => !s.is_active)
+          .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+        setSessions(completed);
       }
 
       if (!profileRes.error && profileRes.data) {
@@ -687,9 +679,9 @@ export default function WorkoutHistoryScreen() {
           </View>
         )}
         renderItem={({ item: s }) => {
-          const machineType = s.machines?.type || 'treadmill';
-          const machineName = s.machines?.name || t('unknownMachine');
-          const gymName = s.gyms?.name || '';
+          const machineType = s.machine_type || 'treadmill';
+          const machineName = s.machine_name || t('unknownMachine');
+          const gymName = s.gym_name || '';
           const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
           const isExpanded = expandedSessionId === s.id;
           const metrics = s.raw_metrics as RawMetrics | null;

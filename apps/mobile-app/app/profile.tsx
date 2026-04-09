@@ -115,30 +115,37 @@ export default function ProfileScreen() {
   });
 
   const loadProfile = useCallback(async () => {
-    if (!session?.user) return;
+    if (!session?.user) { setLoading(false); return; }
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username, full_name, avatar_url, total_drops, available_drops, weekly_drops, monthly_drops, streak_days, is_newcomer, created_at, home_gym_id')
         .eq('id', session.user.id)
         .single();
-      if (!error && data) setProfile(data as ProfileData);
+      if (!error && data) {
+        setProfile(data as ProfileData);
+      } else {
+        setLoading(false);
+      }
     } catch (err) {
       log.error('[Profile] Error:', err);
+      setLoading(false);
     }
   }, [session?.user?.id]);
 
   const loadStats = useCallback(async () => {
     if (!session?.user) return;
     try {
-      const { data: sessionData } = await supabase
-        .from('sessions')
-        .select('duration_seconds, drops_earned')
-        .eq('user_id', session.user.id)
-        .eq('is_active', false);
-      const totalWorkouts = sessionData?.length || 0;
-      const totalSeconds = sessionData?.reduce((sum, s) => sum + (s.duration_seconds || 0), 0) || 0;
-      const totalDropsEarned = sessionData?.reduce((sum, s) => sum + (s.drops_earned || 0), 0) || 0;
+      const { data: rpcData } = await supabase.rpc('get_my_sessions', {
+        p_gym_id: null,
+        p_active_only: false,
+        p_since: null,
+        p_limit: 5000,
+      });
+      const sessionData = (rpcData ?? []).filter((s: any) => !s.is_active);
+      const totalWorkouts = sessionData.length;
+      const totalSeconds = sessionData.reduce((sum: number, s: any) => sum + (s.duration_seconds || 0), 0);
+      const totalDropsEarned = sessionData.reduce((sum: number, s: any) => sum + (s.drops_earned || 0), 0);
       const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
       setStats({ totalWorkouts, totalHours, totalDropsEarned });
     } catch (err) {

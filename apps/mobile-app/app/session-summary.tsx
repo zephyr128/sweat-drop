@@ -207,7 +207,8 @@ export default function SessionSummaryScreen() {
     loadEarnedBadges();
     loadChallengeProgress();
     loadStreakDays();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, gymId]);
 
   // Percentile depends on session being loaded
   useEffect(() => {
@@ -354,46 +355,29 @@ export default function SessionSummaryScreen() {
     if (!authSession?.user || !gymId) return;
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_challenges', {
+        p_gym_id: gymId,
+      });
 
-      // Get active challenges for this gym
-      const { data: challengesData, error: challengesError } = await supabase
-        .from('gym_challenges')
-        .select('id, name, challenge_type, target_drops, reward_drops, streak_days')
-        .eq('gym_id', gymId)
-        .eq('is_active', true)
-        .lte('start_date', today)
-        .gte('end_date', today);
+      if (rpcError || !rpcData || rpcData.length === 0) return;
 
-      if (challengesError || !challengesData || challengesData.length === 0) return;
-
-      const challengeIds = challengesData.map((c) => c.id);
-
-      // Get user's progress
-      const { data: progressData } = await supabase
-        .from('challenge_progress')
-        .select('*')
-        .eq('user_id', authSession.user.id)
-        .in('challenge_id', challengeIds);
-
-      const items: ChallengeProgressItem[] = challengesData.map((challenge) => {
-        const progress = progressData?.find((p) => p.challenge_id === challenge.id);
-        const isStreakType = challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak';
+      const items: ChallengeProgressItem[] = rpcData.map((c: any) => {
+        const isStreakType = c.challenge_type === 'streak' || c.challenge_type === 'checkin_streak';
         const target = isStreakType
-          ? (challenge.streak_days || challenge.target_drops || 0)
-          : (challenge.target_drops || 0);
+          ? (c.streak_days || c.target_drops || 0)
+          : (c.target_drops || 0);
         const current = isStreakType
-          ? (progress?.current_streak_days || 0)
-          : (progress?.current_drops || 0);
+          ? (c.current_streak_days || 0)
+          : (c.current_drops || 0);
 
         return {
-          challenge_id: challenge.id,
-          challenge_name: challenge.name,
+          challenge_id: c.challenge_id,
+          challenge_name: c.challenge_name,
           target_drops: target,
           current_drops: current,
-          reward_drops: challenge.reward_drops,
-          is_completed: progress?.is_completed || false,
-          challenge_type: challenge.challenge_type,
+          reward_drops: c.reward_drops,
+          is_completed: c.is_completed || false,
+          challenge_type: c.challenge_type,
         };
       });
 
@@ -710,7 +694,7 @@ export default function SessionSummaryScreen() {
                   adjustsFontSizeToFit
                   minimumFontScale={0.7}
                 >
-                  {dropsNum === 0 ? '0' : `+${drops}`}
+                  {dropsNum === 0 ? '0' : `+${dropsNum}`}
                 </Text>
                 <Text style={[styles.ringDropsLabel, { color: hexToRgba(branding.primary, 0.65) }]}>
                   {t('summary.dropsEarned')}

@@ -193,28 +193,39 @@ export default function ChallengeDetailScreen() {
     // Show full-screen spinner only on first fetch, not on back-navigation remount
     if (!hasLoadedRef.current) setLoading(true);
     try {
-      const { data: challengeData, error: challengeError } = await supabase
-        .from('gym_challenges')
-        .select('*')
-        .eq('id', challengeId)
-        .single();
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_challenges', {
+        p_gym_id: gymId ?? null,
+      });
 
-      if (challengeError) { log.error('Error loading challenge:', challengeError); setLoading(false); return; }
-      setChallenge(challengeData);
-      hasLoadedRef.current = true;
+      if (rpcError) { log.error('Error loading challenge:', rpcError); setLoading(false); return; }
 
-      const { data: progressData, error: progressError } = await supabase
-        .from('challenge_progress')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('challenge_id', challengeId)
-        .single();
-
-      if (progressError && progressError.code !== 'PGRST116') {
-        log.error('Error loading progress:', progressError);
-      } else if (progressData) {
-        setProgress(progressData);
+      const match = (rpcData ?? []).find((c: any) => c.challenge_id === challengeId);
+      if (match) {
+        setChallenge({
+          id: match.challenge_id,
+          name: match.challenge_name,
+          challenge_type: match.challenge_type,
+          scoring_model: match.scoring_model,
+          target_drops: match.target_drops,
+          streak_days: match.streak_days,
+          milestone_threshold: match.milestone_threshold,
+          reward_drops: match.reward_drops,
+          tiers: match.tiers,
+          start_date: match.start_date,
+          end_date: match.end_date,
+          badge_image_url: match.badge_image_url,
+        });
+        setProgress({
+          current_drops: match.current_drops ?? 0,
+          current_value: match.current_value ?? 0,
+          current_streak_days: match.current_streak_days ?? 0,
+          is_completed: match.is_completed ?? false,
+          completed_at: match.completed_at ?? null,
+          tier_achieved: match.tier_achieved ?? null,
+          drops_awarded: match.drops_awarded ?? 0,
+        });
       }
+      hasLoadedRef.current = true;
     } catch (err) {
       log.error('Error in loadChallenge:', err);
     } finally {
