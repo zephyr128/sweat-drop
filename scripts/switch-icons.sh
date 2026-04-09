@@ -92,6 +92,12 @@ if [ -d "$ANDROID_RES" ] && [ -d "$ANDROID_SRC" ]; then
         rm -f "$DST_DENSITY/${base}.webp" 2>/dev/null || true
       done
       cp "$SRC_DENSITY"/*.png "$DST_DENSITY/" 2>/dev/null || true
+      # Some exported assets can be JPEG data with a .png extension.
+      # Normalize copied files to real PNG so AAPT can compile release resources.
+      for copied_png in "$DST_DENSITY"/*.png; do
+        [ -f "$copied_png" ] || continue
+        sips -s format png "$copied_png" --out "$copied_png" >/dev/null 2>&1 || true
+      done
     fi
   done
   echo -e "${GREEN}  ✅ Android native mipmaps updated${NC}"

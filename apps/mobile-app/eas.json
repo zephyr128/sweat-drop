@@ -29,6 +29,15 @@
         "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
+    },
+    "internalDevStore": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_PUSH_ENABLED": "true",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "970c6ba3-aae9-4b7a-b014-74915fff4df3",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
     }
   }
 }

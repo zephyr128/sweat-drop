@@ -26,6 +26,12 @@ export const supabase = createClient(finalSupabaseUrl, finalSupabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+  realtime: {
+    heartbeatIntervalMs: 45_000,
+    reconnectAfterMs: (tries: number) =>
+      Math.min(1000 * 2 ** tries, 30_000),
+  },
+  db: { schema: 'public' },
   global: {
     fetch: async (input, init) => {
       const headers = new Headers(init?.headers);
