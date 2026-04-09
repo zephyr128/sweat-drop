@@ -27,6 +27,7 @@ interface UserStats {
   total_drops: number;
   streak_days: number;
   gym_count: number;
+  distance_km: number;
 }
 
 export function useUserProgress(userId?: string) {
@@ -52,7 +53,7 @@ export function useUserProgress(userId?: string) {
 
     try {
       // Fetch user stats from the same sources evaluate_badges() uses
-      const [profileResult, sessionCountResult, gymCountResult, achievementsResult, badgesResult] =
+      const [profileResult, sessionCountResult, gymCountResult, distanceResult, achievementsResult, badgesResult] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -69,6 +70,11 @@ export function useUserProgress(userId?: string) {
             .select('gym_id')
             .eq('user_id', targetUserId),
           supabase
+            .from('sessions')
+            .select('raw_metrics')
+            .eq('user_id', targetUserId)
+            .gt('drops_earned', 0),
+          supabase
             .from('global_achievements')
             .select('*')
             .eq('is_active', true)
@@ -80,11 +86,17 @@ export function useUserProgress(userId?: string) {
             .not('global_achievement_id', 'is', null),
         ]);
 
+      const totalDistanceM = (distanceResult.data || []).reduce(
+        (sum: number, s: any) => sum + (parseFloat(s.raw_metrics?.total_distance) || 0),
+        0
+      );
+
       const stats: UserStats = {
         total_drops: profileResult.data?.total_drops || 0,
         streak_days: profileResult.data?.streak_days || 0,
         session_count: sessionCountResult.count || 0,
         gym_count: new Set((gymCountResult.data || []).map((g: any) => g.gym_id)).size,
+        distance_km: totalDistanceM / 1000,
       };
 
       const achievements = achievementsResult.data || [];
@@ -110,6 +122,9 @@ export function useUserProgress(userId?: string) {
             break;
           case 'gym_count':
             currentValue = stats.gym_count;
+            break;
+          case 'distance_km':
+            currentValue = stats.distance_km;
             break;
           default:
             currentValue = 0;

@@ -29,8 +29,9 @@ import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '@/lib/utils/storage';
 
 // ---------- Zod Schema ----------
+// Types must match evaluate_badges() CASE branches in the database
 const criteriaSchema = z.object({
-  type: z.enum(['drops', 'streak', 'sessions', 'distance', 'duration', 'custom']),
+  type: z.enum(['total_drops', 'streak_days', 'session_count', 'gym_count', 'distance_km']),
   operator: z.enum(['>=', '<=', '==', '>', '<']),
   value: z.number().min(0, 'Value must be 0 or higher'),
   scope: z.enum(['global', 'gym', 'machine_type']).default('global'),
@@ -81,12 +82,11 @@ interface AchievementsManagerProps {
 
 // ---------- Helpers ----------
 const criteriaTypeLabels: Record<string, string> = {
-  drops: 'Total Drops Earned',
-  streak: 'Consecutive Day Streak',
-  sessions: 'Number of Sessions',
-  distance: 'Distance (meters)',
-  duration: 'Duration (seconds)',
-  custom: 'Custom Metric',
+  total_drops: 'Total Drops Earned',
+  streak_days: 'Consecutive Day Streak',
+  session_count: 'Number of Sessions',
+  gym_count: 'Gyms Visited',
+  distance_km: 'Distance (km)',
 };
 
 const operatorLabels: Record<string, string> = {
@@ -125,7 +125,7 @@ export function AchievementsManager({
     description: '',
     badgeImageUrl: '',
     criteria: {
-      type: 'drops',
+      type: 'total_drops',
       operator: '>=',
       value: 1000,
       scope: 'global',
@@ -563,7 +563,7 @@ export function AchievementsManager({
 
                   {/* Machine type (conditional) */}
                   {(watchedScope === 'machine_type' ||
-                    watchedCriteriaType === 'distance') && (
+                    watchedCriteriaType === 'distance_km') && (
                     <div>
                       <label className="block text-xs font-medium text-[#808080] mb-1.5">
                         Machine Type
@@ -585,18 +585,16 @@ export function AchievementsManager({
 
                 {/* Helper text */}
                 <p className="text-xs text-[#555]">
-                  {watchedCriteriaType === 'drops' &&
-                    'User must earn the target number of drops.'}
-                  {watchedCriteriaType === 'streak' &&
+                  {watchedCriteriaType === 'total_drops' &&
+                    'User must earn the target number of drops (lifetime).'}
+                  {watchedCriteriaType === 'streak_days' &&
                     'User must train for the target number of consecutive days.'}
-                  {watchedCriteriaType === 'sessions' &&
+                  {watchedCriteriaType === 'session_count' &&
                     'User must complete the target number of workout sessions.'}
-                  {watchedCriteriaType === 'distance' &&
-                    'User must cover the target distance in meters.'}
-                  {watchedCriteriaType === 'duration' &&
-                    'User must accumulate the target duration in seconds.'}
-                  {watchedCriteriaType === 'custom' &&
-                    'Custom metric evaluated by the criteria engine.'}
+                  {watchedCriteriaType === 'gym_count' &&
+                    'User must visit the target number of different gyms.'}
+                  {watchedCriteriaType === 'distance_km' &&
+                    'User must cover the target distance in kilometers.'}
                 </p>
               </div>
 

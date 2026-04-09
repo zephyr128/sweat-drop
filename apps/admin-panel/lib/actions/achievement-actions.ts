@@ -4,9 +4,9 @@ import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-// Criteria schema matching the JSONB structure from the plan
+// Criteria types must match evaluate_badges() in the database exactly
 const criteriaSchema = z.object({
-  type: z.enum(['drops', 'streak', 'sessions', 'distance', 'duration', 'custom']),
+  type: z.enum(['total_drops', 'streak_days', 'session_count', 'gym_count', 'distance_km']),
   operator: z.enum(['>=', '<=', '==', '>', '<']),
   value: z.number().min(0),
   scope: z.enum(['global', 'gym', 'machine_type']).default('global'),
