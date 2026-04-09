@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { logger } from '@/lib/utils/logger';
+import { sendEmail, buildStaffInvitationEmailHtml } from '@/lib/utils/email-service';
 import { revalidatePath } from 'next/cache';
 
 export interface StaffInvitation {
@@ -72,10 +73,9 @@ export async function createStaffInvitation(
 
     // Send invitation email
     try {
-      await sendInvitationEmail(data);
+      await sendStaffInvitationEmailViaService(data);
     } catch (emailError) {
       logger.error('Failed to send invitation email', { emailError, invitationId: data.id });
-      // Don't fail the invitation creation if email fails
     }
 
     revalidatePath(`/dashboard/gym/${gymId}/team`);
@@ -213,6 +213,7 @@ export async function removeStaffRole(userId: string, gymId: string) {
 
 /**
  * Resend invitation email via RPC (resets delivery status, bumps resend_count)
+ * then actually re-sends the email via Resend.
  */
 export async function resendStaffInvitationEmail(invitationId: string, gymId: string) {
   try {
@@ -227,6 +228,15 @@ export async function resendStaffInvitationEmail(invitationId: string, gymId: st
     const result = data as { error?: string; success?: boolean; invitation?: Record<string, unknown> } | null;
     if (result?.error) {
       return { success: false, error: result.error };
+    }
+
+    // Actually re-send the email after RPC resets status
+    if (result?.invitation) {
+      try {
+        await sendStaffInvitationEmailViaService(result.invitation);
+      } catch (emailError) {
+        logger.error('Failed to resend invitation email', { emailError, invitationId });
+      }
     }
 
     revalidatePath(`/dashboard/gym/${gymId}/team`);
@@ -246,16 +256,17 @@ export async function getInviteAcceptUrl(token: string): Promise<string> {
 }
 
 /**
- * Send invitation email to staff member.
- * Uses Resend API when RESEND_API_KEY is set, otherwise logs the URL for manual sharing.
+ * Send a staff invitation email using the centralized email service,
+ * then update delivery status in the database.
  */
-async function sendInvitationEmail(invitation: Record<string, unknown>) {
+async function sendStaffInvitationEmailViaService(invitation: Record<string, unknown>) {
   try {
     const supabaseAdmin = getAdminClient();
     if (!supabaseAdmin) {
       logger.error('Admin client not available for sending invitation email');
       return;
     }
+
     const { data: gym } = await supabaseAdmin
       .from('gyms')
       .select('name, city, country')
@@ -267,56 +278,23 @@ async function sendInvitationEmail(invitation: Record<string, unknown>) {
     const roleName = invitation.role === 'gym_admin' ? 'Gym Admin' : 'Receptionist';
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/accept-invitation/${invitation.token}`;
-    const RESEND_API_KEY = process.env.RESEND_API_KEY;
-    const fromAddress = process.env.RESEND_FROM_EMAIL || 'SweatDrop <noreply@sweatdrop.com>';
 
-    if (RESEND_API_KEY) {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: invitation.email,
-          subject: `You've been invited to join ${gymName} as ${roleName}`,
-          html: [
-            '<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0A0A;color:#ffffff;border-radius:12px">',
-            `<h2 style="margin:0 0 16px;color:#00E5FF">Staff Invitation</h2>`,
-            `<p style="color:#d4d4d8">You've been invited to join <strong style="color:#fff">${gymName}</strong> as a <strong style="color:#00E5FF">${roleName}</strong>.</p>`,
-            `<a href="${acceptUrl}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#00E5FF;color:#000;font-weight:bold;text-decoration:none;border-radius:8px">Accept Invitation</a>`,
-            `<p style="font-size:12px;color:#71717a;margin-top:24px">Or copy this link:<br/><a href="${acceptUrl}" style="color:#00E5FF;word-break:break-all">${acceptUrl}</a></p>`,
-            '</div>',
-          ].join(''),
-        }),
-      });
+    const html = buildStaffInvitationEmailHtml({ gymName, roleName, acceptUrl });
+    const result = await sendEmail({
+      to: invitation.email as string,
+      subject: `You've been invited to join ${gymName} as ${roleName}`,
+      html,
+    });
 
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        logger.error('Resend API error', { status: response.status, body, email: invitation.email });
-
-        // Update delivery status — table not in generated types, use untyped query
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabaseAdmin as any).from('staff_invitations')
-          .update({ email_delivery_status: 'failed', email_failure_reason: `Resend ${response.status}` })
-          .eq('id', invitation.id);
-      } else {
-        logger.info('Staff invitation email sent via Resend', { email: invitation.email, gymName });
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabaseAdmin as any).from('staff_invitations')
-          .update({ email_delivery_status: 'sent', email_sent_at: new Date().toISOString() })
-          .eq('id', invitation.id);
-      }
-    } else {
-      logger.info('Staff Invitation Created (no email provider)', {
-        email: invitation.email,
-        gymName,
-        roleName,
-        acceptUrl,
-        note: 'Set RESEND_API_KEY to enable email delivery. Share the URL manually for now.',
-      });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (result.success) {
+      await (supabaseAdmin as any).from('staff_invitations')
+        .update({ email_delivery_status: 'sent', email_sent_at: new Date().toISOString() })
+        .eq('id', invitation.id);
+    } else if (result.error && result.error !== 'RESEND_API_KEY not configured') {
+      await (supabaseAdmin as any).from('staff_invitations')
+        .update({ email_delivery_status: 'failed', email_failure_reason: result.error })
+        .eq('id', invitation.id);
     }
   } catch (error) {
     logger.error('Error sending invitation email', { error, invitationId: invitation.id });

@@ -8,9 +8,11 @@ type LoginFormProps = {
   redirectUrl: string | null;
   emailParam: string;
   errorParam: string | null;
+  resetSuccess?: boolean;
+  emailConfirmed?: boolean;
 };
 
-export default function LoginForm({ redirectUrl, emailParam, errorParam }: LoginFormProps) {
+export default function LoginForm({ redirectUrl, emailParam, errorParam, resetSuccess, emailConfirmed }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState('');
@@ -19,14 +21,27 @@ export default function LoginForm({ redirectUrl, emailParam, errorParam }: Login
   const hasCheckedSession = useRef(false);
   const hasRedirected = useRef(false);
 
-  // Sync error from URL param (from middleware redirects)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (errorParam === 'gym_suspended') {
       setError('This gym\'s subscription has been suspended. Please contact support.');
     } else if (errorParam === 'all_gyms_suspended') {
       setError('All your gyms have been suspended. Please contact support.');
+    } else if (errorParam === 'link_expired') {
+      setError('This link has expired. Please request a new one.');
+    } else if (errorParam === 'confirmation_failed') {
+      setError('Email confirmation failed. The link may be invalid or expired.');
+    } else if (errorParam === 'invalid_link') {
+      setError('Invalid link. Please check the URL and try again.');
     }
-  }, [errorParam]);
+
+    if (resetSuccess) {
+      setSuccessMessage('Password updated successfully! You can now sign in with your new password.');
+    } else if (emailConfirmed) {
+      setSuccessMessage('Email confirmed! You can now sign in.');
+    }
+  }, [errorParam, resetSuccess, emailConfirmed]);
 
   // Check environment variables on mount and log to console
   // NOTE: This is just for debugging - actual validation happens in supabase-client.ts
@@ -244,11 +259,26 @@ export default function LoginForm({ redirectUrl, emailParam, errorParam }: Login
             </div>
           </div>
 
+          {successMessage && (
+            <div className="rounded-md bg-[#00E5FF]/10 border border-[#00E5FF]/30 p-3">
+              <p className="text-sm text-[#00E5FF]">{successMessage}</p>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md bg-[#FF5252]/10 border border-[#FF5252]/30 p-3">
               <p className="text-sm text-[#FF5252]">{error}</p>
             </div>
           )}
+
+          <div className="flex items-center justify-end">
+            <a
+              href="/forgot-password"
+              className="text-sm text-[#808080] hover:text-[#00E5FF] transition-colors"
+            >
+              Forgot password?
+            </a>
+          </div>
 
           <div>
             <button

@@ -21,12 +21,16 @@ export default async function LoginPage({
   const redirectUrl = getParam(resolvedSearchParams, 'redirect');
   const emailParam = getParam(resolvedSearchParams, 'email') || '';
   const errorParam = getParam(resolvedSearchParams, 'error');
+  const resetParam = getParam(resolvedSearchParams, 'reset');
+  const confirmedParam = getParam(resolvedSearchParams, 'confirmed');
 
   return (
     <LoginForm
       redirectUrl={redirectUrl}
       emailParam={emailParam}
       errorParam={errorParam}
+      resetSuccess={resetParam === 'success'}
+      emailConfirmed={confirmedParam === 'true'}
     />
   );
 }
