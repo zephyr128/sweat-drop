@@ -37,7 +37,7 @@ import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_MARGIN = 12;
 const CARD_PADDING = 16; // Horizontal padding of ScrollView
 // Bottom cards row: two cards with gap between them
@@ -47,6 +47,180 @@ const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP;
 const CHALLENGE_CARD_WIDTH = SMARTCOACH_CARD_WIDTH;
 const CHALLENGE_CARD_HEIGHT = 200;
 const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
+
+// ═══════════════════════════════════════════════════════════
+// COLD-START SKELETON — shown only on first mount while data loads
+// ═══════════════════════════════════════════════════════════
+
+function ShimmerBlock({ style }: { style: any }) {
+  const shimmer = useSharedValue(0);
+
+  useEffect(() => {
+    shimmer.value = withRepeat(
+      withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(shimmer.value, [0, 1], [0.06, 0.12]),
+  }));
+
+  return <Animated.View style={[style, { backgroundColor: '#fff' }, animatedStyle]} />;
+}
+
+function ColdStartSkeleton({ branding }: { branding: ReturnType<typeof useBranding> }) {
+  return (
+    <View style={sk.root}>
+      {/* Header row */}
+      <View style={sk.header}>
+        <View style={sk.headerLeft}>
+          <ShimmerBlock style={sk.avatar} />
+          <ShimmerBlock style={sk.username} />
+        </View>
+        <ShimmerBlock style={sk.gymLogo} />
+      </View>
+
+      {/* Activity rings placeholder */}
+      <View style={sk.ringsWrap}>
+        <ShimmerBlock style={sk.ringsCircle} />
+      </View>
+
+      {/* Stats cards row */}
+      <View style={sk.statsRow}>
+        <ShimmerBlock style={sk.statCard} />
+        <ShimmerBlock style={sk.statCard} />
+        <ShimmerBlock style={sk.statCard} />
+      </View>
+
+      {/* Weekly chart placeholder */}
+      <ShimmerBlock style={sk.chartBlock} />
+
+      {/* Section header */}
+      <View style={sk.sectionRow}>
+        <ShimmerBlock style={sk.sectionTitle} />
+        <ShimmerBlock style={sk.sectionLink} />
+      </View>
+
+      {/* Challenge cards row */}
+      <View style={sk.cardsRow}>
+        <ShimmerBlock style={sk.challengeCard} />
+        <ShimmerBlock style={sk.challengeCardPartial} />
+      </View>
+
+      {/* Second section header */}
+      <View style={[sk.sectionRow, { marginTop: 28 }]}>
+        <ShimmerBlock style={sk.sectionTitle} />
+      </View>
+
+      {/* Bento grid */}
+      <View style={sk.bentoRow}>
+        <ShimmerBlock style={sk.bentoCard} />
+        <ShimmerBlock style={sk.bentoCard} />
+      </View>
+    </View>
+  );
+}
+
+const sk = StyleSheet.create({
+  root: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  username: {
+    width: 100,
+    height: 14,
+    borderRadius: 7,
+  },
+  gymLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+  },
+  ringsWrap: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  ringsCircle: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24,
+  },
+  statCard: {
+    flex: 1,
+    height: 80,
+    borderRadius: 16,
+  },
+  chartBlock: {
+    height: 100,
+    borderRadius: 16,
+    marginBottom: 28,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    width: 140,
+    height: 16,
+    borderRadius: 8,
+  },
+  sectionLink: {
+    width: 50,
+    height: 12,
+    borderRadius: 6,
+  },
+  cardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  challengeCard: {
+    width: SCREEN_WIDTH * 0.7,
+    height: 180,
+    borderRadius: 16,
+  },
+  challengeCardPartial: {
+    width: SCREEN_WIDTH * 0.3,
+    height: 180,
+    borderRadius: 16,
+  },
+  bentoRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  bentoCard: {
+    flex: 1,
+    height: 160,
+    borderRadius: 20,
+  },
+});
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -389,8 +563,22 @@ export default function HomeScreen() {
     });
   };
 
-  // No full-screen spinner — render the UI immediately.
-  // Individual sections handle their own loading states (skeletons / defaults).
+  // ── Cold-start redacted skeleton (first load only) ──
+  if (!hasLoadedOnce.current && !profile && homeGymId) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <LinearGradient
+            colors={['#080808', '#0A0E1A', '#080808'] as any}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <ColdStartSkeleton branding={branding} />
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   // ── Empty state for users with no home gym ──
   if (!homeGymId) {
