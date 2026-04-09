@@ -137,8 +137,7 @@ function StackNavigator() {
 
 function parseReferralCode(url: string | null): string | null {
   if (!url) return null;
-  // Match both plain and percent-encoded characters (encodeURIComponent from the web page)
-  const match = url.match(/(?:sweatdrop:\/\/|https?:\/\/sweat-drop\.com\/)join\/([A-Za-z0-9_\-%.]+)/);
+  const match = url.match(/(?:sweatdrop:\/\/|https?:\/\/(?:www\.)?sweat-drop\.com\/)join\/([A-Za-z0-9_\-%.]+)/);
   if (!match?.[1]) return null;
   try {
     return decodeURIComponent(match[1]);
@@ -149,15 +148,15 @@ function parseReferralCode(url: string | null): string | null {
 
 /**
  * Extract Supabase auth tokens from a deep link URL.
- * The landing page passes them as a hash fragment:
+ * Handles both custom-scheme and https App Links (Android):
  *   sweatdrop://auth/confirm#access_token=...&refresh_token=...&type=signup
+ *   https://www.sweat-drop.com/auth/confirm#access_token=...&refresh_token=...
  */
 function parseAuthTokensFromUrl(url: string | null): {
   accessToken: string;
   refreshToken: string;
 } | null {
   if (!url) return null;
-  // Look for hash fragment tokens in sweatdrop://auth/* URLs
   const hashIndex = url.indexOf('#');
   if (hashIndex === -1) return null;
   const hash = url.slice(hashIndex + 1);

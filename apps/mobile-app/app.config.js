@@ -62,6 +62,16 @@ module.exports = {
               host: 'www.sweat-drop.com',
               pathPrefix: '/auth/confirm',
             },
+            {
+              scheme: 'https',
+              host: 'www.sweat-drop.com',
+              pathPrefix: '/auth/reset',
+            },
+            {
+              scheme: 'https',
+              host: 'www.sweat-drop.com',
+              pathPrefix: '/join',
+            },
           ],
           category: ['BROWSABLE', 'DEFAULT'],
         },
