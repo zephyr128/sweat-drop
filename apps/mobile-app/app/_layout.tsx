@@ -1,5 +1,6 @@
 import '@/lib/i18n';
 import { Stack, useSegments } from 'expo-router';
+import { ThemeProvider as NavigationThemeProvider, DarkTheme } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useCallback } from 'react';
 import { Platform, Linking } from 'react-native';
@@ -40,11 +41,21 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
 
+const APP_NAV_THEME = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: '#000000',
+    card: '#000000',
+  },
+};
+
 // Inner component that uses theme (must be inside ThemeProvider)
 function StackNavigator() {
   const { branding } = useTheme();
 
   return (
+    <NavigationThemeProvider value={APP_NAV_THEME}>
     <Stack
       screenOptions={{
         headerStyle: {
@@ -132,6 +143,7 @@ function StackNavigator() {
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="transactions" options={{ headerShown: false }} />
     </Stack>
+    </NavigationThemeProvider>
   );
 }
 

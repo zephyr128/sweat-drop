@@ -42,6 +42,8 @@ export default function StatsView() {
   useEffect(() => {
     if (session?.user) {
       loadStats();
+    } else {
+      setLoading(false);
     }
   }, [session?.user, selectedPeriod]);
 
@@ -50,35 +52,33 @@ export default function StatsView() {
 
     setLoading(true);
     try {
-      let query = supabase
-        .from('sessions')
-        .select('duration_seconds, drops_earned, ended_at')
-        .eq('user_id', session.user.id)
-        .not('ended_at', 'is', null)
-        .not('duration_seconds', 'is', null);
-
-      // Filter by period
       const now = new Date();
+      let periodSince: string | null = null;
       if (selectedPeriod === 'daily') {
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        query = query.gte('ended_at', today.toISOString());
+        periodSince = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       } else if (selectedPeriod === 'monthly') {
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        query = query.gte('ended_at', firstDayOfMonth.toISOString());
+        periodSince = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       }
-      // 'total' uses no filter
 
-      const { data: sessionsData, error: sessionsError } = await query;
+      const { data: rpcData, error: sessionsError } = await supabase.rpc('get_my_sessions', {
+        p_gym_id: null,
+        p_active_only: false,
+        p_since: periodSince,
+        p_limit: 5000,
+      });
 
       if (sessionsError) throw sessionsError;
 
-      // Calculate stats from sessions
-      const totalDuration = (sessionsData || []).reduce(
-        (sum: number, s: { duration_seconds: number | null }) => sum + (s.duration_seconds || 0),
+      const sessionsData = (rpcData ?? []).filter((s: any) =>
+        !s.is_active && s.ended_at != null && s.duration_seconds != null
+      );
+
+      const totalDuration = sessionsData.reduce(
+        (sum: number, s: any) => sum + (s.duration_seconds || 0),
         0
       );
-      const totalDrops = (sessionsData || []).reduce(
-        (sum: number, s: { drops_earned: number | null }) => sum + (s.drops_earned || 0),
+      const totalDrops = sessionsData.reduce(
+        (sum: number, s: any) => sum + (s.drops_earned || 0),
         0
       );
 
