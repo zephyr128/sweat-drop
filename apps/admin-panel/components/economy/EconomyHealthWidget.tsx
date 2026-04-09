@@ -14,7 +14,7 @@ function styles(health: EconomySummary['health']) {
 }
 
 export function EconomyHealthWidget({ gymId, summary }: EconomyHealthWidgetProps) {
-  if (!summary) {
+  if (!summary || summary.isEmpty) {
     return (
       <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
         <div className="flex items-center gap-2 mb-2">
@@ -22,8 +22,16 @@ export function EconomyHealthWidget({ gymId, summary }: EconomyHealthWidgetProps
           <h3 className="text-white font-semibold">Economy Health</h3>
         </div>
         <p className="text-sm text-zinc-500">
-          Economy snapshots are not available yet. Run tokenomics migration first.
+          No workout sessions yet. Health metrics will appear once members start earning drops.
         </p>
+        <div className="mt-4">
+          <a
+            href={`/dashboard/gym/${gymId}/economy`}
+            className="text-xs text-cyan-300 hover:text-cyan-200 underline underline-offset-2"
+          >
+            Configure Economy Settings
+          </a>
+        </div>
       </div>
     );
   }

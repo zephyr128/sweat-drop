@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Save, Shield, ShieldAlert, Link2, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, HeartPulse, Save, Shield, ShieldAlert, Link2, Zap } from 'lucide-react';
 import {
   updateEconomyConfig,
   type BandEnforcementMode,
@@ -512,7 +512,32 @@ function SliderField({ label, tooltip, value, onChange, min, max, rec, rsdHint }
 
 function HealthCard({ risk, riskLabel, summary, config }: { risk: EconomySummary['risk']; riskLabel: string; summary: EconomySummary; config: EconomyConfig }) {
   const burnPct = Math.round(summary.burnMintRatio * 100);
-  const diagnoses = diagnoseHealth(summary, config);
+  const diagnoses = summary.isEmpty ? [] : diagnoseHealth(summary, config);
+
+  // New gym — no activity yet, show neutral onboarding state
+  if (summary.isEmpty) {
+    return (
+      <div className="bg-zinc-500/5 border border-zinc-500/20 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <HeartPulse className="w-5 h-5 text-zinc-400 mt-0.5 shrink-0" />
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h4 className="text-sm font-semibold text-white">Economy Health</h4>
+              <span className="px-2.5 py-0.5 rounded-full border text-xs font-semibold bg-zinc-500/15 text-zinc-400 border-zinc-500/30">
+                No data yet
+              </span>
+            </div>
+            <p className="text-sm mt-1.5 text-zinc-400">
+              No workout sessions recorded yet. Economy health will appear once members start earning drops.
+            </p>
+            <p className="text-xs mt-2 text-zinc-500">
+              Make sure rewards are set up and priced correctly before your first members arrive.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const palette = risk === 'green'
     ? { bg: 'bg-emerald-500/5', border: 'border-emerald-500/20', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', text: 'text-emerald-300', icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" /> }

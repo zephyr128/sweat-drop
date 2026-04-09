@@ -61,6 +61,7 @@ export interface EconomySummary {
   burned30d: number;
   health: 'green' | 'yellow' | 'red';
   healthLabel: string;
+  isEmpty: boolean;
 }
 
 export interface EconomyConfigData {
@@ -131,7 +132,10 @@ function parsePriceBands(raw: unknown): PriceBandMap {
   return result;
 }
 
-function healthFromEconomy(burnMintRatio: number, top1SharePct: number): EconomySummary['health'] {
+function healthFromEconomy(burnMintRatio: number, top1SharePct: number, minted30d: number): EconomySummary['health'] {
+  // New gym with no activity — don't penalise
+  if (minted30d === 0) return 'green';
+
   const ratioPct = burnMintRatio * 100;
   const ratioBad = ratioPct < 10 || ratioPct > 60;
   const ratioWarn = (ratioPct >= 10 && ratioPct < 20) || (ratioPct > 45 && ratioPct <= 60);
@@ -487,7 +491,7 @@ export async function getGymEconomyData(gymId: string) {
     snapshots.length > 0
       ? snapshots.reduce((sum, s) => sum + Number(s.top1_share_pct || 0), 0) / snapshots.length
       : 0;
-  const health = healthFromEconomy(burnMintRatio, top1SharePct);
+  const health = healthFromEconomy(burnMintRatio, top1SharePct, minted30d);
 
   const summary: EconomySummary = {
     burnMintRatio: Math.round(burnMintRatio * 1000) / 1000,
@@ -496,6 +500,7 @@ export async function getGymEconomyData(gymId: string) {
     burned30d,
     health,
     healthLabel: healthLabel(health),
+    isEmpty: minted30d === 0,
   };
 
   const guardrails: EconomyRewardGuardrail[] = rewards.map((r) => {
