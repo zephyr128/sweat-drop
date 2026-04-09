@@ -165,9 +165,9 @@ export function useMyStats(gymId: string | null | undefined) {
   const [activePeriod, setActivePeriod] = useState<StatsPeriod>('week');
   const state = states[activePeriod];
 
-  const load = useCallback(async (period: StatsPeriod, forceRefresh = false) => {
+  const load = useCallback(async (period: StatsPeriod, forceRefresh = false, { updateActive = true } = {}) => {
     if (!session?.user) return;
-    setActivePeriod(period);
+    if (updateActive) setActivePeriod(period);
 
     const cacheKey = `${gymId ?? 'global'}:${period}`;
     const cached = cache.get(cacheKey);
@@ -192,22 +192,20 @@ export function useMyStats(gymId: string | null | undefined) {
       else if (period === 'week') periodStart = weekISO;
       else if (period === 'month') periodStart = monthISO;
 
-      // ── 1. Sessions for the selected period ──
-      let sessionsQuery = supabase
-        .from('sessions')
-        .select('id, duration_seconds, drops_earned, started_at, machine_id, multiplier, raw_metrics')
-        .eq('user_id', userId)
-        .eq('is_active', false)
-        .gt('drops_earned', 0);
-      if (gymId) sessionsQuery = sessionsQuery.eq('gym_id', gymId);
-      if (periodStart) sessionsQuery = sessionsQuery.gte('started_at', periodStart);
-      const { data: sessionRows } = await sessionsQuery;
+      // ── 1. Sessions for the selected period (RPC) ──
+      const { data: rpcSessionData } = await supabase.rpc('get_my_sessions', {
+        p_gym_id: gymId ?? null,
+        p_active_only: false,
+        p_since: periodStart ?? null,
+        p_limit: 5000,
+      });
+      const sessionRows = (rpcSessionData ?? []).filter((s: any) => !s.is_active && (s.drops_earned ?? 0) > 0);
 
-      const sessions = sessionRows ?? [];
+      const sessions: any[] = sessionRows ?? [];
       const totalSessions = sessions.length;
-      const totalSeconds = sessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0);
+      const totalSeconds = sessions.reduce((s: number, r: any) => s + (r.duration_seconds ?? 0), 0);
       const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
-      const totalDropsSessions = sessions.reduce((s, r) => s + (r.drops_earned ?? 0), 0);
+      const totalDropsSessions = sessions.reduce((s: number, r: any) => s + (r.drops_earned ?? 0), 0);
       const avgDropsPerSession = totalSessions > 0 ? Math.round(totalDropsSessions / totalSessions) : 0;
 
       // ── 2. Profile ──
@@ -251,16 +249,13 @@ export function useMyStats(gymId: string | null | undefined) {
       // limit(5000) avoids the default PostgREST 1000-row cap for heavy users.
       const earnedTypes = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
 
-      let originQuery = supabase
-        .from('drops_transactions')
-        .select('amount, transaction_type, created_at')
-        .eq('user_id', userId)
-        .gt('amount', 0)
-        .in('transaction_type', earnedTypes)
-        .limit(5000);
-      if (gymId) originQuery = originQuery.eq('gym_id', gymId);
-      if (periodStart) originQuery = originQuery.gte('created_at', periodStart);
-      const { data: originRows } = await originQuery;
+      const { data: rpcOriginData } = await supabase.rpc('get_my_drops', {
+        p_gym_id: gymId ?? null,
+        p_types: earnedTypes,
+        p_since: periodStart ?? null,
+        p_limit: 5000,
+      });
+      const originRows = (rpcOriginData ?? []).filter((d: any) => (d.amount ?? 0) > 0);
 
       const origin: DropsOrigin = { session: 0, challenge: 0, checkin: 0, bonus: 0 };
       for (const row of originRows ?? []) {
@@ -281,8 +276,8 @@ export function useMyStats(gymId: string | null | undefined) {
       const sumFrom = (from: Date) => {
         const fromMs = from.getTime();
         return (originRows ?? [])
-          .filter(r => r.created_at && new Date(r.created_at).getTime() >= fromMs)
-          .reduce((s, r) => s + (r.amount ?? 0), 0);
+          .filter((r: any) => r.created_at && new Date(r.created_at).getTime() >= fromMs)
+          .reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
       };
       const dropsToday = sumFrom(startOfToday());
       const dropsWeek  = sumFrom(startOfWeek());
@@ -290,13 +285,11 @@ export function useMyStats(gymId: string | null | undefined) {
       const dropsAll   = periodDrops;
 
       // ── 6. Period checkins (for activity viz + activeDays) ──
-      let checkinsQuery = supabase
-        .from('gym_checkins')
-        .select('checked_in_at')
-        .eq('user_id', userId);
-      if (gymId) checkinsQuery = checkinsQuery.eq('gym_id', gymId);
-      if (periodStart) checkinsQuery = checkinsQuery.gte('checked_in_at', periodStart);
-      const { data: periodCheckinRows } = await checkinsQuery;
+      const { data: periodCheckinRows } = await supabase.rpc('get_my_checkins', {
+        p_gym_id: gymId ?? null,
+        p_since: periodStart ?? null,
+        p_limit: 5000,
+      });
 
       // Active days (distinct dates with session or checkin)
       const activeDateStrings = new Set<string>();
@@ -456,17 +449,24 @@ export function useMyStats(gymId: string | null | undefined) {
       }
 
       // ── 8. Machines breakdown ──
-      const machineIds = [...new Set(sessions.filter((s) => s.machine_id).map((s) => s.machine_id!))];
+      // RPC returns machine_type flat; also look up from machines table for sessions missing it
+      const machineIds = [...new Set(sessions.filter((s: any) => s.machine_id).map((s: any) => s.machine_id!))];
       let machines: MachineStats[] = [];
       const machineTypeMap = new Map<string, string>();
-      if (machineIds.length > 0) {
+      // Populate from RPC flat columns first
+      for (const s of sessions) {
+        if (s.machine_id && s.machine_type) machineTypeMap.set(s.machine_id, s.machine_type);
+      }
+      // Fallback: fetch any missing machine types from the machines table
+      const missingIds = machineIds.filter((id: string) => !machineTypeMap.has(id));
+      if (missingIds.length > 0) {
         const { data: machineRows } = await supabase
           .from('machines')
           .select('id, type')
-          .in('id', machineIds);
-
+          .in('id', missingIds);
         for (const m of machineRows ?? []) machineTypeMap.set(m.id, m.type);
-
+      }
+      if (machineIds.length > 0) {
         const grouped = new Map<string, { count: number; totalMin: number }>();
         for (const s of sessions) {
           if (!s.machine_id) continue;
@@ -485,40 +485,38 @@ export function useMyStats(gymId: string | null | undefined) {
       let todaySessions: TodaySession[] = [];
       if (period === 'today') {
         todaySessions = sessions
-          .map(s => ({
+          .map((s: any) => ({
             id: s.id,
             startedAt: s.started_at!,
             durationSeconds: s.duration_seconds ?? 0,
             dropsEarned: s.drops_earned ?? 0,
             machineType: s.machine_id ? (machineTypeMap.get(s.machine_id) ?? null) : null,
           }))
-          .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+          .sort((a: any, b: any) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
       }
 
       // ── 9. Period achievements ──
-      const periodBest = sessions.reduce<{ drops: number; date: string | null }>(
-        (best, s) => {
+      const periodBest = sessions.reduce(
+        (best: { drops: number; date: string | null }, s: any) => {
           const drops = s.drops_earned ?? 0;
           return drops > best.drops ? { drops, date: s.started_at ?? null } : best;
         },
         { drops: 0, date: null },
       );
 
-      const periodHappyHours = sessions.filter(s => {
+      const periodHappyHours = sessions.filter((s: any) => {
         try {
           const m = s.raw_metrics as any;
           return m?.drop_calc_v2?.happy_hour?.active === true;
         } catch { return false; }
       }).length;
 
-      let periodChallengesQuery = supabase
-        .from('challenge_progress')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('is_completed', true);
-      if (periodStart) periodChallengesQuery = periodChallengesQuery.gte('completed_at', periodStart);
-      const { data: periodCompletedChallenges } = await periodChallengesQuery;
-      const periodChallengesCompleted = periodCompletedChallenges?.length ?? 0;
+      const { data: rpcChallengeData } = await supabase.rpc('get_my_challenges', {
+        p_gym_id: gymId ?? null,
+      });
+      const periodChallengesCompleted = (rpcChallengeData ?? []).filter((c: any) =>
+        c.is_completed && (!periodStart || new Date(c.completed_at) >= new Date(periodStart))
+      ).length;
 
       const periodAchievements: PeriodAchievements = {
         bestSessionDrops: periodBest.drops,
@@ -540,60 +538,50 @@ export function useMyStats(gymId: string | null | undefined) {
         happyHoursUsed = periodHappyHours;
         challengesCompleted = periodChallengesCompleted;
       } else {
-        const { data: bestSession } = await supabase
-          .from('sessions')
-          .select('drops_earned, started_at')
-          .eq('user_id', userId)
-          .eq('is_active', false)
-          .gt('drops_earned', 0)
-          .order('drops_earned', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const { data: allSessionsData } = await supabase.rpc('get_my_sessions', {
+          p_gym_id: null,
+          p_active_only: false,
+          p_since: null,
+          p_limit: 5000,
+        });
+        const allCompletedSessions = (allSessionsData ?? []).filter((s: any) => !s.is_active && (s.drops_earned ?? 0) > 0);
+
+        const bestSession = [...allCompletedSessions].sort((a: any, b: any) => (b.drops_earned ?? 0) - (a.drops_earned ?? 0))[0] ?? null;
         lifetimeBestDrops = bestSession?.drops_earned ?? 0;
         lifetimeBestDate = bestSession?.started_at ?? null;
 
-        const { data: hhSessions } = await supabase
-          .from('sessions')
-          .select('id, raw_metrics')
-          .eq('user_id', userId)
-          .eq('is_active', false)
-          .gt('drops_earned', 0);
-        happyHoursUsed = (hhSessions ?? []).filter((s) => {
+        happyHoursUsed = allCompletedSessions.filter((s: any) => {
           try {
             const m = s.raw_metrics as any;
             return m?.drop_calc_v2?.happy_hour?.active === true;
           } catch { return false; }
         }).length;
 
-        const { data: allCompleted } = await supabase
-          .from('challenge_progress')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('is_completed', true);
-        challengesCompleted = allCompleted?.length ?? 0;
+        challengesCompleted = (rpcChallengeData ?? []).filter((c: any) => c.is_completed).length;
       }
 
       // Best streak (always all-time)
       let bestStreak = streak;
       try {
-        const { data: allDates } = await supabase
-          .from('sessions')
-          .select('started_at')
-          .eq('user_id', userId)
-          .eq('is_active', false)
-          .gt('drops_earned', 0)
-          .order('started_at', { ascending: true });
-        const { data: allCheckins } = await supabase
-          .from('gym_checkins')
-          .select('checked_in_at')
-          .eq('user_id', userId)
-          .order('checked_in_at', { ascending: true });
+        const [allSessionsForStreak, allCheckinsForStreak] = await Promise.all([
+          supabase.rpc('get_my_sessions', {
+            p_gym_id: null,
+            p_active_only: false,
+            p_since: null,
+            p_limit: 5000,
+          }),
+          supabase.rpc('get_my_checkins', {
+            p_gym_id: null,
+            p_since: null,
+            p_limit: 5000,
+          }),
+        ]);
 
         const dateSet = new Set<string>();
-        for (const s of allDates ?? []) {
+        for (const s of (allSessionsForStreak.data ?? []).filter((s: any) => !s.is_active && (s.drops_earned ?? 0) > 0)) {
           if (s.started_at) dateSet.add(new Date(s.started_at).toISOString().slice(0, 10));
         }
-        for (const c of allCheckins ?? []) {
+        for (const c of allCheckinsForStreak.data ?? []) {
           if (c.checked_in_at) dateSet.add(new Date(c.checked_in_at).toISOString().slice(0, 10));
         }
         const sorted = [...dateSet].sort();
@@ -646,10 +634,9 @@ export function useMyStats(gymId: string | null | undefined) {
     }
   }, [session?.user?.id, gymId]);
 
-  // Load only if not already cached — use for lazy background loading of non-active tabs
   const loadIfNeeded = useCallback((period: StatsPeriod) => {
     const cacheKey = `${gymId ?? 'global'}:${period}`;
-    if (!cache.has(cacheKey)) load(period);
+    if (!cache.has(cacheKey)) load(period, false, { updateActive: false });
   }, [load, gymId]);
 
   // Force-refresh current period (used by pull-to-refresh)

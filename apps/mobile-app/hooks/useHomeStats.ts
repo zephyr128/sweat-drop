@@ -89,38 +89,28 @@ export function useHomeStats(gymId: string | null) {
       monday.setHours(0, 0, 0, 0);
 
       // Fire ALL queries in parallel — no waterfalls
-      const [todayTxRes, lastSessionRes, profileRes, weekTxRes, rewardsRes, redemptionsRes, membershipRes] = await Promise.all([
-        // 1. Today's drops
-        supabase
-          .from('drops_transactions')
-          .select('amount, transaction_type')
-          .eq('user_id', userId)
-          .gte('created_at', todayStart.toISOString())
-          .gt('amount', 0)
-          .in('transaction_type', EARNED_TYPES),
+      // Merged today + week drops into one RPC (week ⊇ today)
+      const [weekDropsRes, lastSessionRes, profileRes, rewardsRes, redemptionsRes, membershipRes] = await Promise.all([
+        // 1+4. Week drops (superset of today's) — single RPC replaces two .from() calls
+        supabase.rpc('get_my_drops', {
+          p_gym_id: null,
+          p_types: EARNED_TYPES,
+          p_since: monday.toISOString(),
+          p_limit: 5000,
+        }),
         // 2. Last workout
-        supabase
-          .from('sessions')
-          .select('duration_seconds, drops_earned, ended_at')
-          .eq('user_id', userId)
-          .eq('is_active', false)
-          .order('ended_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+        supabase.rpc('get_my_sessions', {
+          p_gym_id: null,
+          p_active_only: false,
+          p_since: null,
+          p_limit: 5,
+        }),
         // 3. Streak from profile
         supabase
           .from('profiles')
           .select('streak_days, last_visit_date')
           .eq('id', userId)
           .single(),
-        // 4. Weekly activity
-        supabase
-          .from('drops_transactions')
-          .select('created_at, amount')
-          .eq('user_id', userId)
-          .gt('amount', 0)
-          .gte('created_at', monday.toISOString())
-          .in('transaction_type', EARNED_TYPES),
         // 5. Rewards (gym-dependent, skipped if no gymId)
         gymId
           ? supabase
@@ -131,13 +121,13 @@ export function useHomeStats(gymId: string | null) {
               .order('price_drops', { ascending: true })
               .limit(20)
           : Promise.resolve({ data: null }),
+        // 6. Redemptions via RPC
         gymId
-          ? supabase
-              .from('redemptions')
-              .select('reward_id, created_at, status')
-              .eq('user_id', userId)
-              .eq('gym_id', gymId)
-              .in('status', ['pending', 'confirmed'])
+          ? supabase.rpc('get_my_redemptions', {
+              p_gym_id: gymId,
+              p_statuses: ['pending', 'confirmed'],
+              p_limit: null,
+            })
           : Promise.resolve({ data: null }),
         gymId
           ? supabase
@@ -149,12 +139,13 @@ export function useHomeStats(gymId: string | null) {
           : Promise.resolve({ data: null }),
       ]);
 
-      // Process today's drops
-      const todayTx = todayTxRes.data;
+      // Process today's + weekly drops from the combined week RPC result
+      const allWeekDrops = (weekDropsRes.data ?? []).filter((d: any) => (d.amount ?? 0) > 0);
+      const todayTx = allWeekDrops.filter((d: any) => new Date(d.created_at) >= todayStart);
       const CAPPED_TYPES = new Set(['session', 'checkin']);
       let todayCappedDrops = 0;
       let todayBonusDrops = 0;
-      for (const tx of todayTx ?? []) {
+      for (const tx of todayTx) {
         const a = tx.amount ?? 0;
         if (CAPPED_TYPES.has(tx.transaction_type)) {
           todayCappedDrops += a;
@@ -164,13 +155,16 @@ export function useHomeStats(gymId: string | null) {
       }
       const todayDrops = todayCappedDrops + todayBonusDrops;
 
-      // Process last workout
-      const lastSession = lastSessionRes.data;
-      const lastWorkout: HomeStats['lastWorkout'] = lastSession
+      // Process last workout (RPC returns array; pick latest completed)
+      const allRecentSessions = lastSessionRes.data ?? [];
+      const latestCompleted = allRecentSessions
+        .filter((s: any) => !s.is_active)
+        .sort((a: any, b: any) => new Date(b.ended_at).getTime() - new Date(a.ended_at).getTime())[0] ?? null;
+      const lastWorkout: HomeStats['lastWorkout'] = latestCompleted
         ? {
-            durationSeconds: lastSession.duration_seconds || 0,
-            dropsEarned: lastSession.drops_earned || 0,
-            endedAt: lastSession.ended_at,
+            durationSeconds: latestCompleted.duration_seconds || 0,
+            dropsEarned: latestCompleted.drops_earned || 0,
+            endedAt: latestCompleted.ended_at,
           }
         : null;
 
@@ -205,11 +199,11 @@ export function useHomeStats(gymId: string | null) {
             if (r.stock !== null && r.stock <= 0) return false;
             const limit: string = r.redemption_limit || 'unlimited';
             if (limit === 'unlimited') return true;
-            const matching = redeemed.filter((rd) => rd.reward_id === r.id);
+            const matching = redeemed.filter((rd: any) => rd.reward_id === r.id);
             if (matching.length === 0) return true;
             if (limit === 'once') return false;
             const periodStart = getPeriodStart(limit, now);
-            return !matching.some((rd) => new Date(rd.created_at) >= periodStart);
+            return !matching.some((rd: any) => new Date(rd.created_at) >= periodStart);
           });
 
           if (available.length > 0) {
@@ -231,18 +225,15 @@ export function useHomeStats(gymId: string | null) {
         }
       }
 
-      // Process weekly activity
+      // Process weekly activity (reuses allWeekDrops from combined RPC)
       const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const weekTx = weekTxRes.data;
       const dailyDrops: number[] = [0, 0, 0, 0, 0, 0, 0];
-      if (weekTx) {
-        for (const tx of weekTx) {
-          if (tx.created_at) {
-            const d = new Date(tx.created_at);
-            let idx = d.getDay() - 1;
-            if (idx < 0) idx = 6;
-            dailyDrops[idx] += tx.amount || 0;
-          }
+      for (const tx of allWeekDrops) {
+        if (tx.created_at) {
+          const d = new Date(tx.created_at);
+          let idx = d.getDay() - 1;
+          if (idx < 0) idx = 6;
+          dailyDrops[idx] += tx.amount || 0;
         }
       }
 

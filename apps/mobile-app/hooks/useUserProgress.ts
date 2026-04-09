@@ -141,18 +141,10 @@ export function useUserProgress(userId?: string) {
       });
 
       // ========================================
-      // PART 2: Gym challenge progress
+      // PART 2: Gym challenge progress (via RPC)
       // ========================================
-      // Fetch challenge_progress rows (server updates these in update_challenge_progress())
-      // and the corresponding gym_challenges for target values
-      const [challengeProgressResult, gymChallengesResult, gymBadgesResult] = await Promise.all([
-        supabase
-          .from('challenge_progress')
-          .select('challenge_id, current_value, current_drops, current_streak_days, is_completed, tier_achieved')
-          .eq('user_id', targetUserId),
-        supabase
-          .from('gym_challenges')
-          .select('id, challenge_type, target_drops, streak_days, milestone_threshold, scoring_model, tiers'),
+      const [rpcChallengesResult, gymBadgesResult] = await Promise.all([
+        supabase.rpc('get_my_challenges', { p_gym_id: null }),
         supabase
           .from('user_badges')
           .select('gym_challenge_id')
@@ -160,19 +152,15 @@ export function useUserProgress(userId?: string) {
           .not('gym_challenge_id', 'is', null),
       ]);
 
-      const challengeProgressData = challengeProgressResult.data || [];
-      const gymChallengesData = gymChallengesResult.data || [];
+      const rpcChallenges = rpcChallengesResult.data || [];
       const earnedGymChallengeIds = new Set(
         (gymBadgesResult.data || []).map((b: any) => b.gym_challenge_id)
       );
 
-      const challengeItems: UserProgress[] = challengeProgressData
-        .map((cp: any) => {
-          const challenge = gymChallengesData.find((c: any) => c.id === cp.challenge_id);
-          if (!challenge) return null;
-
-          const isEarned = earnedGymChallengeIds.has(cp.challenge_id);
-          const cType = challenge.challenge_type || '';
+      const challengeItems: UserProgress[] = rpcChallenges
+        .map((c: any) => {
+          const isEarned = earnedGymChallengeIds.has(c.challenge_id);
+          const cType = c.challenge_type || '';
           const isStreak = cType === 'streak' || cType === 'checkin_streak';
           const isMilestone = cType === 'milestone';
 
@@ -180,40 +168,39 @@ export function useUserProgress(userId?: string) {
           let current: number;
 
           if (isStreak) {
-            target = challenge.streak_days || challenge.target_drops || 1;
-            current = cp.current_streak_days ?? 0;
+            target = c.streak_days || c.target_drops || 1;
+            current = c.current_streak_days ?? 0;
           } else if (isMilestone) {
-            target = challenge.milestone_threshold || challenge.target_drops || 1;
-            current = cp.current_drops ?? cp.current_value ?? 0;
+            target = c.milestone_threshold || c.target_drops || 1;
+            current = c.current_drops ?? 0;
           } else {
-            target = challenge.target_drops || 1;
-            current = cp.current_drops ?? cp.current_value ?? 0;
+            target = c.target_drops || 1;
+            current = c.current_drops ?? 0;
           }
 
           const criteriaMet = target > 0 && current >= target;
-          const completed = isEarned || criteriaMet;
+          const completed = isEarned || criteriaMet || (c.is_completed ?? false);
           const percent = completed
             ? 100
             : target > 0 ? Math.min(Math.round((current / target) * 100), 99) : 0;
 
           return {
-            id: cp.challenge_id,
+            id: c.challenge_id,
             user_id: targetUserId,
             global_achievement_id: null,
-            gym_challenge_id: cp.challenge_id,
+            gym_challenge_id: c.challenge_id,
             progress_data: {
               current,
               target,
-              type: challenge.scoring_model || (isStreak ? 'streak_days' : 'total_drops'),
+              type: c.scoring_model || (isStreak ? 'streak_days' : 'total_drops'),
             },
             is_completed: completed,
-            completed_at: null,
+            completed_at: c.completed_at ?? null,
             created_at: '',
             updated_at: '',
             progress_percent: percent,
           } as UserProgress;
-        })
-        .filter(Boolean) as UserProgress[];
+        });
 
       // Merge global + gym challenge progress
       if (isMountedRef.current) setProgress([...progressItems, ...challengeItems]);
@@ -226,15 +213,15 @@ export function useUserProgress(userId?: string) {
   }, [targetUserId]);
 
   useEffect(() => {
-    loadProgress();
-  }, [loadProgress]);
-
-  useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    loadProgress();
+  }, [loadProgress]);
 
   // Helper function to get progress for a specific achievement/challenge
   const getProgress = useCallback(

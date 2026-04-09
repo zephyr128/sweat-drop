@@ -51,99 +51,57 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
     if (isMountedRef.current) setError(null);
 
     try {
-      // Query challenges directly with new schema (challenge_type, target_drops, current_drops)
-      const today = new Date().toISOString().split('T')[0];
-      
-      const { data: challengesData, error: challengesError } = await supabase
-        .from('gym_challenges')
-        .select(`
-          id,
-          name,
-          description,
-          challenge_type,
-          target_drops,
-          milestone_threshold,
-          reward_drops,
-          streak_days,
-          start_date,
-          end_date
-        `)
-        .eq('gym_id', gymId)
-        .eq('is_active', true)
-        .lte('start_date', today)
-        .or(`end_date.gte.${today},end_date.is.null`);
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_challenges', {
+        p_gym_id: gymId,
+      });
 
-      if (challengesError) {
-        log.error('Error loading challenges:', challengesError);
-        if (isMountedRef.current) setError(challengesError.message);
+      if (rpcError) {
+        log.error('Error loading challenges:', rpcError);
+        if (isMountedRef.current) setError(rpcError.message);
         return;
       }
 
-      if (!challengesData || challengesData.length === 0) {
+      if (!rpcData || rpcData.length === 0) {
         if (isMountedRef.current) setChallenges([]);
         return;
       }
 
-      // Get challenge progress for user
-      const challengeIds = challengesData.map((c) => c.id);
-      const { data: progressData, error: progressError } = await supabase
-        .from('challenge_progress')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('gym_id', gymId)
-        .in('challenge_id', challengeIds);
-
-      if (progressError) {
-        log.error('Error loading challenge progress:', progressError);
-        if (isMountedRef.current) setError(progressError.message);
-        return;
-      }
-
-      // Merge challenges with progress
-      const challengesWithProgress: ChallengeProgress[] = challengesData.map((challenge) => {
-        const progress = progressData?.find((p) => p.challenge_id === challenge.id);
-        
-        // Calculate target based on challenge type
+      const challengesWithProgress: ChallengeProgress[] = rpcData.map((c: any) => {
+        const cType = c.challenge_type;
         let target = 0;
-        if (challenge.challenge_type === 'milestone') {
-          target = challenge.milestone_threshold || 0;
-        } else if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
-          target = challenge.streak_days || challenge.target_drops || 0;
+        if (cType === 'milestone') {
+          target = c.milestone_threshold || 0;
+        } else if (cType === 'streak' || cType === 'checkin_streak') {
+          target = c.streak_days || c.target_drops || 0;
         } else {
-          target = challenge.target_drops || 0;
-        }
-        
-        // Calculate current progress based on challenge type
-        let current = 0;
-        if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
-          current = progress?.current_streak_days || 0;
-        } else if (challenge.challenge_type === 'milestone') {
-          // For milestone, we need to query gym_memberships.local_drops_balance
-          // This will be handled separately below
-          current = progress?.current_drops || 0; // Fallback for now
-        } else {
-          current = progress?.current_drops || 0;
+          target = c.target_drops || 0;
         }
 
-        // Calculate progress percentage
-        const progressPercent = target > 0 
+        let current = 0;
+        if (cType === 'streak' || cType === 'checkin_streak') {
+          current = c.current_streak_days || 0;
+        } else {
+          current = c.current_drops || 0;
+        }
+
+        const progressPercent = target > 0
           ? Math.min((current / target) * 100, 100)
           : 0;
 
         return {
-          challenge_id: challenge.id,
-          challenge_name: challenge.name,
-          description: challenge.description,
-          challenge_type: challenge.challenge_type as ChallengeProgress['challenge_type'],
+          challenge_id: c.challenge_id,
+          challenge_name: c.challenge_name,
+          description: null,
+          challenge_type: cType as ChallengeProgress['challenge_type'],
           target_drops: target,
-          milestone_threshold: challenge.milestone_threshold,
-          reward_drops: challenge.reward_drops,
+          milestone_threshold: c.milestone_threshold,
+          reward_drops: c.reward_drops,
           current_drops: current,
-          current_streak_days: progress?.current_streak_days || 0,
-          is_completed: progress?.is_completed || false,
+          current_streak_days: c.current_streak_days || 0,
+          is_completed: c.is_completed || false,
           progress_percentage: progressPercent,
-          start_date: challenge.start_date,
-          end_date: challenge.end_date,
+          start_date: c.start_date,
+          end_date: c.end_date,
         };
       });
 

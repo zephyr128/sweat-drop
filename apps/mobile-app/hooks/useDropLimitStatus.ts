@@ -74,22 +74,18 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
       // Fire all 3 queries in parallel
       const [limitsRes, sessionRes, txRes] = await Promise.all([
         supabase.rpc('get_user_drop_limits', { p_gym_id: gymId }),
-        supabase
-          .from('sessions')
-          .select('started_at')
-          .eq('user_id', authSession.user.id)
-          .eq('is_active', false)
-          .gt('drops_earned', 0)
-          .gte('started_at', weekStart.toISOString())
-          .order('started_at', { ascending: false })
-          .limit(50),
-        supabase
-          .from('drops_transactions')
-          .select('created_at, amount')
-          .eq('user_id', authSession.user.id)
-          .in('transaction_type', EARNED_TYPES)
-          .gt('amount', 0)
-          .gte('created_at', weekStart.toISOString()),
+        supabase.rpc('get_my_sessions', {
+          p_gym_id: null,
+          p_active_only: false,
+          p_since: weekStart.toISOString(),
+          p_limit: 50,
+        }),
+        supabase.rpc('get_my_drops', {
+          p_gym_id: null,
+          p_types: EARNED_TYPES,
+          p_since: weekStart.toISOString(),
+          p_limit: 5000,
+        }),
       ]);
 
       let maxSessionDrops = 120;
@@ -117,12 +113,13 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
       }
 
       let rewardedToday = 0;
-      for (const row of sessionRes.data ?? []) {
+      const completedSessions = (sessionRes.data ?? []).filter((s: any) => !s.is_active && (s.drops_earned ?? 0) > 0);
+      for (const row of completedSessions) {
         const dateStr = getBelgradeDateString(new Date(row.started_at));
         if (dateStr === todayStr) rewardedToday += 1;
       }
 
-      const txRows = txRes.data;
+      const txRows = (txRes.data ?? []).filter((d: any) => (d.amount ?? 0) > 0);
 
       let dropsToday = 0;
       let dropsWeek = 0;
