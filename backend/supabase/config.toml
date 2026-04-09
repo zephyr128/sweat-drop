@@ -10,6 +10,8 @@ additional_redirect_urls = [
   "sweatdrop://auth/confirm",
   "https://www.sweat-drop.com/auth/confirm",
   "https://www.sweat-drop.com/auth/reset",
+  "https://admin.sweat-drop.com/auth/confirm",
+  "https://admin.sweat-drop.com/auth/reset",
 ]
 jwt_expiry = 3600
 enable_signup = true
