@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -96,9 +96,9 @@ export function useAvailableArenas() {
     loadArenas();
   }, [loadArenas]);
 
-  return {
+  return useMemo(() => ({
     arenas,
     loading,
     refresh: loadArenas,
-  };
+  }), [arenas, loading, loadArenas]);
 }

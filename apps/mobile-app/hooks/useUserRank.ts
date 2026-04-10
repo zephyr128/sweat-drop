@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -60,5 +60,5 @@ export function useUserRank(gymId: string | null | undefined): UserRankState & {
     void load();
   }, [load]);
 
-  return { ...state, refresh: load };
+  return useMemo(() => ({ ...state, refresh: load }), [state, load]);
 }

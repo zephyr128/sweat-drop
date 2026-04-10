@@ -17,8 +17,6 @@ interface RealtimeRefreshOptions {
   events?: RealtimeEventType[];
   /** Callback when a matching event arrives */
   onEvent: () => void;
-  /** Fallback poll interval in ms (default 30000) */
-  pollIntervalMs?: number;
   /** Whether the subscription is enabled */
   enabled?: boolean;
 }
@@ -26,9 +24,11 @@ interface RealtimeRefreshOptions {
 const DEFAULT_EVENTS: RealtimeEventType[] = ['INSERT', 'UPDATE'];
 
 /**
- * Subscribe to Supabase Realtime changes on a table, with fallback polling.
+ * Subscribe to Supabase Realtime changes on a table.
  * When realtime delivers an event matching the filter, `onEvent` fires immediately.
- * As a safety net, the same callback also fires on a timer when the app is in foreground.
+ * Also fires once when the app returns to foreground (background→active transition).
+ * Polling is intentionally omitted — Realtime covers live updates and the focus
+ * effect on the home screen covers navigation-triggered refreshes.
  */
 export function useRealtimeRefresh({
   table,
@@ -36,11 +36,9 @@ export function useRealtimeRefresh({
   filterValue,
   events,
   onEvent,
-  pollIntervalMs = 30_000,
   enabled = true,
 }: RealtimeRefreshOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef(AppState.currentState);
   const onEventRef = useRef(onEvent);
 
@@ -85,19 +83,13 @@ export function useRealtimeRefresh({
         if (status === 'SUBSCRIBED') {
           log.debug(`[Realtime] subscribed to ${channelName}`);
         } else if (status === 'CHANNEL_ERROR') {
-          log.warn(`[Realtime] channel error on ${channelName}, relying on polling`);
+          log.warn(`[Realtime] channel error on ${channelName}`);
         }
       });
       channelRef.current = channel;
     } catch (err) {
-      log.warn('[Realtime] subscription failed, using polling only:', err);
+      log.warn('[Realtime] subscription failed:', err);
     }
-
-    pollRef.current = setInterval(() => {
-      if (appStateRef.current === 'active') {
-        onEventRef.current();
-      }
-    }, pollIntervalMs);
 
     const appListener = AppState.addEventListener('change', (next: AppStateStatus) => {
       const wasBackground = appStateRef.current !== 'active';
@@ -112,11 +104,7 @@ export function useRealtimeRefresh({
         supabase.removeChannel(channelRef.current).catch(() => {});
         channelRef.current = null;
       }
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
       appListener.remove();
     };
-  }, [table, filterColumn, filterValue, enabled, pollIntervalMs, eventList]);
+  }, [table, filterColumn, filterValue, enabled, eventList]);
 }

@@ -277,7 +277,6 @@ export default function WalletScreen() {
     filterColumn: 'user_id',
     filterValue: session?.user?.id ?? null,
     onEvent: refreshAll,
-    pollIntervalMs: 30_000,
     enabled: !!session?.user,
   });
 

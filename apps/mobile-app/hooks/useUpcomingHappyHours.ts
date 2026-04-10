@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
@@ -98,5 +98,5 @@ export function useUpcomingHappyHours(
     }, [load])
   );
 
-  return { ...state, refresh: load };
+  return useMemo(() => ({ ...state, refresh: load }), [state, load]);
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
@@ -267,5 +267,5 @@ export function useHomeStats(gymId: string | null) {
     refresh();
   }, [refresh]);
 
-  return { stats, loading, refresh };
+  return useMemo(() => ({ stats, loading, refresh }), [stats, loading, refresh]);
 }
