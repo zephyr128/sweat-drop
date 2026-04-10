@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Pressable, View, StyleProp, ViewStyle, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -16,28 +16,28 @@ interface PressableCardProps {
   haptic?: 'light' | 'medium' | 'heavy' | 'none';
 }
 
-export const PressableCard: React.FC<PressableCardProps> = ({
+export const PressableCard: React.FC<PressableCardProps> = React.memo(function PressableCard({
   onPress,
   disabled = false,
   style,
   children,
   haptic = 'light',
-}) => {
+}) {
   const scale = useSharedValue(1);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
-  const handlePressIn = () => {
+  const handlePressIn = useCallback(() => {
     scale.value = withSpring(0.95, { damping: 15, stiffness: 280, mass: 0.6 });
-  };
+  }, [scale]);
 
-  const handlePressOut = () => {
+  const handlePressOut = useCallback(() => {
     scale.value = withSpring(1, { damping: 12, stiffness: 200, mass: 0.6 });
-  };
+  }, [scale]);
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     if (!onPress) return;
     if (haptic !== 'none') {
       const feedbackStyle =
@@ -49,15 +49,19 @@ export const PressableCard: React.FC<PressableCardProps> = ({
       Haptics.impactAsync(feedbackStyle).catch(() => {});
     }
     onPress();
-  };
+  }, [onPress, haptic]);
 
-  // Flatten so we can read flex/height/width for the outer wrapper
-  const flat = StyleSheet.flatten(style) as ViewStyle | undefined;
-  const outerLayout: ViewStyle = {};
-  if (flat?.flex !== undefined) outerLayout.flex = flat.flex;
-  if (flat?.width !== undefined) outerLayout.width = flat.width;
-  if (flat?.height !== undefined) outerLayout.height = flat.height;
-  if (flat?.alignSelf !== undefined) outerLayout.alignSelf = flat.alignSelf;
+  const flat = useMemo(() => StyleSheet.flatten(style) as ViewStyle | undefined, [style]);
+  const outerLayout = useMemo<ViewStyle>(() => {
+    const layout: ViewStyle = {};
+    if (flat?.flex !== undefined) layout.flex = flat.flex;
+    if (flat?.width !== undefined) layout.width = flat.width;
+    if (flat?.height !== undefined) layout.height = flat.height;
+    if (flat?.alignSelf !== undefined) layout.alignSelf = flat.alignSelf;
+    return layout;
+  }, [flat?.flex, flat?.width, flat?.height, flat?.alignSelf]);
+
+  const innerStyle = useMemo(() => [styles.fill, style], [style]);
 
   return (
     <Animated.View style={[outerLayout, animStyle]}>
@@ -68,14 +72,13 @@ export const PressableCard: React.FC<PressableCardProps> = ({
         disabled={disabled}
         style={styles.pressable}
       >
-        {/* This View holds all visual card styling */}
-        <View style={[styles.fill, style]}>
+        <View style={innerStyle}>
           {children}
         </View>
       </Pressable>
     </Animated.View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   pressable: {

@@ -23,7 +23,7 @@ import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { LockedOverlay } from '@/components/LockedOverlay';
 import { ProgressWidget } from '@/components/ProgressWidget';
 import { PressableCard } from '@/components/PressableCard';
-import { ActivityRings } from '@/components/ActivityRings';
+import { ActivityRings, type ActivityRingsHandle } from '@/components/ActivityRings';
 import { StatsCards } from '@/components/StatsCards';
 import { LeaderboardPreview } from '@/components/LeaderboardPreview';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
@@ -250,9 +250,7 @@ export default function HomeScreen() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showWaitlist, setShowWaitlist] = useState(false);
-  const [ringFocusKey, setRingFocusKey] = useState(0);
-  // Stable ref to the setter so the useFocusEffect below has an empty dep array
-  const setRingFocusKeyRef = useRef(setRingFocusKey);
+  const activityRingsRef = useRef<ActivityRingsHandle>(null);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);
@@ -280,7 +278,6 @@ export default function HomeScreen() {
       refreshLocalDrops();
       dropLimits.refresh();
     }, [refreshStats, refreshLocalDrops, dropLimits.refresh]),
-    pollIntervalMs: 30_000,
     enabled: !!session?.user,
   });
 
@@ -436,11 +433,9 @@ export default function HomeScreen() {
     ])
   );
 
-  // Separate useFocusEffect with empty deps so incrementing ringFocusKey
-  // never causes the main useFocusEffect above to re-run (infinite loop fix).
   useFocusEffect(
     useCallback(() => {
-      setRingFocusKeyRef.current((k) => k + 1);
+      activityRingsRef.current?.replay();
     }, [])
   );
 
@@ -941,6 +936,7 @@ export default function HomeScreen() {
         {/* ═══════════════════════════════════════════ */}
         <View style={styles.heroSection}>
           <ActivityRings
+            ref={activityRingsRef}
             streakDays={homeStats.streak}
             todayDrops={homeStats.todayDrops}
             todayBonusDrops={homeStats.todayBonusDrops}
@@ -949,7 +945,6 @@ export default function HomeScreen() {
             weeklyCap={dropLimits.maxDropsPerWeek}
             totalGymDrops={localDrops}
             size={290}
-            focusKey={ringFocusKey}
             onPress={() => router.push('/wallet')}
           />
           {activeGym && (

@@ -27,7 +27,7 @@ interface LeaderboardPreviewProps {
 const RANK_ICONS = ['🥇', '🥈', '🥉'];
 const SHIMMER: [string, string] = ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)'];
 
-export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, isUnlocked }) => {
+export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(function LeaderboardPreview({ gymId, isUnlocked }) {
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
@@ -301,7 +301,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = ({ gymId, i
 
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

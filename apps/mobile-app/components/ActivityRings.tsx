@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Svg, { Circle, Line, Defs, LinearGradient as SvgGradient, Stop, G } from 'react-native-svg';
 import Animated, {
@@ -16,6 +16,10 @@ import { useTranslation } from 'react-i18next';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 
+export interface ActivityRingsHandle {
+  replay: () => void;
+}
+
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedG = Animated.createAnimatedComponent(G);
 
@@ -28,7 +32,6 @@ export interface ActivityRingsProps {
   weeklyCap: number;
   totalGymDrops: number;
   size?: number;
-  focusKey?: number;
   onPress?: () => void;
 }
 
@@ -52,7 +55,7 @@ const SNAP_EASING = Easing.bezier(0.22, 1, 0.36, 1);
 // Slower deceleration for the entrance sweep
 const SWEEP_EASING = Easing.bezier(0.16, 1, 0.30, 1);
 
-export const ActivityRings: React.FC<ActivityRingsProps> = ({
+export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>(function ActivityRings({
   streakDays,
   todayDrops,
   todayBonusDrops = 0,
@@ -61,9 +64,8 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
   weeklyCap,
   totalGymDrops,
   size = 290,
-  focusKey = 0,
   onPress,
-}) => {
+}, ref) {
   const { t } = useTranslation('home');
   const branding = useBranding();
 
@@ -124,7 +126,15 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
   // Press scale
   const pressScale = useSharedValue(1);
 
-  // ── Entrance animation — replays every time focusKey changes ──
+  // Internal replay counter — incremented by the imperative handle.
+  // Kept local so incrementing it never re-renders the parent screen.
+  const [replayKey, setReplayKey] = useState(0);
+
+  useImperativeHandle(ref, () => ({
+    replay: () => setReplayKey((k) => k + 1),
+  }), []);
+
+  // ── Entrance animation — replays every time replayKey changes ──
   useEffect(() => {
     const EASE_OUT = Easing.out(Easing.cubic);
 
@@ -164,7 +174,7 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
     // 5. Center number appears after rings are well on their way
     centerOpacity.value = withDelay(500, withTiming(1, { duration: 320, easing: EASE_OUT }));
     centerScale.value   = withDelay(500, withTiming(1, { duration: 380, easing: Easing.out(Easing.back(1.8)) }));
-  }, [focusKey]);
+  }, [replayKey]);
 
   // ── Re-animate on data change (after mount) ─────────
   useEffect(() => {
@@ -328,7 +338,7 @@ export const ActivityRings: React.FC<ActivityRingsProps> = ({
       </Animated.View>
     </Pressable>
   );
-};
+});
 
 const styles = StyleSheet.create({
   outerWrap: {
@@ -355,8 +365,8 @@ const styles = StyleSheet.create({
   },
   centerLabel: {
     ...fontStyles.heading,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
     letterSpacing: 3,
     textTransform: 'uppercase',
     marginTop: 4,

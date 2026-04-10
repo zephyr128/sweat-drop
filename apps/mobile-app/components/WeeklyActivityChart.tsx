@@ -83,7 +83,7 @@ const AnimatedBar: React.FC<{
 };
 
 /* ── Component ────────────────────────────────────── */
-export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
+export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = React.memo(function WeeklyActivityChart({
   data,
   activeDays,
   totalSlots,
@@ -92,7 +92,7 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
   activeSuffix = 'days',
   showDropLabels = false,
   onPress,
-}) => {
+}) {
   const maxDrops = Math.max(...data.map((d) => d.drops), 1);
   const denominator = totalSlots ?? data.length;
 
@@ -163,7 +163,7 @@ export const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({
   }
 
   return <View style={styles.wrapper}>{inner}</View>;
-};
+});
 
 /* ── Styles ───────────────────────────────────────── */
 const styles = StyleSheet.create({

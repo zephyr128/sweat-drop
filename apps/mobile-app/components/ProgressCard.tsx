@@ -36,7 +36,7 @@ export interface ProgressCardProps {
   onPress?: () => void;
 }
 
-export const ProgressCard: React.FC<ProgressCardProps> = ({
+export const ProgressCard: React.FC<ProgressCardProps> = React.memo(function ProgressCard({
   eyebrow,
   title,
   progressPercent,
@@ -46,7 +46,7 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({
   primary,
   primaryDark,
   onPress,
-}) => {
+}) {
   const barStyle = useAnimatedStyle(() => ({
     width: withTiming(`${Math.min(progressPercent, 100)}%` as any, {
       duration: 800,
@@ -106,7 +106,7 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({
       </PlatformBlur>
     </PressableCard>
   );
-};
+});
 
 const styles = StyleSheet.create({
   outer: {

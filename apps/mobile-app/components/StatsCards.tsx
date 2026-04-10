@@ -70,7 +70,13 @@ const TODAY_COLOR = '#E8E8E8';
 const GREEN = '#4CD964';
 const GOLD = '#FFD700';
 
-export const StatsCards: React.FC<StatsCardsProps> = ({
+function formatCompact(n: number): string {
+  if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
+export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCards({
   streakDays,
   todayDrops,
   todayBonusDrops = 0,
@@ -93,7 +99,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   onStreakPress,
   onTodayPress,
   onWeeklyPress,
-}) => {
+}) {
   const { t } = useTranslation('home');
 
   const streakColor = getStreakColor(streakDays, primaryColor);
@@ -101,12 +107,6 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   const streakLabel = getStreakLabel(streakDays, t);
   const capReached = dailyCap > 0 && todayDrops >= dailyCap;
   const overCap = dailyCap > 0 && todayDrops > dailyCap && todayBonusDrops > 0;
-
-  const formatCompact = (n: number): string => {
-    if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-    return String(n);
-  };
 
   return (
     <View style={styles.wrapper}>
@@ -286,7 +286,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
       ) : null}
     </View>
   );
-};
+});
 
 // Apple visionOS glass: very transparent dark base + crisp specular top edge
 const GLASS_BG = 'rgba(12, 12, 22, 0.38)';

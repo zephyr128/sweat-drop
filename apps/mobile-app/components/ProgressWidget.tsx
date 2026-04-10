@@ -7,7 +7,7 @@ import { useUserBadges } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { ProgressCard } from '@/components/ProgressCard';
 
-export const ProgressWidget: React.FC = () => {
+export const ProgressWidget: React.FC = React.memo(function ProgressWidget() {
   const { t } = useTranslation('home');
   const router = useRouter();
   const branding = useBranding();
@@ -68,6 +68,10 @@ export const ProgressWidget: React.FC = () => {
     return unearnedBadges[0] || null;
   }, [globalAchievements, gymChallenges, userProgress, earnedBadges]);
 
+  const handlePress = useCallback(() => {
+    router.push('/trophy-room');
+  }, [router]);
+
   if (!nextBadge) return null;
 
   const pct = Math.round(nextBadge.progressPercent);
@@ -82,7 +86,7 @@ export const ProgressWidget: React.FC = () => {
       fallbackIcon="ribbon"
       primary={branding.primary}
       primaryDark={branding.primaryDark}
-      onPress={() => router.push('/trophy-room')}
+      onPress={handlePress}
     />
   );
-};
+});
