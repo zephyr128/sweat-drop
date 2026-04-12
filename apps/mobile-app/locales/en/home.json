@@ -7,6 +7,7 @@
   "step2": "Train",
   "step3": "Earn",
   "startScan": "Scan QR code to start",
+  "startWorkout": "Start workout",
   "setAsHomeGym": "Set as home gym?",
   "setAsHomeGymMsg": "Do you want to set \"{{name}}\" as your home gym?",
   "setAsHome": "Set as home",
@@ -130,20 +131,78 @@
     "streak_unstoppable": "Unstoppable",
     "streak_legend": "Legend",
     "drops": "DROPS",
-    "week": "This week"
+    "week": "This week",
+    "spendable": "SPENDABLE"
   },
   "cards": {
     "checkedIn": "Checked in",
     "checkIn": "Check in",
     "checkInDrops": "+5 drops",
+    "dailyGoal": "DAILY GOAL",
+    "kcalToday": "Drops earned today",
+    "activeDays": "Active days in a row",
+    "weeklyProgress": "WEEKLY PROGRESS",
+    "planFulfillment": "Plan fulfillment",
     "happyHourLive": "x{{mult}} LIVE",
     "happyHourSoon": "In {{time}}",
     "noHappyHour": "None today",
     "happyHourActive": "Happy Hour is live!",
     "endsAt": "Ends at {{time}}",
     "hhToday": "Today",
-    "hhTomorrow": "Tomorrow"
+    "hhTomorrow": "Tomorrow",
+    "happyHourTitle": "Happy Hour",
+    "happyHourNone": "None scheduled today"
   },
   "nextAward": "Next Award",
-  "foundingPartner": "Founding Partner"
+  "challenges": {
+    "overallProgress": "PROGRESS",
+    "completed": "completed",
+    "allDone": "All challenges done!",
+    "remaining": "remaining",
+    "done": "DONE",
+    "ofTotal": "of {{total}} total",
+    "earned": "EARNED"
+  },
+  "arenas": {
+    "bestRank": "BEST RANK",
+    "score": "score",
+    "joinToRank": "Join an arena to compete",
+    "active": "ACTIVE",
+    "available": "arenas available",
+    "joined": "JOINED",
+    "competing": "you're competing"
+  },
+  "compete": {
+    "rank": "YOUR RANK",
+    "outOf": "of {{total}} members",
+    "toFirst": "drops to #1",
+    "leading": "You're leading!",
+    "weekly": "THIS WEEK",
+    "monthly": "THIS MONTH",
+    "allTime": "ALL TIME",
+    "thisMonth": "THIS MONTH",
+    "unranked": "Not ranked",
+    "you": "You",
+    "places": "places",
+    "allTimeRecord": "All-time record!"
+  },
+  "exploreStore": "Explore Rewards Store",
+  "foundingPartner": "Founding Partner",
+  "pagerTabs": {
+    "activity": "ACTIVITY",
+    "compete": "COMPETE",
+    "challenges": "CHALLENGES",
+    "arenas": "ARENAS",
+    "competeLabel": "LEADERBOARD",
+    "challengesLabel": "YOUR CHALLENGES",
+    "arenaLabel": "ARENAS"
+  },
+  "topPercent": "TOP {{percent}}%",
+  "toGo": "{{count}} TO GO",
+  "liveNow": "LIVE NOW",
+  "membersTotal": "members",
+  "badgesEarned": "{{count}} earned",
+  "earnedBadges": "EARNED BADGES ({{count}})",
+  "challengeProgress": "{{completed}}/{{total}} completed",
+  "noArenaActive": "NO ACTIVE ARENAS"
 }

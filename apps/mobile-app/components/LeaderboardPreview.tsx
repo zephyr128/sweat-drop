@@ -1,16 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { PlatformBlur } from '@/components/PlatformBlur';
-import { LinearGradient } from 'expo-linear-gradient';
-import { PressableCard } from '@/components/PressableCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
+import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { log } from '@/lib/logger';
+
+export type LeaderboardPeriod = 'weekly' | 'monthly' | 'all_time';
 
 interface LeaderboardEntry {
   user_id: string;
@@ -22,12 +21,25 @@ interface LeaderboardEntry {
 interface LeaderboardPreviewProps {
   gymId: string | null;
   isUnlocked: boolean;
+  activePeriod?: LeaderboardPeriod;
+  onPeriodChange?: (period: LeaderboardPeriod) => void;
+  onCurrentUserRankChange?: (data: {
+    rank: number;
+    totalMembers: number;
+    period: LeaderboardPeriod;
+  }) => void;
 }
 
-const RANK_ICONS = ['🥇', '🥈', '🥉'];
-const SHIMMER: [string, string] = ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)'];
+const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] as const;
+const PERIODS: LeaderboardPeriod[] = ['weekly', 'monthly', 'all_time'];
 
-export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(function LeaderboardPreview({ gymId, isUnlocked }) {
+export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(function LeaderboardPreview({
+  gymId,
+  isUnlocked,
+  activePeriod: controlledPeriod,
+  onPeriodChange,
+  onCurrentUserRankChange,
+}) {
   const router = useRouter();
   const { session } = useSession();
   const branding = useBranding();
@@ -35,9 +47,14 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
   const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
   const [currentUserEntry, setCurrentUserEntry] = useState<LeaderboardEntry | null>(null);
-  const [activePeriod, setActivePeriod] = useState<string>('weekly');
+  const [internalPeriod, setInternalPeriod] = useState<LeaderboardPeriod>('weekly');
   const [loading, setLoading] = useState(true);
-  const [hasPrizes, setHasPrizes] = useState(false);
+  const activePeriod = controlledPeriod ?? internalPeriod;
+  const onCurrentUserRankChangeRef = useRef(onCurrentUserRankChange);
+
+  useEffect(() => {
+    onCurrentUserRankChangeRef.current = onCurrentUserRankChange;
+  }, [onCurrentUserRankChange]);
 
   const fetchPeriod = useCallback(async (period: string): Promise<LeaderboardEntry[]> => {
     if (!gymId) return [];
@@ -103,116 +120,115 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(
 
   const loadLeaderboard = useCallback(async () => {
     if (!session?.user || !gymId) {
+      onCurrentUserRankChangeRef.current?.({ rank: 0, totalMembers: 0, period: activePeriod });
       setLoading(false);
       return;
     }
 
     try {
-      const periods = ['weekly', 'monthly', 'all_time'] as const;
-      let entries: LeaderboardEntry[] = [];
-      let usedPeriod = 'weekly';
+      setLoading(true);
+      const entries = await fetchPeriod(activePeriod);
 
-      for (const period of periods) {
-        entries = await fetchPeriod(period);
-        if (entries.length > 0) {
-          usedPeriod = period;
-          break;
-        }
-      }
-
-      setActivePeriod(usedPeriod);
       setTopUsers(entries.slice(0, 3));
 
       const userIndex = entries.findIndex((e) => e.user_id === session.user.id);
       if (userIndex !== -1) {
         setCurrentUserRank(userIndex + 1);
+        onCurrentUserRankChangeRef.current?.({
+          rank: userIndex + 1,
+          totalMembers: entries.length,
+          period: activePeriod,
+        });
         if (userIndex >= 3) {
           setCurrentUserEntry(entries[userIndex]);
+        } else {
+          setCurrentUserEntry(null);
         }
-      }
-
-      // Check if gym has active prizes
-      if (gymId) {
-        const { count } = await supabase
-          .from('leaderboard_rewards')
-          .select('*', { count: 'exact', head: true })
-          .eq('gym_id', gymId)
-          .eq('is_active', true);
-        setHasPrizes(!!count && count > 0);
+      } else {
+        setCurrentUserRank(null);
+        setCurrentUserEntry(null);
+        onCurrentUserRankChangeRef.current?.({
+          rank: 0,
+          totalMembers: entries.length,
+          period: activePeriod,
+        });
       }
     } catch (err) {
       log.error('[LeaderboardPreview] Error:', err);
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, gymId, fetchPeriod]);
+  }, [session?.user?.id, gymId, fetchPeriod, activePeriod]);
 
   useEffect(() => {
     loadLeaderboard();
   }, [loadLeaderboard]);
 
-  // Show loading state or empty state, but don't hide completely
+  const periodLabels: Record<LeaderboardPeriod, string> = {
+    weekly: t('weeklyPeriod'),
+    monthly: t('monthlyPeriod'),
+    all_time: t('allTimePeriod'),
+  };
+  const handlePeriodPress = (period: LeaderboardPeriod) => {
+    if (controlledPeriod == null) {
+      setInternalPeriod(period);
+    }
+    onPeriodChange?.(period);
+  };
+
+  const isCurrentUser = (userId: string) => userId === session?.user?.id;
+
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
-        </View>
-        <View style={styles.card}>
-          <PlatformBlur intensity={50} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
-            <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-            <View style={styles.row}>
-              <Text style={[styles.username, { color: theme.colors.textSecondary }]}>Loading...</Text>
+      <View style={styles.card}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={[styles.row, i < 2 && styles.rowBorder]}>
+            <View style={[styles.rankBadge, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+            <View style={styles.userInfo}>
+              <View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.06)' }} />
             </View>
-          </PlatformBlur>
-        </View>
+            <View style={{ width: 50, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.04)' }} />
+          </View>
+        ))}
       </View>
     );
   }
 
   if (topUsers.length === 0) {
     return (
-      <View style={styles.container}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
-        </View>
-        <View style={styles.card}>
-          <PlatformBlur intensity={50} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
-            <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-            <View style={styles.row}>
-              <Text style={[styles.username, { color: theme.colors.textSecondary }]}>{t('noLeaderboardData')}</Text>
-            </View>
-          </PlatformBlur>
-        </View>
+      <View style={styles.emptyCard}>
+        <Ionicons name="podium-outline" size={24} color="rgba(255,255,255,0.15)" />
+        <Text style={styles.emptyText}>{t('noLeaderboardData')}</Text>
       </View>
     );
   }
 
-  const periodLabel = activePeriod === 'weekly'
-    ? t('weeklyPeriod')
-    : activePeriod === 'monthly'
-      ? t('monthlyPeriod')
-      : t('allTimePeriod');
-
-  const isCurrentUser = (userId: string) => userId === session?.user?.id;
-
   return (
-    <View style={styles.container}>
-      {/* Section Header */}
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionHeaderLeft}>
-          <Text style={styles.sectionTitle}>{t('leaderboard')}</Text>
-          {activePeriod !== 'weekly' && (
-            <View style={[styles.periodBadge, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-              <Text style={[styles.periodBadgeText, { color: branding.primary }]}>{periodLabel}</Text>
-            </View>
-          )}
+    <View>
+      {/* Period switcher + View All */}
+      <View style={styles.headerRow}>
+        <View style={styles.periodSwitcher}>
+          {PERIODS.map((p) => (
+            <TouchableOpacity
+              key={p}
+              style={[
+                styles.periodPill,
+                activePeriod === p && { backgroundColor: hexToRgba(branding.primary, 0.18), borderColor: hexToRgba(branding.primary, 0.4) },
+              ]}
+              onPress={() => handlePeriodPress(p)}
+              activeOpacity={0.75}
+            >
+              <Text style={[
+                styles.periodPillText,
+                { color: activePeriod === p ? branding.primary : 'rgba(255,255,255,0.4)' },
+              ]}>
+                {periodLabels[p]}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
         <TouchableOpacity
-          onPress={() => {
-            if (!isUnlocked) return;
-            router.push('/leaderboard');
-          }}
+          onPress={() => { if (isUnlocked) router.push('/leaderboard'); }}
           activeOpacity={0.7}
           disabled={!isUnlocked}
         >
@@ -220,118 +236,110 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(
         </TouchableOpacity>
       </View>
 
-      {/* Leaderboard Card */}
-      <PressableCard
+      <TouchableOpacity
         style={styles.card}
         onPress={() => { if (isUnlocked) router.push('/leaderboard'); }}
+        activeOpacity={isUnlocked ? 0.8 : 1}
         disabled={!isUnlocked}
       >
-        <PlatformBlur intensity={50} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
-          <LinearGradient colors={SHIMMER} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-          {topUsers.map((entry, index) => {
-            const isMe = isCurrentUser(entry.user_id);
-            return (
-              <View
-                key={entry.user_id}
-                style={[
-                  styles.row,
-                  isMe && { backgroundColor: hexToRgba(branding.primary, 0.12) },
-                  index < topUsers.length - 1 && styles.rowBorder,
-                ]}
-              >
-                {/* Rank */}
-                <Text style={styles.rankEmoji}>{RANK_ICONS[index]}</Text>
+        {topUsers.map((entry, index) => {
+          const isMe = isCurrentUser(entry.user_id);
+          const rankColor = RANK_COLORS[index] ?? 'rgba(255,255,255,0.3)';
+          const initial = (entry.username[0] ?? 'U').toUpperCase();
 
-                {/* Username */}
-                <View style={styles.userInfo}>
-                  <Text
-                    style={[
-                      styles.username,
-                      isMe && { color: branding.primary },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {entry.username}
-                    {isMe && ' (You)'}
-                  </Text>
-                </View>
-
-                {/* Drops */}
-                <View style={styles.dropsContainer}>
-                  <Ionicons name="water" size={14} color={branding.primary} />
-                  <Text style={[styles.dropsText, getNumberStyle(14), { color: branding.primary }]}>
-                    {entry.drops.toLocaleString()}
-                  </Text>
-                </View>
+          return (
+            <View
+              key={entry.user_id}
+              style={[
+                styles.row,
+                isMe && { backgroundColor: hexToRgba(branding.primary, 0.08) },
+                index < topUsers.length - 1 && styles.rowBorder,
+              ]}
+            >
+              <View style={[styles.rankBadge, { backgroundColor: hexToRgba(rankColor, 0.15) }]}>
+                <Text style={[styles.rankBadgeText, { color: rankColor }]}>{index + 1}</Text>
               </View>
-            );
-          })}
 
-          {/* Current user row if not in top 3 */}
-          {currentUserRank && currentUserRank > 3 && currentUserEntry && (
-            <>
-              <View style={styles.separatorDots}>
-                <Text style={styles.dotsText}>• • •</Text>
+              <View style={[styles.avatarCircle, isMe && { borderColor: hexToRgba(branding.primary, 0.4) }]}>
+                <Text style={[styles.avatarInitial, isMe && { color: branding.primary }]}>{initial}</Text>
               </View>
-              <View
-                style={[
-                  styles.row,
-                  { backgroundColor: hexToRgba(branding.primary, 0.12) },
-                ]}
-              >
-                <Text style={[styles.rankNumber, { color: branding.primary }]}>
-                  #{currentUserRank}
+
+              <View style={styles.userInfo}>
+                <Text style={[styles.username, isMe && { color: branding.primary }]} numberOfLines={1}>
+                  {entry.username}{isMe ? ' (You)' : ''}
                 </Text>
-                <View style={styles.userInfo}>
-                  <Text style={[styles.username, { color: branding.primary }]} numberOfLines={1}>
-                    {currentUserEntry.username} (You)
-                  </Text>
-                </View>
-                <View style={styles.dropsContainer}>
-                  <Ionicons name="water" size={14} color={branding.primary} />
-                  <Text style={[styles.dropsText, getNumberStyle(14), { color: branding.primary }]}>
-                    {currentUserEntry.drops.toLocaleString()}
-                  </Text>
-                </View>
               </View>
-            </>
-          )}
-        </PlatformBlur>
-      </PressableCard>
 
+              <View style={styles.scoreContainer}>
+                <Ionicons name="water" size={12} color={isMe ? branding.primary : 'rgba(255,255,255,0.35)'} />
+                <Text style={[styles.scoreText, getNumberStyle(13), isMe ? { color: branding.primary } : { color: 'rgba(255,255,255,0.7)' }]}>
+                  {entry.drops.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+
+        {/* Current user if outside top 3 */}
+        {currentUserRank != null && currentUserRank > 3 && currentUserEntry && (
+          <>
+            <View style={styles.separatorDots}>
+              <View style={styles.dotLine} />
+              <Text style={styles.separatorEllipsis}>···</Text>
+              <View style={styles.dotLine} />
+            </View>
+            <View style={[styles.row, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
+              <View style={[styles.rankBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
+                <Text style={[styles.rankBadgeText, { color: branding.primary }]}>{currentUserRank}</Text>
+              </View>
+              <View style={[styles.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.4) }]}>
+                <Text style={[styles.avatarInitial, { color: branding.primary }]}>
+                  {(currentUserEntry.username[0] ?? 'U').toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={[styles.username, { color: branding.primary }]} numberOfLines={1}>
+                  {currentUserEntry.username} (You)
+                </Text>
+              </View>
+              <View style={styles.scoreContainer}>
+                <Ionicons name="water" size={12} color={branding.primary} />
+                <Text style={[styles.scoreText, getNumberStyle(13), { color: branding.primary }]}>
+                  {currentUserEntry.drops.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
+      </TouchableOpacity>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  periodBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+  periodSwitcher: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
   },
-  periodBadgeText: {
+  periodPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  periodPillText: {
     ...fontStyles.bodySemiBold,
     fontSize: 11,
-    letterSpacing: 0.3,
-  },
-  sectionTitle: {
-    ...fontStyles.heading,
-    fontSize: 22,
-    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   viewAllLink: {
     ...fontStyles.bodySemiBold,
@@ -339,40 +347,65 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   card: {
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: 'rgba(12,12,22,0.85)',
     borderWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.22)',
-    borderLeftColor: 'rgba(255,255,255,0.10)',
-    borderRightColor: 'rgba(255,255,255,0.06)',
-    borderBottomColor: 'rgba(255,255,255,0.04)',
+    borderTopColor: 'rgba(255,255,255,0.10)',
+    borderLeftColor: 'rgba(255,255,255,0.06)',
+    borderRightColor: 'rgba(255,255,255,0.04)',
+    borderBottomColor: 'rgba(255,255,255,0.03)',
   },
-  blurContainer: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(12, 12, 22, 0.38)',
+  emptyCard: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(12,12,22,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
   },
   rowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  rankEmoji: {
-    fontSize: 20,
-    width: 32,
-    textAlign: 'center',
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  rankNumber: {
-    ...fontStyles.number,
-    fontSize: 14,
-    width: 32,
-    textAlign: 'center',
+  rankBadgeText: {
+    ...fontStyles.heading,
+    fontSize: 13,
+  },
+  avatarCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitial: {
+    ...fontStyles.heading,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
   },
   userInfo: {
     flex: 1,
@@ -380,34 +413,34 @@ const styles = StyleSheet.create({
   },
   username: {
     ...fontStyles.bodySemiBold,
-    fontSize: 15,
+    fontSize: 14,
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },
-  dropsContainer: {
+  scoreContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
-  dropsText: {
+  scoreText: {
     letterSpacing: 0.3,
   },
   separatorDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 4,
-    alignItems: 'center',
+    gap: 6,
   },
-  dotsText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.3)',
-    letterSpacing: 4,
+  dotLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  prizeHint: {
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  prizeHintText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 12,
-    letterSpacing: 0.3,
+  separatorEllipsis: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.25)',
+    letterSpacing: 3,
   },
 });

@@ -10,7 +10,7 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -115,6 +115,7 @@ function getChallengeTypeLabel(
 
 export default function ChallengesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
@@ -127,6 +128,14 @@ export default function ChallengesScreen() {
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   // Prevents flashing the full-screen spinner on every back-navigation focus
   const hasLoadedRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (params.tab === 'completed' || params.tab === 'active') {
+        setActiveTab(params.tab);
+      }
+    }, [params.tab]),
+  );
 
   const load = useCallback(async () => {
     if (!session?.user) return;

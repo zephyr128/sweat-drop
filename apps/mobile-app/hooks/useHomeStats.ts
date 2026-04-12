@@ -187,11 +187,11 @@ export function useHomeStats(gymId: string | null) {
       }
 
       // Process closest reward
+      const freshDrops = (membershipRes.data as any)?.local_drops_balance ?? 0;
       let closestReward: HomeStats['closestReward'] = null;
       if (gymId) {
         const rewards = rewardsRes.data;
         const redemptions = redemptionsRes.data;
-        const freshDrops = (membershipRes.data as any)?.local_drops_balance ?? 0;
 
         if (rewards && rewards.length > 0) {
           const redeemed = redemptions || [];

@@ -16,6 +16,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
@@ -50,6 +51,10 @@ interface SliderTabsProps {
   style?: object;
   /** Style applied to the tab bar card only */
   barStyle?: object;
+  /** When true, the tab bar is not rendered — use SliderTabsBar separately as a sticky header */
+  hideBar?: boolean;
+  /** Explicit height for each page (required when inside a ScrollView content container) */
+  pageHeight?: number;
 }
 
 // ── Custom glass tab bar ────────────────────────────────────────────────────
@@ -130,6 +135,45 @@ const GlassTabBar: React.FC<
 
 const SPRING_CFG = { damping: 20, stiffness: 220, mass: 0.8 };
 
+export interface SliderTabsBarProps {
+  tabs: SliderTab[];
+  activeKey: string;
+  onChange: (key: string) => void;
+  accentColor?: string;
+  style?: object;
+  barStyle?: object;
+}
+
+/**
+ * SliderTabsBar — tab bar only, no page content.
+ * Use this as a sticky header inside a single outer ScrollView.
+ */
+export const SliderTabsBar: React.FC<SliderTabsBarProps> = ({
+  tabs,
+  activeKey,
+  onChange,
+  accentColor,
+  style,
+  barStyle,
+}) => {
+  const branding = useBranding();
+  const accent = accentColor ?? branding.primary;
+  return (
+    <View style={style}>
+      <ModeABar
+        tabs={tabs}
+        activeKey={activeKey}
+        accent={accent}
+        barStyle={barStyle}
+        onTabPress={(key) => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onChange(key);
+        }}
+      />
+    </View>
+  );
+};
+
 const ModeABar: React.FC<{
   tabs: SliderTab[];
   activeKey: string;
@@ -203,6 +247,8 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
   accentColor,
   style,
   barStyle,
+  hideBar = false,
+  pageHeight,
 }) => {
   const branding = useBranding();
   const accent = accentColor ?? branding.primary;
@@ -260,26 +306,36 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
 
   if (!hasPages) {
     return (
-      <GestureHandlerRootView style={style}>
-        <GestureDetector gesture={barSwipe}>
-          <ModeABar
-            tabs={tabs}
-            activeKey={activeKey}
-            accent={accent}
-            barStyle={barStyle}
-            onTabPress={(key) => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onChange(key);
-            }}
-          />
-        </GestureDetector>
-      </GestureHandlerRootView>
+      <View style={style}>
+        <ModeABar
+          tabs={tabs}
+          activeKey={activeKey}
+          accent={accent}
+          barStyle={barStyle}
+          onTabPress={(key) => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onChange(key);
+          }}
+        />
+      </View>
     );
   }
 
   // ── Mode B: full TabView with swipeable pages ─────────────────────────────
   const renderScene = ({ route }: SceneRendererProps & { route: Route }) => {
     const idx = tabs.findIndex((t) => t.key === route.key);
+    if (pageHeight) {
+      return (
+        <ScrollView
+          style={{ height: pageHeight }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={false}
+        >
+          {pageChildren[idx] ?? null}
+        </ScrollView>
+      );
+    }
     return (
       <View style={styles.page}>
         {pageChildren[idx] ?? null}
@@ -287,26 +343,33 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
     );
   };
 
-  const renderTabBar = (props: SceneRendererProps & { navigationState: NavigationState<Route> }) => (
-    <GlassTabBar
-      {...props}
-      tabs={tabs}
-      accent={accent}
-      barStyle={barStyle}
-      onTabPress={(key) => onChange(key)}
-    />
-  );
+  const renderTabBar = hideBar
+    ? () => null
+    : (props: SceneRendererProps & { navigationState: NavigationState<Route> }) => (
+        <GlassTabBar
+          {...props}
+          tabs={tabs}
+          accent={accent}
+          barStyle={barStyle}
+          onTabPress={(key) => onChange(key)}
+        />
+      );
+
+  const wrapperStyle = pageHeight
+    ? [{ width: '100%' as const, height: pageHeight }, style]
+    : [styles.modeB, style];
 
   return (
-    <View style={[styles.modeB, style]}>
+    <View style={wrapperStyle}>
       <TabView
         navigationState={navigationState}
         renderScene={renderScene}
         onIndexChange={handleIndexChange}
-        initialLayout={{ width: layout.width }}
+        initialLayout={{ width: layout.width, height: pageHeight ?? layout.height }}
         renderTabBar={renderTabBar}
         lazy={false}
         swipeEnabled
+        style={pageHeight ? { height: pageHeight } : undefined}
       />
     </View>
   );

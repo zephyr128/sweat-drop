@@ -7,7 +7,11 @@ import { useUserBadges } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { ProgressCard } from '@/components/ProgressCard';
 
-export const ProgressWidget: React.FC = React.memo(function ProgressWidget() {
+export interface ProgressWidgetProps {
+  accentColor?: string;
+}
+
+export const ProgressWidget: React.FC<ProgressWidgetProps> = React.memo(function ProgressWidget({ accentColor }: ProgressWidgetProps) {
   const { t } = useTranslation('home');
   const router = useRouter();
   const branding = useBranding();
@@ -76,6 +80,9 @@ export const ProgressWidget: React.FC = React.memo(function ProgressWidget() {
 
   const pct = Math.round(nextBadge.progressPercent);
 
+  const color = accentColor ?? branding.primary;
+  const colorDark = accentColor ? accentColor : branding.primaryDark;
+
   return (
     <ProgressCard
       eyebrow={t('nextBadge')}
@@ -84,8 +91,8 @@ export const ProgressWidget: React.FC = React.memo(function ProgressWidget() {
       progressLabel={`${pct}%`}
       imageUrl={nextBadge.badge_image_url}
       fallbackIcon="ribbon"
-      primary={branding.primary}
-      primaryDark={branding.primaryDark}
+      primary={color}
+      primaryDark={colorDark}
       onPress={handlePress}
     />
   );

@@ -6,6 +6,7 @@ import { useSession } from './useSession';
 export interface ChallengeProgress {
   challenge_id: string;
   challenge_name: string;
+  badge_image_url: string | null;
   description: string | null;
   challenge_type: 'daily' | 'weekly' | 'monthly' | 'streak' | 'milestone' | 'checkin_streak' | 'checkin_count';
   target_drops: number;
@@ -91,6 +92,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         return {
           challenge_id: c.challenge_id,
           challenge_name: c.challenge_name,
+          badge_image_url: c.badge_image_url ?? null,
           description: null,
           challenge_type: cType as ChallengeProgress['challenge_type'],
           target_drops: target,

@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, Activit
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo, useRef, type ComponentProps } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -230,6 +230,7 @@ function ExpandableRows({ expanded, children }: { expanded: boolean; children: R
 
 export default function LeaderboardScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ period?: string }>();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
@@ -264,6 +265,13 @@ export default function LeaderboardScreen() {
     monthly: { ...EMPTY_PERIOD },
     all_time: { ...EMPTY_PERIOD },
   });
+
+  useEffect(() => {
+    const incomingPeriod = params.period;
+    if (incomingPeriod === 'weekly' || incomingPeriod === 'monthly' || incomingPeriod === 'all_time') {
+      setPeriod(incomingPeriod);
+    }
+  }, [params.period]);
 
   const cacheKey = useCallback((p: LeaderboardPeriod) =>
     `${activeTab}:${p}:${newcomerOnly ? '1' : '0'}:${activeGymId ?? 'global'}`,

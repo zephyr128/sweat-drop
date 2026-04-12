@@ -7,6 +7,7 @@
   "step2": "Treniraš",
   "step3": "Osvajaš",
   "startScan": "Skeniraj QR kod za početak",
+  "startWorkout": "Pokreni trening",
   "setAsHomeGym": "Postavi kao matičnu teretanu?",
   "setAsHomeGymMsg": "Da li želiš da postaviš \"{{name}}\" kao svoju matičnu teretanu?",
   "setAsHome": "Postavi",
@@ -130,20 +131,78 @@
     "streak_unstoppable": "Nezaustavljiv",
     "streak_legend": "Legenda",
     "drops": "DROPS",
-    "week": "Ova nedelja"
+    "week": "Ova nedelja",
+    "spendable": "DOSTUPNO"
   },
   "cards": {
     "checkedIn": "Čekiran",
     "checkIn": "Čekiraj se",
     "checkInDrops": "+5 kapi",
+    "dailyGoal": "DNEVNI CILJ",
+    "kcalToday": "Drops zarađeni danas",
+    "activeDays": "Aktivni dani zaredom",
+    "weeklyProgress": "NEDELJNI PROGRES",
+    "planFulfillment": "Ispunjenje plana",
     "happyHourLive": "x{{mult}} UŽIVO",
     "happyHourSoon": "Za {{time}}",
     "noHappyHour": "Nema danas",
     "happyHourActive": "Happy Hour je aktivan!",
     "endsAt": "Završava u {{time}}",
     "hhToday": "Danas",
-    "hhTomorrow": "Sutra"
+    "hhTomorrow": "Sutra",
+    "happyHourTitle": "Happy Hour",
+    "happyHourNone": "Nije zakazano danas"
   },
   "nextAward": "Sledeća nagrada",
-  "foundingPartner": "Osnivački partner"
+  "challenges": {
+    "overallProgress": "PROGRES",
+    "completed": "završeno",
+    "allDone": "Svi izazovi završeni!",
+    "remaining": "preostalo",
+    "done": "ZAVRŠENO",
+    "ofTotal": "od {{total}} ukupno",
+    "earned": "ZARAĐENO"
+  },
+  "arenas": {
+    "bestRank": "NAJBOLJI RANG",
+    "score": "poena",
+    "joinToRank": "Pridruži se areni da se takmiči",
+    "active": "AKTIVNO",
+    "available": "arena dostupno",
+    "joined": "PRIDRUŽENO",
+    "competing": "takmiči se"
+  },
+  "compete": {
+    "rank": "TVOJ RANG",
+    "outOf": "od {{total}} članova",
+    "toFirst": "drops do #1",
+    "leading": "Ti vodiš!",
+    "weekly": "OVA NEDELJA",
+    "monthly": "OVAJ MESEC",
+    "allTime": "SVE VREME",
+    "thisMonth": "OVAJ MESEC",
+    "unranked": "Nije rangiran",
+    "you": "Ti",
+    "places": "mesta",
+    "allTimeRecord": "Rekord svih vremena!"
+  },
+  "exploreStore": "Istraži prodavnicu nagrada",
+  "foundingPartner": "Osnivački partner",
+  "pagerTabs": {
+    "activity": "AKTIVNOST",
+    "compete": "TAKMIČENJE",
+    "challenges": "IZAZOVI",
+    "arenas": "ARENE",
+    "competeLabel": "RANG LISTA",
+    "challengesLabel": "VAŠI IZAZOVI",
+    "arenaLabel": "ARENE"
+  },
+  "topPercent": "TOP {{percent}}%",
+  "toGo": "{{count}} PREOSTALO",
+  "liveNow": "UŽIVO",
+  "membersTotal": "članova",
+  "badgesEarned": "{{count}} zarađeno",
+  "earnedBadges": "ZARAĐENI BEDŽEVI ({{count}})",
+  "challengeProgress": "{{completed}}/{{total}} završeno",
+  "noArenaActive": "NEMA AKTIVNIH ARENA"
 }

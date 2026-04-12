@@ -1,27 +1,28 @@
-import React, { useEffect, useImperativeHandle, forwardRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import Svg, { Circle, Line, Defs, LinearGradient as SvgGradient, Stop, G } from 'react-native-svg';
+import React, { useEffect, useImperativeHandle, forwardRef, useState, useRef } from 'react';
+import { Text, StyleSheet, Pressable, View } from 'react-native';
+import Svg, { Line } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedProps,
   withTiming,
   withSpring,
   withDelay,
   withSequence,
-  interpolate,
   Easing,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useBranding } from '@/lib/hooks/useBranding';
-import { getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
+import { fontStyles, hexToRgba } from '@/lib/theme';
+import {
+  HERO_GAUGE_ARC_START_DEG,
+  HERO_GAUGE_ARC_END_DEG,
+  heroGaugeArcChordDrop,
+} from '@/lib/heroGaugeArc';
 
 export interface ActivityRingsHandle {
   replay: () => void;
 }
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedG = Animated.createAnimatedComponent(G);
 
 export interface ActivityRingsProps {
   streakDays: number;
@@ -33,306 +34,175 @@ export interface ActivityRingsProps {
   totalGymDrops: number;
   size?: number;
   onPress?: () => void;
+  compact?: boolean;
 }
 
-function getStreakColor(streak: number, primary: string): string {
-  if (streak >= 60) return '#FFD700';
-  if (streak >= 30) return primary;
-  if (streak >= 14) return '#FF3B30';
-  if (streak >= 7) return '#FFD700';
-  return '#FF6B00';
+// ── Gauge constants ────────────────────────────────────────────────────────────
+const TICKS = 33;
+const RADIUS = 128;
+const STROKE_W = 28;
+const SVG_PAD = 4;
+const SVG_SIZE = (RADIUS + STROKE_W / 2 + SVG_PAD) * 2;
+const CENTER = SVG_SIZE / 2;
+const ARC_CHORD_DROP = heroGaugeArcChordDrop(RADIUS);
+const TICK_R_OUTER = RADIUS + STROKE_W * 0.5 - 1;
+const ENDPOINT_Y = CENTER + TICK_R_OUTER * Math.sin(15 * Math.PI / 180);
+const SEMI_H = Math.ceil(ENDPOINT_Y) + 8;
+const TICK_LONG = 24;
+const TICK_SHORT = 14;
+const D2R = Math.PI / 180;
+const ARC_SPAN = HERO_GAUGE_ARC_END_DEG - HERO_GAUGE_ARC_START_DEG; // 210°
+const ARC_BOWL_TOP = CENTER - RADIUS + TICK_LONG + 4;
+const ARC_BOWL_BOTTOM = CENTER + ARC_CHORD_DROP;
+const ARC_BOWL_HEIGHT = ARC_BOWL_BOTTOM - ARC_BOWL_TOP;
+const BG_ICON_SIZE = Math.round(ARC_BOWL_HEIGHT * 0.88);
+
+function buildTicks(animPct: number) {
+  return Array.from({ length: TICKS }, (_, i) => {
+    const frac = i / (TICKS - 1);
+    const angleDeg = HERO_GAUGE_ARC_END_DEG - frac * ARC_SPAN;
+    const theta = angleDeg * D2R;
+    const long = i % 4 === 0;
+    const len = long ? TICK_LONG : TICK_SHORT;
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    const x1 = CENTER + TICK_R_OUTER * cosT;
+    const y1 = CENTER - TICK_R_OUTER * sinT;
+    const x2 = CENTER + (TICK_R_OUTER - len) * cosT;
+    const y2 = CENTER - (TICK_R_OUTER - len) * sinT;
+    const lit = frac <= animPct / 100;
+    return { x1, y1, x2, y2, lit, long };
+  });
 }
 
-const TODAY_COLOR = '#E8E8E8';
-const STROKE_WIDTH = 14;
-const GAP = 10;
-const OUTER_RADIUS = 120;
-const MIDDLE_RADIUS = OUTER_RADIUS - STROKE_WIDTH - GAP;
-const INNER_RADIUS = MIDDLE_RADIUS - STROKE_WIDTH - GAP;
+function formatDrops(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
+  return String(n);
+}
 
-// Fast start, hard brake — snappy ring fill
-const SNAP_EASING = Easing.bezier(0.22, 1, 0.36, 1);
-// Slower deceleration for the entrance sweep
-const SWEEP_EASING = Easing.bezier(0.16, 1, 0.30, 1);
 
-export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>(function ActivityRings({
-  streakDays,
-  todayDrops,
-  todayBonusDrops = 0,
-  dailyCap,
-  weeklyDrops,
-  weeklyCap,
-  totalGymDrops,
-  size = 290,
-  onPress,
-}, ref) {
+export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>(function ActivityRings(
+  {
+    weeklyDrops,
+    weeklyCap,
+    totalGymDrops,
+    size = 290,
+    onPress,
+    compact = false,
+  },
+  ref,
+) {
   const { t } = useTranslation('home');
   const branding = useBranding();
-
-  const WEEKLY_COLOR = branding.primary;
-  const streakColor = getStreakColor(streakDays, branding.primary);
-
+  const color = branding.primary;
   const weeklyProgress = weeklyCap > 0 ? Math.min(weeklyDrops / weeklyCap, 1) : 0;
-  const streakCycle = streakDays % 7;
-  const streakProgress = streakDays === 0 ? 0 : streakCycle === 0 ? 1 : streakCycle / 7;
-  const overCap = dailyCap > 0 && todayDrops > dailyCap;
-  const todayProgress = dailyCap > 0 ? Math.min(todayDrops / dailyCap, 1) : 0;
-  const todayColor = overCap ? '#4CD964' : TODAY_COLOR;
+  const targetPct = Math.round(weeklyProgress * 100);
 
-  const svgSize = (OUTER_RADIUS + STROKE_WIDTH / 2 + 4) * 2;
-  const center = svgSize / 2;
-
-  const outerC = 2 * Math.PI * OUTER_RADIUS;
-  const middleC = 2 * Math.PI * MIDDLE_RADIUS;
-  const innerC = 2 * Math.PI * INNER_RADIUS;
-
-  // Tick marks around outer ring perimeter
-  const TICK_COUNT = 60;
-  const tickMarks = Array.from({ length: TICK_COUNT }, (_, i) => {
-    const angle = (i / TICK_COUNT) * 360 - 90;
-    const rad = (angle * Math.PI) / 180;
-    const isMajor = i % 5 === 0;
-    const outerR = OUTER_RADIUS + STROKE_WIDTH / 2 + (isMajor ? 7 : 4);
-    const innerR = OUTER_RADIUS + STROKE_WIDTH / 2 + 1;
-    return {
-      x1: center + Math.cos(rad) * innerR,
-      y1: center + Math.sin(rad) * innerR,
-      x2: center + Math.cos(rad) * outerR,
-      y2: center + Math.sin(rad) * outerR,
-      isMajor,
-    };
-  });
-
-  // ── Shared animated values ──────────────────────────
-  // Ring fill (0 → target progress)
-  const animWeekly = useSharedValue(0);
-  const animStreak = useSharedValue(0);
-  const animToday  = useSharedValue(0);
-
-  // Entrance: whole SVG fades + scales in
-  const revealOpacity = useSharedValue(0);
-  const revealScale   = useSharedValue(0.78);
-
-  // Each ring track fades in staggered (bezel → outer → middle → inner)
-  const bezelOpacity  = useSharedValue(0);
-  const outerOpacity  = useSharedValue(0);
-  const middleOpacity = useSharedValue(0);
-  const innerOpacity  = useSharedValue(0);
-
-  // Center counter fades in last
-  const centerOpacity = useSharedValue(0);
-  const centerScale   = useSharedValue(0.7);
-
-  // Press scale
-  const pressScale = useSharedValue(1);
-
-  // Internal replay counter — incremented by the imperative handle.
-  // Kept local so incrementing it never re-renders the parent screen.
+  // ── JS-side tick animation ──────────────────────────────────────────────────
+  const [animPct, setAnimPct] = useState(0);
   const [replayKey, setReplayKey] = useState(0);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    setAnimPct(0);
+    const start = performance.now();
+    const dur = 1100;
+    const run = (now: number) => {
+      const p = Math.min((now - start) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setAnimPct(ease * targetPct);
+      if (p < 1) { rafRef.current = requestAnimationFrame(run); }
+    };
+    rafRef.current = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [targetPct, replayKey]);
 
   useImperativeHandle(ref, () => ({
     replay: () => setReplayKey((k) => k + 1),
   }), []);
 
-  // ── Entrance animation — replays every time replayKey changes ──
+  // ── Entrance animations ─────────────────────────────────────────────────────
+  const revealOpacity = useSharedValue(0);
+  const revealScale = useSharedValue(0.78);
+  const centerOpacity = useSharedValue(0);
+  const centerScale = useSharedValue(0.7);
+  const pressScale = useSharedValue(1);
+
   useEffect(() => {
     const EASE_OUT = Easing.out(Easing.cubic);
-
-    // Reset all values to their start state instantly
     revealOpacity.value = 0;
-    revealScale.value   = 0.78;
-    bezelOpacity.value  = 0;
-    outerOpacity.value  = 0;
-    middleOpacity.value = 0;
-    innerOpacity.value  = 0;
-    animWeekly.value    = 0;
-    animStreak.value    = 0;
-    animToday.value     = 0;
+    revealScale.value = 0.78;
     centerOpacity.value = 0;
-    centerScale.value   = 0.7;
+    centerScale.value = 0.7;
 
-    // 1. Whole container pops in from slightly small
     revealOpacity.value = withTiming(1, { duration: 350, easing: EASE_OUT });
-    revealScale.value   = withSequence(
+    revealScale.value = withSequence(
       withTiming(1.04, { duration: 280, easing: Easing.out(Easing.back(1.5)) }),
-      withTiming(1,    { duration: 160, easing: EASE_OUT }),
+      withTiming(1, { duration: 160, easing: EASE_OUT }),
     );
-
-    // 2. Bezel ticks materialise first
-    bezelOpacity.value  = withDelay(60,  withTiming(1, { duration: 300, easing: EASE_OUT }));
-
-    // 3. Track rings appear staggered
-    outerOpacity.value  = withDelay(120, withTiming(1, { duration: 280, easing: EASE_OUT }));
-    middleOpacity.value = withDelay(200, withTiming(1, { duration: 280, easing: EASE_OUT }));
-    innerOpacity.value  = withDelay(280, withTiming(1, { duration: 280, easing: EASE_OUT }));
-
-    // 4. Progress arcs sweep in (staggered, slower sweep easing)
-    animWeekly.value = withDelay(160, withTiming(weeklyProgress, { duration: 900, easing: SWEEP_EASING }));
-    animStreak.value = withDelay(240, withTiming(streakProgress,  { duration: 900, easing: SWEEP_EASING }));
-    animToday.value  = withDelay(320, withTiming(todayProgress,   { duration: 900, easing: SWEEP_EASING }));
-
-    // 5. Center number appears after rings are well on their way
     centerOpacity.value = withDelay(500, withTiming(1, { duration: 320, easing: EASE_OUT }));
-    centerScale.value   = withDelay(500, withTiming(1, { duration: 380, easing: Easing.out(Easing.back(1.8)) }));
+    centerScale.value = withDelay(500, withTiming(1, { duration: 380, easing: Easing.out(Easing.back(1.8)) }));
   }, [replayKey]);
 
-  // ── Re-animate on data change (after mount) ─────────
-  useEffect(() => {
-    animWeekly.value = withTiming(weeklyProgress, { duration: 600, easing: SNAP_EASING });
-  }, [weeklyProgress]);
+  const ringScale = size / SVG_SIZE;
 
-  useEffect(() => {
-    animStreak.value = withDelay(80, withTiming(streakProgress, { duration: 600, easing: SNAP_EASING }));
-  }, [streakProgress]);
-
-  useEffect(() => {
-    animToday.value = withDelay(160, withTiming(todayProgress, { duration: 600, easing: SNAP_EASING }));
-  }, [todayProgress]);
-
-  // ── Animated props & styles ─────────────────────────
-  const outerAnimatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: outerC * (1 - animWeekly.value),
+  const containerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value * ringScale }],
   }));
-  const middleAnimatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: middleC * (1 - animStreak.value),
-  }));
-  const innerAnimatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: innerC * (1 - animToday.value),
-  }));
-
-  const containerScale = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale.value }],
-  }));
-
   const revealStyle = useAnimatedStyle(() => ({
     opacity: revealOpacity.value,
     transform: [{ scale: revealScale.value }],
   }));
-
-  const bezelAnimatedProps  = useAnimatedProps(() => ({ opacity: bezelOpacity.value }));
-  const outerTrackAnimatedProps  = useAnimatedProps(() => ({ opacity: outerOpacity.value }));
-  const middleTrackAnimatedProps = useAnimatedProps(() => ({ opacity: middleOpacity.value }));
-  const innerTrackAnimatedProps  = useAnimatedProps(() => ({ opacity: innerOpacity.value }));
-
   const centerReveal = useAnimatedStyle(() => ({
     opacity: centerOpacity.value,
     transform: [{ scale: centerScale.value }],
   }));
 
-  const handlePressIn = () => {
-    pressScale.value = withSpring(0.94, { damping: 14, stiffness: 220 });
-  };
-  const handlePressOut = () => {
-    pressScale.value = withSpring(1, { damping: 10, stiffness: 160 });
-  };
+  const handlePressIn = () => { pressScale.value = withSpring(0.94, { damping: 14, stiffness: 220 }); };
+  const handlePressOut = () => { pressScale.value = withSpring(1, { damping: 10, stiffness: 160 }); };
 
-  const formatDrops = (n: number): string => {
-    if (n >= 100000) return `${(n / 1000).toFixed(0)}k`;
-    if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
-    return n.toLocaleString();
-  };
+  const ticks = buildTicks(animPct);
 
-  const dropsFontSize = totalGymDrops >= 100000 ? 22 : totalGymDrops >= 10000 ? 26 : 30;
+  const weeklyPct = weeklyCap > 0 ? Math.round((weeklyDrops / weeklyCap) * 100) : 0;
+  const weeklyLabel = `${weeklyPct}%`;
+  const spendableDisplay = formatDrops(totalGymDrops).toUpperCase();
 
   return (
-    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[styles.outerWrap, containerScale]}>
-        <Animated.View style={[styles.container, { width: svgSize + 16, height: svgSize + 16 }, revealStyle]}>
-
-          <Svg width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`}>
-            <Defs>
-              {/* Solid-to-bright gradient: arc tip is always vivid */}
-              <SvgGradient id="outerGrad" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0%" stopColor={hexToRgba(WEEKLY_COLOR, 0.85)} stopOpacity="1" />
-                <Stop offset="100%" stopColor={WEEKLY_COLOR} stopOpacity="1" />
-              </SvgGradient>
-              <SvgGradient id="middleGrad" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0%" stopColor={hexToRgba(streakColor, 0.85)} stopOpacity="1" />
-                <Stop offset="100%" stopColor={streakColor} stopOpacity="1" />
-              </SvgGradient>
-              <SvgGradient id="innerGrad" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0%" stopColor={hexToRgba(todayColor, 0.85)} stopOpacity="1" />
-                <Stop offset="100%" stopColor={todayColor} stopOpacity="1" />
-              </SvgGradient>
-            </Defs>
-
-            {/* Tick marks — bezel detail, fade in first */}
-            <AnimatedG animatedProps={bezelAnimatedProps}>
-              {tickMarks.map((tick, i) => (
-                <Line
-                  key={i}
-                  x1={tick.x1} y1={tick.y1}
-                  x2={tick.x2} y2={tick.y2}
-                  stroke={tick.isMajor ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)'}
-                  strokeWidth={tick.isMajor ? 1.2 : 0.5}
-                />
-              ))}
-            </AnimatedG>
-
-            {/* Outer: Weekly */}
-            <AnimatedG animatedProps={outerTrackAnimatedProps}>
-              <Circle
-                cx={center} cy={center} r={OUTER_RADIUS}
-                stroke={hexToRgba(WEEKLY_COLOR, 0.22)}
-                strokeWidth={STROKE_WIDTH} fill="transparent"
+    <Pressable
+      onPress={onPress}
+      onPressIn={compact ? undefined : handlePressIn}
+      onPressOut={compact ? undefined : handlePressOut}
+    >
+      <Animated.View style={[styles.outerWrap, { width: SVG_SIZE, height: SEMI_H }, containerStyle]}>
+        <Animated.View style={[styles.container, { width: SVG_SIZE, height: SEMI_H }, revealStyle]}>
+          <Svg width={SVG_SIZE} height={SEMI_H} viewBox={`0 0 ${SVG_SIZE} ${SEMI_H}`}>
+            {ticks.map((tk, i) => (
+              <Line
+                key={i}
+                x1={tk.x1} y1={tk.y1}
+                x2={tk.x2} y2={tk.y2}
+                stroke={tk.lit ? color : 'rgba(255,255,255,0.1)'}
+                strokeWidth={tk.long ? 3.5 : 2}
+                strokeLinecap="round"
               />
-            </AnimatedG>
-            <AnimatedCircle
-              cx={center} cy={center} r={OUTER_RADIUS}
-              stroke="url(#outerGrad)"
-              strokeWidth={STROKE_WIDTH} fill="transparent"
-              strokeDasharray={outerC} animatedProps={outerAnimatedProps}
-              strokeLinecap="round" rotation="-90" origin={`${center}, ${center}`}
-            />
-
-            {/* Middle: Streak */}
-            <AnimatedG animatedProps={middleTrackAnimatedProps}>
-              <Circle
-                cx={center} cy={center} r={MIDDLE_RADIUS}
-                stroke={hexToRgba(streakColor, 0.22)}
-                strokeWidth={STROKE_WIDTH} fill="transparent"
-              />
-            </AnimatedG>
-            <AnimatedCircle
-              cx={center} cy={center} r={MIDDLE_RADIUS}
-              stroke="url(#middleGrad)"
-              strokeWidth={STROKE_WIDTH} fill="transparent"
-              strokeDasharray={middleC} animatedProps={middleAnimatedProps}
-              strokeLinecap="round" rotation="-90" origin={`${center}, ${center}`}
-            />
-
-            {/* Inner: Today */}
-            <AnimatedG animatedProps={innerTrackAnimatedProps}>
-              <Circle
-                cx={center} cy={center} r={INNER_RADIUS}
-                stroke={hexToRgba(todayColor, 0.22)}
-                strokeWidth={STROKE_WIDTH} fill="transparent"
-              />
-            </AnimatedG>
-            <AnimatedCircle
-              cx={center} cy={center} r={INNER_RADIUS}
-              stroke="url(#innerGrad)"
-              strokeWidth={STROKE_WIDTH} fill="transparent"
-              strokeDasharray={innerC} animatedProps={innerAnimatedProps}
-              strokeLinecap="round" rotation="-90" origin={`${center}, ${center}`}
-            />
+            ))}
           </Svg>
 
-          {/* Center */}
-          <Animated.View style={[styles.centerContent, centerReveal]}>
-            <Text
-              style={[
-                styles.centerNumber,
-                getNumberStyle(dropsFontSize),
-                overCap && { color: '#4CD964' },
-              ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-            >
-              {formatDrops(totalGymDrops)}
-            </Text>
-            <Text style={styles.centerLabel}>{t('rings.drops')}</Text>
+          <Animated.View
+            style={[
+              styles.centerContent,
+              { top: ARC_BOWL_TOP, height: ARC_BOWL_HEIGHT },
+              centerReveal,
+            ]}
+          >
+            <Ionicons name="water-outline" size={BG_ICON_SIZE} color={hexToRgba(color, 0.08)} style={styles.bgIcon} />
+            <Text style={styles.topLabel}>{t('rings.spendable')}</Text>
+            <Text style={[styles.spendableNumber, { color }]}>{spendableDisplay}</Text>
+
+            <View style={styles.divider} />
+
+            <Text style={[styles.weeklyNumber, { color }]}>{weeklyLabel}</Text>
+            <Text style={styles.weeklyLabel}>{t('rings.week')}</Text>
           </Animated.View>
         </Animated.View>
       </Animated.View>
@@ -344,31 +214,67 @@ const styles = StyleSheet.create({
   outerWrap: {
     alignItems: 'center',
     alignSelf: 'center',
+    overflow: 'visible',
   },
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'visible',
   },
   centerContent: {
     position: 'absolute',
-    justifyContent: 'center',
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    width: INNER_RADIUS * 2 - STROKE_WIDTH * 2,
+    justifyContent: 'center',
+    gap: 0,
   },
-  centerNumber: {
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
-    includeFontPadding: false,
+  topLabel: {
+    ...fontStyles.heading,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.42)',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 2,
     textAlign: 'center',
   },
-  centerLabel: {
+  bgIcon: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 2,
+  },
+  spendableNumber: {
     ...fontStyles.heading,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
-    letterSpacing: 3,
+    fontSize: 36,
+    lineHeight: 40,
+    color: 'rgba(255,255,255,0.92)',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  divider: {
+    width: 52,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    marginVertical: 8,
+  },
+  weeklyNumber: {
+    ...fontStyles.heading,
+    fontSize: 19,
+    lineHeight: 22,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  weeklyLabel: {
+    ...fontStyles.heading,
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.42)',
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
-    marginTop: 4,
+    marginTop: 1,
+    textAlign: 'center',
   },
 });

@@ -40,6 +40,7 @@ import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const APP_NAV_THEME = {
   ...DarkTheme,
@@ -111,8 +112,8 @@ function StackNavigator() {
         options={{
           headerShown: false,
           presentation: 'transparentModal',
-          animation: 'fade',
-          animationDuration: 200,
+          animation: 'slide_from_bottom',
+          animationDuration: 320,
           gestureEnabled: false,
         }}
       />
@@ -447,14 +448,16 @@ export default function RootLayout() {
   }
 
   return (
-    <ErrorBoundary>
-      <ThemeProvider>
-        <GymDataInitializer />
-        <StackNavigator />
-        <StatusBar style="light" />
-        <OfflineBanner />
-        <AppModal />
-      </ThemeProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <GymDataInitializer />
+          <StackNavigator />
+          <StatusBar style="light" />
+          <OfflineBanner />
+          <AppModal />
+        </ThemeProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

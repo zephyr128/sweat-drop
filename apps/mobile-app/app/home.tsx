@@ -2,12 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, RefreshControl } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, useDerivedValue, withTiming, withRepeat, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
@@ -20,15 +20,20 @@ import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
 import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba} from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
-import { LockedOverlay } from '@/components/LockedOverlay';
-import { ProgressWidget } from '@/components/ProgressWidget';
-import { PressableCard } from '@/components/PressableCard';
 import { ActivityRings, type ActivityRingsHandle } from '@/components/ActivityRings';
-import { StatsCards } from '@/components/StatsCards';
-import { LeaderboardPreview } from '@/components/LeaderboardPreview';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { useUserRank } from '@/hooks/useUserRank';
-import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
+import { useCompeteStats } from '@/hooks/useCompeteStats';
+import { useUserBadges } from '@/hooks/useUserBadges';
+import { HomeHeroPager, type HomeHeroPagerHandle } from '@/components/home/HomeHeroPager';
+import { SheetActivityContent } from '@/components/home/SheetActivityContent';
+import { SheetRankContent } from '@/components/home/SheetRankContent';
+import { SheetBadgesContent } from '@/components/home/SheetBadgesContent';
+import { SheetArenaContent } from '@/components/home/SheetArenaContent';
+import { MiniGaugeBar } from '@/components/home/MiniGaugeBar';
+import { SliderTabs, SliderTabsBar, type SliderTab } from '@/components/SliderTabs';
+import type { LeaderboardPeriod } from '@/components/LeaderboardPreview';
+
 import { useHomeStats } from '@/hooks/useHomeStats';
 import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
@@ -38,6 +43,8 @@ import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const PARALLAX_SHIFT = 18; // px shift per page
+const PARALLAX_EXTRA = PARALLAX_SHIFT * 3 + 10; // total extra width needed
 const CARD_MARGIN = 12;
 const CARD_PADDING = 16; // Horizontal padding of ScrollView
 // Bottom cards row: two cards with gap between them
@@ -47,6 +54,9 @@ const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP;
 const CHALLENGE_CARD_WIDTH = SMARTCOACH_CARD_WIDTH;
 const CHALLENGE_CARD_HEIGHT = 200;
 const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
+const CHALLENGE_ACCENT = '#FF9F4A';
+const LEADERBOARD_ACCENT = '#A855F7';
+const ARENAS_ACCENT = '#22D3EE';
 
 // ═══════════════════════════════════════════════════════════
 // COLD-START SKELETON — shown only on first mount while data loads
@@ -250,7 +260,52 @@ export default function HomeScreen() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showWaitlist, setShowWaitlist] = useState(false);
+  const [sheetLogoLoadFailed, setSheetLogoLoadFailed] = useState(false);
   const activityRingsRef = useRef<ActivityRingsHandle>(null);
+  const insets = useSafeAreaInsets();
+
+  // Pager state for swipeable ring hub
+  const [activePage, setActivePage] = useState(0);
+  const heroPagerScrollPosition = useSharedValue(0);
+  const heroPagerRef = useRef<HomeHeroPagerHandle>(null);
+
+  // ── Single scroll shared value — drives all collapse animations ──
+  const scrollY = useSharedValue(0);
+  // Measured hero block height (set via onLayout)
+  const heroH = useSharedValue(230);
+
+  // Scroll handler — one place, no nested handlers
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      'worklet';
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+
+  // collapseProgress: 0 = hero fully visible, 1 = hero scrolled away
+  const collapseProgress = useDerivedValue(() =>
+    Math.min(Math.max(scrollY.value / (heroH.value || 230), 0), 1)
+  );
+
+  // Hero fades as it scrolls away (the ScrollView natively moves it up — no translateY needed)
+  const heroAnimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(collapseProgress.value, [0, 0.5, 1], [1, 0.6, 0]),
+  }));
+
+  useEffect(() => {
+    setSheetLogoLoadFailed(false);
+  }, [activeGym?.logo_url]);
+
+  const TAB_KEYS = ['activity', 'compete', 'challenges', 'arenas'] as const;
+  const TAB_ACCENTS: Record<string, string> = {
+    activity: branding.primary,
+    compete: '#EAB308',
+    challenges: '#FF9F4A',
+    arenas: '#22D3EE',
+  };
+
+  // Badge data for earned badge count
+  const { badges: earnedBadges } = useUserBadges();
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);
@@ -267,6 +322,13 @@ export default function HomeScreen() {
 
   // User's leaderboard rank
   const userRank = useUserRank(activeGymId);
+  const competeStats = useCompeteStats(activeGymId);
+  // Derive gauge rank from weekly compete stats (falls back to useUserRank)
+  const rankForGauge = useMemo(() => {
+    const ws = competeStats.stats.weekly;
+    if (ws.rank > 0 || ws.totalMembers > 0) return { rank: ws.rank, totalMembers: ws.totalMembers };
+    return { rank: userRank.rank, totalMembers: userRank.totalMembers };
+  }, [competeStats.stats.weekly, userRank.rank, userRank.totalMembers]);
 
   // Realtime: refresh stats when drops_transactions change
   useRealtimeRefresh({
@@ -346,24 +408,51 @@ export default function HomeScreen() {
   const activeChallenges = allChallenges.filter(c => !c.is_completed);
   const displayedChallenges = activeChallenges.slice(0, 3);
   
-  // Glow animation for QR button
-  const glowAnim = useSharedValue(0);
+  // Parallax background shift — driven continuously by onPageScroll offset
+  // Image is PARALLAX_EXTRA wider and starts offset by -half so we have buffer in both directions
+  const bgParallaxStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: interpolate(
+          heroPagerScrollPosition.value,
+          [0, 1, 2, 3],
+          [0, -PARALLAX_SHIFT, -PARALLAX_SHIFT * 2, -PARALLAX_SHIFT * 3],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+        ),
+      },
+    ],
+  }));
 
-  useEffect(() => {
-    glowAnim.value = withRepeat(
-      withTiming(1, {
-        duration: 2000,
-        easing: Easing.inOut(Easing.ease),
-      }),
-      -1,
-      true
-    );
+  // Cumulative challenge progress for BadgeRing
+  const challengeRingData = useMemo(() => {
+    const total = allChallenges.length;
+    const completed = allChallenges.filter((c) => c.is_completed).length;
+    return { completedCount: completed, totalCount: total, earnedBadgeCount: earnedBadges.length };
+  }, [allChallenges, earnedBadges]);
+
+  // Tab bar definitions for SliderTabs inside the bottom sheet
+  const sheetTabs: SliderTab[] = useMemo(() => [
+    { key: 'activity', label: t('pagerTabs.activity'), icon: 'pulse-outline' },
+    { key: 'compete', label: t('pagerTabs.compete'), icon: 'podium-outline' },
+    { key: 'challenges', label: t('pagerTabs.challenges'), icon: 'flame-outline' },
+    { key: 'arenas', label: t('pagerTabs.arenas'), icon: 'shield-outline' },
+  ], [t]);
+
+  const activeTabKey = TAB_KEYS[activePage] ?? 'activity';
+
+  // Hero pager -> tab bar
+  const handleHeroPagerChange = useCallback((page: number) => {
+    setActivePage(page);
   }, []);
 
-  const glowStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(glowAnim.value, [0, 1], [0.4, 0.8]);
-    return { opacity };
-  });
+  // Tab bar -> hero pager
+  const handleTabChange = useCallback((key: string) => {
+    const idx = TAB_KEYS.indexOf(key as typeof TAB_KEYS[number]);
+    if (idx >= 0 && idx !== activePage) {
+      setActivePage(idx);
+      heroPagerRef.current?.setPage(idx);
+    }
+  }, [activePage]);
 
   // Load data when session or active gym changes
   // First load shows spinner, subsequent gym switches refresh silently
@@ -533,7 +622,8 @@ export default function HomeScreen() {
     }
   }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, userRank, dropLimits]);
 
-  const handleQRPress = async () => {
+
+  const handleQRPress = () => {
     router.push('/scan');
   };
 
@@ -831,21 +921,18 @@ export default function HomeScreen() {
             </Animated.View>
           </ScrollView>
 
-          {/* QR Scanner FAB */}
-          <View style={styles.fabContainer}>
-            <Animated.View style={[styles.fabGlow, glowStyle, { backgroundColor: branding.primary }]} />
-            <TouchableOpacity
-              style={[styles.fab, { shadowColor: branding.primary }]}
-              onPress={handleQRPress}
-              activeOpacity={0.9}
-            >
+          <View style={[styles.startWorkoutWrap, { bottom: Math.max(insets.bottom + 10, 16) }]}>
+            <TouchableOpacity style={[styles.startWorkoutButton, { shadowColor: branding.primary }]} onPress={handleQRPress} activeOpacity={0.88}>
               <LinearGradient
-                colors={[branding.primary, branding.primaryDark]}
-                style={styles.fabGradient}
+                colors={[hexToRgba(branding.primaryDark, 0.95), hexToRgba(branding.primary, 0.95)]}
+                style={styles.startWorkoutGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Ionicons name="qr-code" size={48} color={branding.onPrimary} />
+                <View style={styles.startWorkoutContent}>
+                  <Ionicons name="qr-code" size={20} color={branding.onPrimary} />
+                  <Text style={[styles.startWorkoutText, { color: branding.onPrimary }]}>{t('startWorkout')}</Text>
+                </View>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -860,829 +947,278 @@ export default function HomeScreen() {
     );
   }
 
+  const tabAccent = TAB_ACCENTS[activeTabKey] ?? branding.primary;
+  const HEADER_H = 56;
+  const TAB_BAR_H = 48;
+  const MINI_GAUGE_H = 36; // same as MINI_H in MiniGaugeBar
+  const SCROLL_TOP_INSET = 0;
+  // Reserve space for sticky section at its max height (mini gauge fully visible + tab bar)
+  const sheetMinHeight = SCREEN_HEIGHT - insets.top - HEADER_H - MINI_GAUGE_H - TAB_BAR_H;
+
   return (
     <Animated.View style={[{ flex: 1, backgroundColor: '#000000' }, fadeAnimatedStyle]}>
       <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Dynamic background */}
-      {activeGym?.background_url ? (
-        <View style={StyleSheet.absoluteFillObject}>
-          <Image
-            source={activeGym.background_url}
-            style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
-            transition={200}
-          />
-          <LinearGradient
-            colors={['rgba(0,0,0,0.30)', 'rgba(8,8,8,0.50)', 'rgba(0,0,0,0.65)']}
-            style={StyleSheet.absoluteFillObject}
-          />
-        </View>
-      ) : (
-        <LinearGradient
-          colors={['#080808', '#0A0E1A', '#080808'] as any}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-      )}
 
-      {/* ═══════════════════════════════════════════ */}
-      {/* DYNAMIC HEADER (fixed, does not scroll)      */}
-      {/* ═══════════════════════════════════════════ */}
-      <View style={styles.stickyHeader}>
-        <TouchableOpacity
-          style={styles.headerLeft}
-          onPress={() => router.push('/profile')}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-            {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-              <Image source={profile.avatar_url} style={styles.avatarImage} transition={200} />
-            ) : (
-              <Text style={styles.avatarText}>
-                {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
-              </Text>
-            )}
+        {/* ── Background — always fills screen ── */}
+        {activeGym?.background_url ? (
+          <View style={StyleSheet.absoluteFillObject}>
+            <Animated.View style={[styles.parallaxBg, bgParallaxStyle]}>
+              <Image
+                source={activeGym.background_url}
+                style={styles.parallaxImg}
+                contentFit="cover"
+                transition={200}
+              />
+            </Animated.View>
+            <LinearGradient
+              colors={['rgba(0,0,0,0.30)', 'rgba(8,8,8,0.50)', 'rgba(0,0,0,0.65)']}
+              style={StyleSheet.absoluteFillObject}
+            />
           </View>
-          <Text style={styles.username}>{profile?.username || t('common:user')}</Text>
-        </TouchableOpacity>
-
-        {/* Gym logo — top right */}
-        <View style={[styles.gymLogoContainer, { borderColor: hexToRgba(branding.primary, 0.25) }]}>
-          {activeGym?.logo_url ? (
-            <Image source={activeGym.logo_url} style={styles.gymLogoImage} contentFit="contain" transition={200} />
-          ) : (
-            <Ionicons name="fitness" size={20} color={hexToRgba(branding.primary, 0.7)} />
-          )}
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={branding.primary}
-            colors={[branding.primary]}
-            progressBackgroundColor="transparent"
-          />
-        }
-      >
-        {/* ═══════════════════════════════════════════ */}
-        {/* ACTIVITY RINGS (Apple-style)                 */}
-        {/* ═══════════════════════════════════════════ */}
-        <View style={styles.heroSection}>
-          <ActivityRings
-            ref={activityRingsRef}
-            streakDays={homeStats.streak}
-            todayDrops={homeStats.todayDrops}
-            todayBonusDrops={homeStats.todayBonusDrops}
-            dailyCap={dropLimits.maxDropsPerDay}
-            weeklyDrops={dropLimits.mintedWeek}
-            weeklyCap={dropLimits.maxDropsPerWeek}
-            totalGymDrops={localDrops}
-            size={290}
-            onPress={() => router.push('/wallet')}
-          />
-          {activeGym && (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: activeGymId } })}
-            >
-              <Text style={[styles.heroGymName, { color: hexToRgba(branding.primary, 0.6) }]}>
-                {activeGym.name}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ═══════════════════════════════════════════ */}
-        {/* STATS CARDS + REWARD + HAPPY HOUR            */}
-        {/* ═══════════════════════════════════════════ */}
-        <StatsCards
-          streakDays={homeStats.streak}
-          todayDrops={homeStats.todayDrops}
-          todayBonusDrops={homeStats.todayBonusDrops}
-          dailyCap={dropLimits.maxDropsPerDay}
-          weeklyDrops={dropLimits.mintedWeek}
-          weeklyCap={dropLimits.maxDropsPerWeek}
-          primaryColor={branding.primary}
-          isCheckedIn={checkinStatus?.already_checked_in ?? false}
-          gymName={activeGym?.name ?? ''}
-          onCheckinPress={() => router.push('/scan')}
-          nextRewardName={homeStats.closestReward?.name ?? null}
-          nextRewardImageUrl={homeStats.closestReward?.imageUrl ?? null}
-          nextRewardPriceDrops={homeStats.closestReward?.priceDrops ?? 0}
-          localDropsBalance={localDrops}
-          dropsToNextReward={homeStats.closestReward?.dropsAway ?? 0}
-          onRewardPress={() => router.push('/store')}
-          nextHappyHour={(() => {
-            const slot = upcomingHH.liveWindow ?? upcomingHH.windows[0] ?? null;
-            if (!slot) return null;
-            const fmt = (iso: string) => {
-              try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }); }
-              catch { return '--:--'; }
-            };
-            return {
-              label: slot.label,
-              time: fmt(slot.startAt),
-              endTime: fmt(slot.endAt),
-              multiplier: slot.multiplier,
-              inMinutes: slot.minutesUntilStart,
-              isToday: slot.isToday,
-            };
-          })()}
-          isHappyHourActive={!!upcomingHH.liveWindow}
-          onHappyHourPress={() => router.push('/happy-hours' as any)}
-          onStreakPress={() => router.push('/workout-history')}
-          onTodayPress={() => router.push('/stats?period=today' as any)}
-          onWeeklyPress={() => router.push('/stats?period=week' as any)}
-        />
-
-        {/* ═══════════════════════════════════════════ */}
-        {/* WEEKLY ACTIVITY CHART                        */}
-        {/* ═══════════════════════════════════════════ */}
-        {homeStats.weeklyActivity.length > 0 && (
-          <WeeklyActivityChart
-            data={homeStats.weeklyActivity}
-            activeDays={homeStats.activeDaysThisWeek}
-            brandPrimary={branding.primary}
-            onPress={() => router.push('/workout-history')}
+        ) : (
+          <LinearGradient
+            colors={['#080808', '#0A0E1A', '#080808'] as any}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
           />
         )}
 
-        {/* Cards Container with Overlay */}
-        <View style={styles.cardsContainer}>
-          {/* Locked Overlay (preview mode) */}
-          {!isUnlocked && (
-            <View style={styles.cardsOverlayContainer}>
-              <LockedOverlay onSetAsHomeGym={handleSetAsHomeGym} />
-            </View>
-          )}
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* LEADERBOARD PREVIEW                         */}
-          {/* ═══════════════════════════════════════════ */}
-          <LeaderboardPreview gymId={activeGymId} isUnlocked={isUnlocked} />
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* INVITE FRIEND CTA                            */}
-          {/* ═══════════════════════════════════════════ */}
-          {session?.user && isUnlocked && (
-            <PressableCard
-              style={styles.inviteCta}
-              onPress={() => router.push('/invite-friend')}
-            >
-              <PlatformBlur intensity={50} tint="dark" style={styles.inviteCtaBlur} androidColor="rgba(12,12,22,0.97)">
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.inviteCtaGradient}
-                >
-                  <View style={[styles.inviteCtaIcon, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                    <Ionicons name="person-add" size={20} color={branding.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.inviteCtaTitle}>{t('friendsQuick.inviteTitle')}</Text>
-                    <Text style={[styles.inviteCtaSub, { color: branding.primary }]}>
-                      {t('friendsQuick.inviteReward')}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
-                </LinearGradient>
-              </PlatformBlur>
-            </PressableCard>
-          )}
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* ACTIVE CHALLENGES - Horizontal Scroll       */}
-          {/* ═══════════════════════════════════════════ */}
-          {challengesLoading && (
-            <View style={styles.challengesSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{t('activeChallenges')}</Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.challengesScrollContent}
-                style={styles.challengesScrollView}
-                scrollEnabled={false}
-              >
-                {[1, 2].map((index) => (
-                  <View
-                    key={`skeleton-${index}`}
-                    style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
-                  >
-                    <View style={[styles.challengeCardSkeleton, {
-                      borderTopColor: hexToRgba(branding.primary, 0.22),
-                      borderLeftColor: hexToRgba(branding.primary, 0.10),
-                      borderRightColor: hexToRgba(branding.primary, 0.06),
-                      borderBottomColor: hexToRgba(branding.primary, 0.04),
-                    }]}>
-                      <LinearGradient
-                        colors={['rgba(255,255,255,0.08)', hexToRgba(branding.primary, 0.05), 'rgba(12,12,22,0.0)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 0, y: 1 }}
-                        style={styles.challengeGradient}
-                      >
-                        <View style={styles.challengeContent}>
-                          <View style={styles.challengeHeader}>
-                            <View style={[styles.skeletonBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]} />
-                            <View style={[styles.skeletonTitle, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
-                          </View>
-                          <View style={styles.challengeProgress}>
-                            <View style={[styles.progressBar, { backgroundColor: hexToRgba(branding.primary, 0.08) }]} />
-                            <View style={[styles.skeletonProgressText, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
-                          </View>
-                          <View style={[styles.skeletonReward, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} />
-                        </View>
-                      </LinearGradient>
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {!challengesLoading && displayedChallenges.length > 0 && (
-            <View style={styles.challengesSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{t('activeChallenges')}</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (!isUnlocked) return;
-                    router.push('/challenges');
-                  }}
-                  activeOpacity={0.7}
-                  disabled={!isUnlocked}
-                >
-                  <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('viewAll')}</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.challengesScrollContent}
-                style={styles.challengesScrollView}
-                snapToInterval={SNAP_INTERVAL}
-                snapToAlignment="start"
-                decelerationRate="fast"
-                pagingEnabled={false}
-              >
-                {displayedChallenges.map((challenge) => {
-                  const progressRatio = challenge.progress_percentage / 100 || 0;
-                  
-                  const getChallengeTypeLabel = () => {
-                    switch (challenge.challenge_type) {
-                      case 'daily': return t('daily');
-                      case 'weekly': return t('weekly');
-                      case 'monthly': return t('monthly');
-                      case 'streak': return t('streak');
-                      case 'milestone': return t('milestone');
-                      case 'checkin_streak': return t('checkinStreak');
-                      case 'checkin_count': return t('checkinCount');
-                      default: return t('challenge');
-                    }
-                  };
-
-                  const getProgressLabel = () => {
-                    if (challenge.challenge_type === 'streak' || challenge.challenge_type === 'checkin_streak') {
-                      return { current: challenge.current_streak_days, target: challenge.target_drops, unit: t('unitDays') };
-                    } else if (challenge.challenge_type === 'checkin_count') {
-                      return { current: challenge.current_drops, target: challenge.target_drops, unit: t('unitCheckins') };
-                    } else {
-                      return { current: challenge.current_drops, target: challenge.target_drops, unit: 'drops' };
-                    }
-                  };
-
-                  const getTimeUntilMidnight = (): string => {
-                    const now = new Date();
-                    const midnight = new Date(now);
-                    midnight.setHours(24, 0, 0, 0);
-                    const diff = midnight.getTime() - now.getTime();
-                    const h = Math.floor(diff / (1000 * 60 * 60));
-                    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                    return `${h}h ${m}m`;
-                  };
-
-                  const getTimeUntilSunday = (): string => {
-                    const now = new Date();
-                    const dayOfWeek = now.getDay();
-                    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
-                    const sunday = new Date(now);
-                    sunday.setDate(sunday.getDate() + daysUntilSunday);
-                    sunday.setHours(0, 0, 0, 0);
-                    const diff = sunday.getTime() - now.getTime();
-                    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-                    const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    if (d > 0) return `${d}d ${h}h`;
-                    return `${h}h`;
-                  };
-
-                  const getChallengeTimeInfo = (): { text: string; style: 'countdown' | 'recurring' | 'permanent' | 'completed' } | null => {
-                    if (challenge.is_completed) {
-                      if (challenge.challenge_type === 'daily') {
-                        return { text: t('completedResetsIn', { time: getTimeUntilMidnight() }), style: 'completed' };
-                      }
-                      if (challenge.challenge_type === 'weekly') {
-                        return { text: t('completedResetsSunday', { time: getTimeUntilSunday() }), style: 'completed' };
-                      }
-                      return { text: t('completedLabel'), style: 'completed' };
-                    }
-
-                    if (challenge.challenge_type === 'milestone') {
-                      return { text: t('ongoing'), style: 'permanent' };
-                    }
-
-                    if (!challenge.end_date) {
-                      return { text: t('ongoing'), style: 'permanent' };
-                    }
-
-                    const end = new Date(challenge.end_date + 'T23:59:59');
-                    const diff = end.getTime() - Date.now();
-                    if (diff <= 0) return { text: t('ended'), style: 'countdown' };
-
-                    if (challenge.challenge_type === 'daily') {
-                      return { text: t('resetsIn', { time: getTimeUntilMidnight() }), style: 'recurring' };
-                    }
-                    if (challenge.challenge_type === 'weekly') {
-                      return { text: t('resetsIn', { time: getTimeUntilSunday() }), style: 'recurring' };
-                    }
-
-                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    if (days > 0) return { text: t('timeLeft', { days, hours }), style: 'countdown' };
-                    if (hours > 0) return { text: t('hoursLeft', { hours }), style: 'countdown' };
-                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                    return { text: t('minutesLeft', { minutes }), style: 'countdown' };
-                  };
-
-                  const progressLabel = getProgressLabel();
-                  const timeInfo = getChallengeTimeInfo();
-                  
-                  return (
-                    <View
-                      key={challenge.challenge_id}
-                      style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}
-                    >
-                      <PressableCard
-                        style={[
-                          styles.challengeCard,
-                          {
-                            borderTopColor: hexToRgba(branding.primary, 0.30),
-                            borderLeftColor: hexToRgba(branding.primary, 0.14),
-                            borderRightColor: hexToRgba(branding.primary, 0.08),
-                            borderBottomColor: hexToRgba(branding.primary, 0.06),
-                          },
-                        ]}
-                        onPress={() => {
-                          if (!isUnlocked) return;
-                          router.push({
-                            pathname: '/challenge-detail',
-                            params: { challengeId: challenge.challenge_id, gymId: activeGymId || '' },
-                          });
-                        }}
-                        disabled={!isUnlocked}
-                      >
-                        <PlatformBlur intensity={40} tint="dark" style={styles.challengeBlur} androidColor="rgba(12,12,22,0.97)">
-                          <LinearGradient
-                            colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.07), 'rgba(12,12,22,0.0)']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 0, y: 1 }}
-                            style={styles.challengeGradient}
-                          >
-                            <View style={styles.challengeContent}>
-                              <View style={styles.challengeHeader}>
-                                <View style={styles.challengeHeaderRow}>
-                                  <Text style={[styles.challengeType, { color: branding.primary }]}>
-                                    {getChallengeTypeLabel()}
-                                  </Text>
-                                  {timeInfo && (
-                                    <View style={[
-                                      styles.challengeTimeBadge,
-                                      { backgroundColor: timeInfo.style === 'completed'
-                                        ? 'rgba(74, 222, 128, 0.1)'
-                                        : timeInfo.style === 'recurring'
-                                          ? 'rgba(96, 165, 250, 0.1)'
-                                          : timeInfo.style === 'permanent'
-                                            ? 'rgba(255, 255, 255, 0.03)'
-                                            : hexToRgba(branding.primary, 0.1)
-                                      },
-                                    ]}>
-                                      <Ionicons
-                                        name={
-                                          timeInfo.style === 'completed' ? 'checkmark-circle' :
-                                          timeInfo.style === 'permanent' ? 'infinite' :
-                                          timeInfo.style === 'recurring' ? 'refresh' :
-                                          'time-outline'
-                                        }
-                                        size={10}
-                                        color={timeInfo.style === 'completed' ? '#4ade80' : theme.colors.textSecondary}
-                                      />
-                                      <Text style={[
-                                        styles.challengeTimeBadgeText,
-                                        timeInfo.style === 'completed' && { color: '#4ade80' },
-                                      ]}>
-                                        {timeInfo.text}
-                                      </Text>
-                                    </View>
-                                  )}
-                                </View>
-                                <Text style={styles.challengeName} numberOfLines={2}>
-                                  {challenge.challenge_name}
-                                </Text>
-                              </View>
-
-                              <View style={styles.challengeProgress}>
-                                <View style={[styles.progressBar, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
-                                  <View
-                                    style={[
-                                      styles.progressBarFill,
-                                      {
-                                        width: `${Math.min(progressRatio * 100, 100)}%`,
-                                        backgroundColor: challenge.is_completed
-                                          ? theme.colors.secondary
-                                          : branding.primary,
-                                      },
-                                    ]}
-                                  />
-                                </View>
-                                <Text style={styles.progressText}>
-                                  <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                    {progressLabel.current}
-                                  </Text>
-                                  {' / '}
-                                  <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                    {progressLabel.target}
-                                  </Text>
-                                  {' '}
-                                  <Text style={[getNumberStyle(12), { color: branding.primary }]}>
-                                    {progressLabel.unit}
-                                  </Text>
-                                </Text>
-                              </View>
-
-                              <View style={styles.challengeReward}>
-                                <Ionicons name="water" size={14} color={branding.primary} />
-                                <Text style={[styles.challengeRewardText, { color: branding.primary }]}>
-                                  {challenge.reward_drops} drops
-                                </Text>
-                              </View>
-                            </View>
-                          </LinearGradient>
-                        </PlatformBlur>
-                      </PressableCard>
-                    </View>
-                  );
-                })}
-
-              </ScrollView>
-            </View>
-          )}
-
-          {/* No Active Challenges — slim empty state */}
-          {!challengesLoading && displayedChallenges.length === 0 && activeGymId && (
-            <View style={styles.emptyChallengesBanner}>
-              <PlatformBlur intensity={50} tint="dark" style={styles.emptyChallengesBlur} androidColor="rgba(18,18,28,0.97)">
-                <Ionicons name="trophy-outline" size={20} color={hexToRgba(branding.primary, 0.5)} />
-                <Text style={styles.emptyChallengesText}>
-                  {t('noChallenges')}
-                </Text>
-              </PlatformBlur>
-            </View>
-          )}
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* NEXT BADGE — motivational hook               */}
-          {/* ═══════════════════════════════════════════ */}
-          {isUnlocked && <ProgressWidget />}
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* SWEAT ARENAS CAROUSEL                       */}
-          {/* ═══════════════════════════════════════════ */}
-          {isUnlocked && (
-            <View style={styles.challengesSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{t('arenas')}</Text>
-                {activeArenas.length > 0 && (
-                  <TouchableOpacity onPress={() => router.push('/arenas')} activeOpacity={0.7}>
-                    <Text style={[styles.seeAllText, { color: branding.primary }]}>{t('viewAll')}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {activeArenas.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.challengesScrollContent}
-                  style={styles.challengesScrollView}
-                  snapToInterval={SNAP_INTERVAL}
-                  snapToAlignment="start"
-                  decelerationRate="fast"
-                >
-                  {activeArenas.slice(0, 5).map((arena) => {
-                    const isUpcoming = arena.arena_status === 'upcoming';
-                    const targetDate = isUpcoming ? new Date(arena.start_date) : new Date(arena.end_date);
-                    const daysLeft = Math.max(0, Math.ceil((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-                    const ARENA_SCORING_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
-                      total_drops: 'water',
-                      days_visited: 'calendar-outline',
-                      variety_score: 'barbell-outline',
-                      streak_days: 'flame-outline',
-                    };
-                    const scoringIcon = ARENA_SCORING_ICONS[arena.scoring_model] ?? 'water';
-
-                    // Custom branding per arena
-                    const arenaPrimary = arena.card_color || branding.primary;
-                    const arenaText = arena.card_text_color || theme.colors.text;
-                    const arenaGradientEnd = arena.card_gradient_end || 'rgba(20, 20, 35, 0.9)';
-
-                    return (
-                      <View key={arena.arena_id} style={[styles.challengeCardWrapper, { width: CHALLENGE_CARD_WIDTH }]}>
-                        <PressableCard
-                          style={[
-                            styles.challengeCard,
-                            {
-                              borderTopColor: hexToRgba(arenaPrimary, isUpcoming ? 0.38 : 0.28),
-                              borderLeftColor: hexToRgba(arenaPrimary, 0.14),
-                              borderRightColor: hexToRgba(arenaPrimary, 0.08),
-                              borderBottomColor: hexToRgba(arenaPrimary, 0.06),
-                            },
-                          ]}
-                          onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
-                        >
-                          <PlatformBlur intensity={40} tint="dark" style={styles.challengeBlur} androidColor="rgba(12,12,22,0.97)">
-                            <LinearGradient
-                              colors={['rgba(255,255,255,0.10)', hexToRgba(arenaPrimary, 0.10), arenaGradientEnd]}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 0, y: 1 }}
-                              style={styles.challengeGradient}
-                            >
-                              <View style={styles.challengeContent}>
-                                {/* Coming Soon badge for upcoming arenas */}
-                                {isUpcoming && (
-                                  <View style={[styles.arenaComingSoonBadge, { backgroundColor: hexToRgba(arenaPrimary, 0.2), borderColor: hexToRgba(arenaPrimary, 0.3) }]}>
-                                    <Ionicons name="time-outline" size={10} color={arenaPrimary} />
-                                    <Text style={[styles.arenaComingSoonText, { color: arenaPrimary }]}>{t('comingSoon')}</Text>
-                                  </View>
-                                )}
-
-                                {/* Arena Header */}
-                                <View style={styles.challengeHeader}>
-                                  <View style={styles.arenaHeaderRow}>
-                                    {arena.sponsor_logo ? (
-                                      <Image source={arena.sponsor_logo} style={styles.arenaSponsorLogo} contentFit="contain" transition={200} />
-                                    ) : (
-                                      <View style={[styles.arenaSponsorPlaceholder, { backgroundColor: hexToRgba(arenaPrimary, 0.15) }]}>
-                                        <Ionicons name="trophy" size={14} color={arenaPrimary} />
-                                      </View>
-                                    )}
-                                    <Text style={[styles.challengeType, { color: arenaPrimary }]}>{arena.sponsor_name}</Text>
-                                    <Ionicons name={scoringIcon} size={14} color={arenaPrimary} />
-                                  </View>
-                                  <Text style={[styles.challengeName, { color: arenaText }]} numberOfLines={2}>{arena.name}</Text>
-                                </View>
-
-                                {/* Arena Stats */}
-                                <View style={styles.arenaHomeStats}>
-                                  <Text style={styles.arenaHomeStat}>{arena.participant_count} {t('participants')}</Text>
-                                  {isUpcoming ? (
-                                    <Text style={[styles.arenaHomeStat, { color: arenaPrimary }]}>
-                                      {t('startsIn', { days: daysLeft })}
-                                    </Text>
-                                  ) : (
-                                    <Text style={[styles.arenaHomeStat, daysLeft <= 3 && { color: theme.colors.secondary }]}>
-                                      {daysLeft} {t('daysLeft')}
-                                    </Text>
-                                  )}
-                                </View>
-
-                                {/* User rank or Join CTA */}
-                                <View style={[styles.challengeReward, { borderTopColor: hexToRgba(arenaPrimary, 0.08) }]}>
-                                  {arena.user_opted_in ? (
-                                    <>
-                                      <Text style={[styles.arenaRankLabel, { color: arenaPrimary }]}>
-                                        {t('yourRank', { rank: arena.user_rank ?? '—' })}
-                                      </Text>
-                                    </>
-                                  ) : isUpcoming ? (
-                                    <>
-                                      <Ionicons name="time-outline" size={16} color={arenaPrimary} />
-                                      <Text style={[styles.challengeRewardText, { color: arenaPrimary }]}>{t('joinArena')}</Text>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Ionicons name="add-circle-outline" size={16} color={arenaPrimary} />
-                                      <Text style={[styles.challengeRewardText, { color: arenaPrimary }]}>{t('joinArena')}</Text>
-                                    </>
-                                  )}
-                                </View>
-                              </View>
-                            </LinearGradient>
-                          </PlatformBlur>
-                        </PressableCard>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
+        {/* ── Fixed header — sits above the scroll, always visible ── */}
+        <View style={styles.fixedHeader}>
+          <TouchableOpacity
+            style={styles.headerLeft}
+            onPress={() => router.push('/profile')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+              {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
+                <Image source={profile.avatar_url} style={styles.avatarImage} transition={200} />
               ) : (
-                <PressableCard
-                  style={[
-                    styles.arenaEmptyState,
-                    {
-                      borderTopColor: hexToRgba(branding.primary, 0.30),
-                      borderLeftColor: hexToRgba(branding.primary, 0.12),
-                      borderRightColor: hexToRgba(branding.primary, 0.08),
-                      borderBottomColor: hexToRgba(branding.primary, 0.06),
-                    },
-                  ]}
-                  onPress={() => router.push('/arenas')}
-                >
-                  <PlatformBlur intensity={40} tint="dark" style={styles.arenaEmptyBlur} androidColor="rgba(12,12,22,0.97)">
-                    <LinearGradient
-                      colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.07), 'rgba(12,12,22,0.0)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 0, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                      pointerEvents="none"
-                    />
-                    <View style={[styles.arenaEmptyIcon, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
-                      <Ionicons name="trophy-outline" size={28} color={branding.primary} />
-                    </View>
-                    <View style={styles.arenaEmptyTextContainer}>
-                      <Text style={styles.arenaEmptyTitle}>{t('noArenas')}</Text>
-                      <Text style={styles.arenaEmptySubtitle}>
-                        {t('noArenasSubtitle')}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={hexToRgba(branding.primary, 0.5)} />
-                  </PlatformBlur>
-                </PressableCard>
+                <Text style={styles.avatarText}>
+                  {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
+                </Text>
               )}
             </View>
-          )}
+            <Text style={styles.username}>{profile?.username || t('common:user')}</Text>
+          </TouchableOpacity>
 
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* SMARTCOACH CARD (Conditional)               */}
-          {/* ═══════════════════════════════════════════ */}
-          {activeGym?.smartcoach_enabled && (
-            <View style={styles.smartCoachSection}>
-              <TouchableOpacity
-                style={[
-                  styles.smartCoachCard, 
-                  { 
-                    width: SMARTCOACH_CARD_WIDTH,
-                    borderColor: hexToRgba(branding.primary, 0.3),
-                  }
-                ]}
-                onPress={() => {
-                  if (!isUnlocked) return;
-                  router.push('/smartcoach');
-                }}
-                activeOpacity={isUnlocked ? 0.9 : 1}
-                disabled={!isUnlocked}
-              >
-                <PlatformBlur intensity={50} tint="dark" style={styles.smartCoachBlur} androidColor="rgba(18,18,28,0.97)">
-                  <LinearGradient
-                    colors={[hexToRgba(branding.primary, 0.1), hexToRgba(branding.primary, 0.05), hexToRgba(branding.primary, 0.08)]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.smartCoachGradient}
-                  >
-                    <View style={styles.smartCoachContent}>
-                      <View style={styles.smartCoachHeaderRow}>
-                        <View style={[styles.smartCoachIconContainer, { backgroundColor: hexToRgba(branding.primary, 0.2) }]}>
-                          <Ionicons name="fitness" size={32} color={branding.primary} />
-                        </View>
-                        <View style={styles.smartCoachTextContainer}>
-                          <Text style={[styles.smartCoachTitle, { color: branding.primary }]}>SmartCoach</Text>
-                          <Text style={[styles.smartCoachSubtitle, { color: hexToRgba(branding.primary, 0.7) }]} numberOfLines={2}>
-                            {t('smartCoachSubtitle')}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={[{ backgroundColor: branding.primary, borderRadius: 20, padding: 4 }]}
-                        >
-                          <Ionicons name="arrow-forward-circle" size={28} color={branding.onPrimary} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </LinearGradient>
-                </PlatformBlur>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ═══════════════════════════════════════════ */}
-          {/* BENTO GRID - Bottom Cards Row              */}
-          {/* ═══════════════════════════════════════════ */}
-          <View style={styles.bottomCardsRow}>
-            {/* Rewards Store Card */}
-            <View style={styles.featureCardWrapper}>
-              <PressableCard
-                style={styles.featureCard}
-                onPress={() => router.push('/store')}
-                disabled={!isUnlocked}
-              >
-                <PlatformBlur intensity={50} tint="dark" style={styles.featureCardBlur} androidColor="rgba(12,12,22,0.97)">
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
-                  />
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="gift-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
-                    <Text style={styles.cardTitle}>{t('rewardsStore')}</Text>
-                    <Text 
-                      style={styles.cardSubtitle}
-                      numberOfLines={2}
-                      adjustsFontSizeToFit={true}
-                      minimumFontScale={0.8}
-                    >
-                      {t('rewardsStoreSubtitle')}
-                    </Text>
-                  </View>
-                  <View style={styles.cardFooter}>
-                    <Text style={[styles.cardAction, { color: branding.primary }]}>{t('viewStore')}</Text>
-                    <Ionicons name="arrow-forward" size={16} color={branding.primary} />
-                  </View>
-                </PlatformBlur>
-              </PressableCard>
-            </View>
-
-            {/* Trophy Room Card */}
-            <View style={styles.featureCardWrapper}>
-              <PressableCard
-                style={styles.featureCard}
-                onPress={() => router.push('/trophy-room')}
-                disabled={!isUnlocked}
-              >
-                <PlatformBlur intensity={50} tint="dark" style={styles.featureCardBlur} androidColor="rgba(12,12,22,0.97)">
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.01)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
-                  />
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="trophy-outline" size={22} color={branding.primary} style={{ marginBottom: 6 }} />
-                    <Text style={styles.cardTitle}>{t('trophyRoom')}</Text>
-                    <Text 
-                      style={styles.cardSubtitle}
-                      numberOfLines={2}
-                      adjustsFontSizeToFit={true}
-                      minimumFontScale={0.8}
-                    >
-                      {t('trophyRoomSubtitle')}
-                    </Text>
-                  </View>
-                  <View style={styles.cardFooter}>
-                    <Text style={[styles.cardAction, { color: branding.primary }]}>{t('viewBadges')}</Text>
-                    <Ionicons name="arrow-forward" size={16} color={branding.primary} />
-                  </View>
-                </PlatformBlur>
-              </PressableCard>
-            </View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
+              onPress={() => router.push('/store')}
+              activeOpacity={0.75}
+            >
+              <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
+                <Ionicons name="storefront-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
+              </PlatformBlur>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
+              onPress={() => {}}
+              activeOpacity={0.75}
+            >
+              <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
+                <Ionicons name="notifications-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
+              </PlatformBlur>
+            </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
 
-      {/* QR Scanner FAB with Glow */}
-      <View style={styles.fabContainer}>
-        <Animated.View style={[styles.fabGlow, glowStyle, { backgroundColor: branding.primary }]} />
-        <TouchableOpacity
-          style={[styles.fab, { shadowColor: branding.primary }]}
-          onPress={handleQRPress}
-          activeOpacity={0.9}
+        {/* ── Single unified scroll — the entire screen below the fixed header ── */}
+        <Animated.ScrollView
+          style={styles.outerScroll}
+          contentContainerStyle={styles.outerScrollContent}
+          stickyHeaderIndices={[1]}
+          contentInset={{ top: SCROLL_TOP_INSET }}
+          contentOffset={{ x: 0, y: -SCROLL_TOP_INSET }}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          scrollIndicatorInsets={{ top: 0, left: 0, bottom: 0, right: 0 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          onScroll={scrollHandler}
+          bounces
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={branding.primary}
+              colors={[branding.primary]}
+            />
+          }
         >
-          <LinearGradient
-            colors={[branding.primary, branding.primaryDark]}
-            style={styles.fabGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          {/* ── [0] Hero block — scrolls away naturally ── */}
+          <Animated.View
+            style={heroAnimStyle}
+            onLayout={(e) => { heroH.value = e.nativeEvent.layout.height; }}
           >
-            <Ionicons name="qr-code" size={48} color={branding.onPrimary} />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+            <HomeHeroPager
+              ref={heroPagerRef}
+              activityRingsRef={activityRingsRef}
+              streakDays={homeStats.streak}
+              todayDrops={homeStats.todayDrops}
+              todayBonusDrops={homeStats.todayBonusDrops}
+              dailyCap={dropLimits.maxDropsPerDay}
+              weeklyDrops={dropLimits.mintedWeek}
+              weeklyCap={dropLimits.maxDropsPerWeek}
+              totalGymDrops={localDrops}
+              onActivityRingPress={() => router.push('/wallet')}
+              onCompeteRingPress={() => router.push('/leaderboard')}
+              onChallengesRingPress={() => router.push('/challenges')}
+              onArenasRingPress={() => router.push('/arenas')}
+              totalMembers={rankForGauge.totalMembers}
+              rank={rankForGauge.rank}
+              rankPeriod="weekly"
+              challengeCompletedCount={challengeRingData.completedCount}
+              challengeTotalCount={challengeRingData.totalCount}
+              earnedBadgeCount={challengeRingData.earnedBadgeCount}
+              activeArenas={availableArenas ?? []}
+              activePage={activePage}
+              onPageChange={handleHeroPagerChange}
+              scrollPosition={heroPagerScrollPosition}
+            />
 
-      {/* Confetti Effect for Badge Earned */}
-      {showConfetti && (
-        <ConfettiEffect
-          visible={showConfetti}
-          onComplete={() => {
-            setShowConfetti(false);
-            clearNewBadge();
-          }}
-        />
-      )}
+            {/* Gym logo badge */}
+            <View style={styles.sheetLogoBadgeWrap} pointerEvents="none">
+              <View style={[styles.sheetLogoBadge, { borderColor: hexToRgba(branding.primary, 0.55) }]}>
+                {activeGym?.logo_url && !sheetLogoLoadFailed ? (
+                  <Image
+                    source={{ uri: activeGym.logo_url }}
+                    style={styles.sheetLogoBadgeImage}
+                    contentFit="cover"
+                    transition={180}
+                    cachePolicy="memory-disk"
+                    onError={() => setSheetLogoLoadFailed(true)}
+                  />
+                ) : (
+                  <Ionicons name="fitness-outline" size={16} color="rgba(255,255,255,0.70)" />
+                )}
+              </View>
+            </View>
+          </Animated.View>
+
+          {/* ── [1] Sticky section — MiniGaugeBar + tab bar ── */}
+          <View style={[styles.stickySection, styles.dashboardSheetBackground]}>
+            <PlatformBlur intensity={34} tint="dark" style={styles.stickySectionBlur} androidColor="rgba(12,15,24,0.88)">
+              <LinearGradient
+                colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.06), 'rgba(12,12,22,0.0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
+              {/* Mini gauge — fades in as hero scrolls away */}
+              <MiniGaugeBar
+                collapseProgress={collapseProgress}
+                activePage={activePage}
+                weeklyDrops={dropLimits.mintedWeek}
+                weeklyCap={dropLimits.maxDropsPerWeek}
+                rank={rankForGauge.rank}
+                totalMembers={rankForGauge.totalMembers}
+                challengeCompletedCount={challengeRingData.completedCount}
+                challengeTotalCount={challengeRingData.totalCount}
+                activeArenaCount={activeArenas.length}
+              />
+              <SliderTabsBar
+                tabs={sheetTabs}
+                activeKey={activeTabKey}
+                onChange={handleTabChange}
+                accentColor={tabAccent}
+                barStyle={styles.sheetTabBar}
+              />
+            </PlatformBlur>
+          </View>
+
+          {/* ── [2] Sheet content — tab pager with horizontal swipe ── */}
+          <View style={[styles.sheetContent, { backgroundColor: 'rgba(36, 29, 53, 0.93)' }]}>
+            <SliderTabs
+              tabs={sheetTabs}
+              activeKey={activeTabKey}
+              onChange={handleTabChange}
+              accentColor={tabAccent}
+              pageHeight={sheetMinHeight}
+              style={styles.sheetPagerClip}
+              hideBar
+            >
+              <SheetActivityContent
+                homeStats={homeStats}
+                dropLimits={dropLimits}
+                checkinStatus={checkinStatus}
+                upcomingHH={upcomingHH}
+                isHappyHourActive={!!upcomingHH.liveWindow}
+                gymName={activeGym?.name ?? ''}
+                onCheckinPress={() => router.push('/scan')}
+                onHappyHourPress={() => router.push('/happy-hours' as any)}
+                onStreakPress={() => router.push('/workout-history')}
+                onTodayPress={() => router.push('/stats?period=today' as any)}
+                onWeeklyPress={() => router.push('/stats?period=week' as any)}
+                onRewardPress={() => router.push('/store')}
+                localDropsBalance={localDrops}
+                isUnlocked={isUnlocked}
+                onSetAsHomeGym={handleSetAsHomeGym}
+              />
+              <SheetRankContent
+                gymId={activeGymId}
+                isUnlocked={isUnlocked}
+                hasSession={!!session?.user}
+                smartcoachEnabled={!!activeGym?.smartcoach_enabled}
+                weekly={competeStats.stats.weekly}
+                monthly={competeStats.stats.monthly}
+                allTime={competeStats.stats.allTime}
+                onLeaderboardPress={(period) => router.push({ pathname: '/leaderboard', params: { period } } as any)}
+                onInviteFriend={() => router.push('/invite-friend')}
+                onSmartCoachPress={() => { if (isUnlocked) router.push('/smartcoach'); }}
+              />
+              <SheetBadgesContent
+                isUnlocked={isUnlocked}
+                displayedChallenges={allChallenges}
+                challengesLoading={challengesLoading}
+                gymId={activeGymId}
+                earnedBadges={earnedBadges}
+                onChallengePress={(id) => router.push({ pathname: '/challenge-detail', params: { challengeId: id, gymId: activeGymId || '' } })}
+                onViewActiveChallenges={() => { if (isUnlocked) router.push({ pathname: '/challenges', params: { tab: 'active' } } as any); }}
+                onViewCompletedChallenges={() => { if (isUnlocked) router.push({ pathname: '/challenges', params: { tab: 'completed' } } as any); }}
+                onTrophyRoomPress={() => router.push('/trophy-room')}
+              />
+              <SheetArenaContent
+                isUnlocked={isUnlocked}
+                activeArenas={activeArenas}
+                onArenaPress={(id) => router.push({ pathname: '/arena/[id]', params: { id } })}
+                onViewAllArenas={() => router.push('/arenas')}
+              />
+            </SliderTabs>
+          </View>
+        </Animated.ScrollView>
+
+        {/* FAB — absolute overlay, always visible */}
+        <View style={[styles.startWorkoutWrap, { bottom: Math.max(insets.bottom + 10, 16) }]}>
+          <TouchableOpacity style={[styles.startWorkoutButton, { shadowColor: branding.primary }]} onPress={handleQRPress} activeOpacity={0.88}>
+            <LinearGradient
+              colors={[hexToRgba(branding.primaryDark, 0.95), hexToRgba(branding.primary, 0.95)]}
+              style={styles.startWorkoutGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <View style={styles.startWorkoutContent}>
+                <Ionicons name="qr-code" size={20} color={branding.onPrimary} />
+                <Text style={[styles.startWorkoutText, { color: branding.onPrimary }]}>{t('startWorkout')}</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Confetti Effect for Badge Earned */}
+        {showConfetti && (
+          <ConfettiEffect
+            visible={showConfetti}
+            onComplete={() => {
+              setShowConfetti(false);
+              clearNewBadge();
+            }}
+          />
+        )}
       </SafeAreaView>
     </Animated.View>
   );
@@ -1694,18 +1230,104 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#080808',
   },
+  scrollView: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#080808',
   },
-  scrollView: {
+  fixedHeader: {
+    height: 56,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 12,
+    zIndex: 30,
+  },
+  outerScroll: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 140,
+  outerScrollContent: {
+    flexGrow: 1,
+  },
+  stickySection: {
+    zIndex: 10,
+    overflow: 'hidden',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: 10,
+  },
+  stickySectionBlur: {
+    overflow: 'hidden',
+    backgroundColor: 'rgba(12,15,24,0.28)',
+  },
+  sheetContent: {
+    overflow: 'hidden',
+  },
+  sheetPagerClip: {
+    overflow: 'hidden',
+  },
+  tabPager: {
+    flex: 1,
+  },
+  sheetLogoBadgeWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  sheetLogoBadge: {
+    height: 34,
+    width: 94,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(43, 50, 68, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    padding: 2,
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  sheetLogoBadgeImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 13,
+  },
+  sheetTabBar: {
+    paddingHorizontal: 4,
+  },
+  parallaxBg: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: SCREEN_WIDTH + PARALLAX_EXTRA,
+  },
+  parallaxImg: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: SCREEN_WIDTH + PARALLAX_EXTRA,
+  },
+  dashboardSheetBackground: {
+    backgroundColor: 'rgba(36, 29, 53, 0.93)',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderLeftColor: 'rgba(255,255,255,0.06)',
+    borderRightColor: 'rgba(255,255,255,0.06)',
   },
   inviteCta: {
     borderRadius: 18,
@@ -1795,20 +1417,29 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: 'wrap',
   },
-  gymLogoContainer: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  headerActionButton: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
     flexShrink: 0,
   },
-  gymLogoImage: {
+  headerActionBlur: {
     width: '100%',
     height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   /* ─── Hero Section ──────────────────────── */
   heroSection: {
@@ -1816,10 +1447,21 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     paddingVertical: 8,
   },
+  heroPanel: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    gap: 10,
+  },
+  heroMetaBlock: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+  },
   heroGymName: {
     ...fontStyles.heading,
-    fontSize: 14,
-    marginTop: 8,
+    fontSize: 15,
+    letterSpacing: 0.6,
   },
 
   /* ─── Cards Container ───────────────────── */
@@ -1844,10 +1486,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionHeaderIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  sectionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sectionCardIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionCardLabel: {
+    ...fontStyles.heading,
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
   sectionTitle: {
     ...fontStyles.heading,
-    fontSize: 22,
-    color: '#FFFFFF',
+    fontSize: 19,
   },
   viewAllLink: {
     ...fontStyles.bodySemiBold,
@@ -1857,7 +1536,7 @@ const styles = StyleSheet.create({
 
   /* ─── Challenges ────────────────────────── */
   challengesSection: {
-    marginBottom: 24,
+    marginBottom: 0,
   },
   challengesScrollView: {
     marginHorizontal: -16,
@@ -2229,38 +1908,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  /* ─── QR FAB ────────────────────────────── */
-  fabContainer: {
+  startWorkoutWrap: {
     position: 'absolute',
-    bottom: 32,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20,
+    left: 16,
+    right: 16,
+    zIndex: 30,
   },
-  fabGlow: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    opacity: 0.4,
-  },
-  fab: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  startWorkoutButton: {
+    borderRadius: 16,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
     elevation: 10,
   },
-  fabGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
+  startWorkoutGradient: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  startWorkoutContent: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  startWorkoutText: {
+    ...fontStyles.heading,
+    fontSize: 16,
+    letterSpacing: 0.3,
   },
 
 
