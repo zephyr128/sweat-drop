@@ -213,6 +213,7 @@ serve(async (req) => {
               body: JSON.stringify({
                 client_ref: 'leaderboard_prize',
                 tokens: [profile.expo_push_token],
+                user_ids: [user.user_id],
                 title: '🏆 You Won a Leaderboard Prize!',
                 body: pushBody,
                 data: pushData,

@@ -176,6 +176,7 @@ export async function createCampaign(
 /**
  * Queue push deliveries for a draft (or failed) campaign.
  * Verifies `campaignId` belongs to `gymId`, then calls RPC `queue_engagement_delivery`.
+ * After queuing, immediately invokes the process-campaigns edge function.
  */
 export async function queueCampaign(
   campaignId: string,
@@ -221,6 +222,22 @@ export async function queueCampaign(
 
     if (result?.success !== true) {
       return { success: false, error: 'Queue operation did not succeed' };
+    }
+
+    // Fire-and-forget: invoke process-campaigns to send immediately
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && serviceKey) {
+      fetch(`${supabaseUrl}/functions/v1/process-campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ campaign_id: campaignId }),
+      }).catch((err) => {
+        logger.error('Failed to invoke process-campaigns', { error: err, campaignId });
+      });
     }
 
     return {

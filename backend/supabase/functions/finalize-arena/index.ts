@@ -116,10 +116,10 @@ serve(async (req) => {
         const winnerUserIds: string[] = [];
 
         if (winners_count > 0) {
-          // Fetch winners with prizes (redemption_id IS NOT NULL in arena_results)
+          // Fetch winners with prizes + redemption details
           const { data: winnerResults } = await supabase
             .from('arena_results')
-            .select('user_id')
+            .select('user_id, rank, redemption_id, redemptions!inner(id, redemption_code)')
             .eq('arena_id', arena.id)
             .not('redemption_id', 'is', null);
 
@@ -138,7 +138,25 @@ serve(async (req) => {
               .map((p: any) => p.expo_push_token)
               .filter((t: string | null) => isExpoPushToken(t));
 
+            // Build per-winner redemption lookup
+            const redemptionByUser = new Map<string, { id: string; code: string | null; rank: number }>();
+            for (const wr of winnerResults || []) {
+              const redemption = wr.redemptions as any;
+              redemptionByUser.set(wr.user_id, {
+                id: redemption?.id ?? wr.redemption_id,
+                code: redemption?.redemption_code ?? null,
+                rank: wr.rank,
+              });
+            }
+
             if (winnerTokens.length > 0) {
+              // Find first winner's code for the shared push body
+              const firstWinner = winnerResults?.[0];
+              const sampleCode = (firstWinner?.redemptions as any)?.redemption_code;
+              const pushBody = sampleCode
+                ? `Congratulations! You won a prize in ${arena.name}. Show code ${sampleCode} at the desk to collect! 🎁`
+                : `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`;
+
               const pushResponse = await fetch(
                 `${supabaseUrl}/functions/v1/send-push`,
                 {
@@ -150,8 +168,9 @@ serve(async (req) => {
                   body: JSON.stringify({
                     client_ref: 'finalize_arena_winners',
                     tokens: winnerTokens,
+                    user_ids: winnerIds,
                     title: '🏆 Arena Prize Won!',
-                    body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
+                    body: pushBody,
                     data: {
                       type: 'arena_prize',
                       arena_id: arena.id,
@@ -176,10 +195,12 @@ serve(async (req) => {
           .eq('arena_id', arena.id)
           .not('profiles.expo_push_token', 'is', null);
 
-        const nonWinnerTokens = (allParticipants || [])
-          .filter((p: any) => !winnerUserIds.includes(p.user_id))
+        const nonWinnerParticipants = (allParticipants || [])
+          .filter((p: any) => !winnerUserIds.includes(p.user_id));
+        const nonWinnerTokens = nonWinnerParticipants
           .map((p: any) => p.profiles?.expo_push_token)
           .filter((t: string | null) => isExpoPushToken(t));
+        const nonWinnerUserIds = nonWinnerParticipants.map((p: any) => p.user_id);
 
         if (nonWinnerTokens.length > 0) {
           const pushResponse = await fetch(
@@ -193,6 +214,7 @@ serve(async (req) => {
               body: JSON.stringify({
                 client_ref: 'finalize_arena_participants',
                 tokens: nonWinnerTokens,
+                user_ids: nonWinnerUserIds,
                 title: '🏁 Arena Ended',
                 body: `${arena.name} has ended. Check your final ranking!`,
                 data: {

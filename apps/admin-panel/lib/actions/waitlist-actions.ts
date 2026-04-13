@@ -65,7 +65,7 @@ export async function getWaitlistEntries(statusFilter?: WaitlistStatus | 'all'):
       .map((e) => e.user_id)
       .filter((uid): uid is string => uid !== null);
 
-    let profileMap: Record<string, { email: string | null; username: string | null }> = {};
+    const profileMap: Record<string, { email: string | null; username: string | null }> = {};
     if (userIds.length > 0) {
       const { data: profiles } = await admin
         .from('profiles')

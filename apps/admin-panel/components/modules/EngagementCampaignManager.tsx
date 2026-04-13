@@ -34,9 +34,9 @@ const TEMPLATE_OPTIONS = [
 
 const DEEP_LINK_OPTIONS = [
   { value: '', label: 'None (open app)' },
-  { value: 'sweatdrop://home', label: 'Home screen' },
-  { value: 'sweatdrop://store', label: 'Reward store' },
-  { value: 'sweatdrop://challenges', label: 'Challenges' },
+  { value: '/home', label: 'Home screen' },
+  { value: '/store', label: 'Reward store' },
+  { value: '/challenges', label: 'Challenges' },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof Clock }> = {
