@@ -12,6 +12,12 @@ export interface PushRequest {
   client_ref?: string;
   /** If true, include legacy `result` array with raw Expo JSON per batch (large). Default false. */
   include_raw_batches?: boolean;
+  /**
+   * Optional user IDs matching each token 1:1. When provided, the notification
+   * is persisted to user_notifications for the in-app inbox. Callers that batch
+   * tokens from multiple users should pass the corresponding user_id for each.
+   */
+  user_ids?: string[];
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -31,6 +37,7 @@ export function parsePushRequest(raw: unknown):
   const data = raw.data;
   const client_ref = raw.client_ref;
   const include_raw_batches = raw.include_raw_batches;
+  const user_ids = raw.user_ids;
 
   if (!Array.isArray(tokens)) {
     return { ok: false, error: 'tokens must be an array' };
@@ -56,6 +63,9 @@ export function parsePushRequest(raw: unknown):
   ) {
     return { ok: false, error: 'include_raw_batches must be boolean when provided' };
   }
+  if (user_ids !== undefined && !Array.isArray(user_ids)) {
+    return { ok: false, error: 'user_ids must be an array when provided' };
+  }
 
   const coercedTokens = tokens.filter((t): t is string => typeof t === 'string');
 
@@ -68,6 +78,9 @@ export function parsePushRequest(raw: unknown):
       data: data as Record<string, unknown> | undefined,
       client_ref: client_ref && client_ref.length > 64 ? client_ref.slice(0, 64) : client_ref,
       include_raw_batches: include_raw_batches === true,
+      user_ids: Array.isArray(user_ids)
+        ? user_ids.filter((id): id is string => typeof id === 'string')
+        : undefined,
     },
   };
 }

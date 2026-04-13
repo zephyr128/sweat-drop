@@ -67,7 +67,7 @@ serve(async (req) => {
       );
     }
 
-    const { tokens, title, body, data, client_ref, include_raw_batches } = parsed.value;
+    const { tokens, title, body, data, client_ref, include_raw_batches, user_ids } = parsed.value;
     const requested = tokens.length;
 
     if (requested === 0) {
@@ -284,6 +284,43 @@ serve(async (req) => {
     }
   }
 
+  // Persist to in-app notification inbox when caller provides user_ids.
+  // Runs after push delivery so inbox latency doesn't block the response.
+  let inbox_persisted = 0;
+  if (user_ids && user_ids.length > 0) {
+    try {
+      const notifType = (data?.type as string) || client_ref || 'general';
+      const rows = [...new Set(user_ids)]
+        .filter((uid) => typeof uid === 'string' && uid.length > 0)
+        .map((uid) => ({
+          user_id: uid,
+          type: notifType,
+          title,
+          body,
+          data: data ?? {},
+        }));
+      if (rows.length > 0) {
+        const { count, error: inboxErr } = await supabaseAdmin
+          .from('user_notifications')
+          .insert(rows, { count: 'exact' });
+        if (inboxErr) {
+          console.error(JSON.stringify({
+            event: 'send-push:inbox_persist_error',
+            error: (inboxErr.message ?? '').slice(0, 160),
+          }));
+        } else {
+          inbox_persisted = count ?? rows.length;
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown';
+      console.error(JSON.stringify({
+        event: 'send-push:inbox_persist_exception',
+        error: msg.slice(0, 160),
+      }));
+    }
+  }
+
   const batches_attempted = batch_summaries.length;
   const sent = valid_tokens;
   const ok = valid_tokens === 0 || receipt_ok > 0;
@@ -302,6 +339,7 @@ serve(async (req) => {
     batches_failed,
     batch_summaries,
     tokens_cleared,
+    inbox_persisted,
   };
 
     if (include_raw_batches) {
@@ -323,6 +361,7 @@ serve(async (req) => {
       batches_attempted,
       batches_failed,
       tokens_cleared,
+      inbox_persisted,
     }));
 
     return new Response(JSON.stringify(payload), {
