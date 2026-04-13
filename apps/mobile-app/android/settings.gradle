@@ -1,5 +1,14 @@
 pluginManagement {
-  def nodeExecutable = System.getenv("NODE_BINARY") ?: ["/usr/local/bin/node", "/usr/bin/node", "/opt/homebrew/bin/node"].find { new File(it).exists() } ?: "node"
+  // Read local.properties to find the node binary path.
+  // Android Studio doesn't inherit the shell PATH, so we need an explicit path.
+  def localProps = new Properties()
+  def localPropsFile = new File(rootDir, "local.properties")
+  if (localPropsFile.exists()) localProps.load(localPropsFile.newDataInputStream())
+  def nodeFromLocalProps = localProps.getProperty("node.binary")
+  def nodeExecutable = System.getenv("NODE_BINARY")
+    ?: (nodeFromLocalProps && new File(nodeFromLocalProps).exists() ? nodeFromLocalProps : null)
+    ?: ["/usr/local/bin/node", "/usr/bin/node", "/opt/homebrew/bin/node"].find { new File(it).exists() }
+    ?: "node"
 
   def reactNativeGradlePlugin = new File(
     providers.exec {

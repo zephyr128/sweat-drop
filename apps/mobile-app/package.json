@@ -11,7 +11,11 @@
     "type-check": "tsc --noEmit",
     "test:integration": "tsx --test tests/**/*.test.ts",
     "test": "pnpm test:integration",
-    "postinstall": "node $(node --print \"require.resolve('@shopify/react-native-skia/scripts/install-skia.mjs')\") || true"
+    "postinstall": "node $(node --print \"require.resolve('@shopify/react-native-skia/scripts/install-skia.mjs')\") || true",
+    "build:android": "bash scripts/build-android-release.sh",
+    "build:android:prod": "bash scripts/build-android-release.sh --env prod",
+    "build:android:dev": "bash scripts/build-android-release.sh --env dev",
+    "build:android:no-bump": "bash scripts/build-android-release.sh --no-bump"
   },
   "dependencies": {
     "@expo-google-fonts/bebas-neue": "^0.4.1",

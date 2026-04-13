@@ -17,3 +17,7 @@ local.properties
 
 # Local Sentry auth token file (never commit secrets)
 sentry.properties
+
+# Release signing credentials (never commit secrets)
+keystore.properties
+app/upload-keystore.jks
