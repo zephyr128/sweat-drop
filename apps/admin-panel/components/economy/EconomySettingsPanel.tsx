@@ -512,10 +512,11 @@ function SliderField({ label, tooltip, value, onChange, min, max, rec, rsdHint }
 
 function HealthCard({ risk, riskLabel, summary, config }: { risk: EconomySummary['risk']; riskLabel: string; summary: EconomySummary; config: EconomyConfig }) {
   const burnPct = Math.round(summary.burnMintRatio * 100);
-  const diagnoses = summary.isEmpty ? [] : diagnoseHealth(summary, config);
+  const isEmpty = summary.minted30d <= 0 && summary.burned30d <= 0;
+  const diagnoses = isEmpty ? [] : diagnoseHealth(summary, config);
 
   // New gym — no activity yet, show neutral onboarding state
-  if (summary.isEmpty) {
+  if (isEmpty) {
     return (
       <div className="bg-zinc-500/5 border border-zinc-500/20 rounded-xl p-5">
         <div className="flex items-start gap-3">

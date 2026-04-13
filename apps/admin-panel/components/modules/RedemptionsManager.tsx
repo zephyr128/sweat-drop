@@ -129,7 +129,11 @@ export function RedemptionsManager({
 
   const getRewardName = (redemption: Redemption) => {
     if (redemption.rewards?.name) return redemption.rewards.name;
-    if (redemption.description) return redemption.description;
+    if (redemption.description) {
+      const dashIdx = redemption.description.indexOf(' — ');
+      if (dashIdx !== -1) return redemption.description.slice(dashIdx + 3);
+      return redemption.description;
+    }
     return 'Unknown Reward';
   };
 

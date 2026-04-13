@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useTransition, useRef } from 'react';
 import {
   Ticket, Clock, CheckCircle2, XCircle, Droplet, User,
-  Gift, Loader2, X,
+  Gift, Loader2, X, Trophy, Swords, ShoppingBag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
@@ -46,12 +46,43 @@ function formatDate(d: string) {
   });
 }
 
+type SourceType = 'reward_store' | 'leaderboard_prize' | 'arena_prize';
+
+const SOURCE_META: Record<SourceType, { label: string; icon: typeof ShoppingBag; color: string }> = {
+  reward_store:      { label: 'Store',       icon: ShoppingBag, color: 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/30' },
+  leaderboard_prize: { label: 'Leaderboard', icon: Trophy,      color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  arena_prize:       { label: 'Arena',        icon: Swords,      color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+};
+
+function SourceBadge({ sourceType }: { sourceType: string | null }) {
+  const key = (sourceType || 'reward_store') as SourceType;
+  const meta = SOURCE_META[key] ?? SOURCE_META.reward_store;
+  const Icon = meta.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${meta.color}`}>
+      <Icon className="w-2.5 h-2.5" />
+      {meta.label}
+    </span>
+  );
+}
+
+function getDisplayName(row: RedemptionRow): string {
+  if (row.reward_name) return row.reward_name;
+  if (row.description) {
+    // Strip the "Leaderboard Prize: #1 ..." prefix if present, return the prize name part
+    const dashIdx = row.description.indexOf(' — ');
+    if (dashIdx !== -1) return row.description.slice(dashIdx + 3);
+    return row.description;
+  }
+  return 'Unknown';
+}
+
 const COLUMNS: ColumnDef<RedemptionRow>[] = [
   {
     key: 'redemption_code',
     label: 'Code',
     render: (row) => (
-      <span className="font-mono text-[#00E5FF] text-sm tracking-wider">{row.redemption_code}</span>
+      <span className="font-mono text-[#00E5FF] text-sm tracking-wider">{row.redemption_code || '—'}</span>
     ),
   },
   {
@@ -65,7 +96,10 @@ const COLUMNS: ColumnDef<RedemptionRow>[] = [
     key: 'reward_name',
     label: 'Reward',
     render: (row) => (
-      <span className="text-zinc-300">{row.reward_name || '—'}</span>
+      <div className="flex flex-col gap-1">
+        <span className="text-zinc-300 text-sm">{getDisplayName(row)}</span>
+        <SourceBadge sourceType={row.source_type} />
+      </div>
     ),
   },
   {
@@ -182,8 +216,11 @@ function RedemptionDetailModal({
               <Gift className="w-5 h-5 text-[#00E5FF]" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">{row.reward_name || 'Redemption'}</h3>
-              <p className="text-xs font-mono text-[#00E5FF] tracking-wider">{row.redemption_code}</p>
+              <div className="flex items-center gap-2 mb-0.5">
+                <h3 className="text-base font-bold text-white">{getDisplayName(row)}</h3>
+                <SourceBadge sourceType={row.source_type} />
+              </div>
+              <p className="text-xs font-mono text-[#00E5FF] tracking-wider">{row.redemption_code || '—'}</p>
             </div>
           </div>
           <button
@@ -229,7 +266,7 @@ function RedemptionDetailModal({
                 <Gift className="w-3.5 h-3.5 text-zinc-500" />
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Reward</span>
               </div>
-              <p className="text-sm text-zinc-300">{row.reward_name || '—'}</p>
+              <p className="text-sm text-zinc-300">{getDisplayName(row)}</p>
             </div>
           </div>
 
@@ -283,6 +320,7 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
     page: 1, limit: 25, sortBy: 'created_at', sortDir: 'desc',
     filters: { status: 'all' },
   });
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [selectedRow, setSelectedRow] = useState<RedemptionRow | null>(null);
 
   const fetchData = useCallback((q: DataTableQuery) => {
@@ -324,13 +362,50 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
     onActionComplete?.();
   }, [fetchData, query, onActionComplete]);
 
+  const displayedItems = sourceFilter === 'all'
+    ? data.items
+    : data.items.filter((r) => (r.source_type || 'reward_store') === sourceFilter);
+
   return (
     <>
-      <div className="flex items-center justify-end mb-2">
+      <div className="flex items-center justify-between mb-2">
+        {/* Source type chip filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(['all', 'reward_store', 'leaderboard_prize', 'arena_prize'] as const).map((st) => {
+            const isActive = sourceFilter === st;
+            if (st === 'all') {
+              return (
+                <button
+                  key="all"
+                  onClick={() => setSourceFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                    isActive ? 'bg-[#00E5FF] text-black' : 'bg-[#1A1A1A] text-[#808080] hover:text-white border border-[#333]'
+                  }`}
+                >
+                  All sources
+                </button>
+              );
+            }
+            const meta = SOURCE_META[st];
+            const Icon = meta.icon;
+            return (
+              <button
+                key={st}
+                onClick={() => setSourceFilter(st)}
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all border ${
+                  isActive ? `${meta.color} opacity-100` : 'bg-[#1A1A1A] text-[#808080] hover:text-white border-[#333]'
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
         <LiveIndicator label="Live — auto-refreshing" />
       </div>
       <DataTable<RedemptionRow>
-        data={data.items}
+        data={displayedItems}
         columns={COLUMNS}
         total={data.total}
         page={data.page}

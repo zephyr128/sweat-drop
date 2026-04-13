@@ -18,6 +18,9 @@ import {
   Info,
   Play,
   AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  KeyRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -26,6 +29,8 @@ import {
   getLeaderboardRewards,
   updateLeaderboardRewards,
   distributeLeaderboardPrizesNow,
+  getDistributionHistory,
+  type DistributionSnapshot,
 } from '@/lib/actions/leaderboard-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
 
@@ -63,7 +68,7 @@ interface LeaderboardHistoryProps {
   gymName: string;
 }
 
-type Tab = 'weekly' | 'monthly' | 'all_time' | 'history';
+type Tab = 'weekly' | 'monthly' | 'all_time' | 'history' | 'distributions';
 
 const RANK_ICONS = [Trophy, Medal, Award];
 const RANK_COLORS = [
@@ -478,6 +483,194 @@ function SnapshotHistory({ gymId }: { gymId: string }) {
   );
 }
 
+function RedemptionStatusBadge({ status, confirmedAt }: { status: string; confirmedAt: string | null }) {
+  if (status === 'confirmed') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+        <CheckCircle2 className="w-3 h-3" />
+        Confirmed {confirmedAt ? formatDate(confirmedAt) : ''}
+      </span>
+    );
+  }
+  if (status === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+        <CircleDashed className="w-3 h-3" />
+        Pending Collection
+      </span>
+    );
+  }
+  if (status === 'cancelled') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+        <AlertTriangle className="w-3 h-3" />
+        Cancelled
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs text-[#808080] bg-[#1A1A1A] px-2 py-0.5 rounded-full">{status}</span>
+  );
+}
+
+function DistributionHistory({ gymId }: { gymId: string }) {
+  const [distributions, setDistributions] = useState<DistributionSnapshot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const perPage = 10;
+
+  const loadDistributions = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    const result = await getDistributionHistory(gymId, page, perPage);
+    if (result.success && result.data) {
+      setDistributions(result.data);
+      setTotal(result.total ?? 0);
+    } else if (!result.success) {
+      setLoadError(result.error || 'Failed to load distribution history');
+    }
+    setLoading(false);
+  }, [gymId, page]);
+
+  useEffect(() => {
+    loadDistributions();
+  }, [loadDistributions]);
+
+  const totalPages = Math.ceil(total / perPage);
+
+  if (loading) {
+    return <div className="text-center py-8 text-[#808080]">Loading distribution history...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        {loadError}
+      </div>
+    );
+  }
+
+  if (distributions.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Gift className="w-12 h-12 text-[#333] mx-auto mb-3" />
+        <p className="text-[#808080]">No prizes distributed yet</p>
+        <p className="text-xs text-[#555] mt-1">Distributions will appear here once prizes are sent to winners</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {distributions.map((dist) => (
+        <div key={dist.snapshot_id} className="bg-[#0A0A0A] border border-[#333] rounded-lg overflow-hidden">
+          {/* Header */}
+          <div className="p-4 flex items-center justify-between border-b border-[#222]">
+            <div className="flex items-center gap-3">
+              <span
+                className={`px-2 py-1 rounded text-xs font-medium ${
+                  dist.period === 'weekly'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'bg-purple-500/20 text-purple-400'
+                }`}
+              >
+                {dist.period.toUpperCase()}
+              </span>
+              <span className="text-sm text-white font-medium">
+                {formatPeriodRange(dist.period_start, dist.period_end)}
+              </span>
+            </div>
+            <span className="text-xs text-[#555]">Distributed {formatDate(dist.distributed_at)}</span>
+          </div>
+
+          {/* Winners */}
+          <div className="divide-y divide-[#1A1A1A]">
+            {dist.winners.length === 0 ? (
+              <p className="text-xs text-[#555] text-center py-4">No winners recorded</p>
+            ) : (
+              dist.winners.map((winner, idx) => {
+                const RankIcon = idx < 3 ? RANK_ICONS[idx] : null;
+                return (
+                  <div key={winner.user_id} className="p-4 flex items-center gap-4">
+                    {/* Rank icon */}
+                    <div className="w-8 flex justify-center shrink-0">
+                      {RankIcon ? (
+                        <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${RANK_COLORS[idx]} flex items-center justify-center`}>
+                          <RankIcon className="w-3.5 h-3.5 text-black" />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#808080] font-mono">#{winner.rank}</span>
+                      )}
+                    </div>
+
+                    {/* Name + prize */}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${idx < 3 ? RANK_TEXT_COLORS[idx] : 'text-white'}`}>
+                        {winner.username || 'Unknown'}
+                      </p>
+                      {winner.prize_name && (
+                        <p className="text-xs text-[#808080] mt-0.5 truncate">{winner.prize_name}</p>
+                      )}
+                    </div>
+
+                    {/* Code */}
+                    {winner.redemption_code ? (
+                      <div className="flex items-center gap-1.5 bg-[#1A1A1A] border border-[#333] rounded-lg px-2.5 py-1.5 shrink-0">
+                        <KeyRound className="w-3 h-3 text-[#00E5FF]" />
+                        <span className="font-mono text-sm text-[#00E5FF] tracking-widest font-bold">
+                          {winner.redemption_code}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-[#555] italic shrink-0">No code</span>
+                    )}
+
+                    {/* Status */}
+                    <div className="shrink-0">
+                      <RedemptionStatusBadge
+                        status={winner.status}
+                        confirmedAt={winner.confirmed_at}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ))}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-[#333]">
+          <p className="text-xs text-[#808080]">
+            {total} distribution{total !== 1 ? 's' : ''} total
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+              className="p-2 rounded bg-[#0A0A0A] border border-[#333] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:border-[#555] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm text-[#808080] px-2">{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page === totalPages}
+              className="p-2 rounded bg-[#0A0A0A] border border-[#333] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:border-[#555] transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) {
   const [activeTab, setActiveTab] = useState<Tab>('weekly');
   const [weeklyBoard, setWeeklyBoard] = useState<CurrentLeaderboardEntry[]>([]);
@@ -515,7 +708,8 @@ export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) 
     { key: 'weekly', label: 'Weekly' },
     { key: 'monthly', label: 'Monthly' },
     { key: 'all_time', label: 'All Time' },
-    { key: 'history', label: 'History' },
+    { key: 'history', label: 'Snapshots' },
+    { key: 'distributions', label: 'Distributions' },
   ];
 
   return (
@@ -628,12 +822,30 @@ export function LeaderboardHistory({ gymId, gymName }: LeaderboardHistoryProps) 
           <div className="p-6 border-b border-[#333]">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#00E5FF]" />
-              Leaderboard History
+              Leaderboard Snapshots
             </h2>
-            <p className="text-sm text-[#808080] mt-1">Past period snapshots & prize distributions</p>
+            <p className="text-sm text-[#808080] mt-1">Past period snapshots & prize distribution status</p>
           </div>
           <div className="p-6">
             <SnapshotHistory gymId={gymId} />
+          </div>
+        </div>
+      )}
+
+      {/* Distributions tab */}
+      {activeTab === 'distributions' && (
+        <div className="bg-[#1A1A1A] rounded-xl border border-[#1A1A1A] overflow-hidden">
+          <div className="p-6 border-b border-[#333]">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Gift className="w-5 h-5 text-[#00E5FF]" />
+              Prize Distribution Log
+            </h2>
+            <p className="text-sm text-[#808080] mt-1">
+              Winners, 4-char redemption codes, and confirmation status for every distributed period
+            </p>
+          </div>
+          <div className="p-6">
+            <DistributionHistory gymId={gymId} />
           </div>
         </div>
       )}
