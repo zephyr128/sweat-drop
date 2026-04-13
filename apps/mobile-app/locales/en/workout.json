@@ -2,6 +2,7 @@
   "workout": "Workout",
   "endWorkout": "End workout",
   "finishWorkout": "Finish workout",
+  "savingWorkout": "Saving workout…",
   "endWorkoutConfirm": "Are you sure you want to end the workout?",
   "endWorkoutTitle": "End workout",
   "paused": "Paused",

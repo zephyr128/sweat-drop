@@ -1259,6 +1259,7 @@ export default function HomeScreen() {
               />
               <SheetArenaContent
                 isUnlocked={isUnlocked}
+                hasSession={!!session?.user}
                 activeArenas={activeArenas}
                 onArenaPress={navToArena}
                 onViewAllArenas={navToAllArenas}

@@ -52,7 +52,7 @@ export const SheetRankContent = React.memo(function SheetRankContent({
   const { rewards: monthlyRewards } = useLeaderboardRewards(gymId, 'monthly');
   const { pending: pendingPrizes } = useMyLeaderboardPrizes(gymId);
 
-  const firstPendingPrize = pendingPrizes[0] ?? null;
+  const firstPendingPrize = pendingPrizes.find((p) => p.source_type === 'leaderboard_prize') ?? null;
 
   return (
     <View style={styles.container}>
@@ -71,7 +71,7 @@ export const SheetRankContent = React.memo(function SheetRankContent({
             pointerEvents="none"
           />
           <View style={styles.prizeBannerIcon}>
-            <Text style={styles.prizeBannerEmoji}>🏆</Text>
+            <Ionicons name="trophy" size={22} color={GOLD} />
           </View>
           <View style={styles.prizeBannerBody}>
             <Text style={styles.prizeBannerTitle}>{t('prize.wonTitle')}</Text>
@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  prizeBannerEmoji: { fontSize: 22 },
   prizeBannerBody: { flex: 1 },
   prizeBannerTitle: {
     ...fontStyles.bodySemiBold,

@@ -455,4 +455,17 @@ export const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: theme.spacing.lg,
   },
+  finishingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 200,
+  },
+  finishingOverlayText: {
+    ...fontStyles.heading,
+    color: theme.colors.text,
+    fontSize: 18,
+    marginTop: theme.spacing.md,
+  },
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
@@ -140,9 +141,40 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
     [loadChallenges]
   );
 
+  // Initial load + reload when gym/user changes
   useEffect(() => {
     loadChallenges();
   }, [loadChallenges]);
+
+  // Refresh when screen comes back into focus (e.g. returning from session summary)
+  useFocusEffect(
+    useCallback(() => {
+      void loadChallenges();
+    }, [loadChallenges])
+  );
+
+  // Realtime subscription: re-fetch whenever this user's challenge_progress changes.
+  // award_drops() updates challenge_progress rows, so this fires immediately after
+  // a workout without needing a manual pull-to-refresh.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`challenge_progress_${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'challenge_progress',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => { void loadChallenges(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.user?.id, loadChallenges]);
 
   return {
     challenges,

@@ -11,7 +11,7 @@ import {
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
@@ -25,7 +25,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { BottomSheet } from '@/components/BottomSheet';
 
@@ -180,12 +180,16 @@ const filterStyles = StyleSheet.create({
 
 export default function RedemptionsScreen() {
   const { t } = useTranslation('redemptions');
+  const { highlight } = useLocalSearchParams<{ highlight?: string }>();
   const showModal = useAppModal((s) => s.showModal);
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const { getActiveGymId } = useGymStore();
   const branding = useBranding();
   const activeGymId = getActiveGymId();
+  const scrollRef = useRef<ScrollView>(null);
+  const cardPositions = useRef<Record<string, number>>({});
+  const [highlightId, setHighlightId] = useState<string | null>(highlight ?? null);
 
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('all');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -259,10 +263,27 @@ export default function RedemptionsScreen() {
     void load(activeFilter);
   }, [activeGymId, session?.user?.id]));
 
+  const ts = tabStates[activeFilter];
+
+  // Scroll to highlighted card after data loads
+  useEffect(() => {
+    if (!highlightId || ts.loading || ts.data.length === 0) return;
+    const idx = ts.data.findIndex((r: any) => r.id === highlightId);
+    if (idx < 0) return;
+    const timer = setTimeout(() => {
+      const y = cardPositions.current[highlightId];
+      if (y != null) {
+        scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+      }
+      // Clear highlight after a few seconds
+      setTimeout(() => setHighlightId(null), 3000);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [highlightId, ts.data, ts.loading]);
+
   // ── Active filter display props ──
   const activeOpt = FILTER_OPTIONS.find((f) => f.key === activeFilter)!;
   const activeColor = activeFilter === 'all' ? branding.primary : activeOpt.color;
-  const ts = tabStates[activeFilter];
 
   // ── Helpers ──
   const getRedemptionName = (r: any) => {
@@ -335,14 +356,18 @@ export default function RedemptionsScreen() {
     const imageUrl = redemption.rewards?.image_url;
     const sourceIcon = getSourceIcon(redemption.source_type);
     const isPending = redemption.status === 'pending';
+    const isHighlighted = highlightId === redemption.id;
 
     return (
-      <Animated.View entering={FadeInDown.delay(30 + index * 40).duration(320)}>
+      <Animated.View
+        entering={FadeInDown.delay(30 + index * 40).duration(320)}
+        onLayout={(e) => { cardPositions.current[redemption.id] = e.nativeEvent.layout.y; }}
+      >
         <View style={[styles.card, {
-          borderTopColor:    hexToRgba(status.color, 0.30),
-          borderLeftColor:   hexToRgba(status.color, 0.12),
-          borderRightColor:  'rgba(255,255,255,0.04)',
-          borderBottomColor: 'rgba(255,255,255,0.03)',
+          borderTopColor:    hexToRgba(status.color, isHighlighted ? 0.70 : 0.30),
+          borderLeftColor:   hexToRgba(status.color, isHighlighted ? 0.50 : 0.12),
+          borderRightColor:  isHighlighted ? hexToRgba(status.color, 0.30) : 'rgba(255,255,255,0.04)',
+          borderBottomColor: isHighlighted ? hexToRgba(status.color, 0.20) : 'rgba(255,255,255,0.03)',
         }]}>
           <PlatformBlur intensity={50} tint="dark" style={styles.cardBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
@@ -442,7 +467,7 @@ export default function RedemptionsScreen() {
         </View>
       </Animated.View>
     );
-  }, [branding.primary, cancellingId, t]);
+  }, [branding.primary, cancellingId, highlightId, t]);
 
   return (
     <View style={styles.container}>
@@ -497,6 +522,7 @@ export default function RedemptionsScreen() {
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           style={styles.scrollView}
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 32 }]}
           showsVerticalScrollIndicator={false}

@@ -196,6 +196,7 @@ export default function WorkoutScreen() {
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [pausedTime, setPausedTime] = useState<Date | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
   const [pauseReason, setPauseReason] = useState<'manual' | 'inactivity' | 'connection'>('manual');
   // REMOVED: challengeMessage state - challenge completions are now shown in session summary
   // Challenge progress is automatically updated via award_drops() when workout ends
@@ -1308,18 +1309,17 @@ export default function WorkoutScreen() {
         idleSyncRef.current = true;
         
         try {
+          // Only sync duration — drops_earned is set exclusively by award_drops()
+          // and writing client-side estimates here would poison its idempotency check.
           await supabase
             .from('sessions')
             .update({
-              drops_earned: Math.round(earnedDropsShared.value),
               duration_seconds: duration,
               updated_at: new Date().toISOString(),
             })
             .eq('id', session.id);
-          
-          // Battery Optimization: Only log critical events
         } catch (error) {
-          log.error('[Workout] Final sync error:', error);
+          log.error('[Workout] Idle sync error:', error);
         }
       }, 15000); // 15 seconds
     } else if (smoothedRPMShared.value > 0) {
@@ -2327,11 +2327,11 @@ export default function WorkoutScreen() {
       return;
     }
     isFinalizingRef.current = true;
+    setIsFinishing(true);
     try {
       await _handleFinishWorkoutCore();
     } catch (fatalError) {
       log.error('[Workout] handleFinishWorkout fatal error:', fatalError);
-      // Fallback: always give the user a way out
       if (isMountedRef.current) {
         try {
           router.replace('/scan');
@@ -2341,6 +2341,7 @@ export default function WorkoutScreen() {
       }
     } finally {
       isFinalizingRef.current = false;
+      setIsFinishing(false);
     }
   };
 
@@ -2505,6 +2506,9 @@ export default function WorkoutScreen() {
     let finalSyncOk = false;
     try {
       await withRetry(async () => {
+        // Do NOT set is_active=false or ended_at here — award_drops() does that
+        // atomically along with wallet crediting. Setting it early causes award_drops()
+        // to hit its idempotency guard and skip the entire calculation.
         const { error: syncError } = await supabase
           .from('sessions')
           .update({
@@ -3286,6 +3290,13 @@ export default function WorkoutScreen() {
         finishButtonStyle={finishButtonStyle}
         finishWorkoutLabel={t('finishWorkout')}
       />
+
+      {isFinishing && (
+        <View style={styles.finishingOverlay}>
+          <ActivityIndicator size="large" color={brandingHook.primary} />
+          <Text style={styles.finishingOverlayText}>{t('savingWorkout')}</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

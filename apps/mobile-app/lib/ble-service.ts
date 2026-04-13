@@ -13,8 +13,11 @@
  * at connection time based on available services, or forced via setProtocol().
  */
 
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 
+// react-native-ble-manager v12+: events are subscribed via typed methods on the module
+// (e.g. BleManager.onDiscoverPeripheral, onDisconnectPeripheral, onDidUpdateValueForCharacteristic)
+// not via NativeEventEmitter string-based addListener.
 let BleManager: any = null;
 try {
   if (Platform.OS === 'android') {
@@ -246,41 +249,75 @@ export class BLEService {
         }, timeout);
       });
     } else {
-      // Android scanning
+      // Android scanning — react-native-ble-manager v12
       return new Promise((resolve, reject) => {
-        const devices: BLEDevice[] = [];
-        const deviceMap = new Map<string, BLEDevice>(); // Use Map to avoid duplicates
-        
-        // Scan for CSC (0x1816, 0x1818) and FTMS (0x1826) services
-        // @ts-ignore - react-native-ble-manager types are incomplete, scan accepts service UUIDs array
-        BleManager.scan(ALL_SCAN_SERVICE_UUIDS, timeout / 1000, false).then(() => {
+        const deviceMap = new Map<string, BLEDevice>();
+
+        // Check if a peripheral advertises at least one of our target service UUIDs
+        const hasSupportedService = (peripheral: any): boolean => {
+          const advUUIDs: string[] = peripheral.advertising?.serviceUUIDs || [];
+          return advUUIDs.some((uuid: string) =>
+            ALL_SCAN_SERVICE_UUIDS.some(target => uuidMatches(uuid, target))
+          );
+        };
+
+        // Fallback: known fitness device name patterns for devices that don't
+        // advertise service UUIDs but are still relevant
+        const KNOWN_DEVICE_NAMES = /magene|yesoul|ic\d|s3\+|life\s*fitness|technogym|matrix|horizon|schwinn|peloton|wahoo|garmin|tacx|elite|saris|kinetic|spinner/i;
+        const hasKnownName = (peripheral: any): boolean => {
+          const name = peripheral.name || peripheral.advertising?.localName || '';
+          return KNOWN_DEVICE_NAMES.test(name);
+        };
+
+        const addPeripheral = (peripheral: any) => {
+          if (deviceMap.has(peripheral.id)) return;
+          if (!hasSupportedService(peripheral) && !hasKnownName(peripheral)) return;
+          deviceMap.set(peripheral.id, {
+            id: peripheral.id,
+            name: peripheral.name || peripheral.advertising?.localName || null,
+            rssi: peripheral.rssi || null,
+          });
+          log.debug(`[BLE] Found fitness device: ${peripheral.name || peripheral.id}`);
+        };
+
+        const finish = async () => {
+          discoverSub.remove();
+          stopSub.remove();
+          clearTimeout(fallbackTimer);
+          try {
+            const extra: any[] = await BleManager.getDiscoveredPeripherals();
+            for (const p of extra) { addPeripheral(p); }
+          } catch (_e) { /* non-fatal */ }
+          const devices = Array.from(deviceMap.values());
+          log.debug(`[BLE] Scan complete, found ${devices.length} fitness device(s)`);
+          resolve(devices);
+        };
+
+        const discoverSub = BleManager.onDiscoverPeripheral((peripheral: any) => {
+          addPeripheral(peripheral);
+        });
+
+        const stopSub = BleManager.onStopScan(() => { finish(); });
+
+        const fallbackTimer = setTimeout(() => {
+          BleManager.stopScan().catch((err: unknown) => log.error('[BLE] Error stopping scan:', err));
+          finish();
+        }, timeout + 2000);
+
+        // Android: scan without UUID filter — some fitness devices don't advertise service
+        // UUIDs in the advertisement packet. We filter discovered devices ourselves above.
+        BleManager.scan({
+          serviceUUIDs: [],
+          seconds: timeout / 1000,
+          allowDuplicates: false,
+        }).then(() => {
           log.debug('[BLE] Scan started');
         }).catch((error: unknown) => {
+          discoverSub.remove();
+          stopSub.remove();
+          clearTimeout(fallbackTimer);
           reject(error);
         });
-
-        // Listen for discovered devices
-        // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-        const subscription = BleManager.addListener('BleManagerDiscoverPeripheral', (peripheral: any) => {
-          if (!deviceMap.has(peripheral.id)) {
-            const bleDevice: BLEDevice = {
-              id: peripheral.id,
-              name: peripheral.name || null,
-              rssi: peripheral.rssi || null,
-            };
-            deviceMap.set(peripheral.id, bleDevice);
-            devices.push(bleDevice);
-            log.debug(`[BLE] Found CSC device: ${peripheral.name || peripheral.id}`);
-          }
-        });
-
-        // Stop scanning and return results after timeout
-        setTimeout(() => {
-          BleManager.stopScan().catch((err: unknown) => log.error('[BLE] Error stopping scan:', err));
-          subscription.remove();
-          log.debug(`[BLE] Scan complete, found ${devices.length} device(s)`);
-          resolve(devices);
-        }, timeout);
       });
     }
   }
@@ -327,6 +364,54 @@ export class BLEService {
   }
 
   /**
+   * Request Android BLE runtime permissions.
+   * Android 12+ (API 31+): BLUETOOTH_SCAN + BLUETOOTH_CONNECT
+   * Android <12: ACCESS_FINE_LOCATION (required for BLE scan)
+   * Returns true if all required permissions are granted.
+   */
+  async requestAndroidPermissions(): Promise<boolean> {
+    if (Platform.OS !== 'android') return true;
+
+    try {
+      const apiLevel = Platform.Version as number;
+
+      if (apiLevel >= 31) {
+        // Android 12+: new BLE-specific permissions
+        const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        ]);
+        const granted =
+          result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED &&
+          result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
+        if (!granted) {
+          log.warn('[BLE] Android 12+: BLUETOOTH_SCAN or BLUETOOTH_CONNECT denied', result);
+        }
+        return granted;
+      } else {
+        // Android <12: location permission required for BLE scanning
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'SweatDrop needs location access to scan for Bluetooth fitness sensors.',
+            buttonPositive: 'Allow',
+            buttonNegative: 'Deny',
+          }
+        );
+        const granted = result === PermissionsAndroid.RESULTS.GRANTED;
+        if (!granted) {
+          log.warn('[BLE] Android <12: ACCESS_FINE_LOCATION denied');
+        }
+        return granted;
+      }
+    } catch (err) {
+      log.error('[BLE] Error requesting Android permissions:', err);
+      return false;
+    }
+  }
+
+  /**
    * Connect to a specific BLE device by sensor ID
    * If sensorId is a base64 string (from Web Bluetooth), we'll scan and match by device name
    */
@@ -344,6 +429,17 @@ export class BLEService {
         this.emitStatus(`Simulator connected (${simulator.profile})`);
         log.debug(`[BLE] Using simulator profile: ${simulator.profile}`);
         return true;
+      }
+
+      // Request Android BLE permissions before any native BLE call.
+      // On Android 12+ this is BLUETOOTH_SCAN + BLUETOOTH_CONNECT;
+      // on older Android it is ACCESS_FINE_LOCATION.
+      if (Platform.OS === 'android') {
+        const permissionsGranted = await this.requestAndroidPermissions();
+        if (!permissionsGranted) {
+          this.emitStatus('Bluetooth permission denied');
+          throw new Error('Bluetooth permissions were denied. Please enable them in Settings.');
+        }
       }
 
       log.debug(`[BLE] Connecting to Magene S3+ sensor: ${sensorId}`);
@@ -562,22 +658,29 @@ export class BLEService {
         log.debug('[BLE] Connected via CSC (Magene S3+) (iOS)');
         return true;
       } else {
-        // Android connection
+        // Android connection — react-native-ble-manager v12
         log.debug('[BLE] Android: Connecting to device...');
         this.emitStatus('Establishing connection...');
         await BleManager.connect(deviceId);
         log.debug('[BLE] Android: Retrieving services...');
         this.emitStatus('Discovering services...');
-        await BleManager.retrieveServices(deviceId);
+        // v12: retrieveServices returns PeripheralInfo with .services and .characteristics
+        const peripheralInfo = await BleManager.retrieveServices(deviceId);
+        const services: any[] = peripheralInfo.services || [];
+        const allChars: any[] = peripheralInfo.characteristics || [];
 
-        // Get ALL services and log them
-        log.debug('[BLE] Android: Getting services...');
-        // @ts-ignore - react-native-ble-manager types are incomplete, getServices exists at runtime
-        const services = await BleManager.getServices(deviceId);
         log.debug(`[BLE] Found ${services.length} service(s):`);
         services.forEach((service: any, index: number) => {
           log.debug(`  [${index + 1}] Service UUID: ${service.uuid} (normalized: ${normalizeUUID(service.uuid)})`);
         });
+
+        // Helper: get characteristics for a specific service UUID
+        const charsForService = (serviceUUID: string) =>
+          allChars.filter((c: any) => uuidMatches(c.service, serviceUUID));
+
+        // v12 Characteristic uses .characteristic for UUID, not .uuid
+        const charUuidMatches = (c: any, uuid: string) =>
+          uuidMatches(c.characteristic || c.uuid, uuid);
 
         // ── PROTOCOL DETECTION ──
         const yesoulService = services.find((s: any) => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
@@ -602,10 +705,8 @@ export class BLEService {
           this.activeProtocol = 'yesoul';
           this.syntheticCrankCounter = 0;
 
-          // Validate FFF4 notify characteristic
-          // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-          const chars = await BleManager.getCharacteristics(deviceId, yesoulService.uuid);
-          const hasNotify = chars.some((c: any) => uuidMatches(c.uuid, YESOUL_NOTIFY_CHAR_UUID));
+          const chars = charsForService(yesoulService.uuid);
+          const hasNotify = chars.some((c: any) => charUuidMatches(c, YESOUL_NOTIFY_CHAR_UUID));
 
           log.debug(`[BLE] Yesoul characteristics — Notify (FFF4): ${hasNotify}`);
 
@@ -628,12 +729,10 @@ export class BLEService {
           this.activeProtocol = 'ftms';
           this.syntheticCrankCounter = 0;
 
-          // Validate FTMS data characteristics
-          // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-          const chars = await BleManager.getCharacteristics(deviceId, ftmsService.uuid);
-          const hasTreadmill = chars.some((c: any) => uuidMatches(c.uuid, FTMS_TREADMILL_DATA_CHAR_UUID));
-          const hasBike = chars.some((c: any) => uuidMatches(c.uuid, FTMS_INDOOR_BIKE_CHAR_UUID));
-          const hasCrossTrainer = chars.some((c: any) => uuidMatches(c.uuid, FTMS_CROSS_TRAINER_CHAR_UUID));
+          const chars = charsForService(ftmsService.uuid);
+          const hasTreadmill = chars.some((c: any) => charUuidMatches(c, FTMS_TREADMILL_DATA_CHAR_UUID));
+          const hasBike = chars.some((c: any) => charUuidMatches(c, FTMS_INDOOR_BIKE_CHAR_UUID));
+          const hasCrossTrainer = chars.some((c: any) => charUuidMatches(c, FTMS_CROSS_TRAINER_CHAR_UUID));
 
           log.debug(`[BLE] FTMS characteristics — Treadmill: ${hasTreadmill}, Bike: ${hasBike}, CrossTrainer: ${hasCrossTrainer}`);
 
@@ -673,37 +772,34 @@ export class BLEService {
         log.debug(`[BLE] Found CSC Service: ${cscService.uuid}`);
         this.emitStatus('Found CSC service');
 
-        // Get ALL characteristics and log them
-        log.debug('[BLE] Android: Getting characteristics...');
-        // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-        const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
+        const characteristics = charsForService(cscService.uuid);
         log.debug(`[BLE] Found ${characteristics.length} characteristic(s) in CSC service:`);
         characteristics.forEach((char: any, index: number) => {
-          log.debug(`  [${index + 1}] Characteristic UUID: ${char.uuid}`);
+          log.debug(`  [${index + 1}] Characteristic UUID: ${char.characteristic || char.uuid}`);
         });
 
         const measurementChar = characteristics.find((c: any) => {
-          return uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
+          return charUuidMatches(c, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
         });
 
         if (!measurementChar) {
-          const charUuids = characteristics.map((c: any) => c.uuid).join(', ');
+          const charUuids = characteristics.map((c: any) => c.characteristic || c.uuid).join(', ');
           throw new Error(`CSC Measurement Characteristic (0x2A5B) not found. Available: ${charUuids}`);
         }
 
-        log.debug(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.uuid}`);
+        log.debug(`[BLE] Found CSC Measurement Characteristic: ${measurementChar.characteristic || measurementChar.uuid}`);
         
-        const properties = (measurementChar as any).properties || [];
-        const canNotify = properties.includes('notify') || properties.includes('indicate');
+        // v12: properties is an object like { Notify: 'Notify', Read: 'Read' }
+        const properties = measurementChar.properties || {};
+        const canNotify = !!properties.Notify || !!properties.Indicate;
         
         this.device = deviceId;
         this.deviceId = deviceId;
         this.isConnected = true;
 
-        // Start notification immediately after connection if characteristic supports it (Android)
         if (canNotify) {
           try {
-            await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
+            await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.characteristic || measurementChar.uuid);
             log.debug('[BLE] Android: CSC notification started successfully');
           } catch (notifError) {
             log.warn('[BLE] Android: Could not start notification immediately:', notifError);
@@ -838,36 +934,35 @@ export class BLEService {
     } else {
       const deviceId = this.device as string;
       
-      // @ts-ignore - react-native-ble-manager types are incomplete, getServices exists at runtime
-      const services = await BleManager.getServices(deviceId);
+      const peripheralInfo = await BleManager.retrieveServices(deviceId);
+      const services: any[] = peripheralInfo.services || [];
+      const allChars: any[] = peripheralInfo.characteristics || [];
       const cscService = services.find((s: any) => uuidMatches(s.uuid, CSC_SERVICE_UUID));
       if (!cscService) {
         throw new Error('CSC Service not found for monitoring');
       }
       
-      // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-      const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
-      const measurementChar = characteristics.find((c: any) => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
+      const characteristics = allChars.filter((c: any) => uuidMatches(c.service, cscService.uuid));
+      const measurementChar = characteristics.find((c: any) => uuidMatches(c.characteristic || c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
       if (!measurementChar) {
         throw new Error('CSC Measurement Characteristic not found for monitoring');
       }
       
+      const charUUID = measurementChar.characteristic || measurementChar.uuid;
       try {
-        await BleManager.startNotification(deviceId, cscService.uuid, measurementChar.uuid);
+        await BleManager.startNotification(deviceId, cscService.uuid, charUUID);
       } catch (notifError) {
         log.error('[BLE] Android: Failed to start CSC notification:', notifError);
         throw notifError;
       }
 
-      // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-      this.notificationSubscription = BleManager.addListener(
-        'BleManagerDidUpdateValueForCharacteristic',
+      this.notificationSubscription = BleManager.onDidUpdateValueForCharacteristic(
         (data: any) => {
           const isCSCMeasurement = data.characteristic && uuidMatches(data.characteristic, CSC_MEASUREMENT_CHARACTERISTIC_UUID);
           
           if (data.peripheral === deviceId && isCSCMeasurement) {
             if (data.value) {
-              const bytes = this.base64ToBytes(data.value);
+              const bytes = this.toBytes(data.value);
               if (bytes) {
                 this.handleCSCMeasurement(bytes.buffer as ArrayBuffer);
               }
@@ -876,8 +971,7 @@ export class BLEService {
         }
       );
 
-      // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-      BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
+      BleManager.onDisconnectPeripheral((data: any) => {
         if (data.peripheral === deviceId) {
           log.debug('[BLE] Device disconnected');
           this.handleConnectionLoss();
@@ -957,35 +1051,34 @@ export class BLEService {
       log.debug('[BLE] FTMS monitoring started (iOS)');
     } else {
       const deviceId = this.device as string;
-      // @ts-ignore - react-native-ble-manager types are incomplete, getServices exists at runtime
-      const services = await BleManager.getServices(deviceId);
+      const peripheralInfo = await BleManager.retrieveServices(deviceId);
+      const services: any[] = peripheralInfo.services || [];
+      const allChars: any[] = peripheralInfo.characteristics || [];
       const ftmsService = services.find((s: any) => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
       if (!ftmsService) {
         throw new Error('FTMS Service not found for monitoring');
       }
 
-      // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-      const characteristics = await BleManager.getCharacteristics(deviceId, ftmsService.uuid);
+      const characteristics = allChars.filter((c: any) => uuidMatches(c.service, ftmsService.uuid));
 
       for (const targetCharUUID of charUUIDs) {
-        const dataChar = characteristics.find((c: any) => uuidMatches(c.uuid, targetCharUUID));
+        const dataChar = characteristics.find((c: any) => uuidMatches(c.characteristic || c.uuid, targetCharUUID));
         if (!dataChar) {
           log.warn(`[BLE] FTMS characteristic ${targetCharUUID} not found, skipping`);
           continue;
         }
 
+        const charUUID = dataChar.characteristic || dataChar.uuid;
         try {
-          await BleManager.startNotification(deviceId, ftmsService.uuid, dataChar.uuid);
-          log.debug(`[BLE] Android: FTMS notification started for ${dataChar.uuid}`);
+          await BleManager.startNotification(deviceId, ftmsService.uuid, charUUID);
+          log.debug(`[BLE] Android: FTMS notification started for ${charUUID}`);
         } catch (notifError) {
           log.error(`[BLE] Android: Failed to start FTMS notification for ${targetCharUUID}:`, notifError);
         }
       }
 
       // Listen for FTMS data notifications
-      // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-      this.notificationSubscription = BleManager.addListener(
-        'BleManagerDidUpdateValueForCharacteristic',
+      this.notificationSubscription = BleManager.onDidUpdateValueForCharacteristic(
         (data: any) => {
           if (data.peripheral !== deviceId) return;
           if (!data.value || !data.characteristic) return;
@@ -993,7 +1086,7 @@ export class BLEService {
           // Determine which FTMS characteristic this data came from
           for (const targetCharUUID of charUUIDs) {
             if (uuidMatches(data.characteristic, targetCharUUID)) {
-              const bytes = this.base64ToBytes(data.value);
+              const bytes = this.toBytes(data.value);
               if (bytes) {
                 this.handleFTMSMeasurement(bytes.buffer as ArrayBuffer, targetCharUUID);
               }
@@ -1003,8 +1096,7 @@ export class BLEService {
         }
       );
 
-      // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-      BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
+      BleManager.onDisconnectPeripheral((data: any) => {
         if (data.peripheral === deviceId) {
           log.debug('[BLE] FTMS device disconnected');
           this.handleConnectionLoss();
@@ -1135,8 +1227,8 @@ export class BLEService {
     } else {
       // Android
       const deviceId = this.device as string;
-      // @ts-ignore - react-native-ble-manager types are incomplete, getServices exists at runtime
-      const services = await BleManager.getServices(deviceId);
+      const peripheralInfo = await BleManager.retrieveServices(deviceId);
+      const services: any[] = peripheralInfo.services || [];
       const yesoulService = services.find((s: any) => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
       if (!yesoulService) {
         throw new Error('Yesoul service not found for monitoring');
@@ -1148,23 +1240,20 @@ export class BLEService {
         YESOUL_NOTIFY_CHAR_UUID,
       );
 
-      // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-      this.notificationSubscription = BleManager.addListener(
-        'BleManagerDidUpdateValueForCharacteristic',
+      this.notificationSubscription = BleManager.onDidUpdateValueForCharacteristic(
         (data: any) => {
           if (data.peripheral !== deviceId) return;
           if (!uuidMatches(data.characteristic, YESOUL_NOTIFY_CHAR_UUID)) return;
           if (!data.value) return;
 
-          const bytes = this.base64ToBytes(data.value);
+          const bytes = this.toBytes(data.value);
           if (bytes) {
             this.handleYesoulMeasurement(bytes);
           }
         }
       );
 
-      // @ts-ignore - react-native-ble-manager types are incomplete, addListener exists at runtime
-      BleManager.addListener('BleManagerDisconnectPeripheral', (data: any) => {
+      BleManager.onDisconnectPeripheral((data: any) => {
         if (data.peripheral === deviceId) {
           log.debug('[BLE] Yesoul device disconnected');
           this.handleConnectionLoss();
@@ -1176,19 +1265,32 @@ export class BLEService {
   }
 
   /**
-   * Convert base64 string to Uint8Array (shared utility for iOS/Android)
+   * Convert notification value to Uint8Array.
+   * iOS (react-native-ble-plx): value is a base64 string.
+   * Android (react-native-ble-manager v12): value is a number[] (byte array).
    */
-  private base64ToBytes(base64: string): Uint8Array | null {
+  private toBytes(value: string | number[] | unknown): Uint8Array | null {
     try {
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      if (Array.isArray(value)) {
+        return new Uint8Array(value);
       }
-      return bytes;
+      if (typeof value === 'string') {
+        const binaryString = atob(value);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes;
+      }
+      return null;
     } catch {
       return null;
     }
+  }
+
+  /** @deprecated Use toBytes() instead — kept for iOS ble-plx compatibility */
+  private base64ToBytes(base64: string): Uint8Array | null {
+    return this.toBytes(base64);
   }
 
   /**
@@ -1377,29 +1479,28 @@ export class BLEService {
         if (this.device && this.notificationSubscription) {
           const deviceId = this.device as string;
           try {
-            // @ts-ignore - react-native-ble-manager types are incomplete, getServices exists at runtime
-            const services = await BleManager.getServices(deviceId);
+            const peripheralInfo = await BleManager.retrieveServices(deviceId);
+            const services: any[] = peripheralInfo.services || [];
+            const allChars: any[] = peripheralInfo.characteristics || [];
 
             if (this.activeProtocol === 'ftms') {
-              // Stop FTMS notifications
               const ftmsService = services.find((s: any) => uuidMatches(s.uuid, FTMS_SERVICE_UUID));
               if (ftmsService) {
-                // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-                const chars = await BleManager.getCharacteristics(deviceId, ftmsService.uuid);
+                const chars = allChars.filter((c: any) => uuidMatches(c.service, ftmsService.uuid));
                 for (const char of chars) {
+                  const cUUID = char.characteristic || char.uuid;
                   if (
-                    uuidMatches(char.uuid, FTMS_INDOOR_BIKE_CHAR_UUID) ||
-                    uuidMatches(char.uuid, FTMS_TREADMILL_DATA_CHAR_UUID) ||
-                    uuidMatches(char.uuid, FTMS_CROSS_TRAINER_CHAR_UUID)
+                    uuidMatches(cUUID, FTMS_INDOOR_BIKE_CHAR_UUID) ||
+                    uuidMatches(cUUID, FTMS_TREADMILL_DATA_CHAR_UUID) ||
+                    uuidMatches(cUUID, FTMS_CROSS_TRAINER_CHAR_UUID)
                   ) {
                     try {
-                      await BleManager.stopNotification(deviceId, ftmsService.uuid, char.uuid);
+                      await BleManager.stopNotification(deviceId, ftmsService.uuid, cUUID);
                     } catch { /* ignore */ }
                   }
                 }
               }
             } else if (this.activeProtocol === 'yesoul') {
-              // Stop Yesoul notification
               const yesoulService = services.find((s: any) => uuidMatches(s.uuid, YESOUL_SERVICE_UUID));
               if (yesoulService) {
                 try {
@@ -1407,14 +1508,12 @@ export class BLEService {
                 } catch { /* ignore */ }
               }
             } else {
-              // Stop CSC notification
               const cscService = services.find((s: any) => uuidMatches(s.uuid, CSC_SERVICE_UUID));
               if (cscService) {
-                // @ts-ignore - react-native-ble-manager types are incomplete, getCharacteristics exists at runtime
-                const characteristics = await BleManager.getCharacteristics(deviceId, cscService.uuid);
-                const measurementChar = characteristics.find((c: any) => uuidMatches(c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
+                const characteristics = allChars.filter((c: any) => uuidMatches(c.service, cscService.uuid));
+                const measurementChar = characteristics.find((c: any) => uuidMatches(c.characteristic || c.uuid, CSC_MEASUREMENT_CHARACTERISTIC_UUID));
                 if (measurementChar) {
-                  await BleManager.stopNotification(deviceId, cscService.uuid, measurementChar.uuid);
+                  await BleManager.stopNotification(deviceId, cscService.uuid, measurementChar.characteristic || measurementChar.uuid);
                 }
               }
             }

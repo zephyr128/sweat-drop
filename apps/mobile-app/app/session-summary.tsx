@@ -205,16 +205,19 @@ export default function SessionSummaryScreen() {
   useEffect(() => {
     loadSession();
     loadLeaderboardRank();
-    loadEarnedBadges();
     loadStreakDays();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, gymId]);
 
-  // Depends on session being loaded (need started_at for challenge filtering)
+  // Depends on session being loaded:
+  // - award_drops() is guaranteed to have finished by the time loadSession() resolves
+  //   (retry loop waits for drop_calc_v2 in raw_metrics), so we load badges and
+  //   challenge completions here to avoid a race condition on first workout.
   useEffect(() => {
     if (session) {
       calculatePercentile();
       loadChallengeProgress(session.started_at);
+      loadEarnedBadges();
     }
   }, [session]);
 
