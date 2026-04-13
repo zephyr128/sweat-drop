@@ -19,8 +19,8 @@ interface MiniGaugeBarProps {
   // Active tab data — whichever tab/gauge is showing
   activePage: number; // 0=activity, 1=compete, 2=challenges, 3=arenas
   // Activity gauge
-  weeklyDrops: number;
-  weeklyCap: number;
+  todayDrops: number;
+  dailyCap: number;
   // Compete gauge
   rank: number;
   totalMembers: number;
@@ -44,8 +44,8 @@ function pct(val: number, cap: number): number {
 export function MiniGaugeBar({
   collapseProgress,
   activePage,
-  weeklyDrops,
-  weeklyCap,
+  todayDrops,
+  dailyCap,
   rank,
   totalMembers,
   challengeCompletedCount,
@@ -91,9 +91,9 @@ export function MiniGaugeBar({
       break;
     default: // Activity
       iconName = 'water-outline';
-      valueText = formatDrops(weeklyDrops);
-      labelText = `/ ${formatDrops(weeklyCap)} ova nedelja`;
-      progressPct = pct(weeklyDrops, weeklyCap);
+      valueText = formatDrops(todayDrops);
+      labelText = `/ ${formatDrops(dailyCap)} danas`;
+      progressPct = pct(todayDrops, dailyCap);
   }
 
   return (

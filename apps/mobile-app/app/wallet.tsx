@@ -80,6 +80,8 @@ export default function WalletScreen() {
 
   const [earned, setEarned] = useState<EarnedData>({ today: 0, week: 0, month: 0, allTime: 0 });
   const [spent, setSpent] = useState<SpentData>({ today: 0, week: 0, month: 0, allTime: 0 });
+  /** SUM(amount) per period from server — matches ledger (incl. refunds); may differ from earned−spent in edge cases */
+  const [summaryNet, setSummaryNet] = useState<EarnedData>({ today: 0, week: 0, month: 0, allTime: 0 });
   const [expiry, setExpiry] = useState<ExpiryData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activePeriod, setActivePeriod] = useState<SummaryPeriod>('week');
@@ -121,96 +123,34 @@ export default function WalletScreen() {
     }
   }, [session?.user]);
 
-  const loadEarned = useCallback(async () => {
-    if (!session?.user || !activeGymId) return;
-    try {
-      const userId = session.user.id;
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const dayOfWeek = now.getDay();
-      const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      const EARN_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak'];
-
-      const { data: rpcDrops } = await supabase.rpc('get_my_drops', {
-        p_gym_id: selectedGymId ?? null,
-        p_types: EARN_TYPES,
-        p_since: null,
-        p_limit: 500,
-      });
-      const txRows = (rpcDrops ?? []).filter((d: any) => (d.amount ?? 0) > 0);
-
-      let today = 0;
-      let week = 0;
-      let month = 0;
-      let allTime = 0;
-      for (const row of txRows ?? []) {
-        const a = row.amount ?? 0;
-        const d = new Date(row.created_at);
-        allTime += a;
-        if (d >= monthStart) month += a;
-        if (d >= weekStart) week += a;
-        if (d >= todayStart) today += a;
-      }
-      setEarned({ today, week, month, allTime });
-    } catch (err) {
-      log.error('[Wallet] Error loading earned:', err);
-    }
-  }, [session?.user, activeGymId, scope]);
-
-  const loadSpent = useCallback(async () => {
+  const loadSummary = useCallback(async () => {
     if (!session?.user) return;
     try {
-      const userId = session.user.id;
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const dayOfWeek = now.getDay();
-      const weekOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekOffset);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      const SPEND_TYPES = ['redemption', 'reward_claim', 'expired', 'arena_entry'];
-
-      // Fetch gross spend rows (negative amounts) and refunds (positive) together
-      let query = supabase
-        .from('drops_transactions')
-        .select('amount, created_at, transaction_type')
-        .eq('user_id', userId)
-        .or(`and(transaction_type.in.(${SPEND_TYPES.join(',')}),amount.lt.0),and(transaction_type.eq.refund,amount.gt.0)`)
-        .order('created_at', { ascending: false })
-        .limit(500);
-      if (selectedGymId) query = query.eq('gym_id', selectedGymId);
-
-      const { data: txRows } = await query;
-
-      let today = 0;
-      let week = 0;
-      let month = 0;
-      let allTime = 0;
-      for (const row of txRows ?? []) {
-        const d = new Date(row.created_at);
-        // Negative spend rows add to spent; refund rows (positive) subtract from spent
-        const delta = row.transaction_type === 'refund'
-          ? -Math.abs(row.amount ?? 0)
-          : Math.abs(row.amount ?? 0);
-        allTime += delta;
-        if (d >= monthStart) month += delta;
-        if (d >= weekStart) week += delta;
-        if (d >= todayStart) today += delta;
-      }
-      // Clamp each bucket to zero — refunds can't make "spent" go negative
-      setSpent({
-        today: Math.max(0, today),
-        week: Math.max(0, week),
-        month: Math.max(0, month),
-        allTime: Math.max(0, allTime),
+      const { data, error } = await supabase.rpc('get_wallet_summary', {
+        p_gym_id: selectedGymId ?? null,
       });
+      if (error) { log.error('[Wallet] Summary RPC error:', error); return; }
+      const rows = data as Array<{ period: string; earned: number; spent: number; net: number }> | null;
+      if (!rows) return;
+
+      const e: EarnedData = { today: 0, week: 0, month: 0, allTime: 0 };
+      const s: SpentData = { today: 0, week: 0, month: 0, allTime: 0 };
+      const n: EarnedData = { today: 0, week: 0, month: 0, allTime: 0 };
+      for (const r of rows) {
+        const key = r.period as keyof EarnedData;
+        if (key in e) {
+          e[key] = Number(r.earned) || 0;
+          s[key] = Number(r.spent) || 0;
+          n[key] = Number(r.net) || 0;
+        }
+      }
+      setEarned(e);
+      setSpent(s);
+      setSummaryNet(n);
     } catch (err) {
-      log.error('[Wallet] Error loading spent:', err);
+      log.error('[Wallet] Error loading summary:', err);
     }
-  }, [session?.user, activeGymId, scope]);
+  }, [session?.user, selectedGymId]);
 
   const loadExpiry = useCallback(async () => {
     if (!session?.user || !activeGymId) { setExpiry(null); return; }
@@ -257,12 +197,11 @@ export default function WalletScreen() {
   const refreshAll = useCallback(async () => {
     await Promise.all([
       loadGyms(),
-      loadEarned(),
-      loadSpent(),
+      loadSummary(),
       loadExpiry(),
       refreshLocalDrops(),
     ]);
-  }, [loadGyms, loadEarned, loadSpent, loadExpiry, refreshLocalDrops]);
+  }, [loadGyms, loadSummary, loadExpiry, refreshLocalDrops]);
 
   useEffect(() => {
     if (session?.user) refreshAll();
@@ -320,7 +259,7 @@ export default function WalletScreen() {
   // Derived: values for the active period tab
   const periodEarned = earned[activePeriod];
   const periodSpent = spent[activePeriod];
-  const periodNet = periodEarned - periodSpent;
+  const periodNet = summaryNet[activePeriod];
 
   // Period tab config
   const periodTabs: { key: SummaryPeriod; label: string }[] = useMemo(() => [

@@ -1,13 +1,20 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  withRepeat,
+  Easing,
+} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
 import { PressableCard } from '@/components/PressableCard';
+import { LiquidFill } from '@/components/home/LiquidFill';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CARD_GAP = 10;
@@ -16,6 +23,7 @@ const HERO_W = (SCREEN_W - CARD_PAD * 2 - CARD_GAP) * 0.58;
 const SIDE_W = (SCREEN_W - CARD_PAD * 2 - CARD_GAP) * 0.42;
 const HERO_H = 162;
 const SIDE_H = (HERO_H - CARD_GAP) / 2;
+const ACTION_W = (SCREEN_W - CARD_PAD * 2 - CARD_GAP) / 2;
 
 
 function getStreakColor(streak: number, primary: string): string {
@@ -46,6 +54,8 @@ export interface HappyHourSlot {
   label: string;
   time: string;
   endTime: string;
+  endAt: string; // ISO string for countdown
+  startAt?: string; // ISO string — used to compute total duration
   multiplier: number;
   inMinutes: number;
   isToday: boolean;
@@ -78,6 +88,7 @@ export interface StatsCardsProps {
 
 const GREEN = '#4CD964';
 const GOLD = '#FFD700';
+const WATER_BLUE = '#00E5FF';
 
 function formatCompact(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -107,7 +118,7 @@ function NextRewardCard({ eyebrow, title, imageUrl, progressPercent, progressLab
   }));
   return (
     <PressableCard style={[styles.rewardCard, { borderColor: hexToRgba(primary, 0.22) }]} onPress={onPress}>
-      <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+      <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
         <LinearGradient
           colors={[hexToRgba(primary, 0.12), 'rgba(10,10,20,0)']}
           start={{ x: 0, y: 0 }}
@@ -189,10 +200,63 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
   const hhColor = isHappyHourActive ? GOLD : nextHappyHour ? GOLD : 'rgba(255,255,255,0.25)';
 
   const dailyPct = dailyCap > 0 ? Math.min((todayDrops / dailyCap) * 100, 100) : 0;
-  const heroColor = capReached ? GREEN : primaryColor;
 
-  const heroBarStyle = useAnimatedStyle(() => ({
-    width: withTiming(`${dailyPct}%` as any, { duration: 900, easing: Easing.out(Easing.cubic) }),
+  // Glow pulse for active Happy Hour card
+  const hhGlowOpacity = useSharedValue(0);
+  useEffect(() => {
+    if (isHappyHourActive) {
+      hhGlowOpacity.value = 0;
+      hhGlowOpacity.value = withRepeat(
+        withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    } else {
+      hhGlowOpacity.value = withTiming(0, { duration: 380, easing: Easing.out(Easing.ease) });
+    }
+  }, [isHappyHourActive, hhGlowOpacity]);
+
+  const hhGlowStyle = useAnimatedStyle(() => ({
+    opacity: 0.08 + hhGlowOpacity.value * 0.18,
+  }));
+
+  // Countdown state for the "ends in" progress bar
+  const [hhSecondsLeft, setHhSecondsLeft] = useState<number | null>(null);
+  const [hhTotalSeconds, setHhTotalSeconds] = useState<number | null>(null);
+  const hhCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hhProgressPct = useSharedValue(100);
+
+  useEffect(() => {
+    if (hhCountdownRef.current) clearInterval(hhCountdownRef.current);
+    if (!isHappyHourActive || !nextHappyHour?.endAt) {
+      setHhSecondsLeft(null);
+      setHhTotalSeconds(null);
+      hhProgressPct.value = 100;
+      return;
+    }
+    const endMs = new Date(nextHappyHour.endAt).getTime();
+    const startMs = nextHappyHour.startAt ? new Date(nextHappyHour.startAt).getTime() : null;
+    const totalSec = startMs ? Math.max(0, Math.round((endMs - startMs) / 1000)) : null;
+    setHhTotalSeconds(totalSec);
+    const tick = () => {
+      const left = Math.max(0, Math.round((endMs - Date.now()) / 1000));
+      setHhSecondsLeft(left);
+      if (totalSec && totalSec > 0) {
+        hhProgressPct.value = withTiming(
+          Math.max(0, Math.min(100, (left / totalSec) * 100)),
+          { duration: 950, easing: Easing.out(Easing.linear) },
+        );
+      }
+    };
+    tick();
+    hhCountdownRef.current = setInterval(tick, 1000);
+    return () => {
+      if (hhCountdownRef.current) clearInterval(hhCountdownRef.current);
+    };
+  }, [isHappyHourActive, nextHappyHour?.endAt, nextHappyHour?.startAt, hhProgressPct]);
+
+  const hhProgressBarStyle = useAnimatedStyle(() => ({
+    width: `${hhProgressPct.value}%` as any,
   }));
 
   return (
@@ -201,59 +265,52 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
       {/* ── Row 1: Hero + Side cards ─────────────────────────────────────── */}
       <View style={styles.topRow}>
 
-        {/* Hero card — daily goal */}
+        {/* Hero card — daily goal with liquid wave fill */}
         <PressableCard
-          style={[styles.heroCard, { borderColor: hexToRgba(heroColor, 0.28) }]}
+          style={[styles.heroCard, { borderColor: hexToRgba(WATER_BLUE, 0.28) }]}
           onPress={onTodayPress}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
-            <LinearGradient
-              colors={[hexToRgba(heroColor, 0.12), 'rgba(10,10,20,0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0.6, y: 1 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
+          <View style={styles.liquidHeroInner}>
+            <LiquidFill
+              width={HERO_W}
+              height={HERO_H}
+              fillPercent={dailyPct / 100}
+              color={capReached ? 'rgba(74, 222, 128, 0.35)' : 'rgba(0, 229, 255, 0.28)'}
+              colorEnd={capReached ? 'rgba(22, 163, 74, 0.50)' : 'rgba(0, 184, 204, 0.45)'}
+              borderRadius={18}
             />
-            {/* Watermark */}
             <Ionicons
               name={capReached ? 'checkmark-circle-outline' : 'water-outline'}
-              size={96}
-              color={hexToRgba(heroColor, 0.07)}
+              size={150}
+              color={capReached ? 'rgba(74,222,128,0.06)' : 'rgba(0,229,255,0.06)'}
               style={styles.watermark}
             />
-            {/* Top label row */}
-            <View style={styles.heroLabelRow}>
-              <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(heroColor, 0.14) }]}>
-                <Ionicons
-                  name={capReached ? 'checkmark-circle' : 'water-outline'}
-                  size={13}
-                  color={heroColor}
-                />
+            <View style={styles.cardBlurFill} pointerEvents="box-none">
+              <View style={styles.heroLabelRow}>
+                <View style={[styles.heroIconWrap, { backgroundColor: capReached ? 'rgba(74,222,128,0.18)' : 'rgba(0,229,255,0.18)' }]}>
+                  <Ionicons
+                    name={capReached ? 'checkmark-circle' : 'water-outline'}
+                    size={13}
+                    color={capReached ? GREEN : WATER_BLUE}
+                  />
+                </View>
+                <Text style={styles.heroEyebrow}>{t('cards.dailyGoal')}</Text>
               </View>
-              <Text style={styles.heroEyebrow}>{t('cards.dailyGoal')}</Text>
+
+              <Text style={[styles.heroNumber, { color: capReached ? GREEN : '#fff' }]}>
+                {dailyCap > 0 ? `${todayDrops}/${dailyCap}` : `${todayDrops}`}
+              </Text>
+
+              {overCap && (
+                <View style={styles.bonusRow}>
+                  <Ionicons name="flash" size={10} color={GREEN} />
+                  <Text style={[styles.bonusLabel, { color: GREEN }]}>+{todayBonusDrops}</Text>
+                </View>
+              )}
+
+              <Text style={styles.heroSub}>{t('cards.kcalToday')}</Text>
             </View>
-
-            <Text style={[styles.heroNumber, { color: heroColor }]}>
-              {dailyCap > 0 ? `${todayDrops}/${dailyCap}` : `${todayDrops}`}
-            </Text>
-
-            {overCap && (
-              <View style={styles.bonusRow}>
-                <Ionicons name="flash" size={10} color={GREEN} />
-                <Text style={[styles.bonusLabel, { color: GREEN }]}>+{todayBonusDrops}</Text>
-              </View>
-            )}
-
-            {/* Sub label */}
-            <Text style={styles.heroSub}>{t('cards.kcalToday')}</Text>
-
-            {/* Linear progress bar — bottom */}
-            <View style={styles.heroBarWrap}>
-              <View style={[styles.heroBarBg, { backgroundColor: hexToRgba(heroColor, 0.12) }]}>
-                <Animated.View style={[styles.heroBarFill, heroBarStyle, { backgroundColor: heroColor }]} />
-              </View>
-            </View>
-          </PlatformBlur>
+          </View>
         </PressableCard>
 
         {/* Side column */}
@@ -264,7 +321,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
             style={[styles.sideCard, { borderColor: hexToRgba(streakColor, 0.22) }]}
             onPress={onStreakPress}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
               <LinearGradient
                 colors={[hexToRgba(streakColor, 0.10), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
@@ -290,7 +347,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
             style={[styles.sideCard, { borderColor: hexToRgba(primaryColor, 0.22) }]}
             onPress={onWeeklyPress}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
               <LinearGradient
                 colors={[hexToRgba(primaryColor, 0.10), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
@@ -327,7 +384,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
           onPress={isCheckedIn ? undefined : onCheckinPress}
           disabled={isCheckedIn}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
             <LinearGradient
               colors={[hexToRgba(isCheckedIn ? GREEN : 'rgba(255,255,255,1)', 0.06), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -357,43 +414,80 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
         </PressableCard>
 
         {/* Happy Hour */}
-        <PressableCard
-          style={[styles.actionCard, { borderColor: hexToRgba(hhColor, 0.18) }]}
-          onPress={onHappyHourPress}
-        >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
-            <LinearGradient
-              colors={[hexToRgba(hhColor === 'rgba(255,255,255,0.25)' ? '#ffffff' : hhColor, 0.06), 'rgba(10,10,20,0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+        <View style={styles.actionPulseWrap}>
+          {/* Glow ring — absolute, behind the card */}
+          {isHappyHourActive && (
+            <Animated.View
+              style={[styles.hhGlowRing, { borderColor: hexToRgba(GOLD, 0.78) }, hhGlowStyle]}
               pointerEvents="none"
             />
-            <View style={styles.actionInner}>
-              <View style={[styles.actionIconWrap, { backgroundColor: hexToRgba(hhColor, 0.12) }]}>
-                <Ionicons
-                  name={isHappyHourActive ? 'flash' : 'flash-outline'}
-                  size={20}
-                  color={hhColor}
-                />
+          )}
+          <PressableCard
+            style={[styles.actionCard, { borderColor: hexToRgba(hhColor, isHappyHourActive ? 0.5 : 0.18) }]}
+            onPress={onHappyHourPress}
+          >
+            <PlatformBlur intensity={50} tint="dark" style={styles.hhCardBlur} androidColor="rgba(38,32,58,0.97)">
+              <LinearGradient
+                colors={[hexToRgba(hhColor === 'rgba(255,255,255,0.25)' ? '#ffffff' : hhColor, 0.06), 'rgba(10,10,20,0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              <View style={styles.actionInner}>
+                <View style={[styles.actionIconWrap, { backgroundColor: hexToRgba(hhColor, 0.12) }]}>
+                  <Ionicons
+                    name={isHappyHourActive ? 'flash' : 'flash-outline'}
+                    size={20}
+                    color={hhColor}
+                  />
+                </View>
+                <View style={styles.actionInfo}>
+                  {/* Title row with multiplier badge inline when live */}
+                  <View style={styles.hhTitleRow}>
+                    <Text style={[styles.actionTitle, { color: isHappyHourActive ? GOLD : 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
+                      {t('cards.happyHourTitle')}
+                    </Text>
+                    {isHappyHourActive && nextHappyHour && (
+                      <View style={styles.hhMultiplierBadge}>
+                        <Text style={styles.hhMultiplierText}>×{nextHappyHour.multiplier}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.actionSub} numberOfLines={1}>
+                    {isHappyHourActive && nextHappyHour
+                      ? (() => {
+                          if (hhSecondsLeft !== null) {
+                            const totalMin = Math.floor(hhSecondsLeft / 60);
+                            const h = Math.floor(totalMin / 60);
+                            const m = totalMin % 60;
+                            const s = hhSecondsLeft % 60;
+                            const timeStr = h > 0
+                              ? `${h}h ${String(m).padStart(2, '0')}m`
+                              : m > 0
+                                ? `${m}m ${String(s).padStart(2, '0')}s`
+                                : `${s}s`;
+                            return `${t('happyHour.live')} · ${t('cards.endsIn', { time: timeStr })}`;
+                          }
+                          return `${t('happyHour.live')} · ${t('cards.endsAt', { time: nextHappyHour.endTime })}`;
+                        })()
+                      : nextHappyHour
+                        ? nextHappyHour.isToday
+                          ? `×${nextHappyHour.multiplier} · ${t('cards.hhToday')} ${nextHappyHour.time}`
+                          : `×${nextHappyHour.multiplier} · ${t('cards.hhTomorrow')} ${nextHappyHour.time}`
+                        : t('cards.happyHourNone')}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.actionInfo}>
-                <Text style={[styles.actionTitle, { color: isHappyHourActive ? GOLD : 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
-                  {t('cards.happyHourTitle')}
-                </Text>
-                <Text style={styles.actionSub} numberOfLines={1}>
-                  {isHappyHourActive && nextHappyHour
-                    ? `x${nextHappyHour.multiplier} ${t('happyHour.live')} · ${t('cards.endsAt', { time: nextHappyHour.endTime })}`
-                    : nextHappyHour
-                      ? nextHappyHour.isToday
-                        ? `x${nextHappyHour.multiplier} · ${t('cards.hhToday')} ${nextHappyHour.time}`
-                        : `x${nextHappyHour.multiplier} · ${t('cards.hhTomorrow')} ${nextHappyHour.time}`
-                      : t('cards.happyHourNone')}
-                </Text>
-              </View>
-            </View>
-          </PlatformBlur>
-        </PressableCard>
+              {/* Countdown progress bar — only when live */}
+              {isHappyHourActive && hhTotalSeconds !== null && (
+                <View style={styles.hhProgressTrack}>
+                  <Animated.View style={[styles.hhProgressFill, hhProgressBarStyle]} />
+                </View>
+              )}
+            </PlatformBlur>
+          </PressableCard>
+        </View>
       </View>
 
       {/* ── Full-width: Next reward ───────────────────────────────────────── */}
@@ -434,16 +528,21 @@ const styles = StyleSheet.create({
   /* Hero card */
   watermark: {
     position: 'absolute',
-    right: -8,
-    bottom: -4,
+    right: -45,
+    bottom: -20,
   },
   heroCard: {
     width: HERO_W,
     height: HERO_H,
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: GLASS_BG,
+    backgroundColor: 'rgba(8, 12, 24, 0.97)',
     borderWidth: 1,
+  },
+  liquidHeroInner: {
+    flex: 1,
+    overflow: 'hidden',
+    borderRadius: 18,
   },
   heroLabelRow: {
     flexDirection: 'row',
@@ -479,22 +578,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.38)',
     letterSpacing: 0.2,
     marginBottom: 10,
-  },
-  heroBarWrap: {
-    position: 'absolute',
-    bottom: 14,
-    left: 14,
-    right: 14,
-  },
-  heroBarBg: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  heroBarFill: {
-    height: '100%',
-    borderRadius: 2,
   },
   bonusRow: {
     flexDirection: 'row',
@@ -566,14 +649,68 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: CARD_GAP,
+    justifyContent: 'space-between',
   },
   actionCard: {
-    flex: 1,
+    width: ACTION_W,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
     borderWidth: 1,
     minHeight: 64,
+  },
+  actionPulseWrap: {
+    width: ACTION_W,
+    position: 'relative',
+  },
+  hhGlowRing: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    right: -2,
+    bottom: -2,
+    borderRadius: 19,
+    borderWidth: 1,
+    zIndex: -1,
+  },
+  hhCardBlur: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    justifyContent: 'flex-start',
+  },
+  hhTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  hhMultiplierBadge: {
+    backgroundColor: 'rgba(255, 215, 0, 0.18)',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.40)',
+  },
+  hhMultiplierText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 10,
+    color: GOLD,
+    letterSpacing: 0.5,
+  },
+  hhProgressTrack: {
+    marginTop: 8,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 215, 0, 0.12)',
+    overflow: 'hidden',
+  },
+  hhProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: GOLD,
   },
   actionInner: {
     flexDirection: 'row',

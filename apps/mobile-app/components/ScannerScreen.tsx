@@ -19,7 +19,7 @@ import {
   TouchableWithoutFeedback,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -104,7 +104,9 @@ function getSecurityStatusFromErrorMessage(message: string): 'cap_reached' | 'ra
 
 export function ScannerScreen() {
   const { t } = useTranslation('scanner');
+  const insets = useSafeAreaInsets();
   const showModal = useAppModal((s) => s.showModal);
+  const hideModal = useAppModal((s) => s.hideModal);
   const [hasPermission, setHasPermission] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -140,6 +142,7 @@ export function ScannerScreen() {
   const dropLimit = useDropLimitStatus(getActiveGymId());
   const device = useCameraDevice('back');
   const hasScannedRef = useRef(false);
+  const isScreenActiveRef = useRef(true);
 
   // ── 5x tap trigger for simulator modal ──
   const tapCountRef = useRef(0);
@@ -161,6 +164,13 @@ export function ScannerScreen() {
     hasScannedRef.current = false;
     setIsScanning(true);
     setIsProcessing(false);
+  }, []);
+
+  useEffect(() => {
+    isScreenActiveRef.current = true;
+    return () => {
+      isScreenActiveRef.current = false;
+    };
   }, []);
 
   // Premium Animations - All on UI thread for 60/120 FPS
@@ -255,6 +265,7 @@ export function ScannerScreen() {
     try {
       const permission = await Camera.requestCameraPermission();
       log.debug('[Scanner] Camera permission status:', permission);
+      if (!isScreenActiveRef.current) return;
 
       if (permission === 'granted') {
         setHasPermission(true);
@@ -282,6 +293,7 @@ export function ScannerScreen() {
         setHasPermission(false);
       }
     } catch (error) {
+      if (!isScreenActiveRef.current) return;
       log.error('[Scanner] Camera permission error:', error);
       const openSettings = () => Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings();
       showModal({
@@ -1042,6 +1054,15 @@ export function ScannerScreen() {
       Linking.openSettings();
     }
   };
+  const handleCloseScanner = useCallback(() => {
+    hideModal();
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/');
+  }, [hideModal, router]);
+  const floatingButtonTop = Math.max(insets.top + 10, 24);
 
   if (!hasPermission) {
     return (
@@ -1052,6 +1073,18 @@ export function ScannerScreen() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
+        <TouchableOpacity
+          style={[styles.closeButton, { top: floatingButtonTop }]}
+          onPress={handleCloseScanner}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.buttonBlur}>
+            <View style={styles.buttonBorder} />
+            <Ionicons name="close" size={24} color={theme.colors.text} />
+          </PlatformBlur>
+        </TouchableOpacity>
         <View style={styles.permissionContainer}>
           <Ionicons name="camera-outline" size={64} color={branding.primary} />
           <Text style={styles.permissionTitle}>{t('permissionRequired')}</Text>
@@ -1201,8 +1234,8 @@ export function ScannerScreen() {
 
       {/* Premium Close Button with PlatformBlur */}
       <TouchableOpacity
-        style={styles.closeButton}
-        onPress={() => router.back()}
+        style={[styles.closeButton, { top: floatingButtonTop }]}
+        onPress={handleCloseScanner}
         activeOpacity={0.7}
       >
         <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.buttonBlur}>
@@ -1214,7 +1247,7 @@ export function ScannerScreen() {
       {/* Premium Flash Button with PlatformBlur */}
       {device?.hasTorch && (
         <TouchableOpacity
-          style={styles.flashButton}
+          style={[styles.flashButton, { top: floatingButtonTop }]}
           onPress={() => setTorchEnabled(!torchEnabled)}
           activeOpacity={0.7}
         >

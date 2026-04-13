@@ -64,11 +64,21 @@ export interface RankRingProps {
   rank: number;
   totalMembers: number;
   rankPeriod: LeaderboardPeriod;
+  dropsToFirst?: number;
+  rewardText?: string | null;
   active: boolean;
   onPress?: () => void;
 }
 
-export function RankRing({ rank, totalMembers, rankPeriod, active, onPress }: RankRingProps) {
+export function RankRing({
+  rank,
+  totalMembers,
+  rankPeriod,
+  dropsToFirst = 0,
+  rewardText = null,
+  active,
+  onPress,
+}: RankRingProps) {
   const { t } = useTranslation('home');
 
   const progress = totalMembers > 0 && rank > 0
@@ -146,14 +156,28 @@ export function RankRing({ rank, totalMembers, rankPeriod, active, onPress }: Ra
         <Ionicons name="podium-outline" size={BG_ICON_SIZE} color={hexToRgba(RANK_COLOR, 0.08)} style={styles.bgIcon} />
         {rank > 0 ? (
           <>
-            <Text style={styles.rankLabel}>{t('pagerTabs.compete')}</Text>
+            <Text style={styles.rankLabel}>{periodLabel}</Text>
             <Text style={[styles.rankNumber, { color: RANK_COLOR }]}>#{rank}</Text>
-            <Text style={styles.percentile}>{periodLabel}</Text>
+            {rank === 1 ? (
+              <Text style={styles.metaPrimary}>{t('compete.defendFirst', { defaultValue: 'Braniš prvo mesto' })}</Text>
+            ) : dropsToFirst > 0 ? (
+              <Text style={styles.metaPrimary}>
+                {t('compete.stillNeedDrops', {
+                  count: dropsToFirst,
+                  defaultValue: `još ${dropsToFirst} kapi do #1`,
+                })}
+              </Text>
+            ) : null}
+            {!!rewardText && (
+              <Text style={styles.metaReward} numberOfLines={1}>
+                {rewardText}
+              </Text>
+            )}
           </>
         ) : (
           <>
             <Text style={[styles.rankNumber, { color: hexToRgba(RANK_COLOR, 0.4), fontSize: 28 }]}>—</Text>
-            <Text style={styles.percentile}>{t('pagerTabs.compete')}</Text>
+            <Text style={styles.percentile}>{periodLabel}</Text>
           </>
         )}
       </Animated.View>
@@ -209,5 +233,20 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: 2,
+  },
+  metaPrimary: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.62)',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  metaReward: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    color: RANK_COLOR,
+    marginTop: 2,
+    textAlign: 'center',
+    maxWidth: 220,
   },
 });

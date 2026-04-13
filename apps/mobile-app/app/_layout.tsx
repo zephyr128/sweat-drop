@@ -138,6 +138,7 @@ function StackNavigator() {
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
       <Stack.Screen name="auth/confirm" options={{ headerShown: false, animation: 'none' }} />

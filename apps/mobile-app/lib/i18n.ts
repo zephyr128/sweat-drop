@@ -28,6 +28,7 @@ import srSocialFriends from '@/locales/sr/socialFriends.json';
 import srStats from '@/locales/sr/stats.json';
 import srSettings from '@/locales/sr/settings.json';
 import srTransactions from '@/locales/sr/transactions.json';
+import srNotifications from '@/locales/sr/notifications.json';
 
 // ── English translations ──
 import enCommon from '@/locales/en/common.json';
@@ -56,6 +57,7 @@ import enSocialFriends from '@/locales/en/socialFriends.json';
 import enStats from '@/locales/en/stats.json';
 import enSettings from '@/locales/en/settings.json';
 import enTransactions from '@/locales/en/transactions.json';
+import enNotifications from '@/locales/en/notifications.json';
 
 const resources = {
   sr: {
@@ -85,6 +87,7 @@ const resources = {
     stats: srStats,
     settings: srSettings,
     transactions: srTransactions,
+    notifications: srNotifications,
   },
   en: {
     common: enCommon,
@@ -113,6 +116,7 @@ const resources = {
     stats: enStats,
     settings: enSettings,
     transactions: enTransactions,
+    notifications: enNotifications,
   },
 };
 
@@ -162,6 +166,7 @@ i18n.use(initReactI18next).init({
     'stats',
     'settings',
     'transactions',
+    'notifications',
   ],
   interpolation: {
     escapeValue: false,

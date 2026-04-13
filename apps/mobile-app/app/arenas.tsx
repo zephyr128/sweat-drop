@@ -1,19 +1,34 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCallback, useEffect, useMemo, type ComponentProps } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState, useCallback, useMemo, useRef, type ComponentProps } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
-import { theme, fontStyles, getNumberStyle, hexToRgba} from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
-import { useAvailableArenas, AvailableArena } from '@/hooks/useAvailableArenas';
+import { useAvailableArenas, type AvailableArena } from '@/hooks/useAvailableArenas';
 import { useSession } from '@/hooks/useSession';
+import { SliderTabs } from '@/components/SliderTabs';
+
+const CYAN = '#22D3EE';
+const GOLD = '#EAB308';
+const SILVER = '#94A3B8';
+const BRONZE = '#CD7F32';
 
 const SCORING_ICONS: Record<string, ComponentProps<typeof Ionicons>['name']> = {
   total_drops: 'water',
@@ -22,318 +37,418 @@ const SCORING_ICONS: Record<string, ComponentProps<typeof Ionicons>['name']> = {
   streak_days: 'flame-outline',
 };
 
-// ── Helper: Get arena colors (custom branding or default) ──
+const MEDAL_COLORS = [GOLD, SILVER, BRONZE] as const;
+
 function getArenaColors(arena: AvailableArena, fallbackPrimary: string) {
   return {
     primary: arena.card_color || fallbackPrimary,
     text: arena.card_text_color || '#FFFFFF',
     gradientEnd: arena.card_gradient_end || null,
+    hasBranding: !!(arena.card_color),
   };
 }
 
-// ── Helper: Opt-in badge text ──
-function getOptInBadge(arena: AvailableArena): { icon: string | null; text: string } | null {
-  switch (arena.opt_in_type) {
-    case 'drops':
-      return { icon: null, text: `${arena.opt_in_value}` };  // water icon rendered separately
-    case 'streak':
-      return { icon: '🔥', text: `${arena.opt_in_value}d` };
-    case 'level':
-      return { icon: '⭐', text: `${arena.opt_in_value}` };
-    case 'free':
-    default:
-      return null;
-  }
-}
-
-// ── Helper: Days until start ──
-function getDaysUntilStart(startDate: string) {
-  const start = new Date(startDate);
-  const now = new Date();
-  const diff = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  return Math.max(0, diff);
-}
-
-// ── Pulsing border for upcoming cards ──
-function PulsingBorderCard({ children, color }: { children: React.ReactNode; color: string }) {
-  const pulseOpacity = useSharedValue(0.15);
-
-  useEffect(() => {
-    pulseOpacity.value = withRepeat(
-      withTiming(0.4, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    );
-  }, []);
-
-  const animatedBorderStyle = useAnimatedStyle(() => ({
-    borderColor: `rgba(${parseInt(color.slice(1, 3), 16)}, ${parseInt(color.slice(3, 5), 16)}, ${parseInt(color.slice(5, 7), 16)}, ${pulseOpacity.value})`,
-  }));
-
-  return (
-    <Animated.View style={[styles.arenaCard, animatedBorderStyle, { opacity: 0.9 }]}>
-      {children}
-    </Animated.View>
-  );
+function getDaysLeft(dateStr: string): number {
+  return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 }
 
 export default function ArenasScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('arena');
   const { arenas, loading, refresh } = useAvailableArenas();
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
+  const hasLoadedRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
-      if (session?.user) {
+      if (session?.user && !hasLoadedRef.current) {
+        hasLoadedRef.current = true;
+        refresh();
+      } else if (session?.user) {
         refresh();
       }
-    }, [session?.user, refresh])
+    }, [session?.user, refresh]),
   );
 
-  const getDaysLeft = (endDate: string) => {
-    const end = new Date(endDate);
-    const now = new Date();
-    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  };
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
 
-  // Split arenas into upcoming, active, and completed
-  const upcomingArenas = useMemo(() => arenas.filter(a => a.arena_status === 'upcoming'), [arenas]);
-  const activeArenas = useMemo(() => arenas.filter(a => a.arena_status === 'active'), [arenas]);
-  const completedArenas = useMemo(() => arenas.filter(a => a.arena_status === 'ended'), [arenas]);
+  const activeArenas = useMemo(
+    () => arenas.filter((a) => a.arena_status === 'upcoming' || a.arena_status === 'active'),
+    [arenas],
+  );
+  const completedArenas = useMemo(
+    () => arenas.filter((a) => a.arena_status === 'ended'),
+    [arenas],
+  );
 
-  const renderArenaCard = (arena: AvailableArena, index: number, isUpcoming: boolean) => {
-    const colors = getArenaColors(arena, branding.primary);
-    const daysLeft = getDaysLeft(arena.end_date);
-    const daysUntilStart = getDaysUntilStart(arena.start_date);
-    const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
-    const optInBadge = getOptInBadge(arena);
-
-    const cardContent = (
-      <TouchableOpacity
-        onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
-        activeOpacity={0.8}
-        style={{ flex: 1 }}
-      >
-        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.arenaCardBlur}>
-          {/* Opt-in requirement badge — top-right corner */}
-          {optInBadge && (
-            <View style={[styles.optInBadge, { backgroundColor: hexToRgba(colors.primary, 0.15) }]}>
-              {optInBadge.icon === null
-                ? <Ionicons name="water" size={12} color={colors.primary} />
-                : <Text style={styles.optInBadgeIcon}>{optInBadge.icon}</Text>}
-              <Text style={[styles.optInBadgeText, { color: colors.primary }]}>{optInBadge.text}</Text>
-            </View>
-          )}
-
-          {/* Upcoming banner */}
-          {isUpcoming && (
-            <View style={[styles.upcomingBanner, { backgroundColor: hexToRgba(colors.primary, 0.1) }]}>
-              <Ionicons name="time-outline" size={14} color={colors.primary} />
-              <Text style={[styles.upcomingBannerText, { color: colors.primary }]}>
-                {daysUntilStart > 30
-                  ? `${t('startsOn')} ${fmtDate(arena.start_date, { month: 'short', day: 'numeric' })}`
-                  : daysUntilStart === 0
-                    ? t('startingNow')
-                    : `${t('startsIn')} ${daysUntilStart} ${daysUntilStart === 1 ? t('day') : t('days')}`}
-              </Text>
-            </View>
-          )}
-
-          {/* Top row: sponsor + name + scoring */}
-          <View style={styles.arenaCardTop}>
-            {arena.sponsor_logo ? (
-              <Image source={arena.sponsor_logo} style={styles.sponsorLogo} contentFit="contain" transition={200} />
-            ) : (
-              <View style={[styles.sponsorLogoPlaceholder, { backgroundColor: hexToRgba(colors.primary, 0.15) }]}>
-                <Ionicons name="trophy" size={20} color={colors.primary} />
-              </View>
-            )}
-            <View style={styles.arenaCardInfo}>
-              <Text style={[styles.arenaName, { color: colors.text }]} numberOfLines={1}>{arena.name}</Text>
-              <Text style={[styles.sponsorLabel, { color: colors.primary }]}>{arena.sponsor_name}</Text>
-            </View>
-            <View style={styles.arenaCardMeta}>
-              <Ionicons name={scoringIcon} size={20} color={colors.primary} />
-            </View>
-          </View>
-
-          {/* Description */}
-          {arena.description && (
-            <Text style={styles.arenaDescription} numberOfLines={2}>
-              {arena.description}
-            </Text>
-          )}
-
-          {/* Bottom row: stats + rank/join */}
-          <View style={styles.arenaCardBottom}>
-            <View style={styles.arenaStats}>
-              <View style={styles.arenaStat}>
-                <Ionicons name="people-outline" size={14} color={theme.colors.textSecondary} />
-                <Text style={styles.arenaStatText}>{arena.participant_count} {t('participants').toLowerCase()}</Text>
-              </View>
-              <Text style={styles.arenaStatDot}>·</Text>
-              <View style={styles.arenaStat}>
-                <Ionicons
-                  name={isUpcoming ? 'calendar-outline' : 'time-outline'}
-                  size={14}
-                  color={!isUpcoming && daysLeft <= 3 ? theme.colors.secondary : theme.colors.textSecondary}
-                />
-                <Text style={[styles.arenaStatText, !isUpcoming && daysLeft <= 3 && { color: theme.colors.secondary }]}>
-                  {isUpcoming
-                    ? `${daysUntilStart} ${daysUntilStart === 1 ? t('day') : t('days')}`
-                    : `${daysLeft} ${t('daysLeft').toLowerCase()}`}
-                </Text>
-              </View>
-            </View>
-            {arena.user_opted_in ? (
-              <View style={[styles.arenaRankBadge, { backgroundColor: hexToRgba(colors.primary, 0.12) }]}>
-                <Text style={[styles.arenaRankText, { color: colors.primary }]}>
-                  #{arena.user_rank ?? '—'}
-                </Text>
-              </View>
-            ) : (
-              <View style={[styles.joinBadge, { borderColor: hexToRgba(colors.primary, 0.3) }]}>
-                <Ionicons name="add-circle-outline" size={14} color={colors.primary} />
-                <Text style={[styles.joinBadgeText, { color: colors.primary }]}>
-                  {isUpcoming ? t('optInEarly') : t('joinArena')}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Prizes preview */}
-          {arena.prizes && arena.prizes.length > 0 && (
-            <View style={[styles.prizesRow, { borderTopColor: hexToRgba(colors.primary, 0.08) }]}>
-              {arena.prizes.slice(0, 3).map((prize, i) => {
-                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
-                return (
-                  <View key={i} style={styles.prizePill}>
-                    <Text style={styles.prizeMedal}>{medal}</Text>
-                    <Text style={styles.prizeText} numberOfLines={1}>{prize.prize}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </PlatformBlur>
-      </TouchableOpacity>
-    );
-
+  if (loading && !refreshing) {
     return (
-      <Animated.View key={arena.arena_id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
-        {isUpcoming ? (
-          <PulsingBorderCard color={colors.primary}>
-            {cardContent}
-          </PulsingBorderCard>
-        ) : (
-          <View style={[styles.arenaCard, { borderColor: hexToRgba(colors.primary, 0.15) }]}>
-            {cardContent}
-          </View>
-        )}
-      </Animated.View>
+      <View style={styles.container}>
+        <LinearGradient
+          colors={['#000000', '#0A0E1A', '#000000']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <ScreenHeader title={t('title')} />
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={branding.primary} />
+        </View>
+      </View>
     );
-  };
+  }
 
-  const renderCompletedCard = (arena: AvailableArena, index: number) => {
-    const colors = getArenaColors(arena, branding.primary);
-    const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
-    const endedDate = fmtDate(arena.end_date, { month: 'short', day: 'numeric' });
+  const refreshControl = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor={CYAN}
+      colors={[CYAN]}
+    />
+  );
 
-    return (
-      <Animated.View key={arena.arena_id} entering={FadeInDown.delay(100 + index * 80).duration(400)}>
-        <View style={[styles.arenaCard, { borderColor: hexToRgba(colors.primary, 0.08), opacity: 0.85 }]}>
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
-            activeOpacity={0.8}
-            style={{ flex: 1 }}
-          >
-            <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.arenaCardBlur}>
-              {/* ENDED badge — top-right */}
-              <View style={[styles.endedBadge, { backgroundColor: 'rgba(255, 255, 255, 0.06)' }]}>
-                <Ionicons name="flag" size={11} color={theme.colors.textTertiary} />
-                <Text style={styles.endedBadgeText}>{t('ended')}</Text>
-              </View>
+  // ── Active page ────────────────────────────────────────────────────────────
 
-              {/* Top row: sponsor + name + scoring */}
-              <View style={styles.arenaCardTop}>
-                {arena.sponsor_logo ? (
-                  <Image source={arena.sponsor_logo} style={[styles.sponsorLogo, { opacity: 0.7 }]} contentFit="contain" transition={200} />
-                ) : (
-                  <View style={[styles.sponsorLogoPlaceholder, { backgroundColor: hexToRgba(colors.primary, 0.08) }]}>
-                    <Ionicons name="trophy" size={20} color={hexToRgba(colors.primary, 0.5)} />
-                  </View>
-                )}
-                <View style={styles.arenaCardInfo}>
-                  <Text style={[styles.arenaName, { color: hexToRgba(colors.text, 0.8) }]} numberOfLines={1}>{arena.name}</Text>
-                  <Text style={[styles.sponsorLabel, { color: hexToRgba(colors.primary, 0.6) }]}>{arena.sponsor_name}</Text>
-                </View>
-                <View style={[styles.arenaCardMeta, { opacity: 0.5 }]}>
-                  <Ionicons name={scoringIcon} size={20} color={colors.primary} />
-                </View>
-              </View>
+  const activePage = (
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={[styles.pageContent, { paddingBottom: insets.bottom + 32 }]}
+      showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
+    >
+      {activeArenas.length === 0 ? (
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="sword-cross" size={56} color={theme.colors.textSecondary} />
+          <Text style={styles.emptyText}>{t('noActiveArenas')}</Text>
+          <Text style={styles.emptySubtext}>{t('noActiveArenasDesc')}</Text>
+        </View>
+      ) : (
+        activeArenas.map((arena, index) => {
+          const colors = getArenaColors(arena, CYAN);
+          const isUpcoming = arena.arena_status === 'upcoming';
+          const daysLeft = isUpcoming
+            ? getDaysLeft(arena.start_date)
+            : getDaysLeft(arena.end_date);
+          const scoringIcon = SCORING_ICONS[arena.scoring_model] ?? 'water';
 
-              {/* Bottom row: ended date + rank or "View Results" */}
-              <View style={styles.arenaCardBottom}>
-                <View style={styles.arenaStats}>
-                  <View style={styles.arenaStat}>
-                    <Ionicons name="calendar-outline" size={14} color={theme.colors.textTertiary} />
-                    <Text style={[styles.arenaStatText, { color: theme.colors.textTertiary }]}>
-                      {t('endedOn', { date: endedDate })}
+          // When the arena has custom branding colors, render a full-color gradient card.
+          // When there's no branding, fall back to the dark glass card.
+          const statIconColor = colors.hasBranding ? hexToRgba(colors.text, 0.65) : 'rgba(255,255,255,0.45)';
+          const statTextStyle = colors.hasBranding ? { color: hexToRgba(colors.text, 0.65) } : {};
+
+          const brandedCardContent = (
+            <>
+              {/* Header row: logo + info + scoring icon */}
+              <View style={styles.activeCardHeader}>
+                <View style={styles.activeCardMeta}>
+                  {arena.sponsor_logo ? (
+                    <Image
+                      source={arena.sponsor_logo}
+                      style={[
+                        styles.sponsorLogo,
+                        colors.hasBranding && styles.sponsorLogoBranded,
+                      ]}
+                      contentFit="contain"
+                      transition={200}
+                    />
+                  ) : (
+                    <View style={[
+                      styles.sponsorLogoPlaceholder,
+                      { backgroundColor: colors.hasBranding ? 'rgba(255,255,255,0.15)' : hexToRgba(colors.primary, 0.14) },
+                    ]}>
+                      <MaterialCommunityIcons name="sword-cross" size={20} color={colors.hasBranding ? colors.text : colors.primary} />
+                    </View>
+                  )}
+
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.sponsorLabel,
+                        { color: colors.hasBranding ? hexToRgba(colors.text, 0.75) : colors.primary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {arena.sponsor_name}
                     </Text>
-                  </View>
-                  <Text style={styles.arenaStatDot}>·</Text>
-                  <View style={styles.arenaStat}>
-                    <Ionicons name="people-outline" size={14} color={theme.colors.textTertiary} />
-                    <Text style={[styles.arenaStatText, { color: theme.colors.textTertiary }]}>
-                      {arena.participant_count}
+                    <Text
+                      style={[
+                        styles.arenaName,
+                        colors.hasBranding && { color: colors.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {arena.name}
                     </Text>
                   </View>
                 </View>
-                {arena.user_opted_in && arena.user_rank != null ? (
-                  <View style={[styles.arenaRankBadge, { backgroundColor: hexToRgba(colors.primary, 0.08) }]}>
-                    <Text style={[styles.arenaRankText, { color: hexToRgba(colors.primary, 0.7) }]}>
-                      #{arena.user_rank} / {arena.participant_count}
+
+                {/* Scoring icon badge — always CYAN so it pops on any background */}
+                <View style={[styles.scoringBadge, { backgroundColor: hexToRgba(CYAN, colors.hasBranding ? 0.20 : 0.12) }]}>
+                  <Ionicons name={scoringIcon} size={14} color={CYAN} />
+                </View>
+              </View>
+
+              {!!arena.description && (
+                <Text
+                  style={[
+                    styles.arenaDescription,
+                    colors.hasBranding && { color: hexToRgba(colors.text, 0.75) },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {arena.description}
+                </Text>
+              )}
+
+              <View style={styles.activeCardFooter}>
+                <View style={styles.statsRow}>
+                  {isUpcoming && (
+                    <View style={[
+                      styles.upcomingPill,
+                      colors.hasBranding
+                        ? { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' }
+                        : { backgroundColor: hexToRgba(colors.primary, 0.12), borderColor: hexToRgba(colors.primary, 0.25) },
+                    ]}>
+                      <Ionicons name="time-outline" size={10} color={colors.hasBranding ? colors.text : colors.primary} />
+                      <Text style={[styles.upcomingPillText, { color: colors.hasBranding ? colors.text : colors.primary }]}>
+                        {t('upcomingPill')}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.statPill}>
+                    <Ionicons name="people-outline" size={11} color={statIconColor} />
+                    <Text style={[styles.statText, statTextStyle]}>{arena.participant_count}</Text>
+                  </View>
+                  <View style={styles.statPill}>
+                    <Ionicons
+                      name={isUpcoming ? 'calendar-outline' : 'time-outline'}
+                      size={11}
+                      color={!colors.hasBranding && !isUpcoming && daysLeft <= 3 ? theme.colors.secondary : statIconColor}
+                    />
+                    <Text style={[
+                      styles.statText,
+                      statTextStyle,
+                      !colors.hasBranding && !isUpcoming && daysLeft <= 3 && { color: theme.colors.secondary },
+                    ]}>
+                      {isUpcoming
+                        ? `${daysLeft}d`
+                        : `${daysLeft} ${t('daysLeft').toLowerCase()}`}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Rank / join badge — always CYAN */}
+                {arena.user_opted_in ? (
+                  <View style={[styles.rankBadge, { backgroundColor: hexToRgba(CYAN, colors.hasBranding ? 0.22 : 0.14) }]}>
+                    <Text style={[styles.rankBadgeText, { color: CYAN }]}>
+                      #{arena.user_rank ?? '—'}
                     </Text>
                   </View>
                 ) : (
-                  <View style={[styles.viewResultsBadge, { borderColor: hexToRgba(colors.primary, 0.2) }]}>
-                    <Text style={[styles.viewResultsText, { color: hexToRgba(colors.primary, 0.7) }]}>
-                      {t('viewResults')}
+                  <View style={[styles.joinBadge, { borderColor: hexToRgba(CYAN, colors.hasBranding ? 0.45 : 0.35) }]}>
+                    <Ionicons name="add-circle-outline" size={12} color={CYAN} />
+                    <Text style={[styles.joinBadgeText, { color: CYAN }]}>
+                      {isUpcoming ? t('optInEarly') : t('joinArena')}
                     </Text>
-                    <Ionicons name="chevron-forward" size={14} color={hexToRgba(colors.primary, 0.5)} />
                   </View>
                 )}
               </View>
 
-              {/* Prizes — highlight won prize */}
+              {/* Prizes strip — always gold/silver/bronze */}
               {arena.prizes && arena.prizes.length > 0 && (
-                <View style={[styles.prizesRow, { borderTopColor: hexToRgba(colors.primary, 0.05) }]}>
+                <View style={[
+                  styles.prizesStrip,
+                  { borderTopColor: colors.hasBranding ? 'rgba(255,255,255,0.18)' : hexToRgba(colors.primary, 0.10) },
+                ]}>
                   {arena.prizes.slice(0, 3).map((prize, i) => {
-                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
-                    const isWon = arena.user_opted_in && arena.user_rank === prize.rank;
+                    const medalColor = MEDAL_COLORS[i] ?? GOLD;
                     return (
-                      <View key={i} style={[styles.prizePill, isWon && { backgroundColor: hexToRgba(colors.primary, 0.1) }]}>
-                        <Text style={styles.prizeMedal}>{medal}</Text>
-                        <Text style={[styles.prizeText, isWon && { color: colors.primary }]} numberOfLines={1}>
-                          {isWon ? `🏆 ${prize.prize}` : prize.prize}
+                      <View
+                        key={i}
+                        style={[
+                          styles.prizePill,
+                          colors.hasBranding && { backgroundColor: 'rgba(0,0,0,0.18)' },
+                        ]}
+                      >
+                        <Ionicons name="gift-outline" size={10} color={hexToRgba(medalColor, 0.9)} />
+                        <Text style={[styles.prizeRank, { color: medalColor }]}>#{prize.rank}</Text>
+                        <Text
+                          style={[styles.prizeText, colors.hasBranding && { color: hexToRgba(colors.text, 0.75) }]}
+                          numberOfLines={1}
+                        >
+                          {prize.prize}
                         </Text>
                       </View>
                     );
                   })}
                 </View>
               )}
-            </PlatformBlur>
-          </TouchableOpacity>
+            </>
+          );
+
+          return (
+            <Animated.View key={arena.arena_id} entering={FadeInDown.delay(80 + index * 70).duration(380)}>
+              <TouchableOpacity
+                style={[
+                  styles.activeCard,
+                  colors.hasBranding
+                    ? { borderColor: 'transparent' }
+                    : {
+                        borderTopColor: hexToRgba(colors.primary, 0.38),
+                        borderLeftColor: hexToRgba(colors.primary, 0.14),
+                        borderRightColor: 'rgba(255,255,255,0.05)',
+                        borderBottomColor: 'rgba(255,255,255,0.03)',
+                      },
+                ]}
+                onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
+                activeOpacity={0.8}
+              >
+                {colors.hasBranding ? (
+                  /* ── Branded card: full gradient fill ── */
+                  <LinearGradient
+                    colors={[colors.primary, colors.gradientEnd || colors.primary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.brandedCardInner}
+                  >
+                    {brandedCardContent}
+                  </LinearGradient>
+                ) : (
+                  /* ── Default glass card ── */
+                  <PlatformBlur intensity={50} tint="dark" style={styles.activeBlur} androidColor="rgba(16,16,28,0.97)">
+                    <LinearGradient
+                      colors={[hexToRgba(colors.primary, 0.10), 'rgba(255,255,255,0.02)', 'transparent']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
+                    {brandedCardContent}
+                  </PlatformBlur>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+          );
+        })
+      )}
+    </ScrollView>
+  );
+
+  // ── Completed page ─────────────────────────────────────────────────────────
+
+  const completedPage = (
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={[styles.pageContent, { paddingBottom: insets.bottom + 32 }]}
+      showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
+    >
+      {completedArenas.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="flag-outline" size={56} color={theme.colors.textSecondary} />
+          <Text style={styles.emptyText}>{t('noCompletedArenas')}</Text>
+          <Text style={styles.emptySubtext}>{t('noCompletedArenasDesc')}</Text>
         </View>
-      </Animated.View>
-    );
-  };
+      ) : (
+        completedArenas.map((arena, index) => {
+          const colors = getArenaColors(arena, CYAN);
+          const endedDate = fmtDate(arena.end_date, { month: 'short', day: 'numeric' });
+          const hasResult = arena.user_opted_in && arena.user_rank != null;
+
+          return (
+            <Animated.View key={arena.arena_id} entering={FadeInDown.delay(80 + index * 60).duration(350)}>
+              <TouchableOpacity
+                style={[
+                  styles.completedCard,
+                  {
+                    borderTopColor: hexToRgba(colors.primary, 0.16),
+                    borderLeftColor: hexToRgba(colors.primary, 0.07),
+                    borderRightColor: 'rgba(255,255,255,0.03)',
+                    borderBottomColor: 'rgba(255,255,255,0.02)',
+                  },
+                ]}
+                onPress={() => router.push({ pathname: '/arena/[id]', params: { id: arena.arena_id } })}
+                activeOpacity={0.8}
+              >
+                <PlatformBlur intensity={40} tint="dark" style={styles.completedBlur} androidColor="rgba(16,16,28,0.97)">
+                  <LinearGradient
+                    colors={[hexToRgba(colors.primary, 0.06), 'transparent']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
+
+                  <View style={styles.completedRow}>
+                    {/* Sponsor logo (dimmed) */}
+                    {arena.sponsor_logo ? (
+                      <Image
+                        source={arena.sponsor_logo}
+                        style={[styles.sponsorLogoSm, { opacity: 0.65 }]}
+                        contentFit="contain"
+                        transition={200}
+                      />
+                    ) : (
+                      <View style={[styles.sponsorLogoSmPlaceholder, { backgroundColor: hexToRgba(colors.primary, 0.08) }]}>
+                        <MaterialCommunityIcons name="sword-cross" size={16} color={hexToRgba(colors.primary, 0.5)} />
+                      </View>
+                    )}
+
+                    {/* Info */}
+                    <View style={styles.completedInfo}>
+                      <Text style={[styles.completedSponsor, { color: hexToRgba(colors.primary, 0.65) }]} numberOfLines={1}>
+                        {arena.sponsor_name}
+                      </Text>
+                      <Text style={[styles.completedName, { color: hexToRgba(colors.text, 0.80) }]} numberOfLines={1}>
+                        {arena.name}
+                      </Text>
+                      <Text style={styles.completedDate}>
+                        {t('endedOn', { date: endedDate })} · {arena.participant_count}
+                      </Text>
+                    </View>
+
+                    {/* Rank or view results */}
+                    {hasResult ? (
+                      <View style={styles.completedReward}>
+                        <View style={[styles.completedRankCircle, { backgroundColor: hexToRgba(colors.primary, 0.10), borderColor: hexToRgba(colors.primary, 0.25) }]}>
+                          <Text style={[styles.completedRankText, { color: hexToRgba(colors.primary, 0.85) }]}>
+                            #{arena.user_rank}
+                          </Text>
+                        </View>
+                        <Text style={styles.completedRankLabel}>
+                          {`/ ${arena.participant_count}`}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.viewResultsBadge, { borderColor: hexToRgba(colors.primary, 0.22) }]}>
+                        <Text style={[styles.viewResultsText, { color: hexToRgba(colors.primary, 0.65) }]}>
+                          {t('viewResults')}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={12} color={hexToRgba(colors.primary, 0.45)} />
+                      </View>
+                    )}
+                  </View>
+                </PlatformBlur>
+              </TouchableOpacity>
+            </Animated.View>
+          );
+        })
+      )}
+    </ScrollView>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#000000', '#0A0E1A', '#000000']}
         start={{ x: 0.5, y: 0 }}
@@ -341,58 +456,23 @@ export default function ArenasScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <ScreenHeader title={t('title')} insetHandled />
+      <ScreenHeader title={t('title')} />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <SliderTabs
+        tabs={[
+          { key: 'active', label: t('tabActive'), icon: 'flash-outline' },
+          { key: 'completed', label: t('tabCompleted'), icon: 'flag-outline' },
+        ]}
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as 'active' | 'completed')}
+        accentColor={CYAN}
+        style={{ flex: 1 }}
+        barStyle={styles.tabBar}
       >
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={branding.primary} />
-          </View>
-        ) : arenas.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={styles.emptyText}>{t('noArenas')}</Text>
-            <Text style={styles.emptySubtext}>{t('noArenasDesc')}</Text>
-          </View>
-        ) : (
-          <>
-            {/* 🔜 UPCOMING ARENAS SECTION */}
-            {upcomingArenas.length > 0 && (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionLabel}>🔜 {t('comingSoon')}</Text>
-                </View>
-                {upcomingArenas.map((arena, index) => renderArenaCard(arena, index, true))}
-              </>
-            )}
-
-            {/* ⚡ ACTIVE ARENAS SECTION */}
-            {activeArenas.length > 0 && (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionLabel}>⚡ {t('activeNow')}</Text>
-                </View>
-                {activeArenas.map((arena, index) => renderArenaCard(arena, index + upcomingArenas.length, false))}
-              </>
-            )}
-
-            {/* 🏁 COMPLETED ARENAS SECTION */}
-            {completedArenas.length > 0 && (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>🏁 {t('completedArenas')}</Text>
-                </View>
-                {completedArenas.map((arena, index) => renderCompletedCard(arena, index + upcomingArenas.length + activeArenas.length))}
-              </>
-            )}
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+        {activePage}
+        {completedPage}
+      </SliderTabs>
+    </View>
   );
 }
 
@@ -401,40 +481,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  scrollView: {
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabBar: {
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: 6,
+  },
+  page: {
     flex: 1,
   },
-  scrollContent: {
-    padding: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+  pageContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
   },
-  /* Section Headers */
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    marginTop: 8,
-  },
-  sectionLabel: {
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
-    letterSpacing: 1,
-  },
-  /* Loading / Empty */
-  loadingContainer: {
-    padding: theme.spacing['3xl'],
-    alignItems: 'center',
-  },
+
+  /* Empty states */
   emptyState: {
-    padding: theme.spacing['3xl'],
+    paddingTop: theme.spacing['3xl'],
     alignItems: 'center',
     gap: theme.spacing.md,
   },
   emptyText: {
     ...fontStyles.heading,
-    fontSize: 22,
+    fontSize: 20,
     color: theme.colors.text,
+    textAlign: 'center',
   },
   emptySubtext: {
     ...fontStyles.body,
@@ -442,30 +516,51 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
     letterSpacing: 0.3,
+    paddingHorizontal: theme.spacing.xl,
   },
-  /* Arena Card */
-  arenaCard: {
-    borderRadius: theme.borderRadius.xl,
+
+  /* Active card */
+  activeCard: {
+    borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: 1,
-    marginBottom: theme.spacing.md,
+    marginBottom: 12,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
   },
-  arenaCardBlur: {
-    borderRadius: theme.borderRadius.xl,
+  activeBlur: {
+    borderRadius: 18,
     overflow: 'hidden',
     padding: theme.spacing.lg,
-    backgroundColor: 'rgba(20, 20, 30, 0.75)',
+    backgroundColor: 'rgba(16, 16, 28, 0.82)',
   },
-  arenaCardTop: {
+  brandedCardInner: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
+  },
+  sponsorLogoBranded: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 10,
+  },
+  activeCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    marginBottom: 10,
+  },
+  activeCardMeta: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
+    gap: theme.spacing.sm,
   },
   sponsorLogo: {
     width: 40,
     height: 40,
     borderRadius: 10,
+    flexShrink: 0,
   },
   sponsorLogoPlaceholder: {
     width: 40,
@@ -473,83 +568,107 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
-  arenaCardInfo: {
-    flex: 1,
+  sponsorLabel: {
+    ...fontStyles.heading,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginBottom: 2,
   },
   arenaName: {
     ...fontStyles.bodySemiBold,
     fontSize: 15,
-    letterSpacing: 0.3,
+    color: theme.colors.text,
+    letterSpacing: 0.2,
   },
-  sponsorLabel: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    letterSpacing: 0.3,
-    marginTop: 2,
-  },
-  arenaCardMeta: {
+  scoringBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   arenaDescription: {
     ...fontStyles.body,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
-    marginBottom: 12,
-    letterSpacing: 0.3,
-    lineHeight: 20,
+    lineHeight: 17,
+    marginBottom: 10,
+    letterSpacing: 0.2,
   },
-  arenaCardBottom: {
+  activeCardFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  arenaStats: {
+  statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+    flexWrap: 'wrap',
   },
-  arenaStat: {
+  upcomingPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+    borderWidth: 1,
   },
-  arenaStatText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
+  upcomingPillText: {
+    ...fontStyles.heading,
+    fontSize: 9,
+    letterSpacing: 0.8,
+  },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  statText: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.45)',
     letterSpacing: 0.2,
   },
-  arenaStatDot: {
-    fontSize: 12,
-    color: theme.colors.textTertiary,
-  },
-  arenaRankBadge: {
+  rankBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 9,
+    flexShrink: 0,
   },
-  arenaRankText: {
-    ...fontStyles.number,
-    fontSize: 14,
+  rankBadgeText: {
+    ...fontStyles.heading,
+    fontSize: 13,
+    letterSpacing: 0.5,
   },
   joinBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
+    flexShrink: 0,
   },
   joinBadgeText: {
     ...fontStyles.heading,
-    fontSize: 14,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
-  prizesRow: {
+
+  /* Prizes strip */
+  prizesStrip: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   prizePill: {
@@ -557,89 +676,116 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  prizeMedal: {
-    fontSize: 14,
+  prizeRank: {
+    ...fontStyles.heading,
+    fontSize: 9,
+    letterSpacing: 0.3,
+    flexShrink: 0,
   },
   prizeText: {
-    ...fontStyles.bodyMedium,
+    ...fontStyles.body,
     fontSize: 10,
     color: theme.colors.textSecondary,
     flex: 1,
   },
-  /* Opt-in badge */
-  optInBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
+
+  /* Completed card */
+  completedCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 10,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+  },
+  completedBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    padding: theme.spacing.md,
+    backgroundColor: 'rgba(16, 16, 28, 0.82)',
+  },
+  completedRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  sponsorLogoSm: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  sponsorLogoSmPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  completedInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  completedSponsor: {
+    ...fontStyles.heading,
+    fontSize: 10,
+    letterSpacing: 1.0,
+  },
+  completedName: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  completedDate: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
+  completedReward: {
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    zIndex: 1,
+    flexShrink: 0,
   },
-  optInBadgeIcon: {
-    fontSize: 11,
-  },
-  optInBadgeText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 10,
-    letterSpacing: 0.3,
-  },
-  /* Upcoming banner */
-  upcomingBanner: {
-    flexDirection: 'row',
+  completedRankCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 12,
-    alignSelf: 'flex-start',
   },
-  upcomingBannerText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 12,
-    letterSpacing: 0.3,
-  },
-  /* Ended badge */
-  endedBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    zIndex: 1,
-  },
-  endedBadgeText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 10,
-    color: theme.colors.textTertiary,
+  completedRankText: {
+    ...fontStyles.heading,
+    fontSize: 13,
     letterSpacing: 0.5,
   },
-  /* View Results badge */
+  completedRankLabel: {
+    ...fontStyles.body,
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.2,
+  },
   viewResultsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9,
     borderWidth: 1,
+    flexShrink: 0,
   },
   viewResultsText: {
     ...fontStyles.bodySemiBold,
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: 0.3,
   },
 });

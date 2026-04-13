@@ -15,7 +15,7 @@ export interface SheetArenaContentProps {
   onViewAllArenas: () => void;
 }
 
-export function SheetArenaContent({
+export const SheetArenaContent = React.memo(function SheetArenaContent({
   isUnlocked,
   activeArenas,
   onArenaPress,
@@ -31,7 +31,7 @@ export function SheetArenaContent({
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },

@@ -26,6 +26,8 @@ import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 
+const ORANGE = '#FF9F4A';
+
 // ── Helper functions (module-level, no hooks) ────────────────────────────────
 
 function getTimeUntilMidnight(): string {
@@ -310,8 +312,8 @@ export default function ChallengesScreen() {
                 style={[
                   styles.activeCard,
                   {
-                    borderTopColor: hexToRgba(branding.primary, isCompleted ? 0.45 : 0.28),
-                    borderLeftColor: hexToRgba(branding.primary, isCompleted ? 0.2 : 0.1),
+                    borderTopColor: hexToRgba(ORANGE, isCompleted ? 0.45 : 0.28),
+                    borderLeftColor: hexToRgba(ORANGE, isCompleted ? 0.2 : 0.1),
                     borderRightColor: 'rgba(255,255,255,0.05)',
                     borderBottomColor: 'rgba(255,255,255,0.03)',
                   },
@@ -323,7 +325,7 @@ export default function ChallengesScreen() {
                   <LinearGradient
                     colors={isCompleted
                       ? ['rgba(74,222,128,0.06)', 'transparent']
-                      : [hexToRgba(branding.primary, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
+                      : [hexToRgba(ORANGE, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     style={StyleSheet.absoluteFill}
                     pointerEvents="none"
@@ -332,11 +334,11 @@ export default function ChallengesScreen() {
                   {/* ── Header row: icon + meta + badge image ── */}
                   <View style={styles.activeCardHeader}>
                     <View style={styles.activeCardMeta}>
-                      <View style={[styles.typeIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                        <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={branding.primary} />
+                      <View style={[styles.typeIconWrap, { backgroundColor: hexToRgba(ORANGE, 0.1) }]}>
+                        <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={ORANGE} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.typeLabel, { color: branding.primary }]}>{typeLabel}</Text>
+                        <Text style={[styles.typeLabel, { color: ORANGE }]}>{typeLabel}</Text>
                         <Text style={styles.challengeName} numberOfLines={2}>{challenge.name}</Text>
                       </View>
                     </View>
@@ -350,8 +352,8 @@ export default function ChallengesScreen() {
                         transition={200}
                       />
                     ) : (
-                      <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.08), borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                        <Ionicons name="shield-outline" size={22} color={hexToRgba(branding.primary, 0.5)} />
+                      <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(ORANGE, 0.08), borderColor: hexToRgba(ORANGE, 0.2) }]}>
+                        <Ionicons name="shield-outline" size={22} color={hexToRgba(ORANGE, 0.5)} />
                       </View>
                     )}
                   </View>
@@ -366,7 +368,7 @@ export default function ChallengesScreen() {
                     <LinearGradient
                       colors={isCompleted
                         ? ['#4ade80', '#22c55e']
-                        : [branding.primary, hexToRgba(branding.primary, 0.7)]}
+                        : [ORANGE, hexToRgba(ORANGE, 0.7)]}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                       style={[styles.progressFill, { width: `${pct}%` }]}
                     />
@@ -375,7 +377,7 @@ export default function ChallengesScreen() {
                   {/* Progress meta row */}
                   <View style={styles.progressMetaRow}>
                     <Text style={styles.progressMeta}>
-                      <Text style={[getNumberStyle(13), { color: isCompleted ? '#4ade80' : branding.primary }]}>{current}</Text>
+                      <Text style={[getNumberStyle(13), { color: isCompleted ? '#4ade80' : ORANGE }]}>{current}</Text>
                       <Text style={styles.progressSlash}> / </Text>
                       <Text style={[getNumberStyle(13), { color: theme.colors.textSecondary }]}>{target}</Text>
                       <Text style={styles.progressUnit}> {unit}</Text>
@@ -410,8 +412,8 @@ export default function ChallengesScreen() {
                     )}
                     {challenge.reward_drops > 0 && (
                       <View style={styles.rewardPill}>
-                        <Ionicons name="water" size={11} color={branding.primary} />
-                        <Text style={[styles.rewardPillText, { color: branding.primary }]}>
+                        <Ionicons name="water" size={11} color={ORANGE} />
+                        <Text style={[styles.rewardPillText, { color: ORANGE }]}>
                           +{challenge.reward_drops}
                         </Text>
                       </View>
@@ -445,8 +447,8 @@ export default function ChallengesScreen() {
             <Animated.View key={challenge.id} entering={FadeInDown.delay(80 + index * 60).duration(350)}>
               <TouchableOpacity
                 style={[styles.completedCard, {
-                  borderTopColor: hexToRgba(branding.primary, 0.18),
-                  borderLeftColor: hexToRgba(branding.primary, 0.08),
+                  borderTopColor: hexToRgba(ORANGE, 0.18),
+                  borderLeftColor: hexToRgba(ORANGE, 0.08),
                   borderRightColor: 'rgba(255,255,255,0.04)',
                   borderBottomColor: 'rgba(255,255,255,0.02)',
                 }]}
@@ -466,13 +468,13 @@ export default function ChallengesScreen() {
                     {challenge.badge_image_url ? (
                       <Image source={challenge.badge_image_url} style={styles.completedBadgeImg} contentFit="cover" transition={200} />
                     ) : (
-                      <View style={[styles.completedBadgeFallback, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                        <Ionicons name="shield-checkmark" size={20} color={branding.primary} />
+                      <View style={[styles.completedBadgeFallback, { backgroundColor: hexToRgba(ORANGE, 0.1) }]}>
+                        <Ionicons name="shield-checkmark" size={20} color={ORANGE} />
                       </View>
                     )}
 
                     <View style={styles.completedInfo}>
-                      <Text style={[styles.completedType, { color: branding.primary }]}>
+                      <Text style={[styles.completedType, { color: ORANGE }]}>
                         {getChallengeTypeLabel(challenge.challenge_type, t)}
                       </Text>
                       <Text style={styles.completedName} numberOfLines={1}>{challenge.name}</Text>
@@ -485,7 +487,7 @@ export default function ChallengesScreen() {
                       <View style={[styles.completedCheckCircle, { backgroundColor: 'rgba(74,222,128,0.12)', borderColor: 'rgba(74,222,128,0.3)' }]}>
                         <Ionicons name="checkmark" size={14} color="#4ade80" />
                       </View>
-                      <Text style={[styles.completedDrops, { color: branding.primary }]}>
+                      <Text style={[styles.completedDrops, { color: ORANGE }]}>
                         +{challenge.reward_drops || 0}
                       </Text>
                       <Text style={styles.completedDropsLabel}>drops</Text>
@@ -519,7 +521,7 @@ export default function ChallengesScreen() {
         ]}
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as 'active' | 'completed')}
-        accentColor={branding.primary}
+        accentColor={ORANGE}
         style={{ flex: 1 }}
         barStyle={styles.tabBar}
       >

@@ -31,14 +31,13 @@ import { BottomSheet } from '@/components/BottomSheet';
 
 const PAGE_SIZE = 20;
 
-type StatusFilter = 'all' | 'pending' | 'confirmed' | 'claimed' | 'cancelled' | 'expired';
+type StatusFilter = 'all' | 'pending' | 'confirmed' | 'cancelled' | 'expired';
 
 const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap }> = {
   pending:   { color: '#fbbf24', icon: 'time-outline'         },
   confirmed: { color: '#4ade80', icon: 'checkmark-circle'     },
   cancelled: { color: '#f87171', icon: 'close-circle'         },
   expired:   { color: '#94a3b8', icon: 'alert-circle-outline' },
-  claimed:   { color: '#60a5fa', icon: 'gift-outline'         },
 };
 
 const FILTER_OPTIONS: {
@@ -51,7 +50,6 @@ const FILTER_OPTIONS: {
   { key: 'all',       labelKey: 'filterAll',       descKey: 'filterAllDesc',       icon: 'list-outline',        color: '#FFFFFF'  },
   { key: 'pending',   labelKey: 'pending',          descKey: 'filterPendingDesc',   icon: 'time-outline',        color: '#fbbf24'  },
   { key: 'confirmed', labelKey: 'filterConfirmed',  descKey: 'filterConfirmedDesc', icon: 'checkmark-circle',    color: '#4ade80'  },
-  { key: 'claimed',   labelKey: 'claimed',          descKey: 'filterClaimedDesc',   icon: 'gift-outline',        color: '#60a5fa'  },
   { key: 'cancelled', labelKey: 'filterCancelled',  descKey: 'filterCancelledDesc', icon: 'close-circle',        color: '#f87171'  },
   { key: 'expired',   labelKey: 'filterExpired',    descKey: 'filterExpiredDesc',   icon: 'alert-circle-outline',color: '#94a3b8'  },
 ];
@@ -268,8 +266,12 @@ export default function RedemptionsScreen() {
 
   // ── Helpers ──
   const getRedemptionName = (r: any) => {
-    if (r.source_type === 'leaderboard_prize') return r.description || t('leaderboardPrize');
-    if (r.source_type === 'arena_prize') return r.description || t('arenaPrize');
+    if (r.source_type === 'leaderboard_prize' || r.source_type === 'arena_prize') {
+      const desc: string = r.description || '';
+      const dashIdx = desc.indexOf(' — ');
+      if (dashIdx !== -1) return desc.slice(dashIdx + 3);
+      return desc || (r.source_type === 'leaderboard_prize' ? t('leaderboardPrize') : t('arenaPrize'));
+    }
     return r.rewards?.name || t('unknownReward');
   };
 
@@ -419,13 +421,6 @@ export default function RedemptionsScreen() {
                   </>
                 )}
               </TouchableOpacity>
-            )}
-
-            {redemption.status === 'claimed' && (
-              <View style={[styles.prizeRow, { backgroundColor: hexToRgba('#60a5fa', 0.07) }]}>
-                <Text style={styles.prizeEmoji}>🎖️</Text>
-                <Text style={[styles.prizeLabel, { color: '#60a5fa' }]}>{t('prizeAwarded')}</Text>
-              </View>
             )}
 
             {redemption.status === 'expired' && (
@@ -889,21 +884,6 @@ const styles = StyleSheet.create({
     ...fontStyles.bodySemiBold,
     fontSize: 13,
     color: '#f87171',
-    letterSpacing: 0.2,
-  },
-  prizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  prizeEmoji: { fontSize: 16 },
-  prizeLabel: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 13,
     letterSpacing: 0.2,
   },
   expiredRow: {

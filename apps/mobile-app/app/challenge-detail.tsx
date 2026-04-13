@@ -23,6 +23,8 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
+const ORANGE = '#FF9F4A';
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getTimeUntilMidnight(): string {
@@ -303,8 +305,8 @@ export default function ChallengeDetailScreen() {
         {/* ── Hero card: badge + title ─────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(80).duration(380)}>
           <View style={[styles.heroCard, {
-            borderTopColor: hexToRgba(branding.primary, 0.35),
-            borderLeftColor: hexToRgba(branding.primary, 0.15),
+            borderTopColor: hexToRgba(ORANGE, 0.35),
+            borderLeftColor: hexToRgba(ORANGE, 0.15),
             borderRightColor: 'rgba(255,255,255,0.05)',
             borderBottomColor: 'rgba(255,255,255,0.03)',
           }]}>
@@ -312,7 +314,7 @@ export default function ChallengeDetailScreen() {
               <LinearGradient
                 colors={isCompleted
                   ? ['rgba(74,222,128,0.08)', 'transparent']
-                  : [hexToRgba(branding.primary, 0.1), 'rgba(255,255,255,0.02)', 'transparent']}
+                  : [hexToRgba(ORANGE, 0.1), 'rgba(255,255,255,0.02)', 'transparent']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
@@ -322,7 +324,7 @@ export default function ChallengeDetailScreen() {
                 {/* Badge image / placeholder */}
                 <Animated.View entering={ZoomIn.delay(180).duration(350)}>
                   {challenge.badge_image_url ? (
-                    <View style={[styles.badgeWrap, { borderColor: isCompleted ? 'rgba(74,222,128,0.4)' : hexToRgba(branding.primary, 0.4) }]}>
+                    <View style={[styles.badgeWrap, { borderColor: isCompleted ? 'rgba(74,222,128,0.4)' : hexToRgba(ORANGE, 0.4) }]}>
                       <Image
                         source={challenge.badge_image_url}
                         style={styles.badgeImage}
@@ -336,8 +338,8 @@ export default function ChallengeDetailScreen() {
                       )}
                     </View>
                   ) : (
-                    <View style={[styles.badgeWrap, styles.badgePlaceholder, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
-                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={36} color={branding.primary} />
+                    <View style={[styles.badgeWrap, styles.badgePlaceholder, { borderColor: hexToRgba(ORANGE, 0.3), backgroundColor: hexToRgba(ORANGE, 0.08) }]}>
+                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={36} color={ORANGE} />
                     </View>
                   )}
                 </Animated.View>
@@ -345,9 +347,9 @@ export default function ChallengeDetailScreen() {
                 {/* Title block */}
                 <View style={styles.heroMeta}>
                   <View style={styles.heroTopRow}>
-                    <View style={[styles.typeBadge, { backgroundColor: hexToRgba(branding.primary, 0.1), borderColor: hexToRgba(branding.primary, 0.25) }]}>
-                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={11} color={branding.primary} />
-                      <Text style={[styles.typeBadgeText, { color: branding.primary }]}>{typeLabel}</Text>
+                    <View style={[styles.typeBadge, { backgroundColor: hexToRgba(ORANGE, 0.1), borderColor: hexToRgba(ORANGE, 0.25) }]}>
+                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={11} color={ORANGE} />
+                      <Text style={[styles.typeBadgeText, { color: ORANGE }]}>{typeLabel}</Text>
                     </View>
 
                     {timeInfo && (
@@ -378,12 +380,12 @@ export default function ChallengeDetailScreen() {
 
               {/* Info pills row */}
               <View style={styles.pillsRow}>
-                <View style={[styles.infoPill, { backgroundColor: hexToRgba(branding.primary, 0.08), borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="trophy-outline" size={13} color={branding.primary} />
+                <View style={[styles.infoPill, { backgroundColor: hexToRgba(ORANGE, 0.08), borderColor: hexToRgba(ORANGE, 0.15) }]}>
+                  <Ionicons name="trophy-outline" size={13} color={ORANGE} />
                   <Text style={[styles.infoPillText, { color: theme.colors.text }]}>{t('needed', { count: target, unit })}</Text>
                 </View>
-                <View style={[styles.infoPill, { backgroundColor: hexToRgba(branding.primary, 0.08), borderColor: hexToRgba(branding.primary, 0.15) }]}>
-                  <Ionicons name="water" size={13} color={branding.primary} />
+                <View style={[styles.infoPill, { backgroundColor: hexToRgba(ORANGE, 0.08), borderColor: hexToRgba(ORANGE, 0.15) }]}>
+                  <Ionicons name="water" size={13} color={ORANGE} />
                   <Text style={[styles.infoPillText, { color: theme.colors.text }]}>{t('dropsReward', { count: rewardDrops })}</Text>
                 </View>
               </View>
@@ -393,10 +395,10 @@ export default function ChallengeDetailScreen() {
 
         {/* ── Progress card ────────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(200).duration(380)}>
-          <View style={[styles.card, { borderTopColor: hexToRgba(branding.primary, 0.2), borderLeftColor: hexToRgba(branding.primary, 0.1), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' }]}>
+          <View style={[styles.card, { borderTopColor: hexToRgba(ORANGE, 0.2), borderLeftColor: hexToRgba(ORANGE, 0.1), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' }]}>
             <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
               <LinearGradient
-                colors={[hexToRgba(branding.primary, 0.05), 'transparent']}
+                colors={[hexToRgba(ORANGE, 0.05), 'transparent']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
@@ -409,10 +411,10 @@ export default function ChallengeDetailScreen() {
                     radius={46}
                     strokeWidth={7}
                     progress={progressRatio}
-                    color={isCompleted ? '#4ade80' : branding.primary}
+                    color={isCompleted ? '#4ade80' : ORANGE}
                     bgColor="rgba(255,255,255,0.07)"
                   >
-                    <Text style={[getNumberStyle(26), { color: isCompleted ? '#4ade80' : branding.primary }]}>
+                    <Text style={[getNumberStyle(26), { color: isCompleted ? '#4ade80' : ORANGE }]}>
                       {Math.round(progressRatio * 100)}
                     </Text>
                     <Text style={styles.ringPct}>%</Text>
@@ -425,14 +427,14 @@ export default function ChallengeDetailScreen() {
 
                   <View style={styles.progressBarTrack}>
                     <LinearGradient
-                      colors={isCompleted ? ['#4ade80', '#22c55e'] : [branding.primary, hexToRgba(branding.primary, 0.6)]}
+                      colors={isCompleted ? ['#4ade80', '#22c55e'] : [ORANGE, hexToRgba(ORANGE, 0.6)]}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                       style={[styles.progressBarFill, { width: `${progressRatio * 100}%` }]}
                     />
                   </View>
 
                   <View style={styles.progressNumRow}>
-                    <Text style={[getNumberStyle(28), { color: isCompleted ? '#4ade80' : branding.primary }]}>
+                    <Text style={[getNumberStyle(28), { color: isCompleted ? '#4ade80' : ORANGE }]}>
                       {current}
                     </Text>
                     <Text style={styles.progressSlash}> / </Text>
@@ -468,12 +470,12 @@ export default function ChallengeDetailScreen() {
 
         {/* ── How to participate ───────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(340).duration(380)}>
-          <View style={[styles.card, { borderTopColor: hexToRgba(branding.primary, 0.15), borderLeftColor: hexToRgba(branding.primary, 0.08), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' }]}>
+          <View style={[styles.card, { borderTopColor: hexToRgba(ORANGE, 0.15), borderLeftColor: hexToRgba(ORANGE, 0.08), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' }]}>
             <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
 
               <View style={styles.howToHeader}>
-                <View style={[styles.howToIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                  <Ionicons name="bulb-outline" size={18} color={branding.primary} />
+                <View style={[styles.howToIconWrap, { backgroundColor: hexToRgba(ORANGE, 0.1) }]}>
+                  <Ionicons name="bulb-outline" size={18} color={ORANGE} />
                 </View>
                 <Text style={styles.howToTitle}>{t('howToParticipate')}</Text>
               </View>
@@ -490,16 +492,16 @@ export default function ChallengeDetailScreen() {
                     style={styles.stepRow}
                   >
                     <LinearGradient
-                      colors={[hexToRgba(branding.primary, 0.18), hexToRgba(branding.primary, 0.08)]}
+                      colors={[hexToRgba(ORANGE, 0.18), hexToRgba(ORANGE, 0.08)]}
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                       style={styles.stepNumGradient}
                     >
-                      <Text style={[styles.stepNum, getNumberStyle(13), { color: branding.primary }]}>
+                      <Text style={[styles.stepNum, getNumberStyle(13), { color: ORANGE }]}>
                         {idx + 1}
                       </Text>
                     </LinearGradient>
                     {idx < 2 && (
-                      <View style={[styles.stepConnector, { backgroundColor: hexToRgba(branding.primary, 0.15) }]} />
+                      <View style={[styles.stepConnector, { backgroundColor: hexToRgba(ORANGE, 0.15) }]} />
                     )}
                     <Text style={styles.stepText}>{stepText}</Text>
                   </Animated.View>

@@ -15,7 +15,6 @@ import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import Svg, { Circle } from 'react-native-svg';
 import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
@@ -30,8 +29,6 @@ const HERO_W = (SCREEN_W - CARD_PAD * 2 - CARD_GAP) * 0.58;
 const SIDE_W = (SCREEN_W - CARD_PAD * 2 - CARD_GAP) * 0.42;
 const HERO_H = 162;
 const SIDE_H = (HERO_H - CARD_GAP) / 2;
-const RING_SIZE = 60;
-const RING_STROKE = 5;
 const ORANGE = '#FF9F4A';
 const GREEN = '#4ade80';
 const GLASS_BG = 'rgba(10, 10, 20, 0.52)';
@@ -64,20 +61,6 @@ const barStyles = StyleSheet.create({
   fillWrap: { height: '100%', width: '100%' },
   fill: { height: '100%', borderRadius: 2 },
 });
-
-// ── Mini ring ─────────────────────────────────────────────────────────────────
-function MiniRing({ pct, color }: { pct: number; color: string }) {
-  const r = (RING_SIZE - RING_STROKE) / 2;
-  const circ = 2 * Math.PI * r;
-  const dash = Math.min(pct / 100, 1) * circ;
-  return (
-    <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: '-90deg' }] }}>
-      <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={r} stroke="rgba(255,255,255,0.08)" strokeWidth={RING_STROKE} fill="none" />
-      <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={r} stroke={color} strokeWidth={RING_STROKE} fill="none"
-        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-    </Svg>
-  );
-}
 
 // ── Challenge type label ──────────────────────────────────────────────────────
 function useChallengeTypeLabel(t: (k: string) => string) {
@@ -132,11 +115,24 @@ export function ChallengesStatsCards({
 
   const allDone = total > 0 && completed === total;
 
-  // Show active (in-progress) first, then completed
-  const sortedChallenges = [...challenges].sort((a, b) => {
-    if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
-    return b.progress_percentage - a.progress_percentage;
-  });
+  const activeChallenges = challenges.filter((c) => !c.is_completed);
+
+  // Sort active challenges by remaining effort (lowest first = closest to completion).
+  // Drop-based challenges use raw remaining drops; streak-based challenges use remaining
+  // days scaled up so they don't outrank a challenge that just needs a few more drops.
+  function remainingEffort(c: ChallengeProgress): number {
+    const isStreakBased = c.challenge_type === 'streak' || c.challenge_type === 'checkin_streak';
+    if (isStreakBased) {
+      const daysLeft = Math.max(0, c.target_drops - c.current_streak_days);
+      return daysLeft * 1000;
+    }
+    return Math.max(0, c.target_drops - c.current_drops);
+  }
+
+  const sortedActive = [...activeChallenges].sort((a, b) => remainingEffort(a) - remainingEffort(b));
+
+  // Nearest-to-completion active challenge for the hero card
+  const nearestChallenge = sortedActive[0] ?? null;
 
   function formatK(n: number) {
     if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -149,13 +145,13 @@ export function ChallengesStatsCards({
       {/* ── Top row: hero + side ── */}
       <View style={styles.topRow}>
 
-        {/* Hero card — overall completion */}
+        {/* Hero card — nearest-to-completion challenge (or all-done state) */}
         <PressableCard
           style={[styles.heroCard, { borderColor: hexToRgba(allDone ? GREEN : ORANGE, 0.30) }]}
-          onPress={onViewActiveChallenges}
+          onPress={nearestChallenge ? () => onChallengePress(nearestChallenge.challenge_id) : onViewActiveChallenges}
           disabled={!isUnlocked}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
             <LinearGradient
               colors={[hexToRgba(allDone ? GREEN : ORANGE, 0.16), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -163,45 +159,57 @@ export function ChallengesStatsCards({
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
-            {/* Watermark */}
-            <Ionicons name="flame-outline" size={96} color={hexToRgba(allDone ? GREEN : ORANGE, 0.07)} style={styles.watermark} />
+            <Ionicons name="flame-outline" size={150} color={hexToRgba(allDone ? GREEN : ORANGE, 0.2)} style={styles.watermark} />
 
-            {/* Eyebrow */}
-            <View style={styles.heroLabelRow}>
-              <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(allDone ? GREEN : ORANGE, 0.14) }]}>
-                <Ionicons name={allDone ? 'checkmark-circle' : 'flame-outline'} size={12} color={allDone ? GREEN : ORANGE} />
-              </View>
-              <Text style={styles.heroEyebrow}>{t('challenges.overallProgress')}</Text>
-            </View>
-
-            {/* Big number */}
-            <Text style={[styles.heroNumber, { color: allDone ? GREEN : ORANGE }]}>
-              {loading ? '–' : `${overallPct}%`}
-            </Text>
-            <Text style={styles.heroSub}>
-              {loading ? '' : `${completed} / ${total} ${t('challenges.completed')}`}
-            </Text>
-
-            {/* Status line */}
             {allDone ? (
-              <View style={styles.heroStatusRow}>
-                <Ionicons name="star" size={11} color={GREEN} />
-                <Text style={[styles.heroStatus, { color: GREEN }]}>{t('challenges.allDone')}</Text>
-              </View>
-            ) : total > 0 ? (
-              <View style={styles.heroStatusRow}>
-                <Ionicons name="time-outline" size={11} color={hexToRgba(ORANGE, 0.7)} />
-                <Text style={[styles.heroStatus, { color: hexToRgba(ORANGE, 0.85) }]}>
-                  {`${total - completed} ${t('challenges.remaining')}`}
+              <>
+                <View style={styles.heroLabelRow}>
+                  <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(GREEN, 0.14) }]}>
+                    <Ionicons name="checkmark-circle" size={12} color={GREEN} />
+                  </View>
+                  <Text style={styles.heroEyebrow}>{t('challenges.allDone')}</Text>
+                </View>
+                <Text style={[styles.heroNumber, { color: GREEN }]}>{`${completed}/${total}`}</Text>
+                <Text style={styles.heroSub}>{t('challenges.completed')}</Text>
+              </>
+            ) : nearestChallenge ? (
+              <>
+                <View style={styles.heroLabelRow}>
+                  <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(ORANGE, 0.14) }]}>
+                    <Ionicons name="flame-outline" size={12} color={ORANGE} />
+                  </View>
+                  <Text style={styles.heroEyebrow}>{t('challenges.nearestGoal')}</Text>
+                </View>
+                <Text style={[styles.heroNumber, { color: ORANGE }]}>
+                  {loading ? '–' : `${nearestChallenge.progress_percentage}%`}
                 </Text>
-              </View>
-            ) : null}
-
-            {/* Progress ring bottom-right */}
-            {!loading && total > 0 && (
-              <View style={styles.heroRingWrap} pointerEvents="none">
-                <MiniRing pct={overallPct} color={allDone ? GREEN : ORANGE} />
-              </View>
+                <Text style={styles.heroSub} numberOfLines={2}>
+                  {nearestChallenge.challenge_name}
+                </Text>
+                <View style={styles.heroStatusRow}>
+                  <Ionicons name="trophy-outline" size={11} color={hexToRgba(ORANGE, 0.7)} />
+                  <Text style={[styles.heroStatus, { color: hexToRgba(ORANGE, 0.85) }]}>
+                    {(nearestChallenge.challenge_type === 'streak' || nearestChallenge.challenge_type === 'checkin_streak')
+                      ? `${nearestChallenge.current_streak_days}/${nearestChallenge.target_drops} ${t('unitDays')} · +${nearestChallenge.reward_drops} drops`
+                      : `${formatK(nearestChallenge.current_drops)}/${formatK(nearestChallenge.target_drops)} · +${nearestChallenge.reward_drops} drops`}
+                  </Text>
+                </View>
+                {!loading && (
+                  <View style={styles.heroProgressWrap} pointerEvents="none">
+                    <AnimBar pct={nearestChallenge.progress_percentage} color={ORANGE} />
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={styles.heroLabelRow}>
+                  <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(ORANGE, 0.14) }]}>
+                    <Ionicons name="flame-outline" size={12} color={ORANGE} />
+                  </View>
+                  <Text style={styles.heroEyebrow}>{t('challenges.overallProgress')}</Text>
+                </View>
+                <Text style={[styles.heroNumber, { color: 'rgba(255,255,255,0.35)' }]}>–</Text>
+              </>
             )}
           </PlatformBlur>
         </PressableCard>
@@ -215,7 +223,7 @@ export function ChallengesStatsCards({
             onPress={onViewCompletedChallenges}
             disabled={!isUnlocked}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
               <LinearGradient
                 colors={[hexToRgba(GREEN, 0.10), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
@@ -244,7 +252,7 @@ export function ChallengesStatsCards({
             onPress={onViewActiveChallenges}
             disabled={!isUnlocked}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
               <LinearGradient
                 colors={[hexToRgba(ORANGE, 0.10), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
@@ -277,7 +285,7 @@ export function ChallengesStatsCards({
           onPress={onTrophyRoomPress}
           disabled={!isUnlocked}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.badgesBlur} androidColor="rgba(10,10,20,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.badgesBlur} androidColor="rgba(38,32,58,0.97)">
             <LinearGradient
               colors={[hexToRgba(ORANGE, 0.12), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -322,54 +330,51 @@ export function ChallengesStatsCards({
       )}
 
       {/* ── Active Challenges header ── */}
-      {!loading && sortedChallenges.length > 0 && (
+      {!loading && sortedActive.length > 0 && (
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionLabel}>{t('activeChallenges').toUpperCase()}</Text>
         </View>
       )}
 
-      {/* ── Challenge rows ── */}
+      {/* ── Challenge rows (active only) ── */}
       {loading ? (
         <View style={styles.skeletonWrap}>
           {[1, 2, 3].map((i) => (
             <View key={i} style={styles.skeletonRow} />
           ))}
         </View>
-      ) : challenges.length > 0 ? (
+      ) : sortedActive.length > 0 ? (
         <View style={styles.rowsWrap}>
-          {sortedChallenges.slice(0, 1).map((ch) => {
+          {sortedActive.slice(0, 2).map((ch) => {
             const pct = Math.max(0, Math.min(100, ch.progress_percentage || 0));
-            const rowColor = ch.is_completed ? GREEN : ORANGE;
             return (
               <PressableCard
                 key={ch.challenge_id}
-                style={[styles.challengeRow, { borderColor: hexToRgba(rowColor, 0.20) }]}
+                style={[styles.challengeRow, { borderColor: hexToRgba(ORANGE, 0.20) }]}
                 onPress={() => { if (isUnlocked && gymId) onChallengePress(ch.challenge_id); }}
                 disabled={!isUnlocked}
               >
-                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(10,10,20,0.95)">
+                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(38,32,58,0.95)">
                   <LinearGradient
-                    colors={[hexToRgba(rowColor, 0.10), 'rgba(10,10,20,0)']}
+                    colors={[hexToRgba(ORANGE, 0.10), 'rgba(10,10,20,0)']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={StyleSheet.absoluteFill}
                     pointerEvents="none"
                   />
-                  {/* Icon */}
-                  <View style={[styles.rowIconWrap, { backgroundColor: hexToRgba(rowColor, 0.14) }]}>
+                  <View style={[styles.rowIconWrap, { backgroundColor: hexToRgba(ORANGE, 0.14) }]}>
                     {ch.badge_image_url ? (
                       <Image source={ch.badge_image_url} style={styles.rowIconImage} contentFit="cover" transition={150} />
                     ) : (
-                      <Ionicons name={ch.is_completed ? 'checkmark-circle' : 'flame-outline'} size={16} color={rowColor} />
+                      <Ionicons name="flame-outline" size={16} color={ORANGE} />
                     )}
                   </View>
-                  {/* Body */}
                   <View style={styles.rowBody}>
                     <View style={styles.rowTop}>
                       <Text style={styles.rowTitle} numberOfLines={1}>{ch.challenge_name}</Text>
-                      <Text style={[styles.rowPct, { color: rowColor }]}>{Math.round(pct)}%</Text>
+                      <Text style={[styles.rowPct, { color: ORANGE }]}>{Math.round(pct)}%</Text>
                     </View>
-                    <AnimBar pct={pct} color={rowColor} />
+                    <AnimBar pct={pct} color={ORANGE} />
                     <Text style={styles.rowMeta} numberOfLines={1}>
                       {typeLabel(ch.challenge_type)} · {ch.reward_drops} {t('drops')}
                     </Text>
@@ -380,13 +385,15 @@ export function ChallengesStatsCards({
             );
           })}
 
-          {/* View all link if there are more challenges */}
-          {sortedChallenges.length > 1 && (
-            <TouchableOpacity style={styles.viewAllBtn} onPress={onViewActiveChallenges} activeOpacity={0.7} disabled={!isUnlocked}>
-              <Text style={styles.viewAllText}>{t('viewAllChallenges')}</Text>
-              <Ionicons name="chevron-forward" size={13} color={hexToRgba(ORANGE, 0.7)} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.viewAllBtn} onPress={onViewActiveChallenges} activeOpacity={0.7} disabled={!isUnlocked}>
+            <Text style={styles.viewAllText}>{t('viewAllChallenges')}</Text>
+            <Ionicons name="chevron-forward" size={13} color={hexToRgba(ORANGE, 0.7)} />
+          </TouchableOpacity>
+        </View>
+      ) : challenges.length > 0 ? (
+        <View style={[styles.emptyState, { borderColor: hexToRgba(GREEN, 0.12) }]}>
+          <Ionicons name="checkmark-circle" size={22} color={hexToRgba(GREEN, 0.6)} />
+          <Text style={styles.emptyText}>{t('challenges.allDone')}</Text>
         </View>
       ) : (
         <View style={[styles.emptyState, { borderColor: hexToRgba(ORANGE, 0.12) }]}>
@@ -414,7 +421,7 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_BG,
     borderWidth: 1,
   },
-  watermark: { position: 'absolute', right: -8, bottom: -4 },
+  watermark: { position: 'absolute', right: -45, bottom: -30 },
   heroLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   heroIconWrap: { width: 20, height: 20, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   heroEyebrow: {
@@ -440,7 +447,7 @@ const styles = StyleSheet.create({
   },
   heroStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   heroStatus: { ...fontStyles.body, fontSize: 11, letterSpacing: 0.2 },
-  heroRingWrap: { position: 'absolute', bottom: 12, right: 12 },
+  heroProgressWrap: { marginTop: 8 },
 
   /* Side column */
   sideCol: { width: SIDE_W, gap: CARD_GAP },

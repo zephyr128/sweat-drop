@@ -56,6 +56,7 @@ interface ChallengeProgressItem {
   current_drops: number;
   reward_drops: number;
   is_completed: boolean;
+  completed_at: string | null;
   challenge_type: string;
 }
 
@@ -205,15 +206,15 @@ export default function SessionSummaryScreen() {
     loadSession();
     loadLeaderboardRank();
     loadEarnedBadges();
-    loadChallengeProgress();
     loadStreakDays();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, gymId]);
 
-  // Percentile depends on session being loaded
+  // Depends on session being loaded (need started_at for challenge filtering)
   useEffect(() => {
     if (session) {
       calculatePercentile();
+      loadChallengeProgress(session.started_at);
     }
   }, [session]);
 
@@ -351,7 +352,7 @@ export default function SessionSummaryScreen() {
     }
   };
 
-  const loadChallengeProgress = async () => {
+  const loadChallengeProgress = async (sessionStartedAt?: string) => {
     if (!authSession?.user || !gymId) return;
 
     try {
@@ -377,11 +378,16 @@ export default function SessionSummaryScreen() {
           current_drops: current,
           reward_drops: c.reward_drops,
           is_completed: c.is_completed || false,
+          completed_at: c.completed_at,
           challenge_type: c.challenge_type,
         };
       });
 
-      const justCompleted = items.filter((item) => item.is_completed && item.reward_drops > 0);
+      const sessionStart = sessionStartedAt ? new Date(sessionStartedAt).getTime() : 0;
+      const justCompleted = items.filter((item) =>
+        item.is_completed && item.reward_drops > 0 && item.completed_at &&
+        new Date(item.completed_at).getTime() >= sessionStart
+      );
       const inProgress = items.filter((item) => !item.is_completed && item.current_drops > 0);
       setCompletedChallenges(justCompleted);
       setChallengeProgress(inProgress);

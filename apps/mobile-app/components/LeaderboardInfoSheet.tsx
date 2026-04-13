@@ -34,7 +34,6 @@ const SNAP_BACK = { damping: 22, stiffness: 280, mass: 0.9 };
 
 const MEDAL_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] as const;
 const MEDAL_EMOJIS = ['🥇', '🥈', '🥉'] as const;
-const RANK_ORDINAL = ['1st', '2nd', '3rd'] as const;
 
 export interface LeaderboardRewardInfo {
   id: string;
@@ -53,6 +52,7 @@ interface LeaderboardInfoSheetProps {
   leaderScoreLabel: string | null;
   currentUserScoreLabel: string | null;
   accentColor: string;
+  period?: 'weekly' | 'monthly' | 'all_time';
 }
 
 export function LeaderboardInfoSheet({
@@ -63,6 +63,7 @@ export function LeaderboardInfoSheet({
   leaderScoreLabel,
   currentUserScoreLabel,
   accentColor,
+  period,
 }: LeaderboardInfoSheetProps) {
   const { t } = useTranslation('leaderboard');
 
@@ -261,7 +262,9 @@ export function LeaderboardInfoSheet({
 
                                 <View style={styles.prizeCardBody}>
                                   <Text style={[styles.prizeRankLabel, { color: medalColor }]}>
-                                    {RANK_ORDINAL[idx] ?? `#${r.rank_position}`} Place
+                                    {idx < 3
+                                      ? t(`rankOrdinal_${r.rank_position}` as any)
+                                      : t('rankOrdinalFallback', { rank: r.rank_position })}
                                   </Text>
                                   <Text style={styles.prizeName}>{r.reward_name}</Text>
                                   {r.reward_description ? (
@@ -284,6 +287,36 @@ export function LeaderboardInfoSheet({
                       </View>
                     )}
                   </View>
+
+                  {/* Reset info — weekly and monthly */}
+                  {period !== 'all_time' && (
+                    <View style={styles.section}>
+                      <Text style={[styles.sectionLabel, { color: accentColor }]}>{t('infoResetTitle')}</Text>
+                      <View style={[styles.resetCard, { borderColor: hexToRgba(accentColor, 0.14) }]}>
+                        {/* Weekly reset row */}
+                        <View style={styles.resetRow}>
+                          <View style={[styles.resetIconWrap, { backgroundColor: hexToRgba('#F5A623', 0.12) }]}>
+                            <Ionicons name="calendar-outline" size={14} color="#F5A623" />
+                          </View>
+                          <View style={styles.resetRowText}>
+                            <Text style={styles.resetRowLabel}>{t('infoResetWeeklyLabel')}</Text>
+                            <Text style={styles.resetRowDesc}>{t('infoResetWeeklyDesc')}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.resetDivider} />
+                        {/* Monthly reset row */}
+                        <View style={styles.resetRow}>
+                          <View style={[styles.resetIconWrap, { backgroundColor: hexToRgba('#94A3B8', 0.12) }]}>
+                            <Ionicons name="calendar" size={14} color="#94A3B8" />
+                          </View>
+                          <View style={styles.resetRowText}>
+                            <Text style={styles.resetRowLabel}>{t('infoResetMonthlyLabel')}</Text>
+                            <Text style={styles.resetRowDesc}>{t('infoResetMonthlyDesc')}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  )}
 
                   {/* CTA */}
                   <Pressable
@@ -520,6 +553,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
+  },
+  /* Reset info card */
+  resetCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    overflow: 'hidden',
+  },
+  resetRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+  },
+  resetIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  resetRowText: {
+    flex: 1,
+    gap: 3,
+  },
+  resetRowLabel: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#fff',
+    letterSpacing: 0.2,
+  },
+  resetRowDesc: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+    letterSpacing: 0.1,
+  },
+  resetDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    marginHorizontal: 14,
   },
   /* CTA */
   closeButton: {

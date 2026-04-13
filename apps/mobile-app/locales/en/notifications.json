@@ -1,0 +1,13 @@
+{
+  "title": "Notifications",
+  "markAllRead": "Mark all read",
+  "empty": "You're all caught up",
+  "emptyHint": "Notifications about your activity, leaderboard changes, and rewards will appear here.",
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "thisWeek": "This Week",
+  "earlier": "Earlier",
+  "justNow": "Just now",
+  "minutesAgo": "{{count}}m ago",
+  "hoursAgo": "{{count}}h ago"
+}

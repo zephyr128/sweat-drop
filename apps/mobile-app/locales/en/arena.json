@@ -55,8 +55,8 @@
   "optInEarly": "Opt-in Early",
   "freeEntry": "Free entry",
   "entryFee": "Entry: {{value}} drops",
-  "requiresStreak": "Requires: {{value}}-day streak 🔥",
-  "requiresLevel": "Requires: {{value}} total drops ⭐",
+  "requiresStreak": "Requires: {{value}}-day streak",
+  "requiresLevel": "Requires: {{value}} total drops",
   "yourBalance": "Your balance",
   "yourStreak": "Your streak",
   "yourTotalDrops": "Your total drops",
@@ -90,5 +90,13 @@
   "noResults": "Results not available yet",
   "endedOn": "Ended {{date}}",
   "redeemed": "Redeemed",
-  "pendingRedemption": "Pending redemption"
+  "pendingRedemption": "Pending redemption",
+  "tabActive": "Active",
+  "tabCompleted": "Completed",
+  "noActiveArenas": "No active arenas",
+  "noActiveArenasDesc": "Check back soon for new competitions",
+  "noCompletedArenas": "No completed arenas yet",
+  "noCompletedArenasDesc": "Your finished competitions will appear here",
+  "upcomingPill": "UPCOMING",
+  "rankResult": "#{{rank}} / {{total}}"
 }

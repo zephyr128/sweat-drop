@@ -5,7 +5,7 @@
  * Layout:
  *   Top row:
  *     Hero card (left)  — user's best rank across active arenas + drops score
- *     Side col (right)  — active arenas count + joined arenas count
+ *     Side col (right)  — active arenas count + top prize
  *   Arena rows         — up to 3 arenas, each as premium glass card with sponsor logo,
  *                        rank badge, progress, days left
  */
@@ -104,7 +104,6 @@ export function ArenasStatsCards({
 
   const joined = activeArenas.filter((a) => a.user_opted_in);
   const totalActive = activeArenas.length;
-  const totalJoined = joined.length;
 
   // Best rank among joined arenas
   const bestRanked = joined
@@ -114,6 +113,10 @@ export function ArenasStatsCards({
   const bestRank = bestRanked?.user_rank ?? null;
   const bestScore = bestRanked?.user_score ?? null;
   const heroColor = CYAN;
+
+  // Top prize: from the best arena the user is in, or the first active arena
+  const prizeSource = bestRanked ?? activeArenas[0] ?? null;
+  const topPrize = prizeSource?.prizes?.[0]?.prize ?? null;
 
   return (
     <View style={styles.wrapper}>
@@ -127,7 +130,7 @@ export function ArenasStatsCards({
           onPress={bestRanked ? () => onArenaPress(bestRanked.arena_id) : onViewAllArenas}
           disabled={!isUnlocked}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
             <LinearGradient
               colors={[hexToRgba(heroColor, 0.16), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -136,7 +139,7 @@ export function ArenasStatsCards({
               pointerEvents="none"
             />
             {/* Watermark */}
-            <MaterialCommunityIcons name="sword-cross" size={96} color={hexToRgba(heroColor, 0.07)} style={styles.watermark} />
+            <MaterialCommunityIcons name="sword-cross" size={150} color={hexToRgba(heroColor, 0.1)} style={styles.watermark} />
 
             {/* Eyebrow */}
             <View style={styles.heroLabelRow}>
@@ -154,14 +157,28 @@ export function ArenasStatsCards({
             {bestRanked ? (
               <>
                 <Text style={styles.heroSub} numberOfLines={1}>{bestRanked.name}</Text>
-                {bestScore !== null && bestScore > 0 && (
+                {bestRank === 1 ? (
+                  <View style={styles.heroScoreRow}>
+                    <Ionicons name="shield-checkmark" size={11} color={hexToRgba(heroColor, 0.85)} />
+                    <Text style={[styles.heroScore, { color: hexToRgba(heroColor, 0.85) }]}>
+                      {t('arenas.youLead')}
+                    </Text>
+                  </View>
+                ) : bestScore !== null && bestRanked.leader_score !== null ? (
+                  <View style={styles.heroScoreRow}>
+                    <Ionicons name="trending-up" size={11} color={hexToRgba(heroColor, 0.7)} />
+                    <Text style={[styles.heroScore, { color: hexToRgba(heroColor, 0.85) }]}>
+                      {`+${formatScore(bestRanked.leader_score - bestScore)} ${t('arenas.toFirst')}`}
+                    </Text>
+                  </View>
+                ) : bestScore !== null && bestScore > 0 ? (
                   <View style={styles.heroScoreRow}>
                     <Ionicons name="water" size={11} color={hexToRgba(heroColor, 0.7)} />
                     <Text style={[styles.heroScore, { color: hexToRgba(heroColor, 0.85) }]}>
                       {`${formatScore(bestScore)} ${t('arenas.score')}`}
                     </Text>
                   </View>
-                )}
+                ) : null}
               </>
             ) : (
               <Text style={styles.heroSub}>{t('arenas.joinToRank')}</Text>
@@ -177,7 +194,7 @@ export function ArenasStatsCards({
             style={[styles.sideCard, { borderColor: hexToRgba(GREEN, 0.22) }]}
             onPress={onViewAllArenas}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
               <LinearGradient
                 colors={[hexToRgba(GREEN, 0.12), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
@@ -200,31 +217,36 @@ export function ArenasStatsCards({
             </PlatformBlur>
           </PressableCard>
 
-          {/* Joined count */}
+          {/* Top prize */}
           <PressableCard
-            style={[styles.sideCard, { borderColor: hexToRgba(CYAN, 0.22) }]}
-            onPress={onViewAllArenas}
+            style={[styles.sideCard, { borderColor: hexToRgba(GOLD, 0.22) }]}
+            onPress={bestRanked ? () => onArenaPress(bestRanked.arena_id) : onViewAllArenas}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
               <LinearGradient
-                colors={[hexToRgba(CYAN, 0.12), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(GOLD, 0.12), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
               />
               <View style={styles.sideCardInner}>
-                <View style={[styles.sideIconWrap, { backgroundColor: hexToRgba(CYAN, 0.16) }]}>
-                  <Ionicons name="person-circle-outline" size={11} color={CYAN} />
+                <View style={[styles.sideIconWrap, { backgroundColor: hexToRgba(GOLD, 0.16) }]}>
+                  <Ionicons name="gift-outline" size={11} color={GOLD} />
                 </View>
-                <Text style={[styles.sideEyebrow, { color: hexToRgba(CYAN, 0.65) }]} numberOfLines={1}>
-                  {t('arenas.joined')}
+                <Text style={[styles.sideEyebrow, { color: hexToRgba(GOLD, 0.65) }]} numberOfLines={1}>
+                  {t('arenas.topPrize')}
                 </Text>
               </View>
-              <Text style={[styles.sideNumber, { color: totalJoined > 0 ? CYAN : 'rgba(255,255,255,0.35)' }]}>
-                {String(totalJoined)}
-              </Text>
-              <Text style={styles.sideSub} numberOfLines={1}>{t('arenas.competing')}</Text>
+              {topPrize ? (
+                <>
+                  <Text style={[styles.sidePrizeText, { color: GOLD }]} numberOfLines={2}>
+                    {topPrize}
+                  </Text>
+                </>
+              ) : (
+                <Text style={[styles.sideNumber, { color: 'rgba(255,255,255,0.35)' }]}>–</Text>
+              )}
             </PlatformBlur>
           </PressableCard>
 
@@ -254,7 +276,7 @@ export function ArenasStatsCards({
                 onPress={() => onArenaPress(arena.arena_id)}
                 disabled={!isUnlocked}
               >
-                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(10,10,20,0.95)">
+                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(38,32,58,0.95)">
                   <LinearGradient
                     colors={[hexToRgba(arenaPrimary, 0.12), 'rgba(10,10,20,0)']}
                     start={{ x: 0, y: 0 }}
@@ -336,7 +358,7 @@ export function ArenasStatsCards({
           style={[styles.emptyState, { borderColor: hexToRgba(CYAN, 0.14) }]}
           onPress={onViewAllArenas}
         >
-          <PlatformBlur intensity={40} tint="dark" style={styles.emptyBlur} androidColor="rgba(10,10,20,0.95)">
+          <PlatformBlur intensity={40} tint="dark" style={styles.emptyBlur} androidColor="rgba(38,32,58,0.95)">
             <LinearGradient
               colors={[hexToRgba(CYAN, 0.08), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -377,7 +399,7 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_BG,
     borderWidth: 1,
   },
-  watermark: { position: 'absolute', right: -8, bottom: -4 },
+  watermark: { position: 'absolute', right: -30, bottom: -20 },
   heroLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   heroIconWrap: { width: 20, height: 20, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   heroEyebrow: {
@@ -430,6 +452,12 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   sideSub: { ...fontStyles.body, fontSize: 9, color: 'rgba(255,255,255,0.35)', marginTop: 1 },
+  sidePrizeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
 
   /* Arena rows */
   rowsWrap: { gap: CARD_GAP },

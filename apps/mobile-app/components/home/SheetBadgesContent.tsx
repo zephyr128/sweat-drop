@@ -11,7 +11,7 @@ import type { UserBadge } from '@/hooks/useUserBadges';
 
 export interface SheetBadgesContentProps {
   isUnlocked: boolean;
-  displayedChallenges: ChallengeProgress[];
+  challenges: ChallengeProgress[];
   challengesLoading: boolean;
   gymId: string | null;
   earnedBadges?: UserBadge[];
@@ -21,9 +21,9 @@ export interface SheetBadgesContentProps {
   onTrophyRoomPress: () => void;
 }
 
-export function SheetBadgesContent({
+export const SheetBadgesContent = React.memo(function SheetBadgesContent({
   isUnlocked,
-  displayedChallenges,
+  challenges,
   challengesLoading,
   gymId,
   earnedBadges = [],
@@ -35,7 +35,7 @@ export function SheetBadgesContent({
   return (
     <View style={styles.container}>
       <ChallengesStatsCards
-        challenges={displayedChallenges}
+        challenges={challenges}
         earnedBadges={earnedBadges}
         loading={challengesLoading}
         isUnlocked={isUnlocked}
@@ -47,7 +47,7 @@ export function SheetBadgesContent({
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },

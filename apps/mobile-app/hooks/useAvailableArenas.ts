@@ -21,6 +21,7 @@ export interface AvailableArena {
   user_opted_in: boolean;
   user_rank: number | null;
   user_score: number | null;
+  leader_score: number | null;
   prizes: Array<{ rank: number; prize: string; value?: string }>;
   // v2 fields — opt-in requirements, branding, status
   opt_in_type: string;         // 'free' | 'drops' | 'streak' | 'level'

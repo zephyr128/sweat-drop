@@ -132,7 +132,8 @@
     "streak_legend": "Legend",
     "drops": "DROPS",
     "week": "This week",
-    "spendable": "SPENDABLE"
+    "spendable": "SPENDABLE",
+    "goalReached": "Goal reached!"
   },
   "cards": {
     "checkedIn": "Checked in",
@@ -148,6 +149,7 @@
     "noHappyHour": "None today",
     "happyHourActive": "Happy Hour is live!",
     "endsAt": "Ends at {{time}}",
+    "endsIn": "Ends in {{time}}",
     "hhToday": "Today",
     "hhTomorrow": "Tomorrow",
     "happyHourTitle": "Happy Hour",
@@ -156,6 +158,7 @@
   "nextAward": "Next Award",
   "challenges": {
     "overallProgress": "PROGRESS",
+    "nearestGoal": "CLOSEST TO GOAL",
     "completed": "completed",
     "allDone": "All challenges done!",
     "remaining": "remaining",
@@ -170,7 +173,10 @@
     "active": "ACTIVE",
     "available": "arenas available",
     "joined": "JOINED",
-    "competing": "you're competing"
+    "competing": "you're competing",
+    "topPrize": "TOP PRIZE",
+    "youLead": "You're leading!",
+    "toFirst": "to #1"
   },
   "compete": {
     "rank": "YOUR RANK",
@@ -184,7 +190,20 @@
     "unranked": "Not ranked",
     "you": "You",
     "places": "places",
-    "allTimeRecord": "All-time record!"
+    "allTimeRecord": "All-time record!",
+    "stillNeedDrops": "{{count}} more drops to #1",
+    "defendFirst": "Defend first place",
+    "monthlyProgress": "THIS MONTH · PROGRESS TO #1"
+  },
+  "prizes": {
+    "weeklyPrizes": "Weekly Prizes",
+    "thisWeek": "This Week",
+    "dropsToFirst": "drops to 1st place",
+    "youQualify": "You qualify",
+    "youAreLead": "You're in 1st — keep the lead",
+    "yourPrize": "Your prize:",
+    "topThreeForPrize": "Top 3 wins a prize",
+    "gaugeReward": "{{reward}} for #{{rank}}"
   },
   "exploreStore": "Explore Rewards Store",
   "foundingPartner": "Founding Partner",
@@ -202,7 +221,15 @@
   "liveNow": "LIVE NOW",
   "membersTotal": "members",
   "badgesEarned": "{{count}} earned",
+  "badgesEarnedWithUnit": "{{count}} BADGES EARNED",
   "earnedBadges": "EARNED BADGES ({{count}})",
   "challengeProgress": "{{completed}}/{{total}} completed",
-  "noArenaActive": "NO ACTIVE ARENAS"
+  "noArenaActive": "NO ACTIVE ARENAS",
+  "prize": {
+    "wonTitle": "You won a leaderboard prize!",
+    "showCode": "Show code {{code}} at the desk to collect",
+    "collectNow": "Tap to collect your prize",
+    "expiresIn": "Expires in {{days}} days"
+  },
+  "you": "You"
 }

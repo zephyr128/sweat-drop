@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, RefreshControl, Platform } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,12 +25,12 @@ import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { useUserRank } from '@/hooks/useUserRank';
 import { useCompeteStats } from '@/hooks/useCompeteStats';
 import { useUserBadges } from '@/hooks/useUserBadges';
+import { useLeaderboardRewards } from '@/hooks/useLeaderboardRewards';
 import { HomeHeroPager, type HomeHeroPagerHandle } from '@/components/home/HomeHeroPager';
 import { SheetActivityContent } from '@/components/home/SheetActivityContent';
 import { SheetRankContent } from '@/components/home/SheetRankContent';
 import { SheetBadgesContent } from '@/components/home/SheetBadgesContent';
 import { SheetArenaContent } from '@/components/home/SheetArenaContent';
-import { MiniGaugeBar } from '@/components/home/MiniGaugeBar';
 import { SliderTabs, SliderTabsBar, type SliderTab } from '@/components/SliderTabs';
 import type { LeaderboardPeriod } from '@/components/LeaderboardPreview';
 
@@ -38,6 +38,7 @@ import { useHomeStats } from '@/hooks/useHomeStats';
 import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { log } from '@/lib/logger';
@@ -243,7 +244,8 @@ export default function HomeScreen() {
   const { updateHomeGym, loadActiveGym } = useGymData();
   const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
-  
+  const unreadNotifCount = useUnreadNotificationCount();
+
   // Fade-in animation for smooth transition from splash
   const fadeOpacity = useSharedValue(0);
   const [hasAnimated, setHasAnimated] = useState(false);
@@ -323,12 +325,58 @@ export default function HomeScreen() {
   // User's leaderboard rank
   const userRank = useUserRank(activeGymId);
   const competeStats = useCompeteStats(activeGymId);
-  // Derive gauge rank from weekly compete stats (falls back to useUserRank)
+  const { rewards: weeklyRankRewards } = useLeaderboardRewards(activeGymId, 'weekly');
+  const { rewards: monthlyRankRewards } = useLeaderboardRewards(activeGymId, 'monthly');
+  // Gauge rank uses weekly first, then monthly, then all_time as fallback.
+  // Period label in gauge must match the source period to avoid mismatched text.
   const rankForGauge = useMemo(() => {
     const ws = competeStats.stats.weekly;
-    if (ws.rank > 0 || ws.totalMembers > 0) return { rank: ws.rank, totalMembers: ws.totalMembers };
-    return { rank: userRank.rank, totalMembers: userRank.totalMembers };
-  }, [competeStats.stats.weekly, userRank.rank, userRank.totalMembers]);
+    if (ws.rank > 0) {
+      return {
+        rank: ws.rank,
+        totalMembers: ws.totalMembers,
+        period: 'weekly' as LeaderboardPeriod,
+        dropsToFirst: ws.dropsToFirst,
+      };
+    }
+    const ms = competeStats.stats.monthly;
+    if (ms.rank > 0) {
+      return {
+        rank: ms.rank,
+        totalMembers: ms.totalMembers,
+        period: 'monthly' as LeaderboardPeriod,
+        dropsToFirst: ms.dropsToFirst,
+      };
+    }
+    const at = competeStats.stats.allTime;
+    if (at.rank > 0) {
+      return {
+        rank: at.rank,
+        totalMembers: at.totalMembers,
+        period: 'all_time' as LeaderboardPeriod,
+        dropsToFirst: at.dropsToFirst,
+      };
+    }
+    return {
+      rank: 0,
+      totalMembers: ws.totalMembers || ms.totalMembers || at.totalMembers || userRank.totalMembers,
+      period: 'weekly' as LeaderboardPeriod,
+      dropsToFirst: 0,
+    };
+  }, [competeStats.stats.weekly, competeStats.stats.monthly, competeStats.stats.allTime, userRank.totalMembers]);
+  const gaugeRewardText = useMemo(() => {
+    if (rankForGauge.rank <= 0) return null;
+    const rewardPool =
+      rankForGauge.period === 'monthly'
+        ? monthlyRankRewards
+        : rankForGauge.period === 'weekly'
+          ? weeklyRankRewards
+          : [];
+    const reward = rewardPool.find((r) => r.rank_position === rankForGauge.rank);
+    if (!reward) return null;
+    const rewardLabel = reward.value ? `${reward.value} ${reward.reward_name}` : reward.reward_name;
+    return t('prizes.gaugeReward', { reward: rewardLabel, rank: rankForGauge.rank });
+  }, [rankForGauge, weeklyRankRewards, monthlyRankRewards, t]);
 
   // Realtime: refresh stats when drops_transactions change
   useRealtimeRefresh({
@@ -339,7 +387,8 @@ export default function HomeScreen() {
       refreshStats?.();
       refreshLocalDrops();
       dropLimits.refresh();
-    }, [refreshStats, refreshLocalDrops, dropLimits.refresh]),
+      competeStats.refresh();
+    }, [refreshStats, refreshLocalDrops, dropLimits.refresh, competeStats.refresh]),
     enabled: !!session?.user,
   });
 
@@ -405,8 +454,6 @@ export default function HomeScreen() {
 
   // Load challenge progress for all machine types
   const { challenges: allChallenges, loading: challengesLoading, refresh: refreshChallenges } = useChallengeProgress(activeGymId, null);
-  const activeChallenges = allChallenges.filter(c => !c.is_completed);
-  const displayedChallenges = activeChallenges.slice(0, 3);
   
   // Parallax background shift — driven continuously by onPageScroll offset
   // Image is PARALLAX_EXTRA wider and starts offset by -half so we have buffer in both directions
@@ -497,6 +544,7 @@ export default function HomeScreen() {
               refreshArenas?.() ?? Promise.resolve(),
               userRank.refresh(),
               dropLimits.refresh(),
+              competeStats.refresh(),
             ]
           : []),
       ]);
@@ -519,6 +567,7 @@ export default function HomeScreen() {
       refreshArenas,
       userRank,
       dropLimits.refresh,
+      competeStats.refresh,
     ])
   );
 
@@ -612,6 +661,7 @@ export default function HomeScreen() {
               refreshArenas?.() ?? Promise.resolve(),
               userRank.refresh(),
               dropLimits.refresh(),
+              competeStats.refresh(),
             ]
           : []),
       ]);
@@ -620,12 +670,29 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, userRank, dropLimits]);
+  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, userRank, dropLimits, competeStats.refresh]);
 
 
-  const handleQRPress = () => {
+  const handleQRPress = useCallback(() => {
     router.push('/scan');
-  };
+  }, [router]);
+
+  // Stable navigation callbacks for sheet content (avoids breaking React.memo)
+  const navToScan = handleQRPress;
+  const navToHappyHours = useCallback(() => router.push('/happy-hours' as any), [router]);
+  const navToWorkoutHistory = useCallback(() => router.push('/workout-history'), [router]);
+  const navToStatsToday = useCallback(() => router.push('/stats?period=today' as any), [router]);
+  const navToStatsWeek = useCallback(() => router.push('/stats?period=week' as any), [router]);
+  const navToStore = useCallback(() => router.push('/store'), [router]);
+  const navToLeaderboard = useCallback((period: string) => router.push({ pathname: '/leaderboard', params: { period } } as any), [router]);
+  const navToInviteFriend = useCallback(() => router.push('/invite-friend'), [router]);
+  const navToSmartCoach = useCallback(() => { if (isUnlocked) router.push('/smartcoach'); }, [router, isUnlocked]);
+  const navToChallenge = useCallback((id: string) => router.push({ pathname: '/challenge-detail', params: { challengeId: id, gymId: activeGymId || '' } }), [router, activeGymId]);
+  const navToActiveChallenges = useCallback(() => { if (isUnlocked) router.push({ pathname: '/challenges', params: { tab: 'active' } } as any); }, [router, isUnlocked]);
+  const navToCompletedChallenges = useCallback(() => { if (isUnlocked) router.push({ pathname: '/challenges', params: { tab: 'completed' } } as any); }, [router, isUnlocked]);
+  const navToTrophyRoom = useCallback(() => router.push('/trophy-room'), [router]);
+  const navToArena = useCallback((id: string) => router.push({ pathname: '/arena/[id]', params: { id } }), [router]);
+  const navToAllArenas = useCallback(() => router.push('/arenas'), [router]);
 
   const handleSetAsHomeGym = async () => {
     if (!activeGym) return;
@@ -948,12 +1015,17 @@ export default function HomeScreen() {
   }
 
   const tabAccent = TAB_ACCENTS[activeTabKey] ?? branding.primary;
+  const sheetBackdropColors = Platform.OS === 'android'
+    ? (['rgba(36,29,53,0.00)', 'rgba(36,29,53,0.10)', 'rgba(36,29,53,0.18)', 'rgba(36,29,53,0.24)'] as const)
+    : (['rgba(36,29,53,0.00)', 'rgba(36,29,53,0.62)', 'rgba(36,29,53,0.93)', 'rgba(36,29,53,0.97)'] as const);
+  const fabBottomMaskColors = Platform.OS === 'android'
+    ? (['rgba(24,20,38,0.00)', 'rgba(24,20,38,0.74)', 'rgba(24,20,38,0.96)'] as const)
+    : (['rgba(24,20,38,0.00)', 'rgba(24,20,38,0.58)', 'rgba(24,20,38,0.90)'] as const);
   const HEADER_H = 56;
   const TAB_BAR_H = 48;
-  const MINI_GAUGE_H = 36; // same as MINI_H in MiniGaugeBar
   const SCROLL_TOP_INSET = 0;
-  // Reserve space for sticky section at its max height (mini gauge fully visible + tab bar)
-  const sheetMinHeight = SCREEN_HEIGHT - insets.top - HEADER_H - MINI_GAUGE_H - TAB_BAR_H;
+  // Reserve space for sticky section (tab bar only)
+  const sheetMinHeight = SCREEN_HEIGHT - insets.top - HEADER_H - TAB_BAR_H;
 
   return (
     <Animated.View style={[{ flex: 1, backgroundColor: '#000000' }, fadeAnimatedStyle]}>
@@ -1015,14 +1087,31 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
-              onPress={() => {}}
+              onPress={() => router.push('/notifications')}
               activeOpacity={0.75}
             >
               <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
                 <Ionicons name="notifications-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
               </PlatformBlur>
+              {unreadNotifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Static sheet backdrop: stays fixed while content scrolls above it */}
+        <View pointerEvents="none" style={styles.sheetStaticBackdrop}>
+          <LinearGradient
+            colors={sheetBackdropColors}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
         </View>
 
         {/* ── Single unified scroll — the entire screen below the fixed header ── */}
@@ -1030,8 +1119,6 @@ export default function HomeScreen() {
           style={styles.outerScroll}
           contentContainerStyle={styles.outerScrollContent}
           stickyHeaderIndices={[1]}
-          contentInset={{ top: SCROLL_TOP_INSET }}
-          contentOffset={{ x: 0, y: -SCROLL_TOP_INSET }}
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
           scrollIndicatorInsets={{ top: 0, left: 0, bottom: 0, right: 0 }}
@@ -1061,8 +1148,6 @@ export default function HomeScreen() {
               todayDrops={homeStats.todayDrops}
               todayBonusDrops={homeStats.todayBonusDrops}
               dailyCap={dropLimits.maxDropsPerDay}
-              weeklyDrops={dropLimits.mintedWeek}
-              weeklyCap={dropLimits.maxDropsPerWeek}
               totalGymDrops={localDrops}
               onActivityRingPress={() => router.push('/wallet')}
               onCompeteRingPress={() => router.push('/leaderboard')}
@@ -1070,7 +1155,9 @@ export default function HomeScreen() {
               onArenasRingPress={() => router.push('/arenas')}
               totalMembers={rankForGauge.totalMembers}
               rank={rankForGauge.rank}
-              rankPeriod="weekly"
+              rankPeriod={rankForGauge.period}
+              rankDropsToFirst={rankForGauge.dropsToFirst}
+              rankRewardText={gaugeRewardText}
               challengeCompletedCount={challengeRingData.completedCount}
               challengeTotalCount={challengeRingData.totalCount}
               earnedBadgeCount={challengeRingData.earnedBadgeCount}
@@ -1099,27 +1186,15 @@ export default function HomeScreen() {
             </View>
           </Animated.View>
 
-          {/* ── [1] Sticky section — MiniGaugeBar + tab bar ── */}
+          {/* ── [1] Sticky section — tab bar ── */}
           <View style={[styles.stickySection, styles.dashboardSheetBackground]}>
-            <PlatformBlur intensity={34} tint="dark" style={styles.stickySectionBlur} androidColor="rgba(12,15,24,0.88)">
+            <PlatformBlur intensity={34} tint="dark" style={styles.stickySectionBlur} androidColor="#181426">
               <LinearGradient
                 colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.06), 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
                 style={StyleSheet.absoluteFillObject}
                 pointerEvents="none"
-              />
-              {/* Mini gauge — fades in as hero scrolls away */}
-              <MiniGaugeBar
-                collapseProgress={collapseProgress}
-                activePage={activePage}
-                weeklyDrops={dropLimits.mintedWeek}
-                weeklyCap={dropLimits.maxDropsPerWeek}
-                rank={rankForGauge.rank}
-                totalMembers={rankForGauge.totalMembers}
-                challengeCompletedCount={challengeRingData.completedCount}
-                challengeTotalCount={challengeRingData.totalCount}
-                activeArenaCount={activeArenas.length}
               />
               <SliderTabsBar
                 tabs={sheetTabs}
@@ -1132,7 +1207,7 @@ export default function HomeScreen() {
           </View>
 
           {/* ── [2] Sheet content — tab pager with horizontal swipe ── */}
-          <View style={[styles.sheetContent, { backgroundColor: 'rgba(36, 29, 53, 0.93)' }]}>
+          <View style={[styles.sheetContent, { backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(24, 20, 38, 0.98)' }]}>
             <SliderTabs
               tabs={sheetTabs}
               activeKey={activeTabKey}
@@ -1149,12 +1224,12 @@ export default function HomeScreen() {
                 upcomingHH={upcomingHH}
                 isHappyHourActive={!!upcomingHH.liveWindow}
                 gymName={activeGym?.name ?? ''}
-                onCheckinPress={() => router.push('/scan')}
-                onHappyHourPress={() => router.push('/happy-hours' as any)}
-                onStreakPress={() => router.push('/workout-history')}
-                onTodayPress={() => router.push('/stats?period=today' as any)}
-                onWeeklyPress={() => router.push('/stats?period=week' as any)}
-                onRewardPress={() => router.push('/store')}
+                onCheckinPress={navToScan}
+                onHappyHourPress={navToHappyHours}
+                onStreakPress={navToWorkoutHistory}
+                onTodayPress={navToStatsToday}
+                onWeeklyPress={navToStatsWeek}
+                onRewardPress={navToStore}
                 localDropsBalance={localDrops}
                 isUnlocked={isUnlocked}
                 onSetAsHomeGym={handleSetAsHomeGym}
@@ -1167,30 +1242,43 @@ export default function HomeScreen() {
                 weekly={competeStats.stats.weekly}
                 monthly={competeStats.stats.monthly}
                 allTime={competeStats.stats.allTime}
-                onLeaderboardPress={(period) => router.push({ pathname: '/leaderboard', params: { period } } as any)}
-                onInviteFriend={() => router.push('/invite-friend')}
-                onSmartCoachPress={() => { if (isUnlocked) router.push('/smartcoach'); }}
+                onLeaderboardPress={navToLeaderboard}
+                onInviteFriend={navToInviteFriend}
+                onSmartCoachPress={navToSmartCoach}
               />
               <SheetBadgesContent
                 isUnlocked={isUnlocked}
-                displayedChallenges={allChallenges}
+                challenges={allChallenges}
                 challengesLoading={challengesLoading}
                 gymId={activeGymId}
                 earnedBadges={earnedBadges}
-                onChallengePress={(id) => router.push({ pathname: '/challenge-detail', params: { challengeId: id, gymId: activeGymId || '' } })}
-                onViewActiveChallenges={() => { if (isUnlocked) router.push({ pathname: '/challenges', params: { tab: 'active' } } as any); }}
-                onViewCompletedChallenges={() => { if (isUnlocked) router.push({ pathname: '/challenges', params: { tab: 'completed' } } as any); }}
-                onTrophyRoomPress={() => router.push('/trophy-room')}
+                onChallengePress={navToChallenge}
+                onViewActiveChallenges={navToActiveChallenges}
+                onViewCompletedChallenges={navToCompletedChallenges}
+                onTrophyRoomPress={navToTrophyRoom}
               />
               <SheetArenaContent
                 isUnlocked={isUnlocked}
                 activeArenas={activeArenas}
-                onArenaPress={(id) => router.push({ pathname: '/arena/[id]', params: { id } })}
-                onViewAllArenas={() => router.push('/arenas')}
+                onArenaPress={navToArena}
+                onViewAllArenas={navToAllArenas}
               />
             </SliderTabs>
           </View>
         </Animated.ScrollView>
+
+        {/* Bottom dimming mask — hides sheet content behind FAB area */}
+        <View
+          pointerEvents="none"
+          style={[styles.fabBottomMask, { height: Math.max(insets.bottom + 120, 132) }]}
+        >
+          <LinearGradient
+            colors={fabBottomMaskColors}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </View>
 
         {/* FAB — absolute overlay, always visible */}
         <View style={[styles.startWorkoutWrap, { bottom: Math.max(insets.bottom + 10, 16) }]}>
@@ -1250,6 +1338,18 @@ const styles = StyleSheet.create({
   },
   outerScroll: {
     flex: 1,
+    position: 'relative',
+    zIndex: 2,
+    elevation: 2,
+  },
+  sheetStaticBackdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: SCREEN_HEIGHT * 0.74,
+    zIndex: 1,
+    elevation: 0,
   },
   outerScrollContent: {
     flexGrow: 1,
@@ -1263,7 +1363,7 @@ const styles = StyleSheet.create({
   },
   stickySectionBlur: {
     overflow: 'hidden',
-    backgroundColor: 'rgba(12,15,24,0.28)',
+    backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(12,15,24,0.28)',
   },
   sheetContent: {
     overflow: 'hidden',
@@ -1319,7 +1419,7 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH + PARALLAX_EXTRA,
   },
   dashboardSheetBackground: {
-    backgroundColor: 'rgba(36, 29, 53, 0.93)',
+    backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(24, 20, 38, 0.98)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
@@ -1440,6 +1540,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FF5252',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#000',
+  },
+  notifBadgeText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    color: '#FFFFFF',
+    lineHeight: 13,
   },
   /* ─── Hero Section ──────────────────────── */
   heroSection: {
@@ -1913,6 +2033,14 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 30,
+  },
+  fabBottomMask: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+    elevation: 6,
   },
   startWorkoutButton: {
     borderRadius: 16,

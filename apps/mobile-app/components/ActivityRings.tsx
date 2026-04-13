@@ -29,8 +29,6 @@ export interface ActivityRingsProps {
   todayDrops: number;
   todayBonusDrops?: number;
   dailyCap: number;
-  weeklyDrops: number;
-  weeklyCap: number;
   totalGymDrops: number;
   size?: number;
   onPress?: () => void;
@@ -83,8 +81,8 @@ function formatDrops(n: number) {
 
 export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>(function ActivityRings(
   {
-    weeklyDrops,
-    weeklyCap,
+    todayDrops,
+    dailyCap,
     totalGymDrops,
     size = 290,
     onPress,
@@ -94,9 +92,11 @@ export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>
 ) {
   const { t } = useTranslation('home');
   const branding = useBranding();
-  const color = branding.primary;
-  const weeklyProgress = weeklyCap > 0 ? Math.min(weeklyDrops / weeklyCap, 1) : 0;
-  const targetPct = Math.round(weeklyProgress * 100);
+  const dailyProgress = dailyCap > 0 ? Math.min(todayDrops / dailyCap, 1) : 0;
+  const goalReached = dailyProgress >= 1;
+  const color = goalReached ? '#4ade80' : branding.primary;
+  const targetPct = Math.round(dailyProgress * 100);
+  const todayDisplay = formatDrops(todayDrops).toUpperCase();
 
   // ── JS-side tick animation ──────────────────────────────────────────────────
   const [animPct, setAnimPct] = useState(0);
@@ -163,8 +163,6 @@ export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>
 
   const ticks = buildTicks(animPct);
 
-  const weeklyPct = weeklyCap > 0 ? Math.round((weeklyDrops / weeklyCap) * 100) : 0;
-  const weeklyLabel = `${weeklyPct}%`;
   const spendableDisplay = formatDrops(totalGymDrops).toUpperCase();
 
   return (
@@ -195,14 +193,20 @@ export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>
               centerReveal,
             ]}
           >
-            <Ionicons name="water-outline" size={BG_ICON_SIZE} color={hexToRgba(color, 0.08)} style={styles.bgIcon} />
-            <Text style={styles.topLabel}>{t('rings.spendable')}</Text>
-            <Text style={[styles.spendableNumber, { color }]}>{spendableDisplay}</Text>
+            <View style={styles.topRow}>
+              <Text style={styles.topLabel}>{t('rings.spendable')}</Text>
+              <Ionicons name="water-outline" size={14} color={hexToRgba(color, 0.75)} />
+            </View>
+            <View style={styles.spendableRow}>
+              <Text style={[styles.spendableNumber, { color }]}>{spendableDisplay}</Text>
+            </View>
 
             <View style={styles.divider} />
 
-            <Text style={[styles.weeklyNumber, { color }]}>{weeklyLabel}</Text>
-            <Text style={styles.weeklyLabel}>{t('rings.week')}</Text>
+            <Text style={[styles.todayNumber, { color }]}>{todayDisplay}</Text>
+            <Text style={styles.todayLabel}>
+              {goalReached ? t('rings.goalReached') : t('rings.today')}
+            </Text>
           </Animated.View>
         </Animated.View>
       </Animated.View>
@@ -229,13 +233,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 0,
   },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
   topLabel: {
     ...fontStyles.heading,
     fontSize: 10,
     color: 'rgba(255,255,255,0.42)',
     letterSpacing: 1.4,
     textTransform: 'uppercase',
-    marginBottom: 2,
     textAlign: 'center',
   },
   bgIcon: {
@@ -245,12 +254,17 @@ const styles = StyleSheet.create({
   },
   spendableNumber: {
     ...fontStyles.heading,
-    fontSize: 36,
-    lineHeight: 40,
+    fontSize: 42,
+    lineHeight: 46,
     color: 'rgba(255,255,255,0.92)',
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  spendableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   divider: {
     width: 52,
@@ -258,17 +272,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.14)',
     marginVertical: 8,
   },
-  weeklyNumber: {
+  todayNumber: {
     ...fontStyles.heading,
-    fontSize: 19,
-    lineHeight: 22,
+    fontSize: 22,
+    lineHeight: 25,
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  weeklyLabel: {
+  todayLabel: {
     ...fontStyles.heading,
     fontSize: 9,
     color: 'rgba(255,255,255,0.42)',

@@ -4,18 +4,22 @@
  * No internal scroll — the parent Animated.ScrollView handles all vertical scrolling.
  */
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { CompeteStatsCards } from '@/components/home/CompeteStatsCards';
 import type { LeaderboardPeriod } from '@/components/LeaderboardPreview';
 import type { PeriodRankInfo } from '@/hooks/useCompeteStats';
+import { useLeaderboardRewards } from '@/hooks/useLeaderboardRewards';
+import { useMyLeaderboardPrizes } from '@/hooks/useMyLeaderboardPrizes';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 
 const GOLD = '#EAB308';
 
+// ── Props ────────────────────────────────────────────────────────────────────
 export interface SheetRankContentProps {
   gymId: string | null;
   isUnlocked: boolean;
@@ -29,7 +33,8 @@ export interface SheetRankContentProps {
   onSmartCoachPress: () => void;
 }
 
-export function SheetRankContent({
+export const SheetRankContent = React.memo(function SheetRankContent({
+  gymId,
   isUnlocked,
   hasSession,
   smartcoachEnabled,
@@ -42,14 +47,53 @@ export function SheetRankContent({
 }: SheetRankContentProps) {
   const branding = useBranding();
   const { t } = useTranslation('home');
+  const router = useRouter();
+  const { rewards: weeklyRewards } = useLeaderboardRewards(gymId, 'weekly');
+  const { rewards: monthlyRewards } = useLeaderboardRewards(gymId, 'monthly');
+  const { pending: pendingPrizes } = useMyLeaderboardPrizes(gymId);
+
+  const firstPendingPrize = pendingPrizes[0] ?? null;
 
   return (
     <View style={styles.container}>
+      {/* Leaderboard prize celebration banner */}
+      {hasSession && firstPendingPrize && (
+        <TouchableOpacity
+          style={styles.prizeBanner}
+          onPress={() => router.push(`/redemptions?highlight=${firstPendingPrize.id}` as any)}
+          activeOpacity={0.82}
+        >
+          <LinearGradient
+            colors={[hexToRgba(GOLD, 0.22), hexToRgba(GOLD, 0.06), 'rgba(10,10,18,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={styles.prizeBannerIcon}>
+            <Text style={styles.prizeBannerEmoji}>🏆</Text>
+          </View>
+          <View style={styles.prizeBannerBody}>
+            <Text style={styles.prizeBannerTitle}>{t('prize.wonTitle')}</Text>
+            <Text style={styles.prizeBannerSub} numberOfLines={1}>
+              {firstPendingPrize.redemption_code
+                ? t('prize.showCode', { code: firstPendingPrize.redemption_code })
+                : t('prize.collectNow')}
+            </Text>
+          </View>
+          <View style={styles.prizeBannerArrow}>
+            <Ionicons name="chevron-forward" size={16} color={hexToRgba(GOLD, 0.6)} />
+          </View>
+        </TouchableOpacity>
+      )}
+
       <CompeteStatsCards
         weekly={weekly}
         monthly={monthly}
         allTime={allTime}
         primaryColor={branding.primary}
+        weeklyRewards={weeklyRewards}
+        monthlyRewards={monthlyRewards}
         onLeaderboardPress={onLeaderboardPress}
       />
 
@@ -103,12 +147,58 @@ export function SheetRankContent({
           </View>
         </TouchableOpacity>
       )}
+
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
+
+  prizeBanner: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderTopColor: hexToRgba(GOLD, 0.55),
+    borderLeftColor: hexToRgba(GOLD, 0.22),
+    borderRightColor: hexToRgba(GOLD, 0.12),
+    borderBottomColor: hexToRgba(GOLD, 0.08),
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: hexToRgba(GOLD, 0.06),
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  prizeBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: hexToRgba(GOLD, 0.16),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  prizeBannerEmoji: { fontSize: 22 },
+  prizeBannerBody: { flex: 1 },
+  prizeBannerTitle: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+    color: GOLD,
+  },
+  prizeBannerSub: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: hexToRgba(GOLD, 0.7),
+    marginTop: 2,
+  },
+  prizeBannerArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: hexToRgba(GOLD, 0.1),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   inviteCta: {
     borderRadius: 18,

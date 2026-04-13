@@ -11,7 +11,7 @@
  *  - Ends workout via the same award_drops() RPC as workout.tsx.
  */
 
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, AppState, AppStateStatus, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -621,9 +621,13 @@ export default function WorkoutSimScreen() {
           pointerEvents="none"
         />
       )}
-      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
-      </PlatformBlur>
+      {Platform.OS === 'ios' ? (
+        <PlatformBlur intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+        </PlatformBlur>
+      ) : (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,18,0.58)' }]} />
+      )}
 
       {/* Header — simulation badge left, drops right */}
       <View style={workoutStyles.header}>

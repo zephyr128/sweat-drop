@@ -283,6 +283,10 @@ interface NotificationData {
   /** Campaign-specific fields */
   campaign_id?: string;
   discount_code?: string;
+  /** Leaderboard prize redemption fields (Phase-1 migration) */
+  redemption_id?: string;
+  redemption_code?: string;
+  rank?: string;
 }
 
 /**
@@ -337,7 +341,12 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
       return '/arenas';
 
     case 'leaderboard_prize':
-      return '/leaderboard';
+      // Deep-link to the specific redemption card when redemption_id is available,
+      // otherwise fall back to the full redemptions list.
+      if (data.redemption_id) {
+        return `/redemptions?highlight=${data.redemption_id}`;
+      }
+      return '/redemptions';
 
     case 'reminder':
       return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/home';

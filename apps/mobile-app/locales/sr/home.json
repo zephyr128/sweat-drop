@@ -132,7 +132,8 @@
     "streak_legend": "Legenda",
     "drops": "DROPS",
     "week": "Ova nedelja",
-    "spendable": "DOSTUPNO"
+    "spendable": "DOSTUPNO",
+    "goalReached": "Cilj dostignut!"
   },
   "cards": {
     "checkedIn": "Čekiran",
@@ -148,6 +149,7 @@
     "noHappyHour": "Nema danas",
     "happyHourActive": "Happy Hour je aktivan!",
     "endsAt": "Završava u {{time}}",
+    "endsIn": "Završava za {{time}}",
     "hhToday": "Danas",
     "hhTomorrow": "Sutra",
     "happyHourTitle": "Happy Hour",
@@ -156,6 +158,7 @@
   "nextAward": "Sledeća nagrada",
   "challenges": {
     "overallProgress": "PROGRES",
+    "nearestGoal": "NAJBLIŽI CILJ",
     "completed": "završeno",
     "allDone": "Svi izazovi završeni!",
     "remaining": "preostalo",
@@ -170,7 +173,10 @@
     "active": "AKTIVNO",
     "available": "arena dostupno",
     "joined": "PRIDRUŽENO",
-    "competing": "takmiči se"
+    "competing": "takmiči se",
+    "topPrize": "GLAVNA NAGRADA",
+    "youLead": "Ti vodiš!",
+    "toFirst": "do #1"
   },
   "compete": {
     "rank": "TVOJ RANG",
@@ -184,7 +190,20 @@
     "unranked": "Nije rangiran",
     "you": "Ti",
     "places": "mesta",
-    "allTimeRecord": "Rekord svih vremena!"
+    "allTimeRecord": "Rekord svih vremena!",
+    "stillNeedDrops": "Još {{count}} kapi do #1",
+    "defendFirst": "Braniš prvo mesto",
+    "monthlyProgress": "OVAJ MESEC · NAPREDAK DO #1"
+  },
+  "prizes": {
+    "weeklyPrizes": "Nedeljne nagrade",
+    "thisWeek": "Ova nedelja",
+    "dropsToFirst": "dropsa do 1. mesta",
+    "youQualify": "Osvajač si",
+    "youAreLead": "Na 1. si mestu — drži prednost",
+    "yourPrize": "Tvoja nagrada:",
+    "topThreeForPrize": "Top 3 osvajaju nagradu",
+    "gaugeReward": "{{reward}} za #{{rank}}"
   },
   "exploreStore": "Istraži prodavnicu nagrada",
   "foundingPartner": "Osnivački partner",
@@ -202,7 +221,15 @@
   "liveNow": "UŽIVO",
   "membersTotal": "članova",
   "badgesEarned": "{{count}} zarađeno",
+  "badgesEarnedWithUnit": "{{count}} BEDŽEVA ZARAĐENO",
   "earnedBadges": "ZARAĐENI BEDŽEVI ({{count}})",
   "challengeProgress": "{{completed}}/{{total}} završeno",
-  "noArenaActive": "NEMA AKTIVNIH ARENA"
+  "noArenaActive": "NEMA AKTIVNIH ARENA",
+  "prize": {
+    "wonTitle": "Osvojio si nagradu sa rang liste!",
+    "showCode": "Pokaži kod {{code}} na recepciji za preuzimanje",
+    "collectNow": "Dodirni da preuzmеš nagradu",
+    "expiresIn": "Ističe za {{days}} dana"
+  },
+  "you": "Ti"
 }

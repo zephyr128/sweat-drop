@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, AppState, AppStateStatus, BackHandler, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, AppState, AppStateStatus, BackHandler, Alert, Platform } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -2837,10 +2837,16 @@ export default function WorkoutScreen() {
           pointerEvents="none"
         />
       )}
-      {/* Blurred dark overlay for contrast */}
-      <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
-      </PlatformBlur>
+      {/* Contrast overlay:
+          - iOS: real blur + dark tint
+          - Android: translucent tint (no heavy black fallback) so gym bg remains visible */}
+      {Platform.OS === 'ios' ? (
+        <PlatformBlur intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+        </PlatformBlur>
+      ) : (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,18,0.58)' }]} />
+      )}
 
       {/* Header with Gym Info + Status Badges */}
       <View style={styles.header}>

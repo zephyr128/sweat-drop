@@ -1,0 +1,13 @@
+{
+  "title": "Obaveštenja",
+  "markAllRead": "Označi sve",
+  "empty": "Nema novih obaveštenja",
+  "emptyHint": "Obaveštenja o tvojoj aktivnosti, leaderboard promenama i nagradama će se pojaviti ovde.",
+  "today": "Danas",
+  "yesterday": "Juče",
+  "thisWeek": "Ova nedelja",
+  "earlier": "Ranije",
+  "justNow": "Upravo sada",
+  "minutesAgo": "pre {{count}}m",
+  "hoursAgo": "pre {{count}}h"
+}

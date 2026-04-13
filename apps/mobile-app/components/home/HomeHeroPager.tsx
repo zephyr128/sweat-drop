@@ -49,8 +49,6 @@ export interface HomeHeroPagerProps {
   todayDrops: number;
   todayBonusDrops: number;
   dailyCap: number;
-  weeklyDrops: number;
-  weeklyCap: number;
   totalGymDrops: number;
   onActivityRingPress: () => void;
   onCompeteRingPress: () => void;
@@ -60,6 +58,8 @@ export interface HomeHeroPagerProps {
   rank: number;
   totalMembers: number;
   rankPeriod: LeaderboardPeriod;
+  rankDropsToFirst?: number;
+  rankRewardText?: string | null;
 
   challengeCompletedCount: number;
   challengeTotalCount: number;
@@ -80,8 +80,6 @@ export const HomeHeroPager = forwardRef<HomeHeroPagerHandle, HomeHeroPagerProps>
   todayDrops,
   todayBonusDrops,
   dailyCap,
-  weeklyDrops,
-  weeklyCap,
   totalGymDrops,
   onActivityRingPress,
   onCompeteRingPress,
@@ -90,6 +88,8 @@ export const HomeHeroPager = forwardRef<HomeHeroPagerHandle, HomeHeroPagerProps>
   rank,
   totalMembers,
   rankPeriod,
+  rankDropsToFirst = 0,
+  rankRewardText = null,
   challengeCompletedCount,
   challengeTotalCount,
   earnedBadgeCount,
@@ -233,8 +233,6 @@ export const HomeHeroPager = forwardRef<HomeHeroPagerHandle, HomeHeroPagerProps>
               todayDrops={todayDrops}
               todayBonusDrops={todayBonusDrops}
               dailyCap={dailyCap}
-              weeklyDrops={weeklyDrops}
-              weeklyCap={weeklyCap}
               totalGymDrops={totalGymDrops}
               size={290}
               onPress={onActivityRingPress}
@@ -249,6 +247,8 @@ export const HomeHeroPager = forwardRef<HomeHeroPagerHandle, HomeHeroPagerProps>
               rank={rank}
               totalMembers={totalMembers}
               rankPeriod={rankPeriod}
+              dropsToFirst={rankDropsToFirst}
+              rewardText={rankRewardText}
               active={settledPage === PAGE_RANK}
               onPress={onCompeteRingPress}
             />

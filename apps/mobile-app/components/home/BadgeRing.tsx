@@ -137,13 +137,13 @@ export function BadgeRing({ completedCount, totalCount, earnedBadgeCount, active
       <Animated.View style={[styles.center, { top: ARC_BOWL_TOP, height: ARC_BOWL_HEIGHT }, centerReveal]}>
         <Ionicons name="flame-outline" size={BG_ICON_SIZE} color={hexToRgba(BADGE_COLOR, 0.08)} style={styles.bgIcon} />
         <Text style={[styles.pctText, { color: BADGE_COLOR }]}>
-          {progressPercent}%
+          {completedCount}/{totalCount}
         </Text>
         <Text style={styles.badgeName}>
-          {t('challengeProgress', { completed: completedCount, total: totalCount })}
+          {t('challenges.completed')}
         </Text>
         {earnedBadgeCount > 0 && (
-          <Text style={styles.earnedLabel}>{t('badgesEarned', { count: earnedBadgeCount })}</Text>
+          <Text style={styles.earnedLabel}>{t('badgesEarnedWithUnit', { count: earnedBadgeCount })}</Text>
         )}
       </Animated.View>
     </Animated.View>

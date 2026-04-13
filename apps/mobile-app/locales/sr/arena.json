@@ -56,8 +56,8 @@
   "optInEarly": "Prijavi se ranije",
   "freeEntry": "Besplatan ulaz",
   "entryFee": "Ulaz: {{value}} drops",
-  "requiresStreak": "Potreban: {{value}}-dnevni niz 🔥",
-  "requiresLevel": "Potrebno: {{value}} ukupnih kapi ⭐",
+  "requiresStreak": "Potreban: {{value}}-dnevni niz",
+  "requiresLevel": "Potrebno: {{value}} ukupnih kapi",
   "yourBalance": "Tvoje stanje",
   "yourStreak": "Tvoj niz",
   "yourTotalDrops": "Tvoje ukupne kapi",
@@ -91,5 +91,13 @@
   "noResults": "Rezultati još nisu dostupni",
   "endedOn": "Završeno {{date}}",
   "redeemed": "Preuzeto",
-  "pendingRedemption": "Čeka preuzimanje"
+  "pendingRedemption": "Čeka preuzimanje",
+  "tabActive": "Aktivne",
+  "tabCompleted": "Završene",
+  "noActiveArenas": "Nema aktivnih arena",
+  "noActiveArenasDesc": "Proveri uskoro za nova takmičenja",
+  "noCompletedArenas": "Još nema završenih arena",
+  "noCompletedArenasDesc": "Takmičenja koja si završio/la će se pojaviti ovde",
+  "upcomingPill": "USKORO",
+  "rankResult": "#{{rank}} / {{total}}"
 }

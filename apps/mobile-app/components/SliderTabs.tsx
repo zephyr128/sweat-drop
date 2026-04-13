@@ -9,6 +9,10 @@
  *     <PageOne />
  *     <PageTwo />
  *   </SliderTabs>
+ *
+ * PERF: ModeABar and SliderTabsBar are React.memo'd. renderScene/renderTabBar
+ * are memoized via useCallback. The redundant inner ScrollView (when
+ * scrollEnabled=false) has been replaced with a plain View.
  */
 
 import React, { Children, useMemo, useCallback } from 'react';
@@ -28,7 +32,7 @@ import Animated, {
   withSpring,
   runOnJS,
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { fontStyles, hexToRgba } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -47,37 +51,150 @@ interface SliderTabsProps {
   onChange: (key: string) => void;
   children?: React.ReactNode;
   accentColor?: string;
-  /** Style for the outer wrapper */
   style?: object;
-  /** Style applied to the tab bar card only */
   barStyle?: object;
-  /** When true, the tab bar is not rendered — use SliderTabsBar separately as a sticky header */
   hideBar?: boolean;
-  /** Explicit height for each page (required when inside a ScrollView content container) */
   pageHeight?: number;
 }
 
-// ── Custom glass tab bar ────────────────────────────────────────────────────
-
 type Route = { key: string; title: string; icon?: React.ComponentProps<typeof Ionicons>['name'] };
 
-const SPRING_CFG_BAR = { damping: 20, stiffness: 220, mass: 0.8 };
+const SPRING_CFG = { damping: 20, stiffness: 220, mass: 0.8 };
 
-const GlassTabBar: React.FC<
-  SceneRendererProps & {
-    navigationState: NavigationState<Route>;
-    tabs: SliderTab[];
-    accent: string;
-    barStyle?: object;
-    onTabPress: (key: string) => void;
-  }
-> = ({ navigationState, tabs, accent, barStyle, onTabPress }) => {
+// ── Shared animated tab bar (used by both GlassTabBar and ModeABar) ─────────
+
+const ModeABar = React.memo(function ModeABar({
+  tabs,
+  activeKey,
+  accent,
+  barStyle,
+  onTabPress,
+}: {
+  tabs: SliderTab[];
+  activeKey: string;
+  accent: string;
+  barStyle?: object;
+  onTabPress: (key: string) => void;
+}) {
+  const tabCount = tabs.length;
+  const activeIdx = tabs.findIndex((t) => t.key === activeKey);
+  const safeIdx = activeIdx >= 0 ? activeIdx : 0;
+
+  const position = useSharedValue(safeIdx);
+
+  React.useEffect(() => {
+    position.value = withSpring(safeIdx, SPRING_CFG);
+  }, [safeIdx]);
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    const frac = 1 / tabCount;
+    return {
+      left: `${position.value * frac * 100}%` as any,
+      width: `${frac * 100}%` as any,
+    };
+  });
+
+  const trackBg = useMemo(() => hexToRgba(accent, 0.12), [accent]);
+
+  return (
+    <View style={[styles.barContainer, barStyle]}>
+      <View style={styles.trackOuter}>
+        {tabs.map((tab, idx) => {
+          const isActive = idx === safeIdx;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tabItem}
+              onPress={() => onTabPress(tab.key)}
+              activeOpacity={0.75}
+            >
+              {tab.icon && (
+                <Ionicons
+                  name={tab.icon}
+                  size={13}
+                  color={isActive ? accent : 'rgba(255,255,255,0.38)'}
+                  style={styles.tabIconMargin}
+                />
+              )}
+              <Text
+                style={[styles.tabLabel, { color: isActive ? accent : 'rgba(255,255,255,0.42)' }]}
+                numberOfLines={1}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <View style={[styles.underlineTrack, { backgroundColor: trackBg }]}>
+        <Animated.View style={[styles.underline, { backgroundColor: accent }, indicatorStyle]} />
+      </View>
+    </View>
+  );
+});
+
+// ── SliderTabsBar — standalone bar for sticky header usage ──────────────────
+
+export interface SliderTabsBarProps {
+  tabs: SliderTab[];
+  activeKey: string;
+  onChange: (key: string) => void;
+  accentColor?: string;
+  style?: object;
+  barStyle?: object;
+}
+
+export const SliderTabsBar = React.memo(function SliderTabsBar({
+  tabs,
+  activeKey,
+  onChange,
+  accentColor,
+  style,
+  barStyle,
+}: SliderTabsBarProps) {
+  const branding = useBranding();
+  const accent = accentColor ?? branding.primary;
+  const handlePress = useCallback(
+    (key: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onChange(key);
+    },
+    [onChange],
+  );
+  return (
+    <View style={style}>
+      <ModeABar
+        tabs={tabs}
+        activeKey={activeKey}
+        accent={accent}
+        barStyle={barStyle}
+        onTabPress={handlePress}
+      />
+    </View>
+  );
+});
+
+// ── GlassTabBar — used inside TabView ───────────────────────────────────────
+
+const GlassTabBar = React.memo(function GlassTabBar({
+  navigationState,
+  tabs,
+  accent,
+  barStyle,
+  onTabPress,
+}: SceneRendererProps & {
+  navigationState: NavigationState<Route>;
+  tabs: SliderTab[];
+  accent: string;
+  barStyle?: object;
+  onTabPress: (key: string) => void;
+}) {
   const { routes, index: activeIndex } = navigationState;
   const tabCount = routes.length;
-
   const pos = useSharedValue(activeIndex);
+
   React.useEffect(() => {
-    pos.value = withSpring(activeIndex, SPRING_CFG_BAR);
+    pos.value = withSpring(activeIndex, SPRING_CFG);
   }, [activeIndex]);
 
   const indicatorStyle = useAnimatedStyle(() => {
@@ -88,6 +205,8 @@ const GlassTabBar: React.FC<
       width: `${frac * 100}%` as any,
     };
   });
+
+  const trackBg = useMemo(() => hexToRgba(accent, 0.12), [accent]);
 
   return (
     <View style={[styles.barContainer, barStyle]}>
@@ -110,7 +229,7 @@ const GlassTabBar: React.FC<
                   name={tab.icon}
                   size={13}
                   color={isActive ? accent : 'rgba(255,255,255,0.38)'}
-                  style={{ marginBottom: 1 }}
+                  style={styles.tabIconMargin}
                 />
               )}
               <Text
@@ -123,119 +242,12 @@ const GlassTabBar: React.FC<
           );
         })}
       </View>
-      {/* Underline track */}
-      <View style={[styles.underlineTrack, { backgroundColor: hexToRgba(accent, 0.12) }]}>
+      <View style={[styles.underlineTrack, { backgroundColor: trackBg }]}>
         <Animated.View style={[styles.underline, { backgroundColor: accent }, indicatorStyle]} />
       </View>
     </View>
   );
-};
-
-// ── Mode A: standalone bar with spring-animated indicator ───────────────────
-
-const SPRING_CFG = { damping: 20, stiffness: 220, mass: 0.8 };
-
-export interface SliderTabsBarProps {
-  tabs: SliderTab[];
-  activeKey: string;
-  onChange: (key: string) => void;
-  accentColor?: string;
-  style?: object;
-  barStyle?: object;
-}
-
-/**
- * SliderTabsBar — tab bar only, no page content.
- * Use this as a sticky header inside a single outer ScrollView.
- */
-export const SliderTabsBar: React.FC<SliderTabsBarProps> = ({
-  tabs,
-  activeKey,
-  onChange,
-  accentColor,
-  style,
-  barStyle,
-}) => {
-  const branding = useBranding();
-  const accent = accentColor ?? branding.primary;
-  return (
-    <View style={style}>
-      <ModeABar
-        tabs={tabs}
-        activeKey={activeKey}
-        accent={accent}
-        barStyle={barStyle}
-        onTabPress={(key) => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onChange(key);
-        }}
-      />
-    </View>
-  );
-};
-
-const ModeABar: React.FC<{
-  tabs: SliderTab[];
-  activeKey: string;
-  accent: string;
-  barStyle?: object;
-  onTabPress: (key: string) => void;
-}> = ({ tabs, activeKey, accent, barStyle, onTabPress }) => {
-  const tabCount = tabs.length;
-  const activeIdx = tabs.findIndex((t) => t.key === activeKey);
-  const safeIdx = activeIdx >= 0 ? activeIdx : 0;
-
-  const position = useSharedValue(safeIdx);
-
-  React.useEffect(() => {
-    position.value = withSpring(safeIdx, SPRING_CFG);
-  }, [safeIdx]);
-
-  const indicatorStyle = useAnimatedStyle(() => {
-    const frac = 1 / tabCount;
-    return {
-      left: `${position.value * frac * 100}%` as any,
-      width: `${frac * 100}%` as any,
-    };
-  });
-
-  return (
-    <View style={[styles.barContainer, barStyle]}>
-      <View style={styles.trackOuter}>
-        {tabs.map((tab, idx) => {
-          const isActive = idx === safeIdx;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={styles.tabItem}
-              onPress={() => onTabPress(tab.key)}
-              activeOpacity={0.75}
-            >
-              {tab.icon && (
-                <Ionicons
-                  name={tab.icon}
-                  size={13}
-                  color={isActive ? accent : 'rgba(255,255,255,0.38)'}
-                  style={{ marginBottom: 1 }}
-                />
-              )}
-              <Text
-                style={[styles.tabLabel, { color: isActive ? accent : 'rgba(255,255,255,0.42)' }]}
-                numberOfLines={1}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      {/* Underline track */}
-      <View style={[styles.underlineTrack, { backgroundColor: hexToRgba(accent, 0.12) }]}>
-        <Animated.View style={[styles.underline, { backgroundColor: accent }, indicatorStyle]} />
-      </View>
-    </View>
-  );
-};
+});
 
 // ── Main component ──────────────────────────────────────────────────────────
 
@@ -278,7 +290,6 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
   const hasPages = Children.count(children) > 0;
   const pageChildren = useMemo(() => Children.toArray(children), [children]);
 
-  // ── Mode A: bar-only swipe gesture for tab changes ────────────────────────
   const doSwipe = useCallback(
     (dir: 'left' | 'right') => {
       const next = dir === 'left'
@@ -304,6 +315,47 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
       }
     });
 
+  // Stable page height style — avoids creating new objects per render
+  const renderScene = useCallback(
+    ({ route }: SceneRendererProps & { route: Route }) => {
+      const idx = tabs.findIndex((t) => t.key === route.key);
+      if (pageHeight) {
+        return (
+          <ScrollView
+            style={{ height: pageHeight }}
+            contentContainerStyle={{ minHeight: pageHeight }}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
+          >
+            {pageChildren[idx] ?? null}
+          </ScrollView>
+        );
+      }
+      return <View style={styles.page}>{pageChildren[idx] ?? null}</View>;
+    },
+    [tabs, pageChildren, pageHeight],
+  );
+
+  const renderTabBar = useCallback(
+    hideBar
+      ? () => null
+      : (props: SceneRendererProps & { navigationState: NavigationState<Route> }) => (
+          <GlassTabBar
+            {...props}
+            tabs={tabs}
+            accent={accent}
+            barStyle={barStyle}
+            onTabPress={(key) => onChange(key)}
+          />
+        ),
+    [hideBar, tabs, accent, barStyle, onChange],
+  );
+
+  const initialLayout = useMemo(
+    () => ({ width: layout.width, height: pageHeight ?? layout.height }),
+    [layout.width, pageHeight, layout.height],
+  );
+
   if (!hasPages) {
     return (
       <View style={style}>
@@ -321,40 +373,6 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
     );
   }
 
-  // ── Mode B: full TabView with swipeable pages ─────────────────────────────
-  const renderScene = ({ route }: SceneRendererProps & { route: Route }) => {
-    const idx = tabs.findIndex((t) => t.key === route.key);
-    if (pageHeight) {
-      return (
-        <ScrollView
-          style={{ height: pageHeight }}
-          contentContainerStyle={{ flexGrow: 1 }}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
-        >
-          {pageChildren[idx] ?? null}
-        </ScrollView>
-      );
-    }
-    return (
-      <View style={styles.page}>
-        {pageChildren[idx] ?? null}
-      </View>
-    );
-  };
-
-  const renderTabBar = hideBar
-    ? () => null
-    : (props: SceneRendererProps & { navigationState: NavigationState<Route> }) => (
-        <GlassTabBar
-          {...props}
-          tabs={tabs}
-          accent={accent}
-          barStyle={barStyle}
-          onTabPress={(key) => onChange(key)}
-        />
-      );
-
   const wrapperStyle = pageHeight
     ? [{ width: '100%' as const, height: pageHeight }, style]
     : [styles.modeB, style];
@@ -365,7 +383,7 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
         navigationState={navigationState}
         renderScene={renderScene}
         onIndexChange={handleIndexChange}
-        initialLayout={{ width: layout.width, height: pageHeight ?? layout.height }}
+        initialLayout={initialLayout}
         renderTabBar={renderTabBar}
         lazy={false}
         swipeEnabled
@@ -376,9 +394,7 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
 };
 
 const styles = StyleSheet.create({
-  barContainer: {
-    // No background, no border, no blur — transparent
-  },
+  barContainer: {},
   trackOuter: {
     flexDirection: 'row',
   },
@@ -390,6 +406,9 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 10,
     paddingHorizontal: 8,
+  },
+  tabIconMargin: {
+    marginBottom: 1,
   },
   tabLabel: {
     ...fontStyles.heading,

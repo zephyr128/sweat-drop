@@ -38,7 +38,7 @@ export interface SheetActivityContentProps {
   children?: React.ReactNode;
 }
 
-export function SheetActivityContent({
+export const SheetActivityContent = React.memo(function SheetActivityContent({
   homeStats,
   dropLimits,
   checkinStatus,
@@ -73,6 +73,8 @@ export function SheetActivityContent({
       label: slot.label,
       time: fmt(slot.startAt),
       endTime: fmt(slot.endAt),
+      endAt: slot.endAt,
+      startAt: slot.startAt,
       multiplier: slot.multiplier,
       inMinutes: slot.minutesUntilStart,
       isToday: slot.isToday,
@@ -144,7 +146,7 @@ export function SheetActivityContent({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
