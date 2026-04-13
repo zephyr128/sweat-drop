@@ -28,6 +28,12 @@ export const ActiveChallengesOverlay: React.FC<ActiveChallengesOverlayProps> = (
     return null;
   }
 
+  const clampPercent = (value: unknown): number => {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.min(parsed, 100));
+  };
+
   return (
     <View style={styles.overlay}>
       <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
@@ -58,7 +64,7 @@ export const ActiveChallengesOverlay: React.FC<ActiveChallengesOverlayProps> = (
         showsVerticalScrollIndicator={false}
       >
         {activeChallenges.map((challenge) => {
-          const progressPercent = challenge.progress_percentage || 0;
+          const progressPercent = clampPercent(challenge.progress_percentage);
           const isNearCompletion = progressPercent >= 80;
 
           // Get challenge type label

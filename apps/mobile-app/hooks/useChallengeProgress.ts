@@ -68,22 +68,27 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
         return;
       }
 
+      const toNumber = (value: unknown): number => {
+        const parsed = typeof value === 'number' ? value : Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+
       const challengesWithProgress: ChallengeProgress[] = rpcData.map((c: any) => {
         const cType = c.challenge_type;
         let target = 0;
         if (cType === 'milestone') {
-          target = c.milestone_threshold || 0;
+          target = toNumber(c.milestone_threshold);
         } else if (cType === 'streak' || cType === 'checkin_streak') {
-          target = c.streak_days || c.target_drops || 0;
+          target = toNumber(c.streak_days || c.target_drops);
         } else {
-          target = c.target_drops || 0;
+          target = toNumber(c.target_drops);
         }
 
         let current = 0;
         if (cType === 'streak' || cType === 'checkin_streak') {
-          current = c.current_streak_days || 0;
+          current = toNumber(c.current_streak_days);
         } else {
-          current = c.current_drops || 0;
+          current = toNumber(c.current_drops);
         }
 
         const progressPercent = target > 0
@@ -97,12 +102,12 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
           description: null,
           challenge_type: cType as ChallengeProgress['challenge_type'],
           target_drops: target,
-          milestone_threshold: c.milestone_threshold,
-          reward_drops: c.reward_drops,
+          milestone_threshold: c.milestone_threshold === null ? null : toNumber(c.milestone_threshold),
+          reward_drops: toNumber(c.reward_drops),
           current_drops: current,
-          current_streak_days: c.current_streak_days || 0,
+          current_streak_days: toNumber(c.current_streak_days),
           is_completed: c.is_completed || false,
-          progress_percentage: progressPercent,
+          progress_percentage: Number(progressPercent.toFixed(2)),
           start_date: c.start_date,
           end_date: c.end_date,
         };

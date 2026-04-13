@@ -53,9 +53,11 @@ function rankColor(rank: number | null): string {
 
 function formatScore(n: number | null): string {
   if (n === null || n === 0) return '–';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
+  const safe = Number.isFinite(n) ? n : 0;
+  if (safe >= 1_000_000) return `${(safe / 1_000_000).toFixed(1)}M`;
+  if (safe >= 1000) return `${(safe / 1000).toFixed(1)}k`;
+  if (Number.isInteger(safe)) return String(safe);
+  return safe.toFixed(1).replace(/\.0$/, '');
 }
 
 // ── Animated progress bar ─────────────────────────────────────────────────────

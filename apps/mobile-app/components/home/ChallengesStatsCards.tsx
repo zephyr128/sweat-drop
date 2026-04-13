@@ -33,6 +33,21 @@ const ORANGE = '#FF9F4A';
 const GREEN = '#4ade80';
 const GLASS_BG = 'rgba(10, 10, 20, 0.52)';
 
+function toFiniteNumber(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function clampPercent(value: unknown): number {
+  const parsed = toFiniteNumber(value);
+  return Math.max(0, Math.min(parsed, 100));
+}
+
+function formatPercentLabel(value: unknown): string {
+  const pct = clampPercent(value);
+  return Number.isInteger(pct) ? String(pct) : pct.toFixed(1).replace(/\.0$/, '');
+}
+
 // ── Animated progress bar ─────────────────────────────────────────────────────
 function AnimBar({ pct, color }: { pct: number; color: string }) {
   const anim = useAnimatedStyle(() => ({
@@ -135,9 +150,15 @@ export function ChallengesStatsCards({
   const nearestChallenge = sortedActive[0] ?? null;
 
   function formatK(n: number) {
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-    return String(n);
+    const safe = toFiniteNumber(n);
+    if (safe >= 1000) return `${(safe / 1000).toFixed(1)}k`;
+    if (Number.isInteger(safe)) return String(safe);
+    return safe.toFixed(1).replace(/\.0$/, '');
   }
+
+  const nearestProgressPct = nearestChallenge
+    ? clampPercent(nearestChallenge.progress_percentage)
+    : 0;
 
   return (
     <View style={styles.wrapper}>
@@ -181,7 +202,7 @@ export function ChallengesStatsCards({
                   <Text style={styles.heroEyebrow}>{t('challenges.nearestGoal')}</Text>
                 </View>
                 <Text style={[styles.heroNumber, { color: ORANGE }]}>
-                  {loading ? '–' : `${nearestChallenge.progress_percentage}%`}
+                  {loading ? '–' : `${formatPercentLabel(nearestProgressPct)}%`}
                 </Text>
                 <Text style={styles.heroSub} numberOfLines={2}>
                   {nearestChallenge.challenge_name}
@@ -196,7 +217,7 @@ export function ChallengesStatsCards({
                 </View>
                 {!loading && (
                   <View style={styles.heroProgressWrap} pointerEvents="none">
-                    <AnimBar pct={nearestChallenge.progress_percentage} color={ORANGE} />
+                    <AnimBar pct={nearestProgressPct} color={ORANGE} />
                   </View>
                 )}
               </>
@@ -346,7 +367,7 @@ export function ChallengesStatsCards({
       ) : sortedActive.length > 0 ? (
         <View style={styles.rowsWrap}>
           {sortedActive.slice(0, 2).map((ch) => {
-            const pct = Math.max(0, Math.min(100, ch.progress_percentage || 0));
+            const pct = clampPercent(ch.progress_percentage);
             return (
               <PressableCard
                 key={ch.challenge_id}
