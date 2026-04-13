@@ -88,9 +88,28 @@ source "$ENV_FILE"
 set +a
 
 # ── Prebuild ──────────────────────────────────────────────────────────────────
+# Backup iOS icon Contents.json before prebuild — expo prebuild --platform android
+# can still overwrite shared assets and remove manually-added iPad icon entries.
+ICONSET="$APP_DIR/ios/SweatDrop/Images.xcassets/AppIcon.appiconset"
+CONTENTS_BACKUP="/tmp/AppIcon_Contents_backup.json"
+if [[ -f "$ICONSET/Contents.json" ]]; then
+  cp "$ICONSET/Contents.json" "$CONTENTS_BACKUP"
+  info "Backed up iOS AppIcon Contents.json"
+fi
+
 info "Running expo prebuild --platform android ..."
 cd "$APP_DIR"
 npx expo prebuild --platform android --no-install 2>&1 | tail -10
+
+# Restore iOS icon Contents.json if prebuild overwrote it
+if [[ -f "$CONTENTS_BACKUP" ]]; then
+  cp "$CONTENTS_BACKUP" "$ICONSET/Contents.json"
+  info "Restored iOS AppIcon Contents.json (iPad icons preserved)"
+fi
+
+# ── Remove duplicate launcher icons (prebuild generates .webp, old .png cause conflicts) ──
+info "Removing duplicate PNG launcher icons ..."
+find "$APP_DIR/android/app/src/main/res" -name "ic_launcher.png" -o -name "ic_launcher_round.png" | xargs rm -f 2>/dev/null || true
 
 # ── Gradle build ──────────────────────────────────────────────────────────────
 info "Building release AAB ..."
