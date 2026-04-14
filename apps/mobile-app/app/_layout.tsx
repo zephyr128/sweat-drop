@@ -382,6 +382,16 @@ export default function RootLayout() {
     return cleanup;
   }, []);
 
+  // Drain any pending workout finalization left over from a previous session
+  // where the network was unavailable at workout end. Runs once after auth is
+  // ready so award_drops has a valid JWT. Silently no-ops if nothing is pending.
+  useEffect(() => {
+    if (!isInitialized || !session?.user) return;
+    import('@/lib/workout/pendingFinalization').then(({ drainPendingFinalization }) => {
+      drainPendingFinalization();
+    });
+  }, [isInitialized, session?.user]);
+
   // Initialize BLE Manager (Android)
   useEffect(() => {
     if (Platform.OS === 'android') {

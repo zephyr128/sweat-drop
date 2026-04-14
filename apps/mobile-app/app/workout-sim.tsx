@@ -532,7 +532,14 @@ export default function WorkoutSimScreen() {
       try {
         const awardResult = await withRetry(async () => {
           const { data, error: rpcErr } = await supabase.rpc('award_drops', { p_session_id: session.id });
-          if (rpcErr) throw new Error(rpcErr.message || 'award_drops RPC error');
+          if (rpcErr) {
+            const msg = (rpcErr.message || '').toLowerCase();
+            const isBizError = msg.includes('fraud') || msg.includes('abuse') ||
+              msg.includes('cap') || msg.includes('limit') ||
+              msg.includes('rate limit') || msg.includes('blocked');
+            if (isBizError) throw Object.assign(new Error(rpcErr.message), { _noRetry: true });
+            throw new Error(rpcErr.message || 'award_drops RPC error');
+          }
           return data;
         }, { attempts: 3, baseDelayMs: 1500, label: 'WorkoutSim/awardDrops' });
 
@@ -551,16 +558,19 @@ export default function WorkoutSimScreen() {
             'machine_type:', resolvedMachineType);
         }
 
-        // Evaluate referral qualification (check-in + identity verification)
         void supabase
           .rpc('evaluate_referral_qualification', { p_referral_id: null })
           .then(({ error: refErr }) => {
             if (refErr && __DEV__) log.warn('[WorkoutSim] evaluate_referral_qualification failed:', refErr.message);
           });
-      } catch (awardRetryErr) {
-        log.error('[WorkoutSim] award_drops failed after all retries:', awardRetryErr);
-        await savePendingFinalization(session.id);
-        pendingSync = true;
+      } catch (awardRetryErr: any) {
+        if (awardRetryErr?._noRetry) {
+          log.error('[WorkoutSim] award_drops() rejected (business error):', awardRetryErr.message);
+        } else {
+          log.error('[WorkoutSim] award_drops failed after all retries:', awardRetryErr);
+          await savePendingFinalization(session.id);
+          pendingSync = true;
+        }
       }
 
       if (!finalSyncOk && !pendingSync) {

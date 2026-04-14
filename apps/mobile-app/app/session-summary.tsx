@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, AppState } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -92,6 +92,7 @@ export default function SessionSummaryScreen() {
   const [resolvedMultiplier, setResolvedMultiplier] = useState<number | null>(null);
   const [resolvedBadges, setResolvedBadges] = useState<string[] | null>(null);
   const [syncingDrops, setSyncingDrops] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
   const router = useRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
@@ -307,12 +308,12 @@ export default function SessionSummaryScreen() {
 
     const pending = await loadPendingFinalization();
     if (!pending || pending.sessionId !== sessionId) {
-      // No matching pending record — nothing to recover
       if (pending?.sessionId !== sessionId) await clearPendingFinalization();
       return;
     }
 
     setSyncingDrops(true);
+    setSyncFailed(false);
     log.debug('[SessionSummary] Recovering pending finalization for session:', sessionId);
 
     try {
@@ -328,8 +329,8 @@ export default function SessionSummaryScreen() {
           multiplier: row.multiplier,
         });
         await clearPendingFinalization();
+        setSyncFailed(false);
 
-        // Evaluate referral qualification (check-in + identity verification)
         void supabase
           .rpc('evaluate_referral_qualification', { p_referral_id: null })
           .then(({ error: refErr }) => {
@@ -337,13 +338,53 @@ export default function SessionSummaryScreen() {
           });
       } else if (error) {
         log.error('[SessionSummary] Recovery award_drops failed:', error.message);
+        setSyncFailed(true);
       }
     } catch (err) {
       log.error('[SessionSummary] Recovery attempt threw:', err);
+      setSyncFailed(true);
     } finally {
       setSyncingDrops(false);
     }
   };
+
+  const handleManualRetry = async () => {
+    await recoverPendingFinalization();
+  };
+
+  // Auto-retry when network is restored while the user is on this screen
+  useEffect(() => {
+    if (!syncFailed || syncingDrops || resolvedDrops !== null) return;
+
+    let cancelled = false;
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state !== 'active' || cancelled || syncingDrops) return;
+      // Quick connectivity check before retrying
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        const ctrl = new AbortController();
+        timer = setTimeout(() => ctrl.abort(), 4000);
+        await fetch('https://www.google.com/generate_204', {
+          method: 'HEAD',
+          signal: ctrl.signal,
+          cache: 'no-store',
+        });
+      } catch {
+        return; // still offline
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      if (!cancelled) {
+        log.debug('[SessionSummary] Network restored, auto-retrying finalization');
+        recoverPendingFinalization();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [syncFailed, syncingDrops, resolvedDrops]);
 
   const loadLeaderboardRank = async () => {
     if (!authSession?.user || !gymId) return;
@@ -563,6 +604,25 @@ export default function SessionSummaryScreen() {
             <View style={styles.syncingCard}>
               <ActivityIndicator size="small" color="#60A5FA" />
               <Text style={styles.syncingCardText}>{t('summary.syncingDrops')}</Text>
+            </View>
+          </Animated.View>
+        )}
+
+        {syncFailed && !syncingDrops && resolvedDrops === null && (
+          <Animated.View entering={FadeInDown.delay(240).duration(400)}>
+            <View style={styles.syncFailedCard}>
+              <View style={styles.syncFailedRow}>
+                <Ionicons name="cloud-offline-outline" size={18} color="#F59E0B" />
+                <Text style={styles.syncFailedCardText}>{t('summary.syncFailed')}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={handleManualRetry}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh-outline" size={16} color="#000" />
+                <Text style={styles.retryButtonText}>{t('summary.retrySync')}</Text>
+              </TouchableOpacity>
             </View>
           </Animated.View>
         )}
@@ -1169,6 +1229,41 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#93C5FD',
+  },
+  syncFailedCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.30)',
+    marginBottom: 8,
+    gap: 10,
+  },
+  syncFailedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  syncFailedCardText: {
+    ...fontStyles.body,
+    flex: 1,
+    fontSize: 13,
+    color: '#FDE68A',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F59E0B',
+  },
+  retryButtonText: {
+    ...fontStyles.heading,
+    fontSize: 14,
+    color: '#000',
   },
   securityCard: {
     flexDirection: 'row',

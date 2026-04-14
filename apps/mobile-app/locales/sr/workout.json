@@ -136,6 +136,8 @@
     "happyHourApplied": "x{{multiplier}} bonus primenjen — {{earned}} drops zarađeno",
     "trackingOnlyTitle": "Trening zabeležen — nema nagrada",
     "trackingOnlyBody": "Dnevni limit drops je dostignut pre ove sesije. Aktivnost je zapisana, ali drops i izazovi nisu nagrađeni.",
-    "syncingDrops": "Sinhronizujemo tvoje drops — samo trenutak..."
+    "syncingDrops": "Sinhronizujemo tvoje drops — samo trenutak...",
+    "syncFailed": "Nismo uspeli da sinhronizujemo drops — proveri konekciju. Trening je sačuvan i drops će biti dodeljeni čim se povežeš.",
+    "retrySync": "Pokušaj ponovo"
   }
 }

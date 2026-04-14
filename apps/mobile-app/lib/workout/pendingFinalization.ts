@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 
 const KEY = '@sweatdrop/pending_finalization';
@@ -9,9 +10,9 @@ export interface PendingFinalization {
 }
 
 /**
- * Persist a pending-finalization marker so the session-summary screen
- * (or a future app-start handler) can retry `award_drops` when network
- * is restored.
+ * Persist a pending-finalization marker so the session-summary screen,
+ * app-start recovery, or network-change listener can retry `award_drops`
+ * when connectivity is restored.
  */
 export async function savePendingFinalization(sessionId: string): Promise<void> {
   try {
@@ -51,5 +52,43 @@ export async function clearPendingFinalization(): Promise<void> {
     await AsyncStorage.removeItem(KEY);
   } catch (e) {
     log.error('[pendingFinalization] Failed to clear:', e);
+  }
+}
+
+/**
+ * Attempt to finalize a pending session by calling `award_drops`.
+ * Safe to call from any context (app startup, network-change listener, etc.)
+ * since `award_drops` is idempotent — if drops were already awarded it
+ * returns the existing result without re-computing.
+ *
+ * Returns `true` if the session was successfully finalized (or no pending
+ * record existed). Returns `false` if the call failed (network down, etc.).
+ */
+export async function drainPendingFinalization(): Promise<boolean> {
+  const pending = await loadPendingFinalization();
+  if (!pending) return true;
+
+  log.debug('[pendingFinalization] Draining pending session:', pending.sessionId);
+
+  try {
+    const { data, error } = await supabase.rpc('award_drops', {
+      p_session_id: pending.sessionId,
+    });
+
+    if (error) {
+      log.warn('[pendingFinalization] award_drops failed:', error.message);
+      return false;
+    }
+
+    const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
+    log.debug('[pendingFinalization] Recovered:', {
+      sessionId: pending.sessionId,
+      drops_earned: row?.drops_earned ?? 0,
+    });
+    await clearPendingFinalization();
+    return true;
+  } catch (e) {
+    log.warn('[pendingFinalization] drain threw:', e);
+    return false;
   }
 }

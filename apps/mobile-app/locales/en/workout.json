@@ -135,6 +135,8 @@
     "happyHourApplied": "x{{multiplier}} boost applied — {{earned}} drops earned",
     "trackingOnlyTitle": "Workout tracked — no rewards",
     "trackingOnlyBody": "Daily drop limit was reached before this session. Your activity is logged, but no drops or challenge progress were awarded.",
-    "syncingDrops": "Syncing your drops — just a moment..."
+    "syncingDrops": "Syncing your drops — just a moment...",
+    "syncFailed": "Couldn't sync your drops — check your connection. Your workout is saved and drops will be awarded once you're back online.",
+    "retrySync": "Retry Now"
   }
 }
