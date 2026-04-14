@@ -55,7 +55,7 @@ function buildTicks(animPct: number) {
       y1: CENTER - TICK_R_OUTER * sinT,
       x2: CENTER + (TICK_R_OUTER - len) * cosT,
       y2: CENTER - (TICK_R_OUTER - len) * sinT,
-      lit: progress >= 1 ? true : progress > 0 && frac < progress,
+      lit: progress >= 1 ? true : progress > 0 && frac <= progress,
       long,
     };
   });

@@ -69,7 +69,7 @@ function buildTicks(animPct: number) {
     const x2 = CENTER + (TICK_R_OUTER - len) * cosT;
     const y2 = CENTER - (TICK_R_OUTER - len) * sinT;
     const progress = Math.max(0, Math.min(animPct / 100, 1));
-    const lit = progress >= 1 ? true : progress > 0 && frac < progress;
+    const lit = progress >= 1 ? true : progress > 0 && frac <= progress;
     return { x1, y1, x2, y2, lit, long };
   });
 }
