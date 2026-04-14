@@ -7,7 +7,9 @@ type ResetState = 'loading' | 'form' | 'success' | 'error';
 
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null): string {
   if (accessToken && refreshToken) {
-    return `sweatdrop://auth/confirm#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=password_updated`;
+    // Use query params (not hash fragments) because Android strips hash fragments
+    // from custom-scheme intent URIs.
+    return `sweatdrop://auth/confirm?access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=password_updated`;
   }
   return 'sweatdrop://';
 }

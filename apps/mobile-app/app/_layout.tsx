@@ -162,23 +162,43 @@ function parseReferralCode(url: string | null): string | null {
 
 /**
  * Extract Supabase auth tokens from a deep link URL.
- * Handles both custom-scheme and https App Links (Android):
- *   sweatdrop://auth/confirm#access_token=...&refresh_token=...&type=signup
- *   https://www.sweat-drop.com/auth/confirm#access_token=...&refresh_token=...
+ * Checks query parameters first (Android-safe), then hash fragment (iOS / legacy).
+ *
+ * Android strips hash fragments from custom-scheme intents, so the landing page
+ * now sends tokens as query params:
+ *   sweatdrop://auth/confirm?access_token=...&refresh_token=...&type=signup
+ *
+ * Hash fragment parsing is kept for backward compatibility (iOS universal links,
+ * older landing page versions):
+ *   sweatdrop://auth/confirm#access_token=...&refresh_token=...
  */
 function parseAuthTokensFromUrl(url: string | null): {
   accessToken: string;
   refreshToken: string;
 } | null {
   if (!url) return null;
+
+  // Try query parameters first (Android-safe path)
+  const qIndex = url.indexOf('?');
+  if (qIndex !== -1) {
+    const qStr = url.slice(qIndex + 1).split('#')[0]; // strip any trailing hash
+    const qParams = new URLSearchParams(qStr);
+    const qAccess = qParams.get('access_token');
+    const qRefresh = qParams.get('refresh_token');
+    if (qAccess && qRefresh) return { accessToken: qAccess, refreshToken: qRefresh };
+  }
+
+  // Fallback: hash fragment (works on iOS, may be stripped on Android)
   const hashIndex = url.indexOf('#');
-  if (hashIndex === -1) return null;
-  const hash = url.slice(hashIndex + 1);
-  const params = new URLSearchParams(hash);
-  const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-  if (!accessToken || !refreshToken) return null;
-  return { accessToken, refreshToken };
+  if (hashIndex !== -1) {
+    const hash = url.slice(hashIndex + 1);
+    const hParams = new URLSearchParams(hash);
+    const hAccess = hParams.get('access_token');
+    const hRefresh = hParams.get('refresh_token');
+    if (hAccess && hRefresh) return { accessToken: hAccess, refreshToken: hRefresh };
+  }
+
+  return null;
 }
 
 // Prevent splash screen from auto-hiding

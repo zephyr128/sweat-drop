@@ -9,7 +9,9 @@ type OtpType = EmailOtpType;
 
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null, type: string = 'signup'): string {
   if (accessToken && refreshToken) {
-    return `sweatdrop://auth/confirm#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=${encodeURIComponent(type)}`;
+    // Use query params (not hash fragments) because Android strips hash fragments
+    // from custom-scheme intent URIs.
+    return `sweatdrop://auth/confirm?access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=${encodeURIComponent(type)}`;
   }
   return 'sweatdrop://';
 }

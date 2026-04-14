@@ -1,11 +1,19 @@
 /**
  * Deep link landing screen for email confirmation / password recovery.
  *
- * Handles two flows:
- *  1) Universal Link: https://www.sweat-drop.com/auth/confirm?token_hash=...&type=email
- *     → calls verifyOtp(), establishes session, routes appropriately
- *  2) Custom scheme: sweatdrop://auth/confirm#access_token=...&refresh_token=...
- *     → _layout.tsx calls setSession(); this screen polls auth state until it settles
+ * Handles three flows:
+ *  1)  Universal Link: https://www.sweat-drop.com/auth/confirm?token_hash=...&type=email
+ *      → calls verifyOtp(), establishes session, routes appropriately
+ *  1b) Custom scheme with query-param tokens (Android-safe):
+ *      sweatdrop://auth/confirm?access_token=...&refresh_token=...&type=signup
+ *      → calls setSession() directly, routes to verify-email
+ *  2)  Custom scheme with hash-fragment tokens (iOS / legacy):
+ *      sweatdrop://auth/confirm#access_token=...&refresh_token=...
+ *      → _layout.tsx calls setSession(); this screen polls auth state until it settles
+ *
+ * NOTE: Android strips hash fragments from custom-scheme intents, so the landing
+ * page now sends tokens as query params (Flow 1b). Hash fragment support is kept
+ * for iOS backward compatibility.
  *
  * A hard 6-second deadline ensures the screen never shows an infinite loader.
  */
@@ -60,25 +68,57 @@ function normalizeOtpType(value: string | null | undefined): EmailOtpType | null
 }
 
 /**
- * Parse the `type` value from a deep link's hash fragment.
- * e.g. sweatdrop://auth/confirm#access_token=...&type=signup → "signup"
+ * Parse the `type` value from a deep link URL.
+ * Checks query params first (Android-safe), then hash fragment (iOS / legacy).
+ * Also accepts a fallback URL for warm-launch scenarios where getInitialURL
+ * returns the original launcher URL rather than the current deep link.
  */
-async function getDeepLinkType(): Promise<string | null> {
+async function getDeepLinkType(fallbackUrl?: string | null): Promise<string | null> {
+  const extractType = (url: string): string | null => {
+    // Query params first (Android-safe)
+    const qIndex = url.indexOf('?');
+    if (qIndex !== -1) {
+      const qStr = url.slice(qIndex + 1).split('#')[0];
+      const qParams = new URLSearchParams(qStr);
+      const type = qParams.get('type');
+      if (type) return type;
+    }
+    // Hash fragment fallback (iOS)
+    const hashIndex = url.indexOf('#');
+    if (hashIndex !== -1) {
+      const hParams = new URLSearchParams(url.slice(hashIndex + 1));
+      const type = hParams.get('type');
+      if (type) return type;
+    }
+    return null;
+  };
+
+  // Try getInitialURL (cold start)
   try {
     const url = await Linking.getInitialURL();
-    if (!url) return null;
-    const hashIndex = url.indexOf('#');
-    if (hashIndex === -1) return null;
-    const params = new URLSearchParams(url.slice(hashIndex + 1));
-    return params.get('type');
-  } catch {
-    return null;
+    if (url) {
+      const type = extractType(url);
+      if (type) return type;
+    }
+  } catch { /* ignore */ }
+
+  // Warm launch fallback
+  if (fallbackUrl) {
+    const type = extractType(fallbackUrl);
+    if (type) return type;
   }
+
+  return null;
 }
 
 export default function AuthConfirmScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ token_hash?: string; type?: string }>();
+  const params = useLocalSearchParams<{
+    token_hash?: string;
+    type?: string;
+    access_token?: string;
+    refresh_token?: string;
+  }>();
   const done = useRef(false);
 
   useEffect(() => {
@@ -161,12 +201,73 @@ export default function AuthConfirmScreen() {
         return;
       }
 
-      // ── Flow 2: sweatdrop:// deep link (hash-fragment tokens) ──
-      // _layout.tsx processes the tokens via setSession(). We poll the auth
-      // store until the session settles, then route accordingly.
+      // ── Flow 1b: access_token + refresh_token as query params ──
+      // On Android, the landing page sends tokens as query params because
+      // Android strips hash fragments from custom-scheme intents.
+      // expo-router parses these into useLocalSearchParams.
+      // _layout.tsx also processes these via parseAuthTokensFromUrl(), but
+      // we handle them here as a reliable backup.
+      if (params.access_token && params.refresh_token) {
+        log.debug('[AuthConfirm] Tokens received via query params, type:', type);
+        try {
+          const { error } = await supabase.auth.setSession({
+            access_token: params.access_token,
+            refresh_token: params.refresh_token,
+          });
+          if (error) {
+            log.warn('[AuthConfirm] setSession from query params failed:', error.message);
+          } else {
+            log.debug('[AuthConfirm] setSession from query params succeeded');
+          }
+        } catch (e) {
+          log.warn('[AuthConfirm] setSession from query params exception:', e);
+        }
 
-      const deepLinkType = await getDeepLinkType();
-      const isEmailConfirmation = deepLinkType === 'signup' || deepLinkType === 'email_change' || deepLinkType === 'magiclink';
+        if (cancelled) return;
+
+        const isConfirmType = type === 'signup' || type === 'email' || type === 'email_change' || type === 'magiclink';
+
+        if (type === 'recovery') {
+          useAuthStore.setState({ pendingPasswordRecovery: true });
+          finish();
+          return;
+        }
+
+        if (isConfirmType) {
+          // Wait briefly for onAuthStateChange to fire and update the store
+          await new Promise((r) => setTimeout(r, 300));
+          useAuthStore.getState().clearPendingVerification();
+          if (!useAuthStore.getState().profile) {
+            await useAuthStore.getState().fetchProfile();
+          }
+          finish();
+          router.replace('/(onboarding)/verify-email');
+          return;
+        }
+      }
+
+      // ── Flow 2: deep link without inline tokens ──
+      // _layout.tsx may process tokens via its own URL handler. We poll the
+      // auth store until the session settles, then route accordingly.
+
+      // On warm launch, getInitialURL() returns the cold-start URL, not the
+      // current deep link. Listen for the url event to capture the actual URL.
+      let warmUrl: string | null = null;
+      const urlSub = Linking.addEventListener('url', (event) => {
+        warmUrl = event.url;
+      });
+
+      const deepLinkType = await getDeepLinkType(warmUrl);
+      urlSub.remove();
+
+      // If we still couldn't determine the type but this screen was opened via
+      // a deep link, assume it's an email confirmation (this screen is only
+      // reachable via /auth/confirm deep links from the landing page).
+      const isEmailConfirmation = deepLinkType
+        ? (deepLinkType === 'signup' || deepLinkType === 'email_change' || deepLinkType === 'magiclink')
+        : true;
+
+      log.debug('[AuthConfirm] Flow 2: deepLinkType =', deepLinkType, 'isEmailConfirmation =', isEmailConfirmation);
 
       if (cancelled) return;
 
@@ -245,7 +346,7 @@ export default function AuthConfirmScreen() {
       if (pollTimer) clearInterval(pollTimer);
       if (deadlineTimer) clearTimeout(deadlineTimer);
     };
-  }, [params.token_hash, params.type, router]);
+  }, [params.token_hash, params.type, params.access_token, params.refresh_token, router]);
 
   return (
     <View style={styles.container}>
