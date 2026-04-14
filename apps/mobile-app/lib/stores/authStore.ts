@@ -197,6 +197,19 @@ export const useAuthStore = create<AuthState>()(
           .then(async ({ data: { session } }) => {
             set({ session, user: session?.user ?? null });
 
+            // If there is no active session, always reset onboarding cursor to auth.
+            // This prevents stale persisted steps (e.g. avatar/profile_setup) from
+            // leaking into the next sign-in attempt after logout/app restart.
+            if (!session) {
+              set({
+                profile: null,
+                onboardingStep: 'auth',
+                pendingPasswordRecovery: false,
+                pendingVerificationEmail: null,
+                pendingVerificationPassword: null,
+              });
+            }
+
             // If logged in, fetch profile + compute step
             if (session?.user) {
               try {

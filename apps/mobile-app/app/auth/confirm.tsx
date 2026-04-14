@@ -10,7 +10,7 @@
  *   1. Extract tokens from route params / Linking.getInitialURL()
  *   2. Call verifyOtp (token_hash) or setSession (access_token)
  *   3. Wait for auth store to settle (isInitialized + session)
- *   4. Navigate to / — index.tsx handles all routing
+ *   4. Navigate to verify-email success screen
  *   5. Hard deadline ensures no infinite loader
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -220,11 +220,11 @@ export default function AuthConfirmScreen() {
     // Otherwise give fetchProfile a brief window to finish so index.tsx has
     // the correct onboardingStep.
     if (useAuthStore.getState().profile) {
-      navigate('/');
+      navigate('/(onboarding)/verify-email');
       return;
     }
 
-    const timer = setTimeout(() => navigate('/'), 600);
+    const timer = setTimeout(() => navigate('/(onboarding)/verify-email'), 600);
     return () => clearTimeout(timer);
   }, [tokensProcessed, isInitialized, session, pendingPasswordRecovery, navigate]);
 
@@ -240,7 +240,7 @@ export default function AuthConfirmScreen() {
         hasProfile: !!state.profile,
       });
       if (state.session?.user) {
-        navigate('/');
+        navigate('/(onboarding)/verify-email');
       } else {
         navigate('/(onboarding)/auth');
       }
