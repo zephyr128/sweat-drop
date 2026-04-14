@@ -210,14 +210,22 @@ export default function SessionSummaryScreen() {
   }, [sessionId, gymId]);
 
   // Depends on session being loaded:
-  // - award_drops() is guaranteed to have finished by the time loadSession() resolves
-  //   (retry loop waits for drop_calc_v2 in raw_metrics), so we load badges and
-  //   challenge completions here to avoid a race condition on first workout.
+  // After session is available, eagerly process side effects (badges, challenges,
+  // arena scores) that award_drops enqueued asynchronously, then load the results.
   useEffect(() => {
     if (session) {
       calculatePercentile();
-      loadChallengeProgress(session.started_at);
-      loadEarnedBadges();
+      (async () => {
+        try {
+          await supabase.rpc('process_session_side_effects_eager', {
+            p_session_id: session.id,
+          });
+        } catch (err) {
+          log.warn('[SessionSummary] Eager side effects failed, data may be stale:', err);
+        }
+        loadChallengeProgress(session.started_at);
+        loadEarnedBadges();
+      })();
     }
   }, [session]);
 
@@ -255,10 +263,18 @@ export default function SessionSummaryScreen() {
 
     if (lastData) {
       const dc = (lastData.raw_metrics as any)?.drop_calc_v2;
-      log.debug('[SessionSummary] Loaded session raw_metrics.drop_calc_v2:', {
+      log.debug('[SessionSummary] Server drop_calc_v2:', {
         hasDropCalcV2: !!dc,
-        happyHour: dc?.happy_hour ? JSON.stringify(dc.happy_hour) : 'missing',
+        inputs: dc?.inputs,
+        raw_drops: dc?.raw_drops,
+        adjusted_drops: dc?.adjusted_drops,
+        applied_multiplier: dc?.applied_multiplier,
+        soft_session: dc?.soft_session,
+        happyHour: dc?.happy_hour,
+        caps: dc?.caps,
+        reasons: dc?.reasons,
         dropsEarned: lastData.drops_earned,
+        duration_seconds: lastData.duration_seconds,
         sessionId: lastData.id,
       });
       setSession(lastData);
