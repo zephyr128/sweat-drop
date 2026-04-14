@@ -90,6 +90,19 @@ async function ensureGoogleSigninConfigured(): Promise<GoogleSigninModule | null
   return mod;
 }
 
+function buildPublicWebUrl(pathname: string): string | undefined {
+  const raw = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
+  if (!raw) return undefined;
+
+  try {
+    const candidate = raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`;
+    const base = new URL(candidate);
+    return new URL(pathname, `${base.protocol}//${base.host}`).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export default function AuthScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
@@ -342,9 +355,9 @@ export default function AuthScreen() {
     }
     setResetLoading(true);
     try {
-      const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
+      const resetUrl = buildPublicWebUrl('/auth/reset');
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: siteUrl ? siteUrl + '/auth/reset' : undefined,
+        redirectTo: resetUrl,
       });
       if (error) throw error;
       if (isResend) {
@@ -398,13 +411,13 @@ export default function AuthScreen() {
         signInError &&
         signInError.message.toLowerCase().includes('invalid login credentials')
       ) {
-        const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
+        const confirmUrl = buildPublicWebUrl('/auth/confirm');
         const { data: signUpData, error: signUpError } =
           await supabase.auth.signUp({
             email: email.trim(),
             password,
-            options: siteUrl
-              ? { emailRedirectTo: siteUrl + '/auth/confirm' }
+            options: confirmUrl
+              ? { emailRedirectTo: confirmUrl }
               : undefined,
           });
 

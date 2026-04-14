@@ -104,6 +104,19 @@ async function openEmailApp(
   }
 }
 
+function buildPublicWebUrl(pathname: string): string | undefined {
+  const raw = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
+  if (!raw) return undefined;
+
+  try {
+    const candidate = raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`;
+    const base = new URL(candidate);
+    return new URL(pathname, `${base.protocol}//${base.host}`).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export default function VerifyEmailScreen() {
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
@@ -242,12 +255,12 @@ export default function VerifyEmailScreen() {
     }
     setResendLoading(true);
     try {
-      const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL || '').trim();
+      const confirmUrl = buildPublicWebUrl('/auth/confirm');
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: email.trim(),
-        options: siteUrl
-          ? { emailRedirectTo: siteUrl + '/auth/confirm' }
+        options: confirmUrl
+          ? { emailRedirectTo: confirmUrl }
           : undefined,
       });
       if (error) throw error;
