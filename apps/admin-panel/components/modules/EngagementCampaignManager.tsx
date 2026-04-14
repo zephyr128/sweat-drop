@@ -10,6 +10,7 @@ import {
   getAtRiskMembers,
   createCampaign,
   queueCampaign,
+  retryCampaignProcessing,
   getGymCampaigns,
   type AtRiskMember,
   type Campaign,
@@ -135,10 +136,30 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
     setQueuingId(campaign.id);
     const res = await queueCampaign(campaign.id, gymId);
     if (res.success) {
-      toast.success(`${res.data?.queued_deliveries ?? 0} notifications queued for delivery`);
+      const d = res.data;
+      const warning = res.warning;
+      if (d?.status === 'sent') {
+        toast.success(`Campaign sent! ${d.sent_count ?? 0} delivered, ${d.failed_count ?? 0} failed.`);
+      } else if (warning) {
+        toast.warning(warning);
+      } else {
+        toast.success(`${d?.queued_deliveries ?? 0} notifications queued for delivery`);
+      }
       fetchCampaigns();
     } else {
       toast.error(res.error || 'Failed to queue');
+    }
+    setQueuingId(null);
+  };
+
+  const handleRetryProcessing = async (campaign: Campaign) => {
+    setQueuingId(campaign.id);
+    const res = await retryCampaignProcessing(campaign.id, gymId);
+    if (res.success) {
+      toast.success(`Processed! ${res.data?.sent_count ?? 0} sent, ${res.data?.failed_count ?? 0} failed.`);
+      fetchCampaigns();
+    } else {
+      toast.error(res.error || 'Failed to process campaign');
     }
     setQueuingId(null);
   };
@@ -355,14 +376,24 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
                         <StatusIcon className="w-3 h-3" />
                         {status.label}
                       </span>
-                      {c.status === 'draft' && (
+                      {(c.status === 'draft' || c.status === 'failed') && (
                         <button
                           onClick={() => handleQueue(c)}
                           disabled={queuingId === c.id}
                           className="px-3 py-1.5 text-xs font-medium text-[#00E5FF] bg-[#00E5FF]/10 border border-[#00E5FF]/20 rounded-lg hover:bg-[#00E5FF]/20 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                         >
                           {queuingId === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                          Send
+                          {c.status === 'failed' ? 'Retry' : 'Send'}
+                        </button>
+                      )}
+                      {c.status === 'queued' && (
+                        <button
+                          onClick={() => handleRetryProcessing(c)}
+                          disabled={queuingId === c.id}
+                          className="px-3 py-1.5 text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {queuingId === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                          Process Now
                         </button>
                       )}
                     </div>

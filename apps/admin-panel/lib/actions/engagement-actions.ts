@@ -53,6 +53,21 @@ export interface CreateCampaignParams {
   userIds?: string[] | null;
 }
 
+interface QueueCampaignData {
+  campaign_id: string;
+  queued_deliveries: number;
+  status: string;
+  sent_count?: number;
+  failed_count?: number;
+}
+
+interface QueueCampaignResult {
+  success: boolean;
+  data?: QueueCampaignData;
+  error?: string;
+  warning?: string;
+}
+
 function rpcJsonError(result: Record<string, unknown> | null): string | undefined {
   if (result && typeof result.error === 'string' && result.error.length > 0) {
     return result.error;
@@ -181,11 +196,7 @@ export async function createCampaign(
 export async function queueCampaign(
   campaignId: string,
   gymId: string,
-): Promise<{
-  success: boolean;
-  data?: { campaign_id: string; queued_deliveries: number; status: string };
-  error?: string;
-}> {
+): Promise<QueueCampaignResult> {
   try {
     const supabase = await createClient();
 
@@ -224,21 +235,68 @@ export async function queueCampaign(
       return { success: false, error: 'Queue operation did not succeed' };
     }
 
-    // Fire-and-forget: invoke process-campaigns to send immediately
+    // Invoke process-campaigns edge function to send immediately.
+    // Await the response so the admin sees delivery results (not just "queued").
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && serviceKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-campaigns`, {
+    let processResult: { sent?: number; failed?: number; error?: string } = {};
+
+    if (!supabaseUrl || !serviceKey) {
+      logger.error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL — cannot invoke process-campaigns', { campaignId });
+      return {
+        success: true,
+        data: {
+          campaign_id: typeof result.campaign_id === 'string' ? result.campaign_id : campaignId,
+          queued_deliveries:
+            typeof result.queued_deliveries === 'number' ? result.queued_deliveries : 0,
+          status: 'queued',
+        },
+        warning: 'Campaign queued but processing could not be triggered (missing server config).',
+      };
+    }
+
+    try {
+      const processRes = await fetch(`${supabaseUrl}/functions/v1/process-campaigns`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${serviceKey}`,
         },
         body: JSON.stringify({ campaign_id: campaignId }),
-      }).catch((err) => {
-        logger.error('Failed to invoke process-campaigns', { error: err, campaignId });
+        signal: AbortSignal.timeout(25_000),
       });
+
+      const processJson = await processRes.json().catch(() => null);
+
+      if (!processRes.ok) {
+        const errMsg = processJson?.error || `HTTP ${processRes.status}`;
+        logger.error('process-campaigns returned error', { campaignId, status: processRes.status, error: errMsg });
+        processResult = { error: errMsg };
+      } else {
+        processResult = {
+          sent: processJson?.total_sent ?? 0,
+          failed: processJson?.total_failed ?? 0,
+        };
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('Failed to invoke process-campaigns', { error: errMsg, campaignId });
+      processResult = { error: errMsg };
     }
+
+    // Re-fetch campaign status after processing
+    const { data: updatedCampaignRaw } = await supabaseAdmin
+      .from('engagement_campaigns')
+      .select('status, sent_count, failed_count')
+      .eq('id', campaignId)
+      .maybeSingle();
+    const updatedCampaign = updatedCampaignRaw as {
+      status: string;
+      sent_count: number | null;
+      failed_count: number | null;
+    } | null;
+
+    const finalStatus = updatedCampaign?.status ?? 'queued';
 
     return {
       success: true,
@@ -246,14 +304,99 @@ export async function queueCampaign(
         campaign_id: typeof result.campaign_id === 'string' ? result.campaign_id : campaignId,
         queued_deliveries:
           typeof result.queued_deliveries === 'number' ? result.queued_deliveries : 0,
-        status: typeof result.status === 'string' ? result.status : 'queued',
+        status: finalStatus,
+        sent_count: updatedCampaign?.sent_count ?? processResult.sent ?? 0,
+        failed_count: updatedCampaign?.failed_count ?? processResult.failed ?? 0,
       },
+      ...(processResult.error ? { warning: `Processing error: ${processResult.error}` } : {}),
     };
   } catch (error: unknown) {
     logger.error('Error queueing engagement campaign', { error, campaignId, gymId });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to queue campaign',
+    };
+  }
+}
+
+/**
+ * Re-trigger processing for a campaign stuck in 'queued' status.
+ * Directly invokes the process-campaigns edge function.
+ */
+export async function retryCampaignProcessing(
+  campaignId: string,
+  gymId: string,
+): Promise<{ success: boolean; data?: { status: string; sent_count: number; failed_count: number }; error?: string }> {
+  try {
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    const { data: rowRaw } = await supabaseAdmin
+      .from('engagement_campaigns')
+      .select('id, status')
+      .eq('id', campaignId)
+      .eq('gym_id', gymId)
+      .maybeSingle();
+    const row = rowRaw as { id: string; status: string } | null;
+
+    if (!row) {
+      return { success: false, error: 'Campaign not found for this gym' };
+    }
+
+    if (row.status !== 'queued' && row.status !== 'sending') {
+      return { success: false, error: `Cannot process campaign in status: ${row.status}` };
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      return { success: false, error: 'Server configuration missing (SUPABASE_SERVICE_ROLE_KEY)' };
+    }
+
+    const processRes = await fetch(`${supabaseUrl}/functions/v1/process-campaigns`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ campaign_id: campaignId }),
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    const processJson = await processRes.json().catch(() => null);
+
+    if (!processRes.ok) {
+      const errMsg = processJson?.error || `HTTP ${processRes.status}`;
+      return { success: false, error: `Edge function error: ${errMsg}` };
+    }
+
+    const { data: updatedRaw } = await supabaseAdmin
+      .from('engagement_campaigns')
+      .select('status, sent_count, failed_count')
+      .eq('id', campaignId)
+      .maybeSingle();
+    const updated = updatedRaw as {
+      status: string;
+      sent_count: number | null;
+      failed_count: number | null;
+    } | null;
+
+    return {
+      success: true,
+      data: {
+        status: updated?.status ?? 'unknown',
+        sent_count: updated?.sent_count ?? processJson?.total_sent ?? 0,
+        failed_count: updated?.failed_count ?? processJson?.total_failed ?? 0,
+      },
+    };
+  } catch (error: unknown) {
+    logger.error('Error retrying campaign processing', { error, campaignId, gymId });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process campaign',
     };
   }
 }
