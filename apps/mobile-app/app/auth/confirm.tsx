@@ -1,56 +1,26 @@
 /**
  * Deep link landing screen for email confirmation / password recovery.
  *
- * Handles three flows:
- *  1)  Universal Link: https://www.sweat-drop.com/auth/confirm?token_hash=...&type=email
- *      → calls verifyOtp(), establishes session, routes appropriately
- *  1b) Custom scheme with query-param tokens (Android-safe):
- *      sweatdrop://auth/confirm?access_token=...&refresh_token=...&type=signup
- *      → calls setSession() directly, routes to verify-email
- *  2)  Custom scheme with hash-fragment tokens (iOS / legacy):
- *      sweatdrop://auth/confirm#access_token=...&refresh_token=...
- *      → _layout.tsx calls setSession(); this screen polls auth state until it settles
+ * This screen is rendered when the app is opened via:
+ *   sweatdrop://auth/confirm?access_token=...&refresh_token=...&type=email
+ *   sweatdrop://auth/confirm?token_hash=...&type=email
+ *   sweatdrop://auth/confirm#access_token=...  (iOS legacy)
  *
- * NOTE: Android strips hash fragments from custom-scheme intents, so the landing
- * page now sends tokens as query params (Flow 1b). Hash fragment support is kept
- * for iOS backward compatibility.
- *
- * A hard 6-second deadline ensures the screen never shows an infinite loader.
+ * Strategy:
+ *   1. Extract tokens from route params / Linking.getInitialURL()
+ *   2. Call verifyOtp (token_hash) or setSession (access_token)
+ *   3. Wait for auth store to settle (isInitialized + session)
+ *   4. Navigate to / — index.tsx handles all routing
+ *   5. Hard deadline ensures no infinite loader
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { useAuthStore } from '@/lib/stores/authStore';
-import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { theme } from '@/lib/theme';
-
-function navigateByStep(router: ReturnType<typeof useRouter>, step: string) {
-  switch (step) {
-    case 'done':
-      router.replace('/home');
-      break;
-    case 'stepper':
-      router.replace('/(onboarding)/stepper');
-      break;
-    case 'display_name':
-      router.replace('/(onboarding)/username');
-      break;
-    case 'avatar':
-      router.replace('/(onboarding)/avatar');
-      break;
-    case 'notifications':
-      router.replace('/(onboarding)/notifications');
-      break;
-    case 'profile_setup':
-      router.replace('/(onboarding)/step-gender');
-      break;
-    default:
-      router.replace('/home');
-  }
-}
 
 function normalizeOtpType(value: string | null | undefined): EmailOtpType | null {
   if (!value) return null;
@@ -68,47 +38,41 @@ function normalizeOtpType(value: string | null | undefined): EmailOtpType | null
 }
 
 /**
- * Parse the `type` value from a deep link URL.
- * Checks query params first (Android-safe), then hash fragment (iOS / legacy).
- * Also accepts a fallback URL for warm-launch scenarios where getInitialURL
- * returns the original launcher URL rather than the current deep link.
+ * Extract auth parameters from a URL string.
+ * Checks query parameters first (Android-safe), then hash fragment (iOS).
  */
-async function getDeepLinkType(fallbackUrl?: string | null): Promise<string | null> {
-  const extractType = (url: string): string | null => {
-    // Query params first (Android-safe)
-    const qIndex = url.indexOf('?');
-    if (qIndex !== -1) {
-      const qStr = url.slice(qIndex + 1).split('#')[0];
-      const qParams = new URLSearchParams(qStr);
-      const type = qParams.get('type');
-      if (type) return type;
-    }
-    // Hash fragment fallback (iOS)
-    const hashIndex = url.indexOf('#');
-    if (hashIndex !== -1) {
-      const hParams = new URLSearchParams(url.slice(hashIndex + 1));
-      const type = hParams.get('type');
-      if (type) return type;
-    }
-    return null;
-  };
+function extractParamsFromUrl(url: string): {
+  tokenHash?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  type?: string;
+} {
+  const result: ReturnType<typeof extractParamsFromUrl> = {};
 
-  // Try getInitialURL (cold start)
-  try {
-    const url = await Linking.getInitialURL();
-    if (url) {
-      const type = extractType(url);
-      if (type) return type;
-    }
-  } catch { /* ignore */ }
-
-  // Warm launch fallback
-  if (fallbackUrl) {
-    const type = extractType(fallbackUrl);
-    if (type) return type;
+  // Query parameters
+  const qIdx = url.indexOf('?');
+  if (qIdx !== -1) {
+    const qStr = url.slice(qIdx + 1).split('#')[0];
+    const qp = new URLSearchParams(qStr);
+    result.tokenHash = qp.get('token_hash') || undefined;
+    result.accessToken = qp.get('access_token') || undefined;
+    result.refreshToken = qp.get('refresh_token') || undefined;
+    result.type = qp.get('type') || undefined;
   }
 
-  return null;
+  // Hash fragment fallback (iOS / legacy)
+  if (!result.tokenHash && !result.accessToken) {
+    const hIdx = url.indexOf('#');
+    if (hIdx !== -1) {
+      const hp = new URLSearchParams(url.slice(hIdx + 1));
+      result.tokenHash = hp.get('token_hash') || undefined;
+      result.accessToken = hp.get('access_token') || undefined;
+      result.refreshToken = hp.get('refresh_token') || undefined;
+      result.type = hp.get('type') || undefined;
+    }
+  }
+
+  return result;
 }
 
 export default function AuthConfirmScreen() {
@@ -119,35 +83,52 @@ export default function AuthConfirmScreen() {
     access_token?: string;
     refresh_token?: string;
   }>();
-  const done = useRef(false);
 
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const session = useAuthStore((s) => s.session);
+  const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
+
+  const [tokensProcessed, setTokensProcessed] = useState(false);
+  const navigatedRef = useRef(false);
+
+  const navigate = useCallback(
+    (target: string) => {
+      if (navigatedRef.current) return;
+      navigatedRef.current = true;
+      log.debug('[AuthConfirm] Navigating to:', target);
+      router.replace(target as any);
+    },
+    [router],
+  );
+
+  // ── Step 1: Process tokens on mount ────────────────────────
   useEffect(() => {
-    if (done.current) return;
-
     let cancelled = false;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-    let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const finish = () => {
-      if (done.current) return;
-      done.current = true;
-      cancelled = true;
-      if (pollTimer) clearInterval(pollTimer);
-      if (deadlineTimer) clearTimeout(deadlineTimer);
-    };
-
-    const run = async () => {
-      // ── Flow 1: token_hash from Universal Link ──
+    (async () => {
+      // Gather tokens from route params
       let tokenHash = params.token_hash;
+      let accessToken = params.access_token;
+      let refreshToken = params.refresh_token;
       let type = params.type || 'email';
 
-      if (!tokenHash) {
+      // On Android cold start, expo-router may not have parsed query params yet.
+      // Fall back to Linking.getInitialURL() which reads the raw intent URI.
+      // Retry once after a short delay — Android may not have delivered the
+      // Intent to the JS bridge on very early cold start.
+      if (!tokenHash && !accessToken) {
         try {
-          const initialUrl = await Linking.getInitialURL();
-          if (initialUrl && initialUrl.includes('token_hash=')) {
-            const url = new URL(initialUrl);
-            tokenHash = url.searchParams.get('token_hash') ?? undefined;
-            type = url.searchParams.get('type') ?? 'email';
+          let url = await Linking.getInitialURL();
+          if (!url) {
+            await new Promise((r) => setTimeout(r, 300));
+            url = await Linking.getInitialURL();
+          }
+          if (url) {
+            const parsed = extractParamsFromUrl(url);
+            tokenHash = parsed.tokenHash;
+            accessToken = parsed.accessToken;
+            refreshToken = parsed.refreshToken;
+            type = parsed.type || type;
           }
         } catch {
           // ignore
@@ -156,197 +137,116 @@ export default function AuthConfirmScreen() {
 
       if (cancelled) return;
 
+      // ── verifyOtp (Universal Link with token_hash) ──
       if (tokenHash) {
-        log.debug('[AuthConfirm] Verifying OTP with token_hash, type:', type);
+        log.debug('[AuthConfirm] Verifying OTP, type:', type);
         const otpType = normalizeOtpType(type);
-        if (!otpType) {
-          log.warn('[AuthConfirm] Unsupported OTP type:', type);
-          finish();
-          router.replace('/(onboarding)/auth');
+        if (otpType) {
+          try {
+            const { error } = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: otpType,
+            });
+            if (error) log.warn('[AuthConfirm] verifyOtp error:', error.message);
+          } catch (e) {
+            log.warn('[AuthConfirm] verifyOtp exception:', e);
+          }
+        }
+        if (cancelled) return;
+        if (type === 'recovery') {
+          useAuthStore.setState({ pendingPasswordRecovery: true });
+          navigatedRef.current = true; // _layout.tsx handles recovery navigation
+          if (!cancelled) setTokensProcessed(true);
           return;
         }
-        try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: otpType,
-          });
-
-          if (!error && data.session) {
-            useAuthStore.setState({
-              session: data.session,
-              user: data.session.user,
-            });
-
-            if (type === 'recovery') {
-              useAuthStore.setState({ pendingPasswordRecovery: true });
-              finish();
-              return;
-            }
-
-            useAuthStore.getState().clearPendingVerification();
-            await useAuthStore.getState().fetchProfile();
-          } else if (error) {
-            log.warn('[AuthConfirm] verifyOtp error:', error.message);
-          }
-        } catch (e) {
-          log.warn('[AuthConfirm] verifyOtp exception:', e);
-        }
-
-        if (cancelled) return;
-
-        if (type !== 'recovery') {
-          finish();
-          router.replace('/(onboarding)/verify-email');
-        }
+        useAuthStore.getState().clearPendingVerification();
+        if (!cancelled) setTokensProcessed(true);
         return;
       }
 
-      // ── Flow 1b: access_token + refresh_token as query params ──
-      // On Android, the landing page sends tokens as query params because
-      // Android strips hash fragments from custom-scheme intents.
-      // expo-router parses these into useLocalSearchParams.
-      // _layout.tsx also processes these via parseAuthTokensFromUrl(), but
-      // we handle them here as a reliable backup.
-      if (params.access_token && params.refresh_token) {
-        log.debug('[AuthConfirm] Tokens received via query params, type:', type);
+      // ── setSession (custom scheme with access_token + refresh_token) ──
+      if (accessToken && refreshToken) {
+        log.debug('[AuthConfirm] Setting session from tokens, type:', type);
         try {
           const { error } = await supabase.auth.setSession({
-            access_token: params.access_token,
-            refresh_token: params.refresh_token,
+            access_token: accessToken,
+            refresh_token: refreshToken,
           });
           if (error) {
-            log.warn('[AuthConfirm] setSession from query params failed:', error.message);
+            log.warn('[AuthConfirm] setSession error:', error.message);
           } else {
-            log.debug('[AuthConfirm] setSession from query params succeeded');
+            log.debug('[AuthConfirm] setSession succeeded');
           }
         } catch (e) {
-          log.warn('[AuthConfirm] setSession from query params exception:', e);
+          log.warn('[AuthConfirm] setSession exception:', e);
         }
-
         if (cancelled) return;
-
-        const isConfirmType = type === 'signup' || type === 'email' || type === 'email_change' || type === 'magiclink';
-
         if (type === 'recovery') {
           useAuthStore.setState({ pendingPasswordRecovery: true });
-          finish();
+          navigatedRef.current = true;
+          if (!cancelled) setTokensProcessed(true);
           return;
         }
-
-        if (isConfirmType) {
-          // Wait briefly for onAuthStateChange to fire and update the store
-          await new Promise((r) => setTimeout(r, 300));
-          useAuthStore.getState().clearPendingVerification();
-          if (!useAuthStore.getState().profile) {
-            await useAuthStore.getState().fetchProfile();
-          }
-          finish();
-          router.replace('/(onboarding)/verify-email');
-          return;
-        }
+        useAuthStore.getState().clearPendingVerification();
+        if (!cancelled) setTokensProcessed(true);
+        return;
       }
 
-      // ── Flow 2: deep link without inline tokens ──
-      // _layout.tsx may process tokens via its own URL handler. We poll the
-      // auth store until the session settles, then route accordingly.
-
-      // On warm launch, getInitialURL() returns the cold-start URL, not the
-      // current deep link. Listen for the url event to capture the actual URL.
-      let warmUrl: string | null = null;
-      const urlSub = Linking.addEventListener('url', (event) => {
-        warmUrl = event.url;
-      });
-
-      const deepLinkType = await getDeepLinkType(warmUrl);
-      urlSub.remove();
-
-      // If we still couldn't determine the type but this screen was opened via
-      // a deep link, assume it's an email confirmation (this screen is only
-      // reachable via /auth/confirm deep links from the landing page).
-      const isEmailConfirmation = deepLinkType
-        ? (deepLinkType === 'signup' || deepLinkType === 'email_change' || deepLinkType === 'magiclink')
-        : true;
-
-      log.debug('[AuthConfirm] Flow 2: deepLinkType =', deepLinkType, 'isEmailConfirmation =', isEmailConfirmation);
-
-      if (cancelled) return;
-
-      const tryNavigate = async () => {
-        if (done.current) return;
-        if (!useAuthStore.getState().isInitialized) return;
-
-        const { session } = useAuthStore.getState();
-        const user = session?.user;
-
-        if (!user) return;
-
-        // Ensure profile is loaded before routing
-        if (!useAuthStore.getState().profile) {
-          await useAuthStore.getState().fetchProfile();
-        }
-
-        if (cancelled || done.current) return;
-
-        if (isEmailConfirmation) {
-          // Email confirmation: always go to verify-email so the user
-          // sees the "Email Verified!" success screen.
-          finish();
-          router.replace('/(onboarding)/verify-email');
-          return;
-        }
-
-        if (!shouldRequireEmailVerification(user)) {
-          finish();
-          const step = useAuthStore.getState().onboardingStep;
-          navigateByStep(router, step);
-          return;
-        }
-
-        // User exists but email not confirmed — go to verify-email
-        finish();
-        router.replace('/(onboarding)/verify-email');
-      };
-
-      await tryNavigate();
-
-      if (!done.current) {
-        pollTimer = setInterval(tryNavigate, 500);
-      }
-
-      // Hard deadline: navigate no matter what after 6 seconds.
-      deadlineTimer = setTimeout(async () => {
-        if (done.current) return;
-        log.warn('[AuthConfirm] Hard deadline reached, forcing navigation');
-
-        // One last attempt to load profile
-        const { session } = useAuthStore.getState();
-        if (session?.user && !useAuthStore.getState().profile) {
-          try { await useAuthStore.getState().fetchProfile(); } catch { /* ignore */ }
-        }
-
-        finish();
-
-        const user = useAuthStore.getState().session?.user;
-        if (user && isEmailConfirmation) {
-          router.replace('/(onboarding)/verify-email');
-        } else if (user && !shouldRequireEmailVerification(user)) {
-          navigateByStep(router, useAuthStore.getState().onboardingStep);
-        } else if (user) {
-          router.replace('/(onboarding)/verify-email');
-        } else {
-          router.replace('/(onboarding)/auth');
-        }
-      }, 6000);
-    };
-
-    run();
+      // ── No tokens found — _layout.tsx may handle them ──
+      log.debug('[AuthConfirm] No tokens found in params or getInitialURL');
+      if (!cancelled) setTokensProcessed(true);
+    })();
 
     return () => {
       cancelled = true;
-      if (pollTimer) clearInterval(pollTimer);
-      if (deadlineTimer) clearTimeout(deadlineTimer);
     };
-  }, [params.token_hash, params.type, params.access_token, params.refresh_token, router]);
+  }, []); // Run once on mount — params may be empty initially, but getInitialURL covers cold start
+
+  // ── Step 2: Navigate once auth state is ready ──────────────
+  useEffect(() => {
+    if (navigatedRef.current) return;
+    if (!tokensProcessed) return;
+    if (!isInitialized) return;
+
+    // Recovery is handled by _layout.tsx's pendingPasswordRecovery effect
+    if (pendingPasswordRecovery) return;
+
+    if (!session?.user) {
+      navigate('/(onboarding)/auth');
+      return;
+    }
+
+    // If profile is already loaded (onboardingStep computed), navigate now.
+    // Otherwise give fetchProfile a brief window to finish so index.tsx has
+    // the correct onboardingStep.
+    if (useAuthStore.getState().profile) {
+      navigate('/');
+      return;
+    }
+
+    const timer = setTimeout(() => navigate('/'), 600);
+    return () => clearTimeout(timer);
+  }, [tokensProcessed, isInitialized, session, pendingPasswordRecovery, navigate]);
+
+  // ── Step 3: Hard deadline — never show loader forever ──────
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (navigatedRef.current) return;
+      const state = useAuthStore.getState();
+      log.warn('[AuthConfirm] Hard deadline reached', {
+        tokensProcessed,
+        isInitialized: state.isInitialized,
+        hasUser: !!state.session?.user,
+        hasProfile: !!state.profile,
+      });
+      if (state.session?.user) {
+        navigate('/');
+      } else {
+        navigate('/(onboarding)/auth');
+      }
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [tokensProcessed, navigate]);
 
   return (
     <View style={styles.container}>

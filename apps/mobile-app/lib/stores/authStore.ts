@@ -182,33 +182,56 @@ export const useAuthStore = create<AuthState>()(
           return () => {}; // no-op cleanup
         }
 
-        // 1. Get initial session
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
-          set({ session, user: session?.user ?? null });
-
-          // If logged in, fetch profile + compute step
-          if (session?.user) {
-            await get().fetchProfile();
+        // Safety net: guarantee isInitialized is set even if getSession() hangs
+        // or rejects (e.g. Supabase internal lock contention with setSession).
+        const safetyTimer = setTimeout(() => {
+          if (!get().isInitialized) {
+            log.warn('[AuthStore] Initialization safety timeout — forcing isInitialized');
+            set({ isInitialized: true });
           }
+        }, 5000);
 
-          set({ isInitialized: true });
-        });
+        // 1. Get initial session
+        supabase.auth
+          .getSession()
+          .then(async ({ data: { session } }) => {
+            set({ session, user: session?.user ?? null });
+
+            // If logged in, fetch profile + compute step
+            if (session?.user) {
+              try {
+                await get().fetchProfile();
+              } catch {
+                // Non-fatal — profile will be fetched on next SIGNED_IN
+              }
+            }
+
+            clearTimeout(safetyTimer);
+            if (!get().isInitialized) set({ isInitialized: true });
+          })
+          .catch((err) => {
+            log.warn('[AuthStore] getSession() failed:', err);
+            clearTimeout(safetyTimer);
+            if (!get().isInitialized) set({ isInitialized: true });
+          });
 
         // 2. Subscribe to auth changes (THE ONLY listener in the entire app)
+        // IMPORTANT: callbacks are NOT awaited — fire-and-forget for fetchProfile
+        // to avoid holding the Supabase internal auth lock, which would block
+        // getSession() above and prevent isInitialized from being set.
         const {
           data: { subscription },
         } = supabase.auth.onAuthStateChange(
-          async (event: AuthChangeEvent, session: Session | null) => {
+          (event: AuthChangeEvent, session: Session | null) => {
             log.debug('[AuthStore] onAuthStateChange:', event);
             set({ session, user: session?.user ?? null });
 
             if (event === 'SIGNED_IN' && session?.user) {
               setSentryUser(session.user.id, session.user.email);
-              await get().fetchProfile();
+              get().fetchProfile().catch(() => {});
             }
 
             if (event === 'PASSWORD_RECOVERY' && session) {
-              // Signal to _layout.tsx that it should navigate to the reset-password screen.
               set({ pendingPasswordRecovery: true });
             }
 
@@ -221,6 +244,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Return cleanup function
         return () => {
+          clearTimeout(safetyTimer);
           subscription.unsubscribe();
         };
       },
