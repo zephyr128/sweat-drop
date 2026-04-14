@@ -65,10 +65,12 @@ serve(async (req) => {
           .update({ status: 'sending', updated_at: new Date().toISOString() })
           .eq('id', campaign.id);
 
-        // Fetch pending deliveries with push tokens
+        // Fetch pending deliveries with FRESH push tokens from profiles (not stale
+        // snapshots from engagement_campaign_targets). Users may have switched devices
+        // between campaign creation and send time.
         const { data: deliveries, error: dErr } = await supabase
           .from('engagement_campaign_deliveries')
-          .select('id, user_id, engagement_campaign_targets!inner(push_token)')
+          .select('id, user_id, profiles!inner(expo_push_token)')
           .eq('campaign_id', campaign.id)
           .eq('status', 'pending');
 
@@ -108,7 +110,7 @@ serve(async (req) => {
           const deliveryIds: string[] = [];
 
           for (const d of batch) {
-            const token = (d as any).engagement_campaign_targets?.push_token;
+            const token = (d as any).profiles?.expo_push_token;
             if (token && isExpoPushToken(token)) {
               tokens.push(token);
               userIds.push(d.user_id);

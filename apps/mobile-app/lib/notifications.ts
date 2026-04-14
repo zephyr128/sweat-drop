@@ -31,9 +31,11 @@ type NotificationSubscription = { remove: () => void };
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
 
 async function getNotificationsModule(): Promise<NotificationsModule | null> {
-  if (!PUSH_NOTIFICATIONS_ENABLED || __DEV__) {
+  if (!PUSH_NOTIFICATIONS_ENABLED) {
     return null;
   }
+  // No __DEV__ guard: EAS dev-client builds support push notifications.
+  // If the module isn't available (e.g. Expo Go), the import will fail gracefully.
   if (!notificationsModulePromise) {
     notificationsModulePromise = import('expo-notifications')
       .then((module) => {
