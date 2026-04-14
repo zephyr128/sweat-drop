@@ -30,9 +30,14 @@ import { useAppModal } from '@/lib/stores/useAppModal';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Strip emoji from backend score_label (e.g. "729 💧" → "729") */
-function cleanScoreLabel(label: string): string {
-  return label.replace(/\p{Emoji}/gu, '').trim();
+/**
+ * Strip emoji symbols from backend score_label (e.g. "729 💧" → "729").
+ * Uses \p{Emoji_Presentation} instead of \p{Emoji} because the broader
+ * \p{Emoji} property also covers ASCII digits 0-9 and would strip them.
+ */
+function cleanScoreLabel(label: string | null | undefined): string {
+  if (!label) return '';
+  return label.replace(/\p{Emoji_Presentation}/gu, '').trim();
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────

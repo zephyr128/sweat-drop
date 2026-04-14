@@ -994,7 +994,7 @@ export default function LeaderboardScreen() {
                               pointerEvents="none"
                             />
                             <Text style={[styles.rewardCardRank, { color: medalColor, fontSize: 15 }]}>
-                              #{reward.rank_position}{isUsersRank ? ' · Ti' : ''}
+                              #{reward.rank_position}{isUsersRank ? ` · ${t('youTag')}` : ''}
                             </Text>
                             <Text style={styles.rewardCardName} numberOfLines={2}>{reward.reward_name}</Text>
                             {reward.reward_description ? (
@@ -1092,7 +1092,7 @@ export default function LeaderboardScreen() {
                             {/* Name + streak */}
                             <View style={styles.podiumNameRow}>
                               <Text style={[styles.podiumName, isChampion && styles.podiumNameChamp]} numberOfLines={1}>
-                                {entry.username}{isCurrent ? ' · Ti' : ''}
+                                {entry.username}{isCurrent ? ` · ${t('youTag')}` : ''}
                               </Text>
                               {entry.streak_days > 0 && (
                                 <View style={styles.podiumStreakChip}>
@@ -1370,7 +1370,7 @@ export default function LeaderboardScreen() {
                                   <View key={entry.user_id} style={styles.historyRow}>
                                     <Text style={[styles.historyRank, { color: entryMedalColor }]}>#{entry.rank}</Text>
                                     <Text style={[styles.historyUsername, isMe && { color: branding.primary }]} numberOfLines={1}>
-                                      {isMe ? `${entry.username} (Ti)` : entry.username}
+                                      {isMe ? `${entry.username} ${t('you')}` : entry.username}
                                     </Text>
                                     <View style={styles.historyDropsRow}>
                                       <Ionicons name="water" size={10} color={isMe ? branding.primary : theme.colors.textTertiary} />
@@ -1384,7 +1384,7 @@ export default function LeaderboardScreen() {
                               {iAmOutsideTop3 && myDrops != null && (
                                 <View style={[styles.historyRow, styles.historyMyRow]}>
                                   <View style={[styles.historyMyPill, { backgroundColor: hexToRgba(branding.primary, 0.12), borderColor: hexToRgba(branding.primary, 0.3) }]}>
-                                    <Text style={[styles.historyMyPillText, { color: branding.primary }]}>#{myRank} Ti</Text>
+                                    <Text style={[styles.historyMyPillText, { color: branding.primary }]}>#{myRank} {t('youTag')}</Text>
                                     <Ionicons name="water" size={10} color={branding.primary} />
                                     <Text style={[styles.historyMyPillDrops, { color: branding.primary }]}>{myDrops.toLocaleString()}</Text>
                                   </View>
@@ -1486,7 +1486,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.42)',
   },
   periodPageContent: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
   },
   filterRow: {
@@ -1678,7 +1678,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     overflow: 'hidden',
   },
   listItemFirst: {

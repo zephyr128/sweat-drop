@@ -79,13 +79,13 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
       const [limitsRes, sessionRes, txRes] = await Promise.all([
         supabase.rpc('get_user_drop_limits', { p_gym_id: gymId }),
         supabase.rpc('get_my_sessions', {
-          p_gym_id: null,
+          p_gym_id: gymId,
           p_active_only: false,
           p_since: weekStart.toISOString(),
           p_limit: 50,
         }),
         supabase.rpc('get_my_drops', {
-          p_gym_id: null,
+          p_gym_id: gymId,
           p_types: EARNED_TYPES,
           p_since: weekStart.toISOString(),
           p_limit: 5000,

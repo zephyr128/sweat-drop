@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -73,9 +73,17 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
-  const { badges } = useUserBadges();
+  const { badges: allBadges } = useUserBadges();
   const { homeGymId } = useGymStore();
   const hasGym = !!homeGymId;
+
+  // Filter to home gym's badges + global badges (mirrors Trophy Room filtering)
+  const badges = useMemo(() => {
+    if (!homeGymId) return allBadges;
+    return allBadges.filter(
+      (b) => b.badge_type === 'global' || b.gym_id === homeGymId,
+    );
+  }, [allBadges, homeGymId]);
   const { t, i18n } = useTranslation('profile');
   const { t: tSocial } = useTranslation('socialFriends');
   const [profile, setProfile] = useState<ProfileData | null>(null);

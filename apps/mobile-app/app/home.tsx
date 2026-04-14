@@ -306,8 +306,14 @@ export default function HomeScreen() {
     arenas: '#22D3EE',
   };
 
-  // Badge data for earned badge count
-  const { badges: earnedBadges } = useUserBadges();
+  // Badge data for earned badge count — filtered to active gym + global badges
+  const { badges: allEarnedBadges } = useUserBadges();
+  const earnedBadges = useMemo(() => {
+    if (!activeGymId) return allEarnedBadges;
+    return allEarnedBadges.filter(
+      (b) => b.badge_type === 'global' || b.gym_id === activeGymId,
+    );
+  }, [allEarnedBadges, activeGymId]);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);

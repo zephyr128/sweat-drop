@@ -93,7 +93,7 @@ export function useHomeStats(gymId: string | null) {
       const [weekDropsRes, lastSessionRes, profileRes, rewardsRes, redemptionsRes, membershipRes] = await Promise.all([
         // 1+4. Week drops (superset of today's) — single RPC replaces two .from() calls
         supabase.rpc('get_my_drops', {
-          p_gym_id: null,
+          p_gym_id: gymId ?? null,
           p_types: EARNED_TYPES,
           p_since: monday.toISOString(),
           p_limit: 5000,
