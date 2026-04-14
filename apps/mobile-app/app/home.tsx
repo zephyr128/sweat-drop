@@ -22,10 +22,10 @@ import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba} from '@/lib/t
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { ActivityRings, type ActivityRingsHandle } from '@/components/ActivityRings';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
-import { useUserRank } from '@/hooks/useUserRank';
 import { useCompeteStats } from '@/hooks/useCompeteStats';
 import { useUserBadges } from '@/hooks/useUserBadges';
 import { useLeaderboardRewards } from '@/hooks/useLeaderboardRewards';
+import { useMyLeaderboardPrizes } from '@/hooks/useMyLeaderboardPrizes';
 import { HomeHeroPager, type HomeHeroPagerHandle } from '@/components/home/HomeHeroPager';
 import { SheetActivityContent } from '@/components/home/SheetActivityContent';
 import { SheetRankContent } from '@/components/home/SheetRankContent';
@@ -322,11 +322,10 @@ export default function HomeScreen() {
   // Drop limits for activity rings
   const dropLimits = useDropLimitStatus(activeGymId);
 
-  // User's leaderboard rank
-  const userRank = useUserRank(activeGymId);
   const competeStats = useCompeteStats(activeGymId);
   const { rewards: weeklyRankRewards } = useLeaderboardRewards(activeGymId, 'weekly');
   const { rewards: monthlyRankRewards } = useLeaderboardRewards(activeGymId, 'monthly');
+  const { pending: pendingPrizes } = useMyLeaderboardPrizes(activeGymId);
   // Gauge rank uses weekly first, then monthly, then all_time as fallback.
   // Period label in gauge must match the source period to avoid mismatched text.
   const rankForGauge = useMemo(() => {
@@ -359,11 +358,11 @@ export default function HomeScreen() {
     }
     return {
       rank: 0,
-      totalMembers: ws.totalMembers || ms.totalMembers || at.totalMembers || userRank.totalMembers,
+      totalMembers: ws.totalMembers || ms.totalMembers || at.totalMembers,
       period: 'weekly' as LeaderboardPeriod,
       dropsToFirst: 0,
     };
-  }, [competeStats.stats.weekly, competeStats.stats.monthly, competeStats.stats.allTime, userRank.totalMembers]);
+  }, [competeStats.stats.weekly, competeStats.stats.monthly, competeStats.stats.allTime]);
   const gaugeRewardText = useMemo(() => {
     if (rankForGauge.rank <= 0) return null;
     const rewardPool =
@@ -542,7 +541,6 @@ export default function HomeScreen() {
               refreshChallenges?.() ?? Promise.resolve(),
               refreshStats?.() ?? Promise.resolve(),
               refreshArenas?.() ?? Promise.resolve(),
-              userRank.refresh(),
               dropLimits.refresh(),
               competeStats.refresh(),
             ]
@@ -565,7 +563,6 @@ export default function HomeScreen() {
       refreshChallenges,
       refreshStats,
       refreshArenas,
-      userRank,
       dropLimits.refresh,
       competeStats.refresh,
     ])
@@ -659,7 +656,6 @@ export default function HomeScreen() {
               refreshChallenges?.() ?? Promise.resolve(),
               refreshStats?.() ?? Promise.resolve(),
               refreshArenas?.() ?? Promise.resolve(),
-              userRank.refresh(),
               dropLimits.refresh(),
               competeStats.refresh(),
             ]
@@ -670,7 +666,7 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, userRank, dropLimits, competeStats.refresh]);
+  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, dropLimits.refresh, competeStats.refresh]);
 
 
   const handleQRPress = useCallback(() => {
@@ -1188,7 +1184,12 @@ export default function HomeScreen() {
 
           {/* ── [1] Sticky section — tab bar ── */}
           <View style={[styles.stickySection, styles.dashboardSheetBackground]}>
-            <PlatformBlur intensity={34} tint="dark" style={styles.stickySectionBlur} androidColor="#181426">
+            <PlatformBlur
+              intensity={34}
+              tint="dark"
+              style={styles.stickySectionBlur}
+              androidColor="#181426"
+            >
               <LinearGradient
                 colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.06), 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }}
@@ -1233,6 +1234,7 @@ export default function HomeScreen() {
                 localDropsBalance={localDrops}
                 isUnlocked={isUnlocked}
                 onSetAsHomeGym={handleSetAsHomeGym}
+                liquidActive={activePage === 0}
               />
               <SheetRankContent
                 gymId={activeGymId}
@@ -1242,6 +1244,9 @@ export default function HomeScreen() {
                 weekly={competeStats.stats.weekly}
                 monthly={competeStats.stats.monthly}
                 allTime={competeStats.stats.allTime}
+                weeklyRewards={weeklyRankRewards}
+                monthlyRewards={monthlyRankRewards}
+                pendingLeaderboardPrizes={pendingPrizes}
                 onLeaderboardPress={navToLeaderboard}
                 onInviteFriend={navToInviteFriend}
                 onSmartCoachPress={navToSmartCoach}
@@ -1261,6 +1266,7 @@ export default function HomeScreen() {
                 isUnlocked={isUnlocked}
                 hasSession={!!session?.user}
                 activeArenas={activeArenas}
+                pendingArenaPrizes={pendingPrizes}
                 onArenaPress={navToArena}
                 onViewAllArenas={navToAllArenas}
               />

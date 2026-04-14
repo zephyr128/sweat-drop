@@ -4,7 +4,7 @@
  * Uses branding.primary as the accent color for this tab.
  * No internal scroll — the parent Animated.ScrollView handles all vertical scrolling.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,6 +35,8 @@ export interface SheetActivityContentProps {
   localDropsBalance: number;
   isUnlocked: boolean;
   onSetAsHomeGym: () => void;
+  /** When false the liquid wave animation is paused to save CPU/GPU. */
+  liquidActive?: boolean;
   children?: React.ReactNode;
 }
 
@@ -54,12 +56,13 @@ export const SheetActivityContent = React.memo(function SheetActivityContent({
   localDropsBalance,
   isUnlocked,
   onSetAsHomeGym,
+  liquidActive = true,
   children,
 }: SheetActivityContentProps) {
   const branding = useBranding();
   const { t } = useTranslation('home');
 
-  const nextHappyHour = (() => {
+  const nextHappyHour = useMemo(() => {
     const slot = upcomingHH.liveWindow ?? upcomingHH.windows[0] ?? null;
     if (!slot) return null;
     const fmt = (iso: string) => {
@@ -79,13 +82,13 @@ export const SheetActivityContent = React.memo(function SheetActivityContent({
       inMinutes: slot.minutesUntilStart,
       isToday: slot.isToday,
     };
-  })();
+  }, [upcomingHH.liveWindow, upcomingHH.windows]);
 
   return (
     <View style={styles.container}>
       <StatsCards
         streakDays={homeStats.streak}
-        todayDrops={homeStats.todayDrops}
+        todayDrops={homeStats.todayCappedDrops}
         todayBonusDrops={homeStats.todayBonusDrops}
         dailyCap={dropLimits.maxDropsPerDay}
         weeklyDrops={dropLimits.mintedWeek}
@@ -106,6 +109,7 @@ export const SheetActivityContent = React.memo(function SheetActivityContent({
         onStreakPress={onStreakPress}
         onTodayPress={onTodayPress}
         onWeeklyPress={onWeeklyPress}
+        liquidActive={liquidActive}
       />
 
       {/* Explore Store CTA — branding-colored */}

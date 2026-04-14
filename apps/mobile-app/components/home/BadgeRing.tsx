@@ -39,6 +39,7 @@ const ARC_BOWL_HEIGHT = ARC_BOWL_BOTTOM - ARC_BOWL_TOP;
 const BG_ICON_SIZE = Math.round(ARC_BOWL_HEIGHT * 0.9);
 
 function buildTicks(animPct: number) {
+  const progress = Math.max(0, Math.min(animPct / 100, 1));
   return Array.from({ length: TICKS }, (_, i) => {
     const frac = i / (TICKS - 1);
     // i=0 → left end (195°), fills left-to-right
@@ -53,7 +54,7 @@ function buildTicks(animPct: number) {
       y1: CENTER - TICK_R_OUTER * sinT,
       x2: CENTER + (TICK_R_OUTER - len) * cosT,
       y2: CENTER - (TICK_R_OUTER - len) * sinT,
-      lit: frac <= animPct / 100,
+      lit: progress >= 1 ? true : progress > 0 && frac < progress,
       long,
     };
   });
@@ -125,12 +126,20 @@ export function BadgeRing({ completedCount, totalCount, earnedBadgeCount, active
     <Animated.View style={[styles.wrap, revealStyle]}>
       <Svg width={SVG_SIZE} height={SEMI_H} viewBox={`0 0 ${SVG_SIZE} ${SEMI_H}`}>
         {ticks.map((tk, i) => (
-          <Line key={i}
-            x1={tk.x1} y1={tk.y1} x2={tk.x2} y2={tk.y2}
-            stroke={tk.lit ? BADGE_COLOR : 'rgba(255,255,255,0.1)'}
-            strokeWidth={tk.long ? 3.5 : 2}
-            strokeLinecap="round"
-          />
+          <React.Fragment key={i}>
+            <Line
+              x1={tk.x1} y1={tk.y1} x2={tk.x2} y2={tk.y2}
+              stroke="rgba(0,0,0,0.45)"
+              strokeWidth={(tk.long ? 3.5 : 2) + 1.4}
+              strokeLinecap="round"
+            />
+            <Line
+              x1={tk.x1} y1={tk.y1} x2={tk.x2} y2={tk.y2}
+              stroke={tk.lit ? BADGE_COLOR : 'rgba(255,255,255,0.2)'}
+              strokeWidth={tk.long ? 3.5 : 2}
+              strokeLinecap="round"
+            />
+          </React.Fragment>
         ))}
       </Svg>
 

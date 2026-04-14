@@ -32,6 +32,8 @@ interface LiquidFillProps {
   color?: string;
   colorEnd?: string;
   borderRadius?: number;
+  /** When false the per-frame wave animation is paused to save CPU/GPU. */
+  active?: boolean;
 }
 
 export function LiquidFill({
@@ -41,6 +43,7 @@ export function LiquidFill({
   color = 'rgba(0, 229, 255, 0.28)',
   colorEnd = 'rgba(0, 184, 204, 0.45)',
   borderRadius = 18,
+  active = true,
 }: LiquidFillProps) {
   const waveTime = useSharedValue(0);
   const lastFrameTime = useSharedValue(0);
@@ -55,7 +58,7 @@ export function LiquidFill({
     const dt = Math.min((now - lastFrameTime.value) / 1000, 0.05);
     lastFrameTime.value = now;
     waveTime.value += dt * WAVE_SPEED;
-  });
+  }, active);
 
   useEffect(() => {
     animFill.value = withTiming(Math.min(Math.max(fillPercent, 0), 1), {

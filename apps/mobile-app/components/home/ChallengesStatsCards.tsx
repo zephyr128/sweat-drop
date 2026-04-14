@@ -172,9 +172,9 @@ export function ChallengesStatsCards({
           onPress={nearestChallenge ? () => onChallengePress(nearestChallenge.challenge_id) : onViewActiveChallenges}
           disabled={!isUnlocked}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
             <LinearGradient
-              colors={[hexToRgba(allDone ? GREEN : ORANGE, 0.16), 'rgba(10,10,20,0)']}
+              colors={[hexToRgba(allDone ? GREEN : ORANGE, 0.28), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -244,9 +244,9 @@ export function ChallengesStatsCards({
             onPress={onViewCompletedChallenges}
             disabled={!isUnlocked}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(GREEN, 0.10), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(GREEN, 0.22), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -273,9 +273,9 @@ export function ChallengesStatsCards({
             onPress={onViewActiveChallenges}
             disabled={!isUnlocked}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(ORANGE, 0.10), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(ORANGE, 0.22), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -306,9 +306,9 @@ export function ChallengesStatsCards({
           onPress={onTrophyRoomPress}
           disabled={!isUnlocked}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.badgesBlur} androidColor="rgba(38,32,58,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.badgesBlur} androidColor="rgba(10,10,20,0.52)">
             <LinearGradient
-              colors={[hexToRgba(ORANGE, 0.12), 'rgba(10,10,20,0)']}
+              colors={[hexToRgba(ORANGE, 0.24), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -375,9 +375,9 @@ export function ChallengesStatsCards({
                 onPress={() => { if (isUnlocked && gymId) onChallengePress(ch.challenge_id); }}
                 disabled={!isUnlocked}
               >
-                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(38,32,58,0.95)">
+                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(10,10,20,0.52)">
                   <LinearGradient
-                    colors={[hexToRgba(ORANGE, 0.10), 'rgba(10,10,20,0)']}
+                    colors={[hexToRgba(ORANGE, 0.22), 'rgba(10,10,20,0)']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={StyleSheet.absoluteFill}

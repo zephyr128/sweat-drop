@@ -68,7 +68,8 @@ function buildTicks(animPct: number) {
     const y1 = CENTER - TICK_R_OUTER * sinT;
     const x2 = CENTER + (TICK_R_OUTER - len) * cosT;
     const y2 = CENTER - (TICK_R_OUTER - len) * sinT;
-    const lit = frac <= animPct / 100;
+    const progress = Math.max(0, Math.min(animPct / 100, 1));
+    const lit = progress >= 1 ? true : progress > 0 && frac < progress;
     return { x1, y1, x2, y2, lit, long };
   });
 }
@@ -175,14 +176,22 @@ export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>
         <Animated.View style={[styles.container, { width: SVG_SIZE, height: SEMI_H }, revealStyle]}>
           <Svg width={SVG_SIZE} height={SEMI_H} viewBox={`0 0 ${SVG_SIZE} ${SEMI_H}`}>
             {ticks.map((tk, i) => (
-              <Line
-                key={i}
-                x1={tk.x1} y1={tk.y1}
-                x2={tk.x2} y2={tk.y2}
-                stroke={tk.lit ? color : 'rgba(255,255,255,0.1)'}
-                strokeWidth={tk.long ? 3.5 : 2}
-                strokeLinecap="round"
-              />
+              <React.Fragment key={i}>
+                <Line
+                  x1={tk.x1} y1={tk.y1}
+                  x2={tk.x2} y2={tk.y2}
+                  stroke="rgba(0,0,0,0.45)"
+                  strokeWidth={(tk.long ? 3.5 : 2) + 1.4}
+                  strokeLinecap="round"
+                />
+                <Line
+                  x1={tk.x1} y1={tk.y1}
+                  x2={tk.x2} y2={tk.y2}
+                  stroke={tk.lit ? color : 'rgba(255,255,255,0.2)'}
+                  strokeWidth={tk.long ? 3.5 : 2}
+                  strokeLinecap="round"
+                />
+              </React.Fragment>
             ))}
           </Svg>
 
@@ -193,9 +202,14 @@ export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>
               centerReveal,
             ]}
           >
+            <Ionicons
+              name={goalReached ? 'checkmark-circle-outline' : 'water-outline'}
+              size={BG_ICON_SIZE}
+              color={hexToRgba(color, goalReached ? 0.08 : 0.10)}
+              style={styles.bgIcon}
+            />
             <View style={styles.topRow}>
               <Text style={styles.topLabel}>{t('rings.spendable')}</Text>
-              <Ionicons name="water-outline" size={14} color={hexToRgba(color, 0.75)} />
             </View>
             <View style={styles.spendableRow}>
               <Text style={[styles.spendableNumber, { color }]}>{spendableDisplay}</Text>

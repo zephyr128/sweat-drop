@@ -7,12 +7,13 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { useRouter } from 'expo-router';
 import { CompeteStatsCards } from '@/components/home/CompeteStatsCards';
 import type { LeaderboardPeriod } from '@/components/LeaderboardPreview';
 import type { PeriodRankInfo } from '@/hooks/useCompeteStats';
-import { useLeaderboardRewards } from '@/hooks/useLeaderboardRewards';
-import { useMyLeaderboardPrizes } from '@/hooks/useMyLeaderboardPrizes';
+import type { LeaderboardReward } from '@/hooks/useLeaderboardRewards';
+import type { LeaderboardPrize } from '@/hooks/useMyLeaderboardPrizes';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +29,9 @@ export interface SheetRankContentProps {
   weekly: PeriodRankInfo;
   monthly: PeriodRankInfo;
   allTime: PeriodRankInfo;
+  weeklyRewards?: LeaderboardReward[];
+  monthlyRewards?: LeaderboardReward[];
+  pendingLeaderboardPrizes?: LeaderboardPrize[];
   onLeaderboardPress?: (period: LeaderboardPeriod) => void;
   onInviteFriend: () => void;
   onSmartCoachPress: () => void;
@@ -41,6 +45,9 @@ export const SheetRankContent = React.memo(function SheetRankContent({
   weekly,
   monthly,
   allTime,
+  weeklyRewards = [],
+  monthlyRewards = [],
+  pendingLeaderboardPrizes = [],
   onLeaderboardPress,
   onInviteFriend,
   onSmartCoachPress,
@@ -48,11 +55,8 @@ export const SheetRankContent = React.memo(function SheetRankContent({
   const branding = useBranding();
   const { t } = useTranslation('home');
   const router = useRouter();
-  const { rewards: weeklyRewards } = useLeaderboardRewards(gymId, 'weekly');
-  const { rewards: monthlyRewards } = useLeaderboardRewards(gymId, 'monthly');
-  const { pending: pendingPrizes } = useMyLeaderboardPrizes(gymId);
 
-  const firstPendingPrize = pendingPrizes.find((p) => p.source_type === 'leaderboard_prize') ?? null;
+  const firstPendingPrize = pendingLeaderboardPrizes.find((p) => p.source_type === 'leaderboard_prize') ?? null;
 
   return (
     <View style={styles.container}>
@@ -91,7 +95,6 @@ export const SheetRankContent = React.memo(function SheetRankContent({
         weekly={weekly}
         monthly={monthly}
         allTime={allTime}
-        primaryColor={branding.primary}
         weeklyRewards={weeklyRewards}
         monthlyRewards={monthlyRewards}
         onLeaderboardPress={onLeaderboardPress}
@@ -100,10 +103,11 @@ export const SheetRankContent = React.memo(function SheetRankContent({
       {/* Invite friend CTA */}
       {hasSession && isUnlocked && (
         <TouchableOpacity style={styles.inviteCta} onPress={onInviteFriend} activeOpacity={0.82}>
+          <PlatformBlur intensity={50} tint="dark" style={StyleSheet.absoluteFill} androidColor="rgba(10,10,20,0.52)" />
           <LinearGradient
-            colors={[hexToRgba(GOLD, 0.1), hexToRgba(GOLD, 0.04), 'rgba(10,10,18,0)']}
+            colors={[hexToRgba(GOLD, 0.22), 'rgba(10,10,18,0)']}
             start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
+            end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
@@ -202,13 +206,12 @@ const styles = StyleSheet.create({
   inviteCta: {
     borderRadius: 18,
     borderWidth: 1,
-    borderTopColor: hexToRgba(GOLD, 0.32),
-    borderLeftColor: hexToRgba(GOLD, 0.12),
-    borderRightColor: hexToRgba(GOLD, 0.08),
-    borderBottomColor: hexToRgba(GOLD, 0.05),
+    borderTopColor: hexToRgba(GOLD, 0.40),
+    borderLeftColor: hexToRgba(GOLD, 0.18),
+    borderRightColor: hexToRgba(GOLD, 0.10),
+    borderBottomColor: hexToRgba(GOLD, 0.06),
     overflow: 'hidden',
     marginBottom: 18,
-    backgroundColor: hexToRgba(GOLD, 0.04),
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,

@@ -63,6 +63,7 @@ export interface HappyHourSlot {
 
 export interface StatsCardsProps {
   streakDays: number;
+  /** Drops from capped sources only (session + checkin) — drives the gauge */
   todayDrops: number;
   todayBonusDrops?: number;
   dailyCap: number;
@@ -84,6 +85,8 @@ export interface StatsCardsProps {
   onStreakPress: () => void;
   onTodayPress: () => void;
   onWeeklyPress: () => void;
+  /** When false the liquid wave animation is paused to save CPU/GPU. */
+  liquidActive?: boolean;
 }
 
 const GREEN = '#4CD964';
@@ -118,9 +121,9 @@ function NextRewardCard({ eyebrow, title, imageUrl, progressPercent, progressLab
   }));
   return (
     <PressableCard style={[styles.rewardCard, { borderColor: hexToRgba(primary, 0.22) }]} onPress={onPress}>
-      <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+      <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
         <LinearGradient
-          colors={[hexToRgba(primary, 0.12), 'rgba(10,10,20,0)']}
+          colors={[hexToRgba(primary, 0.26), 'rgba(10,10,20,0)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -188,6 +191,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
   onStreakPress,
   onTodayPress,
   onWeeklyPress,
+  liquidActive = true,
 }) {
   const { t } = useTranslation('home');
 
@@ -195,7 +199,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
   const streakIcon = getStreakIcon(streakDays);
   const streakLabel = getStreakLabel(streakDays, t);
   const capReached = dailyCap > 0 && todayDrops >= dailyCap;
-  const overCap = dailyCap > 0 && todayDrops > dailyCap && todayBonusDrops > 0;
+  const hasBonusDrops = todayBonusDrops > 0;
   const checkinColor = isCheckedIn ? GREEN : 'rgba(255,255,255,0.55)';
   const hhColor = isHappyHourActive ? GOLD : nextHappyHour ? GOLD : 'rgba(255,255,255,0.25)';
 
@@ -278,6 +282,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
               color={capReached ? 'rgba(74, 222, 128, 0.35)' : 'rgba(0, 229, 255, 0.28)'}
               colorEnd={capReached ? 'rgba(22, 163, 74, 0.50)' : 'rgba(0, 184, 204, 0.45)'}
               borderRadius={18}
+              active={liquidActive}
             />
             <Ionicons
               name={capReached ? 'checkmark-circle-outline' : 'water-outline'}
@@ -301,14 +306,20 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
                 {dailyCap > 0 ? `${todayDrops}/${dailyCap}` : `${todayDrops}`}
               </Text>
 
-              {overCap && (
-                <View style={styles.bonusRow}>
-                  <Ionicons name="flash" size={10} color={GREEN} />
-                  <Text style={[styles.bonusLabel, { color: GREEN }]}>+{todayBonusDrops}</Text>
-                </View>
+              {hasBonusDrops ? (
+                <>
+                  <View style={styles.bonusRow}>
+                    <Ionicons name="flash" size={10} color={GREEN} />
+                    <Text style={[styles.bonusLabel, { color: GREEN }]}>+{todayBonusDrops} bonus</Text>
+                  </View>
+                  <Text style={styles.heroTotalRow}>
+                    <Text style={styles.heroTotalNumber}>{todayDrops + todayBonusDrops}</Text>
+                    {' '}{t('cards.totalToday')}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.heroSub}>{t('cards.kcalToday')}</Text>
               )}
-
-              <Text style={styles.heroSub}>{t('cards.kcalToday')}</Text>
             </View>
           </View>
         </PressableCard>
@@ -321,9 +332,9 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
             style={[styles.sideCard, { borderColor: hexToRgba(streakColor, 0.22) }]}
             onPress={onStreakPress}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(streakColor, 0.10), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(streakColor, 0.22), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -347,9 +358,9 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
             style={[styles.sideCard, { borderColor: hexToRgba(primaryColor, 0.22) }]}
             onPress={onWeeklyPress}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(primaryColor, 0.10), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(primaryColor, 0.22), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -384,9 +395,9 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
           onPress={isCheckedIn ? undefined : onCheckinPress}
           disabled={isCheckedIn}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
             <LinearGradient
-              colors={[hexToRgba(isCheckedIn ? GREEN : 'rgba(255,255,255,1)', 0.06), 'rgba(10,10,20,0)']}
+              colors={[hexToRgba(isCheckedIn ? GREEN : 'rgba(255,255,255,1)', 0.16), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -426,9 +437,9 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
             style={[styles.actionCard, { borderColor: hexToRgba(hhColor, isHappyHourActive ? 0.5 : 0.18) }]}
             onPress={onHappyHourPress}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.hhCardBlur} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.hhCardBlur} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(hhColor === 'rgba(255,255,255,0.25)' ? '#ffffff' : hhColor, 0.06), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(hhColor === 'rgba(255,255,255,0.25)' ? '#ffffff' : hhColor, 0.18), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -536,7 +547,7 @@ const styles = StyleSheet.create({
     height: HERO_H,
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(8, 12, 24, 0.97)',
+    backgroundColor: 'rgba(8, 12, 24, 0.2)',
     borderWidth: 1,
   },
   liquidHeroInner: {
@@ -583,11 +594,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   bonusLabel: {
     ...fontStyles.bodySemiBold,
     fontSize: 10,
+  },
+  heroTotalRow: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.42)',
+    letterSpacing: 0.2,
+    marginBottom: 6,
+  },
+  heroTotalNumber: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.65)',
   },
 
   /* Side column */

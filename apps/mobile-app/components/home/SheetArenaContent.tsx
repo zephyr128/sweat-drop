@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ArenasStatsCards } from '@/components/home/ArenasStatsCards';
-import { useMyLeaderboardPrizes } from '@/hooks/useMyLeaderboardPrizes';
+import type { LeaderboardPrize } from '@/hooks/useMyLeaderboardPrizes';
 import { fontStyles, hexToRgba } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import type { AvailableArena } from '@/hooks/useAvailableArenas';
@@ -20,6 +20,7 @@ export interface SheetArenaContentProps {
   isUnlocked: boolean;
   hasSession: boolean;
   activeArenas: AvailableArena[];
+  pendingArenaPrizes?: LeaderboardPrize[];
   onArenaPress: (arenaId: string) => void;
   onViewAllArenas: () => void;
 }
@@ -28,13 +29,13 @@ export const SheetArenaContent = React.memo(function SheetArenaContent({
   isUnlocked,
   hasSession,
   activeArenas,
+  pendingArenaPrizes = [],
   onArenaPress,
   onViewAllArenas,
 }: SheetArenaContentProps) {
   const { t } = useTranslation('home');
   const router = useRouter();
-  const { pending: pendingPrizes } = useMyLeaderboardPrizes(null);
-  const arenaPrize = pendingPrizes.find((p) => p.source_type === 'arena_prize') ?? null;
+  const arenaPrize = pendingArenaPrizes.find((p) => p.source_type === 'arena_prize') ?? null;
 
   return (
     <View style={styles.container}>

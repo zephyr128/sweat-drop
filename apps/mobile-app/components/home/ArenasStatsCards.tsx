@@ -132,9 +132,9 @@ export function ArenasStatsCards({
           onPress={bestRanked ? () => onArenaPress(bestRanked.arena_id) : onViewAllArenas}
           disabled={!isUnlocked}
         >
-          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+          <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
             <LinearGradient
-              colors={[hexToRgba(heroColor, 0.16), 'rgba(10,10,20,0)']}
+              colors={[hexToRgba(heroColor, 0.28), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -196,9 +196,9 @@ export function ArenasStatsCards({
             style={[styles.sideCard, { borderColor: hexToRgba(GREEN, 0.22) }]}
             onPress={onViewAllArenas}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(GREEN, 0.12), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(GREEN, 0.24), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -224,9 +224,9 @@ export function ArenasStatsCards({
             style={[styles.sideCard, { borderColor: hexToRgba(GOLD, 0.22) }]}
             onPress={bestRanked ? () => onArenaPress(bestRanked.arena_id) : onViewAllArenas}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(38,32,58,0.97)">
+            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlurFill} androidColor="rgba(10,10,20,0.52)">
               <LinearGradient
-                colors={[hexToRgba(GOLD, 0.12), 'rgba(10,10,20,0)']}
+                colors={[hexToRgba(GOLD, 0.24), 'rgba(10,10,20,0)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -278,9 +278,9 @@ export function ArenasStatsCards({
                 onPress={() => onArenaPress(arena.arena_id)}
                 disabled={!isUnlocked}
               >
-                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(38,32,58,0.95)">
+                <PlatformBlur intensity={40} tint="dark" style={styles.rowBlur} androidColor="rgba(10,10,20,0.52)">
                   <LinearGradient
-                    colors={[hexToRgba(arenaPrimary, 0.12), 'rgba(10,10,20,0)']}
+                    colors={[hexToRgba(arenaPrimary, 0.24), 'rgba(10,10,20,0)']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={StyleSheet.absoluteFill}
@@ -360,9 +360,9 @@ export function ArenasStatsCards({
           style={[styles.emptyState, { borderColor: hexToRgba(CYAN, 0.14) }]}
           onPress={onViewAllArenas}
         >
-          <PlatformBlur intensity={40} tint="dark" style={styles.emptyBlur} androidColor="rgba(38,32,58,0.95)">
+          <PlatformBlur intensity={40} tint="dark" style={styles.emptyBlur} androidColor="rgba(10,10,20,0.52)">
             <LinearGradient
-              colors={[hexToRgba(CYAN, 0.08), 'rgba(10,10,20,0)']}
+              colors={[hexToRgba(CYAN, 0.20), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
               style={StyleSheet.absoluteFill}

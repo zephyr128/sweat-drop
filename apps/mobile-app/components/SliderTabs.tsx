@@ -385,7 +385,7 @@ export const SliderTabs: React.FC<SliderTabsProps> = ({
         onIndexChange={handleIndexChange}
         initialLayout={initialLayout}
         renderTabBar={renderTabBar}
-        lazy={false}
+        lazy
         swipeEnabled
         style={pageHeight ? { height: pageHeight } : undefined}
       />
