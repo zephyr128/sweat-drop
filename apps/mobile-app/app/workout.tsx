@@ -2604,12 +2604,19 @@ export default function WorkoutScreen() {
           }
         }
 
+        const clientDrops = Math.round(totalDropsShared.value);
         log.debug('[Workout] award_drops() success:', {
           drops_earned: serverDrops,
           multiplier: serverMultiplier,
           badges_earned: serverBadges,
           securityMessage,
+          clientEstimatedDrops: clientDrops,
+          delta: serverDrops - clientDrops,
         });
+        if (Math.abs(serverDrops - clientDrops) > 2) {
+          log.warn('[Workout] Drops mismatch — client estimated', clientDrops,
+            'but server awarded', serverDrops, '(delta:', serverDrops - clientDrops, ')');
+        }
 
         // Evaluate referral qualification (check-in + identity verification)
         void supabase

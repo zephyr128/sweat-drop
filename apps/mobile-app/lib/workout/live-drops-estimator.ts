@@ -22,6 +22,8 @@ export interface DropLimitsConfig {
   sessionSoftTier2Factor?: number;
   /** How far past threshold until tier2 kicks in, as ratio of threshold (default 0.5) */
   sessionSoftTier1SpanRatio?: number;
+  /** Merge window for split-session anti-gaming (default 900 = 15 min) */
+  splitMergeWindowSec?: number;
 }
 
 export interface DropHistoryContext {

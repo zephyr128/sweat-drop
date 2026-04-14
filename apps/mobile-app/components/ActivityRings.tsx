@@ -83,6 +83,7 @@ function formatDrops(n: number) {
 export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>(function ActivityRings(
   {
     todayDrops,
+    todayBonusDrops = 0,
     dailyCap,
     totalGymDrops,
     size = 290,
@@ -97,7 +98,8 @@ export const ActivityRings = forwardRef<ActivityRingsHandle, ActivityRingsProps>
   const goalReached = dailyProgress >= 1;
   const color = goalReached ? '#4ade80' : branding.primary;
   const targetPct = Math.round(dailyProgress * 100);
-  const todayDisplay = formatDrops(todayDrops).toUpperCase();
+  const totalToday = todayDrops + todayBonusDrops;
+  const todayDisplay = formatDrops(totalToday).toUpperCase();
 
   // ── JS-side tick animation ──────────────────────────────────────────────────
   const [animPct, setAnimPct] = useState(0);

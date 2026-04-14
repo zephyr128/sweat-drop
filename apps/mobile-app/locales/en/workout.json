@@ -101,6 +101,8 @@
     "dropsEarned": "Drops earned",
     "streakBonus": "×{{multiplier}} streak bonus",
     "duration": "Duration",
+    "rank": "Rank",
+    "today": "Today",
     "equipment": "Equipment",
     "currentStreak": "Current streak",
     "streakDays_one": "{{count}} day",

@@ -101,6 +101,8 @@
     "dropsEarned": "Zarađeni drops",
     "streakBonus": "×{{multiplier}} streak bonus",
     "duration": "Trajanje",
+    "rank": "Rang",
+    "today": "Danas",
     "equipment": "Oprema",
     "currentStreak": "Trenutni streak",
     "streakDays_one": "{{count}} dan",

@@ -9,7 +9,10 @@ export interface DropLimitStatus {
   rewardedSessionsToday: number;
   maxRewardedSessionsPerDay: number;
   maxDropsPerSession: number;
+  /** Capped drops minted today (session + checkin only) — used for limit checks */
   mintedToday: number;
+  /** All drops minted today (including bonus) — for display purposes */
+  mintedTodayAll: number;
   maxDropsPerDay: number;
   mintedWeek: number;
   maxDropsPerWeek: number;
@@ -34,6 +37,7 @@ const DEFAULTS: DropLimitStatus = {
   maxRewardedSessionsPerDay: 4,
   maxDropsPerSession: 120,
   mintedToday: 0,
+  mintedTodayAll: 0,
   maxDropsPerDay: 300,
   mintedWeek: 0,
   maxDropsPerWeek: 1500,
@@ -121,17 +125,23 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
 
       const txRows = (txRes.data ?? []).filter((d: any) => (d.amount ?? 0) > 0);
 
-      let dropsToday = 0;
-      let dropsWeek = 0;
+      const CAPPED_TYPES = new Set(['session', 'checkin']);
+      let cappedDropsToday = 0;
+      let cappedDropsWeek = 0;
+      let allDropsToday = 0;
       for (const row of txRows ?? []) {
         const a = row.amount ?? 0;
-        dropsWeek += a;
-        if (new Date(row.created_at) >= todayStart) dropsToday += a;
+        const isToday = new Date(row.created_at) >= todayStart;
+        if (CAPPED_TYPES.has(row.transaction_type)) {
+          cappedDropsWeek += a;
+          if (isToday) cappedDropsToday += a;
+        }
+        if (isToday) allDropsToday += a;
       }
 
       const sessionsRemaining = Math.max(0, maxSession - rewardedToday);
-      const dayRemaining = Math.max(0, maxDay - dropsToday);
-      const weekRemaining = Math.max(0, maxWeek - dropsWeek);
+      const dayRemaining = Math.max(0, maxDay - cappedDropsToday);
+      const weekRemaining = Math.max(0, maxWeek - cappedDropsWeek);
 
       // Session cap blocks ONLY in hard mode
       const sessionCapBlocks = capMode === 'hard' && sessionsRemaining <= 0;
@@ -146,9 +156,10 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
         rewardedSessionsToday: rewardedToday,
         maxRewardedSessionsPerDay: maxSession,
         maxDropsPerSession: maxSessionDrops,
-        mintedToday: dropsToday,
+        mintedToday: cappedDropsToday,
+        mintedTodayAll: allDropsToday,
         maxDropsPerDay: maxDay,
-        mintedWeek: dropsWeek,
+        mintedWeek: cappedDropsWeek,
         maxDropsPerWeek: maxWeek,
         rewardedSessionsCapMode: capMode,
         sessionRestartGraceSec: graceSec,

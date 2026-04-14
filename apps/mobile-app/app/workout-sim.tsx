@@ -444,6 +444,7 @@ export default function WorkoutSimScreen() {
     }
 
     let pendingSync = false;
+    let finalDuration = duration;
     try {
       const estimatedCalories = Math.round(caloriesShared.value);
       const finalAvgRpm = rpmHistoryRef.current.length > 0
@@ -455,6 +456,17 @@ export default function WorkoutSimScreen() {
       const finalAvgIncline = inclineHistoryRef.current.length > 0
         ? Math.round((inclineHistoryRef.current.reduce((a, b) => a + b, 0) / inclineHistoryRef.current.length) * 10) / 10
         : 0;
+      const finalRpmPeak = rpmHistoryRef.current.length > 0
+        ? Math.max(...rpmHistoryRef.current)
+        : 0;
+
+      // Use simulatorElapsedRef (simulated time) when available to avoid
+      // React state lag on high-timeScale profiles where the 1-second
+      // interval may not have committed the latest value yet.
+      finalDuration = simulatorElapsedRef.current != null
+        ? Math.floor(simulatorElapsedRef.current)
+        : duration;
+
       const deviceHash = await getDeviceFingerprintHash();
 
       const existingRaw = (session.raw_metrics && typeof session.raw_metrics === 'object')
@@ -464,13 +476,10 @@ export default function WorkoutSimScreen() {
       const rawMetrics: Record<string, unknown> = {
         ...existingRaw,
         avg_rpm: finalAvgRpm,
-        // cadence_avg is the primary key the backend reads for elliptical/stepper;
-        // avg_cadence is kept as a fallback alias.
+        rpm_peak: finalRpmPeak > 0 ? finalRpmPeak : undefined,
         cadence_avg: finalAvgRpm,
         avg_cadence: finalAvgRpm,
-        // speed_avg_kmh is required for treadmill; the backend guards on < 1 km/h.
         speed_avg_kmh: finalAvgSpeed,
-        // incline_avg_pct used for treadmill intensity boost.
         incline_avg_pct: finalAvgIncline,
         machine_type: resolvedMachineType,
         calories_source: 'simulator',
@@ -481,13 +490,29 @@ export default function WorkoutSimScreen() {
         },
       };
 
+      log.debug('[WorkoutSim] Final sync payload:', {
+        duration_seconds: finalDuration,
+        duration_state: duration,
+        simulatorElapsed: simulatorElapsedRef.current,
+        calories: estimatedCalories,
+        avg_rpm: finalAvgRpm,
+        rpm_peak: finalRpmPeak,
+        speed_avg_kmh: finalAvgSpeed,
+        incline_avg_pct: finalAvgIncline,
+        machine_type: resolvedMachineType,
+        clientEstimatedDrops: Math.round(earnedDropsShared.value),
+        mergedPriorDrops: mergedPriorDropsRef.current,
+        limits: dropLimitsRef.current,
+        history: dropHistoryRef.current,
+      });
+
       let finalSyncOk = false;
       try {
         await withRetry(async () => {
           const { error: syncErr } = await supabase
             .from('sessions')
             .update({
-              duration_seconds: duration,
+              duration_seconds: finalDuration,
               calories: estimatedCalories > 0 ? estimatedCalories : null,
               raw_metrics: rawMetrics,
               updated_at: new Date().toISOString(),
@@ -515,6 +540,16 @@ export default function WorkoutSimScreen() {
         dropsEarned = awardRow?.drops_earned ?? 0;
         awardMultiplier = awardRow?.multiplier ?? null;
         awardBadges = awardRow?.badges_earned?.length ? awardRow.badges_earned : null;
+
+        const clientDrops = Math.round(earnedDropsShared.value);
+        if (Math.abs(dropsEarned - clientDrops) > 2) {
+          log.warn('[WorkoutSim] Drops mismatch — client estimated', clientDrops,
+            'but server awarded', dropsEarned,
+            '(delta:', dropsEarned - clientDrops, ')',
+            'duration_synced:', finalDuration,
+            'avg_rpm:', finalAvgRpm,
+            'machine_type:', resolvedMachineType);
+        }
 
         // Evaluate referral qualification (check-in + identity verification)
         void supabase
@@ -550,7 +585,7 @@ export default function WorkoutSimScreen() {
         params: {
           sessionId: session.id,
           drops: dropsEarned.toString(),
-          duration: duration.toString(),
+          duration: finalDuration.toString(),
           gymId: session.gym_id,
           sessionTier,
           ...(awardMultiplier ? { multiplier: String(awardMultiplier) } : {}),
@@ -568,7 +603,7 @@ export default function WorkoutSimScreen() {
           params: {
             sessionId: session.id,
             drops: '0',
-            duration: duration.toString(),
+            duration: finalDuration.toString(),
             gymId: session.gym_id,
             pendingSync: '1',
           },

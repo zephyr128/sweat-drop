@@ -475,14 +475,14 @@ export default function ProfileScreen() {
           <Animated.View entering={FadeInDown.delay(340).duration(400)}>
             <SectionLabel label={t('achievements')} />
             <View style={[styles.achieveCard, {
-              borderTopColor: hexToRgba('#FFD700', 0.22),
-              borderLeftColor: hexToRgba('#FFD700', 0.08),
+              borderTopColor: hexToRgba(branding.primary, 0.22),
+              borderLeftColor: hexToRgba(branding.primary, 0.08),
               borderRightColor: 'rgba(255,255,255,0.04)',
               borderBottomColor: 'rgba(255,255,255,0.03)',
             }]}>
               <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.achieveBlur}>
                 <LinearGradient
-                  colors={[hexToRgba('#FFD700', 0.07), 'transparent']}
+                  colors={[hexToRgba(branding.primary, 0.08), 'transparent']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
@@ -490,12 +490,12 @@ export default function ProfileScreen() {
                 <View style={styles.achieveRow}>
                   {badges.slice(0, 4).map((badge, i) => (
                     <View key={badge.badge_id || i} style={styles.achieveBadge}>
-                      <View style={[styles.achieveBadgeImgWrap, { borderColor: hexToRgba('#FFD700', 0.20) }]}>
+                      <View style={[styles.achieveBadgeImgWrap, { borderColor: hexToRgba(branding.primary, 0.20), shadowColor: branding.primary }]}>
                         {badge.badge_image_url ? (
                           <Image source={badge.badge_image_url} style={styles.achieveBadgeImg} transition={200} />
                         ) : (
-                          <View style={[styles.achieveBadgePlaceholder, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
-                            <Ionicons name="trophy" size={24} color="#FFD700" />
+                          <View style={[styles.achieveBadgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.12) }]}>
+                            <Ionicons name="trophy" size={24} color={branding.primary} />
                           </View>
                         )}
                       </View>
@@ -504,15 +504,15 @@ export default function ProfileScreen() {
                   ))}
                 </View>
                 <TouchableOpacity
-                  style={[styles.achieveLink, { borderTopColor: hexToRgba('#FFD700', 0.10) }]}
+                  style={[styles.achieveLink, { borderTopColor: hexToRgba(branding.primary, 0.10) }]}
                   onPress={() => router.push('/trophy-room')}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.achieveLinkText, { color: '#FFD700' }]}>
+                  <Text style={[styles.achieveLinkText, { color: branding.primary }]}>
                     {t('viewTrophyRoom')}
                   </Text>
-                  <View style={[styles.achieveCount, { backgroundColor: hexToRgba('#FFD700', 0.12) }]}>
-                    <Text style={[styles.achieveCountText, { color: '#FFD700' }]}>{badges.length}</Text>
+                  <View style={[styles.achieveCount, { backgroundColor: hexToRgba(branding.primary, 0.14) }]}>
+                    <Text style={[styles.achieveCountText, { color: branding.primary }]}>{badges.length}</Text>
                   </View>
                 </TouchableOpacity>
               </PlatformBlur>

@@ -98,6 +98,7 @@ export function useWorkoutEconomy({
           session_soft_tier_1_factor?: number;
           session_soft_tier_2_factor?: number;
           session_soft_tier_1_span_ratio?: number;
+          split_merge_window_sec?: number;
         } | null;
 
         if (!effectiveLimits) {
@@ -161,6 +162,10 @@ export function useWorkoutEconomy({
               effectiveLimits.session_soft_tier_1_span_ratio != null
                 ? Number(effectiveLimits.session_soft_tier_1_span_ratio)
                 : undefined,
+            splitMergeWindowSec:
+              effectiveLimits.split_merge_window_sec != null
+                ? Number(effectiveLimits.split_merge_window_sec)
+                : undefined,
           };
 
           const initialDayRemaining = Math.max(0, maxDayDrops - dropHistoryRef.current.mintedToday);
@@ -214,7 +219,7 @@ export function useWorkoutEconomy({
         let mintedWeek = 0;
         let mergedPriorDrops = 0;
 
-        const mergeWindowSec = 900;
+        const mergeWindowSec = dropLimitsRef.current.splitMergeWindowSec ?? 900;
         const sessionStartMs = sessionStartedAt ? new Date(sessionStartedAt).getTime() : 0;
 
         for (const row of rewardedSessions || []) {

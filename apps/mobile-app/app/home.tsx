@@ -1081,14 +1081,16 @@ export default function HomeScreen() {
                 <Ionicons name="storefront-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
               </PlatformBlur>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
-              onPress={() => router.push('/notifications')}
-              activeOpacity={0.75}
-            >
-              <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
-                <Ionicons name="notifications-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
-              </PlatformBlur>
+            <View style={styles.headerActionWrap}>
+              <TouchableOpacity
+                style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
+                onPress={() => router.push('/notifications')}
+                activeOpacity={0.75}
+              >
+                <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
+                  <Ionicons name="notifications-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
+                </PlatformBlur>
+              </TouchableOpacity>
               {unreadNotifCount > 0 && (
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>
@@ -1096,7 +1098,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               )}
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -1141,7 +1143,7 @@ export default function HomeScreen() {
               ref={heroPagerRef}
               activityRingsRef={activityRingsRef}
               streakDays={homeStats.streak}
-              todayDrops={homeStats.todayDrops}
+              todayDrops={homeStats.todayCappedDrops}
               todayBonusDrops={homeStats.todayBonusDrops}
               dailyCap={dropLimits.maxDropsPerDay}
               totalGymDrops={localDrops}
@@ -1539,6 +1541,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+    flexShrink: 0,
+  },
+  headerActionWrap: {
+    width: 38,
+    height: 38,
+    position: 'relative',
+    overflow: 'visible',
     flexShrink: 0,
   },
   headerActionBlur: {
