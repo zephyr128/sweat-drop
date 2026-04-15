@@ -121,10 +121,10 @@ export function BottomSheet({ visible, onClose, accentColor = theme.colors.prima
                     pointerEvents="none"
                   />
                   <View style={styles.handle} />
+                  {children}
                   <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
                     <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
                   </Pressable>
-                  {children}
                 </PlatformBlur>
               ) : (
                 <View style={[styles.blurContainer, styles.androidSheet, { paddingBottom: sheetBottomPad }]}>
@@ -136,10 +136,10 @@ export function BottomSheet({ visible, onClose, accentColor = theme.colors.prima
                     pointerEvents="none"
                   />
                   <View style={styles.handle} />
+                  {children}
                   <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
                     <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
                   </Pressable>
-                  {children}
                 </View>
               )}
             </View>
@@ -196,5 +196,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 30,
+    elevation: 8,
   },
 });
