@@ -398,7 +398,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollArea: {
-    flexGrow: 0,
+    // 0.88 × screen − handle (20) − paddingTop (12) − bottom safe area padding (max ~40)
+    maxHeight: SCREEN_HEIGHT * 0.88 - 72,
   },
   scrollContent: {
     paddingHorizontal: 20,

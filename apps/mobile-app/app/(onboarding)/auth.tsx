@@ -117,8 +117,6 @@ export default function AuthScreen() {
   const [emailLoading, setEmailLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [resentConfirm, setResentConfirm] = useState(false);
 
   // Legal consent is implicit — tapping any auth action counts as acceptance
   const legalAccepted = true;
@@ -348,24 +346,23 @@ export default function AuthScreen() {
   // ────────────────────────────────────────────────────
   //  FORGOT PASSWORD
   // ────────────────────────────────────────────────────
-  const handleResetPassword = async (isResend = false) => {
+  const handleResetPassword = async () => {
     if (!email.trim()) {
       showModal({ title: t('common:error'), body: t('auth.enterEmailPassword') });
       return;
     }
     setResetLoading(true);
     try {
+      const resetRedirect =
+        Platform.OS === 'android'
+          ? buildPublicWebUrl('/auth/confirm')
+          : 'sweatdrop://auth/confirm';
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        // Reset links should open directly in the app recovery flow.
-        redirectTo: 'sweatdrop://auth/confirm',
+        redirectTo: resetRedirect || 'sweatdrop://auth/confirm',
       });
       if (error) throw error;
-      if (isResend) {
-        setResentConfirm(true);
-        setTimeout(() => setResentConfirm(false), 3000);
-      } else {
-        setResetSent(true);
-      }
+      // Navigate to dedicated "link sent" screen, passing email for display + resend
+      router.push({ pathname: '/(onboarding)/reset-link-sent', params: { email: email.trim() } });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('auth.somethingWentWrong');
       showModal({ title: t('common:error'), body: msg });
@@ -595,62 +592,30 @@ export default function AuthScreen() {
             </View>
 
             {showForgotPassword ? (
-              resetSent ? (
-                <View style={styles.resetSentContainer}>
-                  <View style={styles.resetSentIconBox}>
-                    <Ionicons name="checkmark-circle" size={40} color={theme.colors.primary} />
-                  </View>
-                  <Text style={styles.resetSentTitle}>{t('auth.resetEmailSent')}</Text>
-                  <Text style={styles.resetSentText}>{t('auth.resetEmailInstructions')}</Text>
-                  <TouchableOpacity
-                    style={[styles.resendButton, (resetLoading || resentConfirm) && { opacity: 0.6 }]}
-                    onPress={() => handleResetPassword(true)}
-                    disabled={resetLoading || resentConfirm}
-                    activeOpacity={0.75}
-                  >
+              <>
+                <TouchableOpacity
+                  style={[styles.primaryButton, (resetLoading || !email.trim()) && { opacity: 0.6 }]}
+                  onPress={() => handleResetPassword()}
+                  disabled={resetLoading || !email.trim()}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.primaryButtonInner}>
                     {resetLoading ? (
-                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                      <ActivityIndicator size="small" color={theme.colors.background} />
                     ) : (
-                      <Text style={styles.resendButtonText}>
-                        {resentConfirm ? t('auth.resetEmailResentConfirm') : t('auth.resetEmailResend')}
-                      </Text>
+                      <Text style={styles.primaryButtonText}>{t('auth.sendResetLink')}</Text>
                     )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => { setShowForgotPassword(false); setResetSent(false); setResentConfirm(false); }}
-                    activeOpacity={0.7}
-                    style={styles.backToSignInContainer}
-                  >
-                    <Ionicons name="arrow-back" size={16} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.backToSignInText}>{t('auth.backToSignIn')}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    style={[styles.primaryButton, (resetLoading || !email.trim()) && { opacity: 0.6 }]}
-                    onPress={() => handleResetPassword(false)}
-                    disabled={resetLoading || !email.trim()}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.primaryButtonInner}>
-                      {resetLoading ? (
-                        <ActivityIndicator size="small" color={theme.colors.background} />
-                      ) : (
-                        <Text style={styles.primaryButtonText}>{t('auth.sendResetLink')}</Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setShowForgotPassword(false)}
-                    activeOpacity={0.7}
-                    style={styles.backToSignInContainer}
-                  >
-                    <Ionicons name="arrow-back" size={16} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.backToSignInText}>{t('auth.backToSignIn')}</Text>
-                  </TouchableOpacity>
-                </>
-              )
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowForgotPassword(false)}
+                  activeOpacity={0.7}
+                  style={styles.backToSignInContainer}
+                >
+                  <Ionicons name="arrow-back" size={16} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.backToSignInText}>{t('auth.backToSignIn')}</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <>
                 <View style={styles.inputContainer}>
@@ -904,37 +869,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     letterSpacing: 0.2,
   },
-  resetSentContainer: {
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  resetSentIconBox: {
-    marginBottom: 4,
-  },
-  resetSentTitle: {
-    ...fontStyles.heading,
-    fontSize: 18,
-    color: theme.colors.text,
-    letterSpacing: 0.2,
-  },
-  resendButton: {
-    marginTop: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    minWidth: 200,
-    alignItems: 'center',
-  },
-  resendButtonText: {
-    ...fontStyles.bodyMedium,
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.2,
-  },
   backToSignInContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -949,15 +883,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     letterSpacing: 0.2,
   },
-  resetSentText: {
-    ...fontStyles.body,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: 0.2,
-  },
-
   // ── Primary Button ──
   primaryButton: {
     backgroundColor: theme.colors.primary,

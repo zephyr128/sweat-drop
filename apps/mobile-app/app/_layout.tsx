@@ -175,17 +175,26 @@ function parseReferralCode(url: string | null): string | null {
 function parseAuthTokensFromUrl(url: string | null): {
   accessToken: string;
   refreshToken: string;
+  type: string | null;
+  passwordUpdated: boolean;
 } | null {
   if (!url) return null;
+
+  const extract = (params: URLSearchParams) => ({
+    type: params.get('type'),
+    passwordUpdated: params.get('password_updated') === '1',
+  });
 
   // Try query parameters first (Android-safe path)
   const qIndex = url.indexOf('?');
   if (qIndex !== -1) {
-    const qStr = url.slice(qIndex + 1).split('#')[0]; // strip any trailing hash
+    const qStr = url.slice(qIndex + 1).split('#')[0];
     const qParams = new URLSearchParams(qStr);
     const qAccess = qParams.get('access_token');
     const qRefresh = qParams.get('refresh_token');
-    if (qAccess && qRefresh) return { accessToken: qAccess, refreshToken: qRefresh };
+    if (qAccess && qRefresh) {
+      return { accessToken: qAccess, refreshToken: qRefresh, ...extract(qParams) };
+    }
   }
 
   // Fallback: hash fragment (works on iOS, may be stripped on Android)
@@ -195,7 +204,9 @@ function parseAuthTokensFromUrl(url: string | null): {
     const hParams = new URLSearchParams(hash);
     const hAccess = hParams.get('access_token');
     const hRefresh = hParams.get('refresh_token');
-    if (hAccess && hRefresh) return { accessToken: hAccess, refreshToken: hRefresh };
+    if (hAccess && hRefresh) {
+      return { accessToken: hAccess, refreshToken: hRefresh, ...extract(hParams) };
+    }
   }
 
   return null;
@@ -264,7 +275,17 @@ export default function RootLayout() {
       // Auth tokens from landing page (email confirm / password reset)
       const tokens = parseAuthTokensFromUrl(url);
       if (tokens) {
-        log.debug('[App] Auth tokens received via deep link');
+        const isRecovery = tokens.type === 'recovery';
+        log.debug('[App] Auth tokens received via deep link, type:', tokens.type, 'passwordUpdated:', tokens.passwordUpdated);
+
+        // Set the recovery flag BEFORE setSession so that index.tsx (which
+        // fires once isInitialized becomes true) can see it immediately.
+        // This eliminates the race where index.tsx reads the flag before
+        // the async setSession completes.
+        if (isRecovery) {
+          useAuthStore.getState().setPendingPasswordRecovery(tokens.passwordUpdated);
+        }
+
         try {
           const { error } = await supabase.auth.setSession({
             access_token: tokens.accessToken,
@@ -272,9 +293,15 @@ export default function RootLayout() {
           });
           if (error) {
             log.warn('[App] setSession from deep link failed:', error.message);
+            if (isRecovery) {
+              useAuthStore.getState().clearPendingPasswordRecovery();
+            }
           }
         } catch (e) {
           log.warn('[App] setSession from deep link exception:', e);
+          if (isRecovery) {
+            useAuthStore.getState().clearPendingPasswordRecovery();
+          }
         }
         return;
       }
@@ -468,11 +495,15 @@ export default function RootLayout() {
   }, [isInitialized, session?.user, segments, router]);
 
   // PASSWORD_RECOVERY deep-link handler — navigate to in-app reset screen.
+  // Guard with isInitialized so this fires after index.tsx has already run and
+  // the navigator is ready. Without this, a cold-start deep link would set the
+  // flag before the router is mounted and index.tsx would overwrite the navigation.
   useEffect(() => {
+    if (!isInitialized) return;
     if (!pendingPasswordRecovery) return;
     clearPendingPasswordRecovery();
     router.replace('/(onboarding)/reset-password');
-  }, [pendingPasswordRecovery, clearPendingPasswordRecovery, router]);
+  }, [isInitialized, pendingPasswordRecovery, clearPendingPasswordRecovery, router]);
 
   if (!fontsLoaded && !fontError) {
     return <View style={{ flex: 1, backgroundColor: '#000000' }} />;

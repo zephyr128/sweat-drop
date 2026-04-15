@@ -15,6 +15,7 @@ export default function Index() {
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const session = useAuthStore((s) => s.session);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
+  const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
   const consumePendingQR = usePendingQRStore((s) => s.consumePendingQR);
 
   const [hasNavigated, setHasNavigated] = useState(false);
@@ -29,6 +30,13 @@ export default function Index() {
         await SplashScreen.hideAsync();
         // Small delay for smooth transition
         await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Password recovery deep-link: _layout.tsx will navigate to reset-password
+        // once this flag is set. Yield here so we don't overwrite that navigation.
+        if (pendingPasswordRecovery) {
+          setHasNavigated(true);
+          return;
+        }
 
         if (!session) {
           // If a QR deep link arrived while unauthenticated, we discard it here.
@@ -89,7 +97,7 @@ export default function Index() {
     };
 
     navigate();
-  }, [isInitialized, session, onboardingStep, hasNavigated, router]);
+  }, [isInitialized, session, onboardingStep, pendingPasswordRecovery, hasNavigated, router]);
 
   return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
 }

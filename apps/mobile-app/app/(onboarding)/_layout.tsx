@@ -7,6 +7,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="auth" />
       <Stack.Screen name="verify-email" />
       <Stack.Screen name="reset-password" />
+      <Stack.Screen name="reset-link-sent" />
       <Stack.Screen name="stepper" />
       <Stack.Screen name="username" />
       <Stack.Screen name="avatar" />

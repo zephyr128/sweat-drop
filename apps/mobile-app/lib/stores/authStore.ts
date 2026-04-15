@@ -66,6 +66,8 @@ interface AuthState {
   isLoading: boolean;
   /** Set to true when Supabase fires PASSWORD_RECOVERY — _layout.tsx navigates to reset-password */
   pendingPasswordRecovery: boolean;
+  /** True when the deep link comes from the web form (password was already changed in browser) */
+  passwordAlreadyReset: boolean;
   /**
    * Temporary in-memory credentials stored after signUp when Supabase returns
    * session: null (email confirmation required).  verify-email uses these to
@@ -84,6 +86,7 @@ interface AuthState {
     expo_push_token?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   setOnboardingStep: (step: OnboardingStep) => void;
+  setPendingPasswordRecovery: (passwordAlreadyReset?: boolean) => void;
   clearPendingPasswordRecovery: () => void;
   setPendingVerification: (email: string, password: string) => void;
   clearPendingVerification: () => void;
@@ -171,6 +174,7 @@ export const useAuthStore = create<AuthState>()(
       isInitialized: false,
       isLoading: false,
       pendingPasswordRecovery: false,
+      passwordAlreadyReset: false,
       pendingVerificationEmail: null,
       pendingVerificationPassword: null,
 
@@ -206,6 +210,7 @@ export const useAuthStore = create<AuthState>()(
                 profile: null,
                 onboardingStep: 'auth',
                 pendingPasswordRecovery: false,
+                passwordAlreadyReset: false,
                 pendingVerificationEmail: null,
                 pendingVerificationPassword: null,
               });
@@ -369,8 +374,12 @@ export const useAuthStore = create<AuthState>()(
         set({ onboardingStep: step });
       },
 
+      setPendingPasswordRecovery: (passwordAlreadyReset?: boolean) => {
+        set({ pendingPasswordRecovery: true, passwordAlreadyReset: !!passwordAlreadyReset });
+      },
+
       clearPendingPasswordRecovery: () => {
-        set({ pendingPasswordRecovery: false });
+        set({ pendingPasswordRecovery: false, passwordAlreadyReset: false });
       },
 
       setPendingVerification: (email: string, password: string) => {
@@ -433,6 +442,7 @@ export const useAuthStore = create<AuthState>()(
           onboardingStep: 'auth',
           isLoading: false,
           pendingPasswordRecovery: false,
+          passwordAlreadyReset: false,
           pendingVerificationEmail: null,
           pendingVerificationPassword: null,
         });

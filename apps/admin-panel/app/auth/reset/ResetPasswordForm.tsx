@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-client';
 
 export default function ResetPasswordForm() {
-  const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,9 +27,7 @@ export default function ResetPasswordForm() {
     setLoading(true);
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password,
-      });
+      const { error: updateError } = await supabase.auth.updateUser({ password });
 
       if (updateError) {
         if (updateError.message.toLowerCase().includes('session')) {
@@ -43,11 +39,31 @@ export default function ResetPasswordForm() {
         return;
       }
 
+      // Grab the fresh session tokens so the mobile app can authenticate
+      // without requiring the user to log in again.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const refreshToken = sessionData.session?.refresh_token;
+
       setSuccess(true);
-      supabase.auth.signOut().catch(() => {});
-      setTimeout(() => {
-        router.replace('/login?reset=success');
-      }, 1500);
+
+      if (accessToken && refreshToken) {
+        // Build a deep link that the SweatDrop app handles on both iOS and Android.
+        // The app receives this, calls setSession(), detects type=recovery, and
+        // navigates directly to the "Password Updated" success screen.
+        const deepLink =
+          `sweatdrop://auth/confirm` +
+          `?access_token=${encodeURIComponent(accessToken)}` +
+          `&refresh_token=${encodeURIComponent(refreshToken)}` +
+          `&type=recovery` +
+          `&password_updated=1`;
+
+        // Small delay so the user sees the success state before the redirect.
+        setTimeout(() => {
+          window.location.href = deepLink;
+        }, 800);
+      }
+      // If no session (edge case), just stay on the success screen — user can open app manually.
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
       setLoading(false);
@@ -67,11 +83,7 @@ export default function ResetPasswordForm() {
         </div>
 
         {success ? (
-          <div className="rounded-md bg-[#00E5FF]/10 border border-[#00E5FF]/30 p-4">
-            <p className="text-sm text-[#00E5FF] text-center">
-              Password updated successfully! Redirecting to login...
-            </p>
-          </div>
+          <SuccessState />
         ) : (
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             <div className="rounded-md shadow-sm -space-y-px">
@@ -138,6 +150,48 @@ export default function ResetPasswordForm() {
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+function SuccessState() {
+  const handleOpenApp = () => {
+    // Re-fetch session to build a fresh deep link if user taps manually
+    supabase.auth.getSession().then(({ data }) => {
+      const at = data.session?.access_token;
+      const rt = data.session?.refresh_token;
+      if (at && rt) {
+        window.location.href =
+          `sweatdrop://auth/confirm` +
+          `?access_token=${encodeURIComponent(at)}` +
+          `&refresh_token=${encodeURIComponent(rt)}` +
+          `&type=recovery` +
+          `&password_updated=1`;
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-6 text-center">
+      <div className="rounded-md bg-[#00E5FF]/10 border border-[#00E5FF]/30 p-6 space-y-3">
+        <p className="text-2xl">✅</p>
+        <p className="text-lg font-bold text-white">Password Updated!</p>
+        <p className="text-sm text-[#808080]">
+          Your password has been changed. Opening SweatDrop…
+        </p>
+      </div>
+      <button
+        onClick={handleOpenApp}
+        className="w-full py-3 px-4 rounded-md text-black bg-[#00E5FF] hover:bg-[#00B8CC] font-semibold text-sm transition-colors"
+      >
+        Open SweatDrop →
+      </button>
+      <a
+        href="/login"
+        className="block text-sm text-[#808080] hover:text-[#00E5FF] transition-colors"
+      >
+        Back to login
+      </a>
     </div>
   );
 }

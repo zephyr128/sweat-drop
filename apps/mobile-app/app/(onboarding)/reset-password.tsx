@@ -5,16 +5,16 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
   KeyboardAvoidingView,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { theme, fontStyles } from '@/lib/theme';
@@ -22,20 +22,53 @@ import { useTranslation } from 'react-i18next';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { log } from '@/lib/logger';
 
+/**
+ * Password reset screen.
+ *
+ * The user arrives here via a deep-link from the password-reset email
+ * (sweatdrop://auth/confirm → PASSWORD_RECOVERY event → _layout.tsx
+ * navigates here).  The actual password form lives in the browser / web
+ * landing page, so by the time the app opens this screen the password has
+ * already been updated.  We just need to re-authenticate the user with the
+ * recovery session Supabase gave us and then send them to the home screen.
+ *
+ * If for some reason the session is missing we fall back to showing the
+ * password form so the user is never stuck.
+ */
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
+  const passwordAlreadyReset = useAuthStore((s) => s.passwordAlreadyReset);
 
+  const [loading, setLoading] = useState(false);
+
+  // ── Form state (shown when user needs to enter new password in-app) ──
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [formDone, setFormDone] = useState(false);
 
-  const handleSubmit = async () => {
+  const handleContinue = async () => {
+    setLoading(true);
+    try {
+      // Force-refresh user so email_confirmed_at is present in the JWT before
+      // the global email-verification guard runs.
+      await supabase.auth.getUser();
+      await fetchProfile();
+    } catch (err) {
+      log.warn('[ResetPassword] fetchProfile after recovery:', err);
+    } finally {
+      setLoading(false);
+    }
+    router.dismissAll();
+    router.replace('/home');
+  };
+
+  // ── Fallback: user opened the screen without a recovery session ──
+  const handleFallbackSubmit = async () => {
     if (!password.trim()) {
       showModal({ title: t('common:error'), body: t('auth.enterNewPassword') });
       return;
@@ -54,27 +87,17 @@ export default function ResetPasswordScreen() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      // The recovery session's refresh token is consumed after updateUser.
-      // Re-authenticate to get a fresh session with working refresh tokens,
-      // otherwise the next token refresh will fire SIGNED_OUT.
       const email = useAuthStore.getState().session?.user?.email;
       if (email) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
-          log.warn('[ResetPassword] Re-auth after password update failed:', signInError.message);
+          log.warn('[ResetPassword] Re-auth failed:', signInError.message);
         } else {
-          // Force-refresh the user object so email_confirmed_at is present in
-          // the session JWT. Without this, the global email-verification guard
-          // in _layout.tsx may redirect the user to verify-email after they
-          // land on /home.
           await supabase.auth.getUser();
         }
       }
 
-      setDone(true);
+      setFormDone(true);
       await fetchProfile();
     } catch (err: unknown) {
       log.error('[ResetPassword] updateUser error:', err);
@@ -85,13 +108,62 @@ export default function ResetPasswordScreen() {
     }
   };
 
-  const handleContinue = () => {
-    // Dismiss the entire onboarding/auth stack before navigating to home
-    // so swipe-back cannot return the user to the sign-in screen.
-    router.dismissAll();
-    router.replace('/home');
-  };
+  // ─────────────────────────────────────────────────────────────
+  //  Success state — shown when:
+  //  1. passwordAlreadyReset (password was changed in browser, deep link sent back)
+  //  2. formDone (user just submitted the in-app form successfully)
+  // ─────────────────────────────────────────────────────────────
+  if (passwordAlreadyReset || formDone) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <LinearGradient
+          colors={['#000000', '#0A0E1A', '#000000']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
 
+        <View style={styles.successContent}>
+          <Animated.View entering={FadeIn.delay(60).duration(500)} style={styles.iconSection}>
+            <View style={styles.iconContainer}>
+              <View style={[styles.iconGlow, { backgroundColor: theme.colors.primary }]} />
+              <Ionicons name="checkmark-circle" size={64} color={theme.colors.primary} />
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(160).duration(500)} style={styles.textSection}>
+            <Text style={styles.successTitle}>{t('auth.resetPasswordSuccess')}</Text>
+            <Text style={styles.successBody}>{t('auth.resetPasswordSuccessBody')}</Text>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(280).duration(500)} style={styles.ctaSection}>
+            <TouchableOpacity
+              style={[styles.primaryButton, loading && { opacity: 0.7 }]}
+              onPress={handleContinue}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <View style={styles.primaryButtonInner}>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>{t('auth.resetPasswordContinue')}</Text>
+                    <Ionicons name="arrow-forward" size={20} color="#000000" />
+                  </>
+                )}
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Fallback form — only shown if there is no recovery session
+  //  (e.g. user manually navigated here or session expired)
+  // ─────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <LinearGradient
@@ -110,123 +182,70 @@ export default function ResetPasswordScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Header ── */}
           <Animated.View entering={FadeInDown.delay(80).duration(500)} style={styles.headerSection}>
             <View style={styles.iconContainer}>
               <View style={styles.iconGlow} />
               <Ionicons name="lock-open-outline" size={48} color={theme.colors.primary} />
             </View>
-            <Text style={styles.title}>{t('auth.resetPasswordTitle')}</Text>
-            <Text style={styles.subtitle}>{t('auth.resetPasswordSubtitle')}</Text>
+            <Text style={styles.formTitle}>{t('auth.resetPasswordTitle')}</Text>
+            <Text style={styles.formSubtitle}>{t('auth.resetPasswordSubtitle')}</Text>
           </Animated.View>
 
-          {done ? (
-            /* ── Success state ── */
-            <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.successCard}>
-              <View style={styles.successIconContainer}>
-                <View style={styles.successIconGlow} />
-                <Ionicons name="checkmark-circle" size={48} color={theme.colors.primary} />
-              </View>
-              <Text style={styles.successTitle}>{t('auth.resetPasswordSuccess')}</Text>
-              <Text style={styles.successBody}>{t('auth.resetPasswordSuccessBody')}</Text>
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.successButton]}
-                onPress={handleContinue}
-                activeOpacity={0.85}
-              >
-                <View style={styles.primaryButtonInner}>
-                  <Text style={styles.primaryButtonText}>{t('auth.resetPasswordContinue')}</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#000000" />
-                </View>
+          <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder={t('auth.newPasswordPlaceholder')}
+                placeholderTextColor={theme.colors.textTertiary}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="new-password"
+                editable={!loading}
+              />
+              <TouchableOpacity onPress={() => setShowPassword((p) => !p)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.textTertiary} />
               </TouchableOpacity>
-            </Animated.View>
-          ) : (
-            /* ── Form ── */
-            <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.form}>
-              {/* New password */}
-              <View style={styles.inputContainer}>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={20}
-                  color={theme.colors.textSecondary}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('auth.newPasswordPlaceholder')}
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                  editable={!loading}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword((p) => !p)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={theme.colors.textTertiary}
-                  />
-                </TouchableOpacity>
-              </View>
+            </View>
 
-              {/* Confirm password */}
-              <View style={styles.inputContainer}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={20}
-                  color={theme.colors.textSecondary}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('auth.confirmPasswordPlaceholder')}
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirm}
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                  editable={!loading}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowConfirm((p) => !p)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons
-                    name={showConfirm ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={theme.colors.textTertiary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  (loading || !password.trim() || !confirmPassword.trim()) && { opacity: 0.6 },
-                ]}
-                onPress={handleSubmit}
-                disabled={loading || !password.trim() || !confirmPassword.trim()}
-                activeOpacity={0.85}
-              >
-                <View style={styles.primaryButtonInner}>
-                  {loading ? (
-                    <ActivityIndicator size="small" color="#000000" />
-                  ) : (
-                    <>
-                      <Text style={styles.primaryButtonText}>{t('auth.resetPasswordSave')}</Text>
-                      <Ionicons name="checkmark" size={20} color="#000000" />
-                    </>
-                  )}
-                </View>
+            <View style={styles.inputContainer}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder={t('auth.confirmPasswordPlaceholder')}
+                placeholderTextColor={theme.colors.textTertiary}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirm}
+                autoCapitalize="none"
+                autoComplete="new-password"
+                editable={!loading}
+              />
+              <TouchableOpacity onPress={() => setShowConfirm((p) => !p)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.textTertiary} />
               </TouchableOpacity>
-            </Animated.View>
-          )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.primaryButton, (loading || !password.trim() || !confirmPassword.trim()) && { opacity: 0.6 }]}
+              onPress={handleFallbackSubmit}
+              disabled={loading || !password.trim() || !confirmPassword.trim()}
+              activeOpacity={0.85}
+            >
+              <View style={styles.primaryButtonInner}>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>{t('auth.resetPasswordSave')}</Text>
+                    <Ionicons name="checkmark" size={20} color="#000000" />
+                  </>
+                )}
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -238,6 +257,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
+
+  // ── Success layout ──
+  successContent: {
+    flex: 1,
+    paddingHorizontal: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconSection: {
+    marginBottom: 32,
+  },
+  textSection: {
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 48,
+  },
+  ctaSection: {
+    width: '100%',
+  },
+  successTitle: {
+    ...fontStyles.heading,
+    fontSize: 26,
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  successBody: {
+    ...fontStyles.body,
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: 0.2,
+  },
+
+  // ── Shared icon ──
+  iconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  iconGlow: {
+    position: 'absolute',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: theme.colors.primary,
+    opacity: 0.18,
+    ...theme.shadows.glow,
+  },
+
+  // ── Fallback form layout ──
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -248,33 +322,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    position: 'relative',
-  },
-  iconGlow: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary,
-    opacity: 0.20,
-    ...theme.shadows.glow,
-  },
-  title: {
+  formTitle: {
     ...fontStyles.heading,
     fontSize: 26,
     color: theme.colors.text,
+    marginTop: 20,
     marginBottom: 8,
     letterSpacing: 0.2,
     textAlign: 'center',
   },
-  subtitle: {
+  formSubtitle: {
     ...fontStyles.body,
     fontSize: 14,
     color: theme.colors.textSecondary,
@@ -305,6 +362,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     letterSpacing: 0.3,
   },
+
+  // ── Button ──
   primaryButton: {
     backgroundColor: theme.colors.primary,
     borderRadius: 14,
@@ -329,48 +388,5 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 17,
     letterSpacing: 0.3,
-  },
-  successCard: {
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 8,
-  },
-  successIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    marginBottom: 6,
-  },
-  successIconGlow: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary,
-    opacity: 0.20,
-    ...theme.shadows.glow,
-  },
-  successTitle: {
-    ...fontStyles.heading,
-    fontSize: 22,
-    color: theme.colors.text,
-    letterSpacing: 0.2,
-    textAlign: 'center',
-  },
-  successBody: {
-    ...fontStyles.body,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: 0.2,
-    marginBottom: 8,
-  },
-  successButton: {
-    alignSelf: 'stretch',
-    marginTop: 4,
   },
 });
