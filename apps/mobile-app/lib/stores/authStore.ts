@@ -98,8 +98,10 @@ interface AuthState {
  * Called after every profile fetch to keep step in sync.
  *
  * Key rules:
+ *  - onboarding_completed=true is the authoritative returning-user signal.
+ *    It short-circuits all other checks → 'done'.  This handles users who
+ *    skipped optional steps (e.g. avatar) during their first session.
  *  - 'auth' → 'stepper' transition only for NEW users (incomplete profile).
- *    Returning users (valid username + avatar) skip straight to 'done'.
  *  - 'stepper' is a "gate" — never auto-advance past it. Only the
  *    stepper screen's CTA button should advance to 'display_name'.
  */
@@ -115,12 +117,18 @@ function computeOnboardingStep(
     !profile.username.startsWith('user_');
   const hasAvatar = !!profile.avatar_url;
 
+  // ── Returning user fast-path ──
+  // If the user has already completed onboarding (flag is authoritative),
+  // always go straight to done — regardless of optional fields like avatar_url
+  // that the user may have skipped.
+  if (profile.onboarding_completed) return 'done';
+
   // ── First sign-in (currentStep is still 'auth') ──
   if (currentStep === 'auth') {
     if (usernameValid && hasAvatar) {
-      // Returning user with complete profile but hasn't done profile setup wizard
-      if (!profile.onboarding_completed) return 'profile_setup';
-      return 'done';
+      // Profile looks complete but onboarding_completed flag is false —
+      // send through the profile-setup wizard so the flag gets set.
+      return 'profile_setup';
     }
     // New user — show stepper intro
     return 'stepper';
@@ -133,18 +141,9 @@ function computeOnboardingStep(
   if (!usernameValid) return 'display_name';
   if (!hasAvatar) return 'avatar';
 
-  // Profile setup wizard (gender, weight, height, birthday, goal)
-  if (!profile.onboarding_completed) {
-    return 'profile_setup';
-  }
-
   // Show the notifications prompt only during the forward onboarding flow.
-  // Specifically: only if we're progressing from avatar/display_name (i.e. the
-  // currentStep shows we're actively moving through onboarding for the first time).
-  // If currentStep is already 'notifications' or later (home, done, etc.) we must
-  // NOT return 'notifications' again — that would cause an infinite loop where
-  // fetchProfile() keeps overwriting the step back to 'notifications' even after
-  // the user has already dismissed the screen.
+  // Guard against re-entering 'notifications' after the screen has been seen
+  // (currentStep must be one of the steps that precede notifications).
   const notificationsSteps: OnboardingStep[] = ['avatar', 'display_name', 'notifications'];
   if (
     PUSH_NOTIFICATIONS_ENABLED &&
@@ -154,7 +153,9 @@ function computeOnboardingStep(
     return 'notifications';
   }
 
-  return 'done';
+  // Profile setup wizard (gender, weight, height, birthday, goal)
+  // onboarding_completed is false here (handled at top), so send to setup.
+  return 'profile_setup';
 }
 
 // ── Store ──────────────────────────────────────────────────

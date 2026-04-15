@@ -2,6 +2,7 @@ import React, { useCallback, useEffect } from 'react';
 import {
   Dimensions,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -67,7 +68,10 @@ export function LeaderboardInfoSheet({
 }: LeaderboardInfoSheetProps) {
   const { t } = useTranslation('leaderboard');
   const insets = useSafeAreaInsets();
-  const sheetBottomPad = Math.max(insets.bottom, 16);
+  // On Android with 3-button or gesture navigation the insets.bottom can be 0
+  // even though the system nav bar occludes content. Use a minimum of 24 dp so
+  // the "Got it" CTA is never hidden behind the navigation bar.
+  const sheetBottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -399,7 +403,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 4,
-    paddingBottom: 8,
+    paddingBottom: Platform.OS === 'android' ? 20 : 8,
     gap: 20,
   },
   /* Title */

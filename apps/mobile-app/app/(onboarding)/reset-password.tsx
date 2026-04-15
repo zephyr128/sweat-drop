@@ -65,6 +65,12 @@ export default function ResetPasswordScreen() {
         });
         if (signInError) {
           log.warn('[ResetPassword] Re-auth after password update failed:', signInError.message);
+        } else {
+          // Force-refresh the user object so email_confirmed_at is present in
+          // the session JWT. Without this, the global email-verification guard
+          // in _layout.tsx may redirect the user to verify-email after they
+          // land on /home.
+          await supabase.auth.getUser();
         }
       }
 
