@@ -73,6 +73,7 @@
     "resetEmailResentConfirm": "Ponovo poslato! Proveri inbox.",
     "resetLinkSentBody": "Poslali smo link za reset lozinke na gornju adresu. Otvori link u svom email klijentu, postavi novu lozinku, a zatim se vrati u SweatDrop.",
     "backToSignIn": "Nazad na prijavu",
+    "alreadyResetPassword": "Već sam resetovao/la lozinku",
     "enterNewPassword": "Unesi novu lozinku",
     "passwordMismatch": "Lozinke se ne podudaraju",
     "resetPasswordTitle": "Postavi novu lozinku",

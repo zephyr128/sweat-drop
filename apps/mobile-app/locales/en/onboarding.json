@@ -73,6 +73,7 @@
     "resetEmailResentConfirm": "Resent! Check your inbox.",
     "resetLinkSentBody": "We sent a password reset link to the address above. Open the link in your email app, set your new password, then return to SweatDrop.",
     "backToSignIn": "Back to Sign In",
+    "alreadyResetPassword": "I've already reset my password",
     "enterNewPassword": "Enter a new password",
     "passwordMismatch": "Passwords do not match",
     "resetPasswordTitle": "Set New Password",
