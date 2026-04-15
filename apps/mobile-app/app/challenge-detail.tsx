@@ -195,6 +195,33 @@ export default function ChallengeDetailScreen() {
     // Show full-screen spinner only on first fetch, not on back-navigation remount
     if (!hasLoadedRef.current) setLoading(true);
     try {
+      // Load challenge metadata directly so description/machine_type are always available,
+      // even if the progress RPC omits those columns.
+      const { data: challengeMeta, error: challengeMetaError } = await supabase
+        .from('gym_challenges')
+        .select(`
+          id,
+          name,
+          description,
+          machine_type,
+          challenge_type,
+          scoring_model,
+          target_drops,
+          streak_days,
+          milestone_threshold,
+          reward_drops,
+          tiers,
+          start_date,
+          end_date,
+          badge_image_url
+        `)
+        .eq('id', challengeId)
+        .maybeSingle();
+
+      if (challengeMetaError) {
+        log.warn('[ChallengeDetail] Failed to load challenge metadata:', challengeMetaError.message);
+      }
+
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_challenges', {
         p_gym_id: gymId ?? null,
       });
@@ -202,29 +229,32 @@ export default function ChallengeDetailScreen() {
       if (rpcError) { log.error('Error loading challenge:', rpcError); setLoading(false); return; }
 
       const match = (rpcData ?? []).find((c: any) => c.challenge_id === challengeId);
-      if (match) {
+      const source = challengeMeta ?? match;
+      if (source) {
         setChallenge({
-          id: match.challenge_id,
-          name: match.challenge_name,
-          challenge_type: match.challenge_type,
-          scoring_model: match.scoring_model,
-          target_drops: match.target_drops,
-          streak_days: match.streak_days,
-          milestone_threshold: match.milestone_threshold,
-          reward_drops: match.reward_drops,
-          tiers: match.tiers,
-          start_date: match.start_date,
-          end_date: match.end_date,
-          badge_image_url: match.badge_image_url,
+          id: source.id ?? match?.challenge_id,
+          name: source.name ?? match?.challenge_name,
+          description: source.description ?? match?.description ?? match?.challenge_description ?? null,
+          machine_type: source.machine_type ?? match?.machine_type ?? 'any',
+          challenge_type: source.challenge_type ?? match?.challenge_type,
+          scoring_model: source.scoring_model ?? match?.scoring_model,
+          target_drops: source.target_drops ?? match?.target_drops,
+          streak_days: source.streak_days ?? match?.streak_days,
+          milestone_threshold: source.milestone_threshold ?? match?.milestone_threshold,
+          reward_drops: source.reward_drops ?? match?.reward_drops,
+          tiers: source.tiers ?? match?.tiers,
+          start_date: source.start_date ?? match?.start_date,
+          end_date: source.end_date ?? match?.end_date,
+          badge_image_url: source.badge_image_url ?? match?.badge_image_url,
         });
         setProgress({
-          current_drops: match.current_drops ?? 0,
-          current_value: match.current_value ?? 0,
-          current_streak_days: match.current_streak_days ?? 0,
-          is_completed: match.is_completed ?? false,
-          completed_at: match.completed_at ?? null,
-          tier_achieved: match.tier_achieved ?? null,
-          drops_awarded: match.drops_awarded ?? 0,
+          current_drops: match?.current_drops ?? 0,
+          current_value: match?.current_value ?? 0,
+          current_streak_days: match?.current_streak_days ?? 0,
+          is_completed: match?.is_completed ?? false,
+          completed_at: match?.completed_at ?? null,
+          tier_achieved: match?.tier_achieved ?? null,
+          drops_awarded: match?.drops_awarded ?? 0,
         });
       }
       hasLoadedRef.current = true;
