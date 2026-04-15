@@ -29,7 +29,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.sweatdrop.app',
-      associatedDomains: ['applinks:www.sweat-drop.com'],
+      associatedDomains: ['applinks:sweat-drop.com', 'applinks:www.sweat-drop.com'],
       entitlements: {
         'aps-environment': 'production',
         'com.apple.developer.applesignin': ['Default'],
@@ -55,6 +55,28 @@ module.exports = {
       versionCode: 8,
       package: 'com.sweatdrop.app',
       intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            {
+              scheme: 'https',
+              host: 'sweat-drop.com',
+              pathPrefix: '/auth/confirm',
+            },
+            {
+              scheme: 'https',
+              host: 'sweat-drop.com',
+              pathPrefix: '/auth/reset',
+            },
+            {
+              scheme: 'https',
+              host: 'sweat-drop.com',
+              pathPrefix: '/join',
+            },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
         {
           action: 'VIEW',
           autoVerify: true,

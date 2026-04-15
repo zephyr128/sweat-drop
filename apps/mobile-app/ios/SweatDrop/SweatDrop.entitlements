@@ -10,6 +10,7 @@
     </array>
     <key>com.apple.developer.associated-domains</key>
     <array>
+      <string>applinks:sweat-drop.com</string>
       <string>applinks:www.sweat-drop.com</string>
     </array>
   </dict>

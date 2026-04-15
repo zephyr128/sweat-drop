@@ -53,6 +53,24 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="sweat-drop.com" android:pathPrefix="/auth/confirm"/>
+      </intent-filter>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="sweat-drop.com" android:pathPrefix="/auth/reset"/>
+      </intent-filter>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="sweat-drop.com" android:pathPrefix="/join"/>
+      </intent-filter>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="https" android:host="www.sweat-drop.com" android:pathPrefix="/auth/confirm"/>
       </intent-filter>
       <intent-filter android:autoVerify="true">
@@ -66,14 +84,6 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="https" android:host="www.sweat-drop.com" android:pathPrefix="/join"/>
-      </intent-filter>
-      <intent-filter android:autoVerify="true" data-generated="true">
-        <action android:name="android.intent.action.VIEW"/>
-        <data android:scheme="https" android:host="www.sweat-drop.com" android:pathPrefix="/auth/confirm"/>
-        <data android:scheme="https" android:host="www.sweat-drop.com" android:pathPrefix="/auth/reset"/>
-        <data android:scheme="https" android:host="www.sweat-drop.com" android:pathPrefix="/join"/>
-        <category android:name="android.intent.category.BROWSABLE"/>
-        <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
     </activity>
   </application>
