@@ -7,11 +7,21 @@ import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 type ConfirmState = 'loading' | 'success' | 'error';
 type OtpType = EmailOtpType;
 
+function isAndroid(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /android/i.test(navigator.userAgent);
+}
+
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null, type: string = 'signup'): string {
   if (accessToken && refreshToken) {
-    // Use query params (not hash fragments) because Android strips hash fragments
-    // from custom-scheme intent URIs.
-    return `sweatdrop://auth/confirm?access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=${encodeURIComponent(type)}`;
+    const params = `access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=${encodeURIComponent(type)}`;
+    if (isAndroid()) {
+      return `https://sweat-drop.com/auth/confirm?${params}`;
+    }
+    return `sweatdrop://auth/confirm?${params}`;
+  }
+  if (isAndroid()) {
+    return 'https://sweat-drop.com/auth/confirm';
   }
   return 'sweatdrop://';
 }

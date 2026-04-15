@@ -48,17 +48,17 @@ export default function ResetPasswordForm() {
       setSuccess(true);
 
       if (accessToken && refreshToken) {
-        // Build a deep link that the SweatDrop app handles on both iOS and Android.
-        // The app receives this, calls setSession(), detects type=recovery, and
-        // navigates directly to the "Password Updated" success screen.
-        const deepLink =
-          `sweatdrop://auth/confirm` +
-          `?access_token=${encodeURIComponent(accessToken)}` +
+        const params =
+          `access_token=${encodeURIComponent(accessToken)}` +
           `&refresh_token=${encodeURIComponent(refreshToken)}` +
           `&type=recovery` +
           `&password_updated=1`;
 
-        // Small delay so the user sees the success state before the redirect.
+        const isAndroid = /android/i.test(navigator.userAgent);
+        const deepLink = isAndroid
+          ? `https://sweat-drop.com/auth/confirm?${params}`
+          : `sweatdrop://auth/confirm?${params}`;
+
         setTimeout(() => {
           window.location.href = deepLink;
         }, 800);
@@ -156,17 +156,20 @@ export default function ResetPasswordForm() {
 
 function SuccessState() {
   const handleOpenApp = () => {
-    // Re-fetch session to build a fresh deep link if user taps manually
     supabase.auth.getSession().then(({ data }) => {
       const at = data.session?.access_token;
       const rt = data.session?.refresh_token;
       if (at && rt) {
-        window.location.href =
-          `sweatdrop://auth/confirm` +
-          `?access_token=${encodeURIComponent(at)}` +
+        const params =
+          `access_token=${encodeURIComponent(at)}` +
           `&refresh_token=${encodeURIComponent(rt)}` +
           `&type=recovery` +
           `&password_updated=1`;
+
+        const isAndroid = /android/i.test(navigator.userAgent);
+        window.location.href = isAndroid
+          ? `https://sweat-drop.com/auth/confirm?${params}`
+          : `sweatdrop://auth/confirm?${params}`;
       }
     });
   };
