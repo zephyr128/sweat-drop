@@ -22,6 +22,17 @@ import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { theme } from '@/lib/theme';
 
+function isRecoveryType(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  return lower === 'recovery';
+}
+
+function isPasswordUpdatedType(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return value.toLowerCase() === 'password_updated';
+}
+
 function normalizeOtpType(value: string | null | undefined): EmailOtpType | null {
   if (!value) return null;
   const lower = value.toLowerCase();
@@ -90,6 +101,7 @@ export default function AuthConfirmScreen() {
 
   const [tokensProcessed, setTokensProcessed] = useState(false);
   const navigatedRef = useRef(false);
+  const authTypeRef = useRef<string>('email');
 
   const navigate = useCallback(
     (target: string) => {
@@ -111,6 +123,7 @@ export default function AuthConfirmScreen() {
       let accessToken = params.access_token;
       let refreshToken = params.refresh_token;
       let type = params.type || 'email';
+      authTypeRef.current = type;
 
       // On Android cold start, expo-router may not have parsed query params yet.
       // Fall back to Linking.getInitialURL() which reads the raw intent URI.
@@ -129,6 +142,7 @@ export default function AuthConfirmScreen() {
             accessToken = parsed.accessToken;
             refreshToken = parsed.refreshToken;
             type = parsed.type || type;
+            authTypeRef.current = type;
           }
         } catch {
           // ignore
@@ -153,7 +167,7 @@ export default function AuthConfirmScreen() {
           }
         }
         if (cancelled) return;
-        if (type === 'recovery') {
+        if (isRecoveryType(type)) {
           useAuthStore.setState({ pendingPasswordRecovery: true });
           navigatedRef.current = true; // _layout.tsx handles recovery navigation
           if (!cancelled) setTokensProcessed(true);
@@ -181,7 +195,7 @@ export default function AuthConfirmScreen() {
           log.warn('[AuthConfirm] setSession exception:', e);
         }
         if (cancelled) return;
-        if (type === 'recovery') {
+        if (isRecoveryType(type)) {
           useAuthStore.setState({ pendingPasswordRecovery: true });
           navigatedRef.current = true;
           if (!cancelled) setTokensProcessed(true);
@@ -216,6 +230,11 @@ export default function AuthConfirmScreen() {
       return;
     }
 
+    if (isPasswordUpdatedType(authTypeRef.current)) {
+      navigate('/home');
+      return;
+    }
+
     // If profile is already loaded (onboardingStep computed), navigate now.
     // Otherwise give fetchProfile a brief window to finish so index.tsx has
     // the correct onboardingStep.
@@ -240,7 +259,11 @@ export default function AuthConfirmScreen() {
         hasProfile: !!state.profile,
       });
       if (state.session?.user) {
-        navigate('/(onboarding)/verify-email');
+        if (isPasswordUpdatedType(authTypeRef.current)) {
+          navigate('/home');
+        } else {
+          navigate('/(onboarding)/verify-email');
+        }
       } else {
         navigate('/(onboarding)/auth');
       }

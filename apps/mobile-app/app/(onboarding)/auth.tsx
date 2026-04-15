@@ -355,9 +355,9 @@ export default function AuthScreen() {
     }
     setResetLoading(true);
     try {
-      const resetUrl = buildPublicWebUrl('/auth/reset');
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: resetUrl,
+        // Reset links should open directly in the app recovery flow.
+        redirectTo: 'sweatdrop://auth/confirm',
       });
       if (error) throw error;
       if (isResend) {
