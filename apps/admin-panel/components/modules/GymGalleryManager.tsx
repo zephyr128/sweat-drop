@@ -26,6 +26,7 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
   const [captionDraft, setCaptionDraft] = useState('');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const dragIdxRef = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchImages = useCallback(async () => {
@@ -102,26 +103,28 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
     }
   };
 
-  const handleDragStart = (idx: number) => setDragIdx(idx);
+  const handleDragStart = (idx: number) => {
+    dragIdxRef.current = idx;
+    setDragIdx(idx);
+  };
   const handleDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault();
     setDragOverIdx(idx);
   };
-  const handleDrop = async (targetIdx: number) => {
-    if (dragIdx === null || dragIdx === targetIdx) {
-      setDragIdx(null);
-      setDragOverIdx(null);
-      return;
-    }
-
-    const reordered = [...images];
-    const [moved] = reordered.splice(dragIdx, 1);
-    reordered.splice(targetIdx, 0, moved);
-    setImages(reordered);
+  const handleDrop = async (dropTargetIdx: number) => {
+    const from = dragIdxRef.current;
+    dragIdxRef.current = null;
     setDragIdx(null);
     setDragOverIdx(null);
 
-    const res = await reorderGalleryImages(gymId, reordered.map((i) => i.id));
+    if (from === null || from === dropTargetIdx) return;
+
+    const newOrder = [...images];
+    const [moved] = newOrder.splice(from, 1);
+    newOrder.splice(dropTargetIdx, 0, moved);
+    setImages(newOrder);
+
+    const res = await reorderGalleryImages(gymId, newOrder.map((i) => i.id));
     if (!res.success) {
       toast.error('Failed to save order');
       await fetchImages();
@@ -177,6 +180,7 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDrop={() => handleDrop(idx)}
                   onDragEnd={() => {
+                    dragIdxRef.current = null;
                     setDragIdx(null);
                     setDragOverIdx(null);
                   }}

@@ -15,5 +15,6 @@ export function ToasterProvider() {
     return null;
   }
 
-  return <Toaster position="top-right" theme="dark" />;
+  return <Toaster position="bottom-right" theme="dark" richColors />;
+
 }

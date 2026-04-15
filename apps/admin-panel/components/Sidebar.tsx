@@ -28,6 +28,8 @@ import {
   ScrollText,
   Megaphone,
   ListTodo,
+  Menu,
+  X,
 } from 'lucide-react';
 import { getPendingInvitationCount } from '@/lib/actions/arena-invitation-actions';
 import { getPendingRedemptionCount } from '@/lib/actions/redemption-actions';
@@ -211,13 +213,13 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
   return (
     <>
       {/* Mobile menu button — h-16 matches Header so icon aligns with avatar row */}
-      <div className="md:hidden fixed left-0 top-0 z-50 flex h-16 items-center pl-4">
+      <div className="md:hidden fixed left-0 top-0 z-50 h-16 w-16 flex items-center justify-center">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-white hover:bg-zinc-900 transition-colors"
+          className="w-10 h-10 flex items-center justify-center bg-zinc-950 border border-zinc-900 rounded-lg text-white hover:bg-zinc-900 transition-colors"
           aria-label="Toggle menu"
         >
-          <span className="block text-2xl leading-none">{isOpen ? '✕' : '☰'}</span>
+          {isOpen ? <X size={20} strokeWidth={2} /> : <Menu size={20} strokeWidth={2} />}
         </button>
       </div>
 
@@ -231,9 +233,10 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
 
       {/* Sidebar */}
       <aside
-        className={`w-64 bg-zinc-950 border-r border-zinc-900 h-dvh fixed left-0 top-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] z-50 transition-transform duration-300 ${
+        className={`w-64 bg-zinc-950 border-r border-zinc-900 h-dvh fixed left-0 top-0 overflow-y-auto overscroll-contain z-50 transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
+        style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
       >
       <div className="p-6 border-b border-zinc-900">
         <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#00E5FF] to-[#00B8CC]">
