@@ -56,7 +56,7 @@ export default function ResetPasswordForm() {
 
         const isAndroid = /android/i.test(navigator.userAgent);
         const deepLink = isAndroid
-          ? `https://sweat-drop.com/auth/confirm?${params}`
+          ? `intent://auth/confirm?${params}#Intent;scheme=sweatdrop;package=com.sweatdrop.app;S.browser_fallback_url=${encodeURIComponent('https://sweat-drop.com')};end`
           : `sweatdrop://auth/confirm?${params}`;
 
         setTimeout(() => {
@@ -168,7 +168,7 @@ function SuccessState() {
 
         const isAndroid = /android/i.test(navigator.userAgent);
         window.location.href = isAndroid
-          ? `https://sweat-drop.com/auth/confirm?${params}`
+          ? `intent://auth/confirm?${params}#Intent;scheme=sweatdrop;package=com.sweatdrop.app;S.browser_fallback_url=${encodeURIComponent('https://sweat-drop.com')};end`
           : `sweatdrop://auth/confirm?${params}`;
       }
     });
