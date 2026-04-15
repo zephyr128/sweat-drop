@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +41,10 @@ export default function ResetPasswordScreen() {
   const showModal = useAppModal((s) => s.showModal);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
   const passwordAlreadyReset = useAuthStore((s) => s.passwordAlreadyReset);
+
+  useEffect(() => {
+    return () => { useAuthStore.setState({ passwordAlreadyReset: false }); };
+  }, []);
 
   const [loading, setLoading] = useState(false);
 

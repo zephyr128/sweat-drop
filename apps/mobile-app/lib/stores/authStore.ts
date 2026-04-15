@@ -379,7 +379,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearPendingPasswordRecovery: () => {
-        set({ pendingPasswordRecovery: false, passwordAlreadyReset: false });
+        set({ pendingPasswordRecovery: false });
       },
 
       setPendingVerification: (email: string, password: string) => {
