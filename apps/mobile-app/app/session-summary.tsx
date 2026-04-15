@@ -107,6 +107,14 @@ export default function SessionSummaryScreen() {
   const wasReducedTier = sessionTier === 'tier1' || sessionTier === 'tier2';
   const wasDayCapHit = dropsNum <= 0 && dropLimit.dailyRemaining <= 0 && !securityStatus;
   const wasWeekCapHit = dropsNum <= 0 && dropLimit.weeklyRemaining <= 0 && !securityStatus;
+  const badgeNamesFromFinalize = useMemo(() => {
+    const source = resolvedBadges ?? awardedBadgeNames;
+    return new Set(
+      (source || [])
+        .map((name) => (typeof name === 'string' ? name.trim().toLowerCase() : ''))
+        .filter(Boolean),
+    );
+  }, [resolvedBadges, awardedBadgeNames]);
 
   const happyHourBreakdown = useMemo(() => {
     const rm = session?.raw_metrics as Record<string, any> | null;
@@ -225,10 +233,17 @@ export default function SessionSummaryScreen() {
           log.warn('[SessionSummary] Eager side effects failed, data may be stale:', err);
         }
         loadChallengeProgress(session.started_at);
-        loadEarnedBadges();
+        await loadEarnedBadges(session.started_at);
       })();
     }
   }, [session]);
+
+  // If award_drops recovery later resolves badge names, re-run badge load once
+  // so summary can include them in the current session scope.
+  useEffect(() => {
+    if (!session || !resolvedBadges?.length) return;
+    void loadEarnedBadges(session.started_at);
+  }, [session, resolvedBadges]);
 
   const loadSession = async () => {
     if (!sessionId) {
@@ -510,28 +525,51 @@ export default function SessionSummaryScreen() {
     return `${mins}m ${sec}s`;
   };
 
-  const loadEarnedBadges = async () => {
+  const loadEarnedBadges = async (sessionStartedAt?: string) => {
     if (!authSession?.user) return;
 
     try {
-      const fiveMinutesAgo = new Date();
-      fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5);
+      const sessionStartMs = sessionStartedAt ? new Date(sessionStartedAt).getTime() : NaN;
+      const fallbackWindowMs = Date.now() - 5 * 60 * 1000;
+      const delays = [0, 350, 900];
+      let bestMatch: any[] = [];
 
-      const { data, error } = await supabase.rpc('get_user_badges', {
-        p_user_id: authSession.user.id,
-      });
+      for (let attempt = 0; attempt < delays.length; attempt++) {
+        if (delays[attempt] > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        }
 
-      if (error) {
-        log.error('Error loading badges:', error);
-        return;
+        const { data, error } = await supabase.rpc('get_user_badges', {
+          p_user_id: authSession.user.id,
+        });
+
+        if (error) {
+          log.error('Error loading badges:', error);
+          return;
+        }
+
+        const byId = new Map<string, any>();
+        for (const badge of data || []) {
+          const badgeName = String(badge.badge_name || '').trim().toLowerCase();
+          const earnedAtMs = Number.isFinite(Date.parse(badge.earned_at)) ? Date.parse(badge.earned_at) : NaN;
+          const earnedInThisSession = Number.isFinite(sessionStartMs)
+            ? Number.isFinite(earnedAtMs) && earnedAtMs >= sessionStartMs
+            : Number.isFinite(earnedAtMs) && earnedAtMs >= fallbackWindowMs;
+          const explicitlyAwarded = badgeNamesFromFinalize.has(badgeName);
+          if (earnedInThisSession || explicitlyAwarded) {
+            byId.set(String(badge.badge_id), badge);
+          }
+        }
+
+        const matched = Array.from(byId.values());
+        if (matched.length > bestMatch.length) bestMatch = matched;
+
+        // Stop early once we have at least one badge (or if there are no known
+        // awarded names to wait for and current session already has a stable result).
+        if (matched.length > 0 || badgeNamesFromFinalize.size === 0) break;
       }
 
-      const newlyEarned = (data || []).filter((badge: any) => {
-        const earnedAt = new Date(badge.earned_at);
-        return earnedAt >= fiveMinutesAgo;
-      });
-
-      setEarnedBadges(newlyEarned);
+      setEarnedBadges(bestMatch);
     } catch (err) {
       log.error('Error in loadEarnedBadges:', err);
     }

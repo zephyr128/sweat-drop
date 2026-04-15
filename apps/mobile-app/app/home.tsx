@@ -307,7 +307,7 @@ export default function HomeScreen() {
   };
 
   // Badge data for earned badge count — filtered to active gym + global badges
-  const { badges: allEarnedBadges } = useUserBadges();
+  const { badges: allEarnedBadges, refresh: refreshBadges } = useUserBadges();
   const earnedBadges = useMemo(() => {
     if (!activeGymId) return allEarnedBadges;
     return allEarnedBadges.filter(
@@ -393,7 +393,8 @@ export default function HomeScreen() {
       refreshLocalDrops();
       dropLimits.refresh();
       competeStats.refresh();
-    }, [refreshStats, refreshLocalDrops, dropLimits.refresh, competeStats.refresh]),
+      refreshBadges();
+    }, [refreshStats, refreshLocalDrops, dropLimits.refresh, competeStats.refresh, refreshBadges]),
     enabled: !!session?.user,
   });
 
@@ -449,6 +450,8 @@ export default function HomeScreen() {
   const { newBadge, clearNewBadge } = useBadgeNotifications({
     onBadgeEarned: (badge) => {
       log.debug('Badge earned!', badge);
+      // Keep home challenge gauge/cards in sync with newly awarded badges.
+      refreshBadges();
       setShowConfetti(true);
       setTimeout(() => {
         setShowConfetti(false);
@@ -549,6 +552,7 @@ export default function HomeScreen() {
               refreshArenas?.() ?? Promise.resolve(),
               dropLimits.refresh(),
               competeStats.refresh(),
+              refreshBadges(),
             ]
           : []),
       ]);
@@ -571,6 +575,7 @@ export default function HomeScreen() {
       refreshArenas,
       dropLimits.refresh,
       competeStats.refresh,
+      refreshBadges,
     ])
   );
 
@@ -664,6 +669,7 @@ export default function HomeScreen() {
               refreshArenas?.() ?? Promise.resolve(),
               dropLimits.refresh(),
               competeStats.refresh(),
+              refreshBadges(),
             ]
           : []),
       ]);
@@ -672,7 +678,7 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, dropLimits.refresh, competeStats.refresh]);
+  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, dropLimits.refresh, competeStats.refresh, refreshBadges]);
 
 
   const handleQRPress = useCallback(() => {
