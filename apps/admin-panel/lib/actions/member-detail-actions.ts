@@ -17,6 +17,9 @@ function getMonthStart(): string {
   return d.toISOString();
 }
 
+// Keep member detail lists large enough for client-side pagination.
+const MEMBER_DETAIL_LIST_LIMIT = 500;
+
 export interface MemberDetail {
   id: string;
   username: string;
@@ -163,14 +166,14 @@ export async function getMemberDetail(
 
     const mp = memberProfile as any;
 
-    // Fetch last 20 sessions with machine name
+    // Fetch recent sessions with machine name.
     const { data: sessionsRaw } = await supabase
       .from('sessions')
       .select('id, started_at, duration_seconds, drops_earned, machine_id')
       .eq('user_id', memberId)
       .eq('gym_id', gymId)
       .order('started_at', { ascending: false })
-      .limit(20);
+      .limit(MEMBER_DETAIL_LIST_LIMIT);
 
     // Resolve machine names
     const sessions: MemberSession[] = [];
@@ -197,14 +200,14 @@ export async function getMemberDetail(
       }
     }
 
-    // Fetch last 20 drops transactions
+    // Fetch recent drops transactions.
     const { data: transactionsRaw } = await supabase
       .from('drops_transactions')
       .select('id, created_at, transaction_type, amount, description')
       .eq('user_id', memberId)
       .eq('gym_id', gymId)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(MEMBER_DETAIL_LIST_LIMIT);
 
     const transactions: MemberTransaction[] = ((transactionsRaw as any[]) || []).map(t => ({
       id: t.id,
@@ -233,14 +236,14 @@ export async function getMemberDetail(
       // Badge fetch failure is non-critical
     }
 
-    // Fetch last 20 redemptions with reward name
+    // Fetch recent redemptions with reward name.
     const { data: redemptionsRaw } = await supabase
       .from('redemptions')
       .select('id, created_at, reward_id, status, redemption_code, drops_spent')
       .eq('user_id', memberId)
       .eq('gym_id', gymId)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(MEMBER_DETAIL_LIST_LIMIT);
 
     const redemptions: MemberRedemption[] = [];
     if (redemptionsRaw && redemptionsRaw.length > 0) {

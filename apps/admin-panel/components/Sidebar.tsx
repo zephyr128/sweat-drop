@@ -210,14 +210,16 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
 
   return (
     <>
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-white hover:bg-zinc-900 transition-colors"
-        aria-label="Toggle menu"
-      >
-        <span className="text-2xl">{isOpen ? '✕' : '☰'}</span>
-      </button>
+      {/* Mobile menu button — h-16 matches Header so icon aligns with avatar row */}
+      <div className="md:hidden fixed left-0 top-0 z-50 flex h-16 items-center pl-4">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-white hover:bg-zinc-900 transition-colors"
+          aria-label="Toggle menu"
+        >
+          <span className="block text-2xl leading-none">{isOpen ? '✕' : '☰'}</span>
+        </button>
+      </div>
 
       {/* Overlay for mobile */}
       {isOpen && (
@@ -229,7 +231,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
 
       {/* Sidebar */}
       <aside
-        className={`w-64 bg-zinc-950 border-r border-zinc-900 h-screen fixed left-0 top-0 overflow-y-auto z-50 transition-transform duration-300 ${
+        className={`w-64 bg-zinc-950 border-r border-zinc-900 h-dvh fixed left-0 top-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] z-50 transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
@@ -251,7 +253,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
       )}
 
       {/* Navigation Groups */}
-      <nav className="p-4 space-y-6">
+      <nav className="p-4 space-y-6 max-md:pb-[max(6rem,calc(2.5rem+env(safe-area-inset-bottom,0px)))]">
         {navGroups.map((group) => (
           <div key={group.title || 'root'}>
             {group.title && (

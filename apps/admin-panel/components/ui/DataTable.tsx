@@ -34,6 +34,8 @@ interface DataTableProps<T> {
   limit: number;
   totalPages: number;
   loading?: boolean;
+  /** Hide search + filter toolbar (e.g. embedded lists with a fixed dataset). */
+  hideToolbar?: boolean;
   searchPlaceholder?: string;
   filters?: FilterDef[];
   filterValues?: Record<string, string>;
@@ -108,6 +110,7 @@ export function DataTable<T>({
   limit,
   totalPages,
   loading = false,
+  hideToolbar = false,
   searchPlaceholder = 'Search…',
   filters,
   filterValues = {},
@@ -161,30 +164,32 @@ export function DataTable<T>({
   return (
     <div className="space-y-4">
       {/* Toolbar: Search + Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            value={searchValue}
-            onChange={(e) => handleSearch(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="w-full pl-9 pr-4 py-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#00E5FF]/50 transition-colors"
-          />
+      {!hideToolbar && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full pl-9 pr-4 py-2 bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#00E5FF]/50 transition-colors"
+            />
+          </div>
+          {filters?.map((f) => (
+            <select
+              key={f.key}
+              value={filterValues[f.key] || 'all'}
+              onChange={(e) => handleFilter(f.key, e.target.value)}
+              className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-[#00E5FF]/50 min-w-[140px]"
+            >
+              {f.options.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          ))}
         </div>
-        {filters?.map((f) => (
-          <select
-            key={f.key}
-            value={filterValues[f.key] || 'all'}
-            onChange={(e) => handleFilter(f.key, e.target.value)}
-            className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-[#00E5FF]/50 min-w-[140px]"
-          >
-            {f.options.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        ))}
-      </div>
+      )}
 
       {/* Table */}
       <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">

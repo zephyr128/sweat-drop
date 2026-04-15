@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -20,8 +20,6 @@ import {
   User,
   CreditCard,
   FileText,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import type {
   MemberDetailResult,
@@ -35,11 +33,14 @@ import type {
 } from '@/lib/actions/member-detail-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { MemberIdentityVerifyDrawer } from '@/components/modules/MemberIdentityVerifyDrawer';
+import { DataTable, type ColumnDef, type DataTableQuery } from '@/components/ui/DataTable';
 
 interface MemberDetailViewProps {
   gymId: string;
   data: MemberDetailResult;
 }
+
+const MEMBER_DETAIL_PAGE_SIZE = 10;
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -128,118 +129,93 @@ function SectionHeader({ icon: Icon, title, count }: { icon: typeof Activity; ti
   );
 }
 
-// ── Pagination helper ────────────────────────────────────────────
+const SESSION_COLUMNS: ColumnDef<MemberSession>[] = [
+  {
+    key: 'started_at',
+    label: 'Date',
+    render: (s) => <span className="text-white">{formatDate(s.started_at)}</span>,
+  },
+  {
+    key: 'duration',
+    label: 'Duration',
+    render: (s) => <span className="text-zinc-500">{formatDuration(s.duration_seconds)}</span>,
+  },
+  {
+    key: 'drops',
+    label: 'Drops',
+    render: (s) => <span className="font-medium text-[#00E5FF]">+{s.drops_earned}</span>,
+  },
+  {
+    key: 'machine',
+    label: 'Machine',
+    render: (s) => <span className="text-zinc-500">{s.machine_name || '—'}</span>,
+  },
+];
 
-const PAGE_SIZE = 10;
+const TRANSACTION_COLUMNS: ColumnDef<MemberTransaction>[] = [
+  {
+    key: 'created_at',
+    label: 'Date',
+    render: (t) => <span className="text-white">{formatDate(t.created_at)}</span>,
+  },
+  {
+    key: 'type',
+    label: 'Type',
+    render: (t) => txTypeBadge(t.transaction_type),
+  },
+  {
+    key: 'amount',
+    label: 'Amount',
+    render: (t) => (
+      <span className={`font-medium ${t.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {t.amount >= 0 ? '+' : ''}
+        {t.amount}
+      </span>
+    ),
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    render: (t) => (
+      <span className="text-zinc-500 max-w-[200px] truncate block">{t.description || '—'}</span>
+    ),
+  },
+];
 
-function usePagination<T>(items: T[]) {
-  const [page, setPage] = useState(1);
-  const total = items.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const safeP = Math.min(page, totalPages);
-  const start = (safeP - 1) * PAGE_SIZE;
-  const paged = items.slice(start, start + PAGE_SIZE);
-  return { paged, page: safeP, totalPages, total, setPage };
-}
+const REDEMPTION_COLUMNS: ColumnDef<MemberRedemption>[] = [
+  {
+    key: 'created_at',
+    label: 'Date',
+    render: (r) => <span className="text-white">{formatDate(r.created_at)}</span>,
+  },
+  {
+    key: 'reward_name',
+    label: 'Reward',
+    render: (r) => <span className="text-white">{r.reward_name}</span>,
+  },
+  {
+    key: 'drops_spent',
+    label: 'Drops',
+    render: (r) => <span className="text-rose-400">-{r.drops_spent}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    render: (r) => redemptionStatusBadge(r.status),
+  },
+  {
+    key: 'code',
+    label: 'Code',
+    render: (r) => <span className="text-zinc-500 font-mono">{r.redemption_code || '—'}</span>,
+  },
+];
 
-function PaginationFooter({ page, totalPages, total, onPage }: { page: number; totalPages: number; total: number; onPage: (p: number) => void }) {
-  if (totalPages <= 1) return null;
-  const start = (page - 1) * PAGE_SIZE + 1;
-  const end = Math.min(page * PAGE_SIZE, total);
-  return (
-    <div className="flex items-center justify-between pt-3 border-t border-[#1A1A1A] mt-3">
-      <span className="text-xs text-zinc-500">{start}–{end} of {total}</span>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => onPage(page - 1)}
-          disabled={page <= 1}
-          className="p-1.5 rounded border border-[#1A1A1A] text-zinc-500 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-        <span className="px-3 text-xs text-zinc-400">{page} / {totalPages}</span>
-        <button
-          onClick={() => onPage(page + 1)}
-          disabled={page >= totalPages}
-          className="p-1.5 rounded border border-[#1A1A1A] text-zinc-500 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Section tables with pagination ───────────────────────────────
-
-function SessionsTable({ sessions }: { sessions: MemberSession[] }) {
-  const { paged, page, totalPages, total, setPage } = usePagination(sessions);
-  if (sessions.length === 0) {
-    return <p className="text-sm text-[#808080] text-center py-6">No sessions recorded</p>;
+function mergeMemberTableQuery(prev: DataTableQuery, update: DataTableQuery): DataTableQuery {
+  const next = { ...prev, ...update };
+  if (update.filters) {
+    next.filters = { ...(prev.filters ?? {}), ...update.filters };
   }
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[#1A1A1A]">
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Date</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Duration</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Drops</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Machine</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#1A1A1A]">
-            {paged.map((s) => (
-              <tr key={s.id} className="hover:bg-[#111] transition-colors">
-                <td className="px-4 py-3 text-sm text-white">{formatDate(s.started_at)}</td>
-                <td className="px-4 py-3 text-sm text-[#808080]">{formatDuration(s.duration_seconds)}</td>
-                <td className="px-4 py-3 text-sm font-medium text-[#00E5FF]">+{s.drops_earned}</td>
-                <td className="px-4 py-3 text-sm text-[#808080]">{s.machine_name || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <PaginationFooter page={page} totalPages={totalPages} total={total} onPage={setPage} />
-    </div>
-  );
-}
-
-function TransactionsTable({ transactions }: { transactions: MemberTransaction[] }) {
-  const { paged, page, totalPages, total, setPage } = usePagination(transactions);
-  if (transactions.length === 0) {
-    return <p className="text-sm text-[#808080] text-center py-6">No transactions recorded</p>;
-  }
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[#1A1A1A]">
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Date</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Type</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Amount</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Description</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#1A1A1A]">
-            {paged.map((t) => (
-              <tr key={t.id} className="hover:bg-[#111] transition-colors">
-                <td className="px-4 py-3 text-sm text-white">{formatDate(t.created_at)}</td>
-                <td className="px-4 py-3">{txTypeBadge(t.transaction_type)}</td>
-                <td className={`px-4 py-3 text-sm font-medium ${t.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {t.amount >= 0 ? '+' : ''}{t.amount}
-                </td>
-                <td className="px-4 py-3 text-sm text-[#808080] max-w-[200px] truncate">{t.description || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <PaginationFooter page={page} totalPages={totalPages} total={total} onPage={setPage} />
-    </div>
-  );
+  return next;
 }
 
 function BadgesGrid({ badges }: { badges: MemberBadge[] }) {
@@ -260,42 +236,6 @@ function BadgesGrid({ badges }: { badges: MemberBadge[] }) {
           <p className="text-[10px] text-[#808080] mt-0.5">{formatDate(b.earned_at)}</p>
         </div>
       ))}
-    </div>
-  );
-}
-
-function RedemptionsTable({ redemptions }: { redemptions: MemberRedemption[] }) {
-  const { paged, page, totalPages, total, setPage } = usePagination(redemptions);
-  if (redemptions.length === 0) {
-    return <p className="text-sm text-[#808080] text-center py-6">No redemptions</p>;
-  }
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[#1A1A1A]">
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Date</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Reward</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Drops</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Status</th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-[#808080] uppercase">Code</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#1A1A1A]">
-            {paged.map((r) => (
-              <tr key={r.id} className="hover:bg-[#111] transition-colors">
-                <td className="px-4 py-3 text-sm text-white">{formatDate(r.created_at)}</td>
-                <td className="px-4 py-3 text-sm text-white">{r.reward_name}</td>
-                <td className="px-4 py-3 text-sm text-rose-400">-{r.drops_spent}</td>
-                <td className="px-4 py-3">{redemptionStatusBadge(r.status)}</td>
-                <td className="px-4 py-3 text-sm text-[#808080] font-mono">{r.redemption_code || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <PaginationFooter page={page} totalPages={totalPages} total={total} onPage={setPage} />
     </div>
   );
 }
@@ -401,12 +341,64 @@ export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [localIdentity, setLocalIdentity] = useState<MemberIdentityInfo | null>(identity);
 
+  const [sessQuery, setSessQuery] = useState<DataTableQuery>({ page: 1, limit: MEMBER_DETAIL_PAGE_SIZE });
+  const [txQuery, setTxQuery] = useState<DataTableQuery>({ page: 1, limit: MEMBER_DETAIL_PAGE_SIZE });
+  const [redQuery, setRedQuery] = useState<DataTableQuery>({ page: 1, limit: MEMBER_DETAIL_PAGE_SIZE });
+
+  useEffect(() => {
+    setSessQuery({ page: 1, limit: MEMBER_DETAIL_PAGE_SIZE });
+    setTxQuery({ page: 1, limit: MEMBER_DETAIL_PAGE_SIZE });
+    setRedQuery({ page: 1, limit: MEMBER_DETAIL_PAGE_SIZE });
+  }, [member.id]);
+
+  const handleSessQuery = useCallback((u: DataTableQuery) => {
+    setSessQuery((prev) => mergeMemberTableQuery(prev, u));
+  }, []);
+
+  const handleTxQuery = useCallback((u: DataTableQuery) => {
+    setTxQuery((prev) => mergeMemberTableQuery(prev, u));
+  }, []);
+
+  const handleRedQuery = useCallback((u: DataTableQuery) => {
+    setRedQuery((prev) => mergeMemberTableQuery(prev, u));
+  }, []);
+
+  const sessLimit = sessQuery.limit ?? MEMBER_DETAIL_PAGE_SIZE;
+  const sessTotal = sessions.length;
+  const sessTotalPages = Math.max(1, Math.ceil(sessTotal / sessLimit));
+  const sessPage = Math.min(sessQuery.page ?? 1, sessTotalPages);
+  const sessOffset = (sessPage - 1) * sessLimit;
+  const sessRows = useMemo(
+    () => sessions.slice(sessOffset, sessOffset + sessLimit),
+    [sessions, sessOffset, sessLimit],
+  );
+
+  const txLimit = txQuery.limit ?? MEMBER_DETAIL_PAGE_SIZE;
+  const txTotal = transactions.length;
+  const txTotalPages = Math.max(1, Math.ceil(txTotal / txLimit));
+  const txPage = Math.min(txQuery.page ?? 1, txTotalPages);
+  const txOffset = (txPage - 1) * txLimit;
+  const txRows = useMemo(
+    () => transactions.slice(txOffset, txOffset + txLimit),
+    [transactions, txOffset, txLimit],
+  );
+
+  const redLimit = redQuery.limit ?? MEMBER_DETAIL_PAGE_SIZE;
+  const redTotal = redemptions.length;
+  const redTotalPages = Math.max(1, Math.ceil(redTotal / redLimit));
+  const redPage = Math.min(redQuery.page ?? 1, redTotalPages);
+  const redOffset = (redPage - 1) * redLimit;
+  const redRows = useMemo(
+    () => redemptions.slice(redOffset, redOffset + redLimit),
+    [redemptions, redOffset, redLimit],
+  );
+
   const handleVerified = () => {
     setLocalIdentity((prev) => (prev ? { ...prev, isVerified: true } : { isVerified: true, fullNameVerified: null, externalMembershipId: null, verifiedByName: null, verifiedAt: new Date().toISOString(), notes: null }));
   };
 
   return (
-    <div className="min-h-screen p-6 md:p-10 max-w-6xl mx-auto">
+    <div className="w-full">
       {/* Back link */}
       <Link
         href={`/dashboard/gym/${gymId}/members`}
@@ -475,16 +467,40 @@ export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
         )}
       </div>
 
-      {/* Activity — with pagination */}
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6 mb-6">
+      {/* Activity — DataTable pagination (same as Members directory) */}
+      <div className="mb-6">
         <SectionHeader icon={Activity} title="Recent Sessions" count={sessions.length} />
-        <SessionsTable sessions={sessions} />
+        <DataTable<MemberSession>
+          hideToolbar
+          data={sessRows}
+          columns={SESSION_COLUMNS}
+          total={sessTotal}
+          page={sessPage}
+          limit={sessLimit}
+          totalPages={sessTotalPages}
+          emptyTitle="No sessions recorded"
+          emptyDescription="Workout sessions will appear here after check-in."
+          onQueryChange={handleSessQuery}
+          rowKey={(r) => r.id}
+        />
       </div>
 
-      {/* Drops History — with pagination */}
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6 mb-6">
+      {/* Drops History */}
+      <div className="mb-6">
         <SectionHeader icon={Droplet} title="Drops History" count={transactions.length} />
-        <TransactionsTable transactions={transactions} />
+        <DataTable<MemberTransaction>
+          hideToolbar
+          data={txRows}
+          columns={TRANSACTION_COLUMNS}
+          total={txTotal}
+          page={txPage}
+          limit={txLimit}
+          totalPages={txTotalPages}
+          emptyTitle="No transactions recorded"
+          emptyDescription="Wallet credits and debits will show up here."
+          onQueryChange={handleTxQuery}
+          rowKey={(r) => r.id}
+        />
       </div>
 
       {/* Badges */}
@@ -493,10 +509,22 @@ export function MemberDetailView({ gymId, data }: MemberDetailViewProps) {
         <BadgesGrid badges={badges} />
       </div>
 
-      {/* Redemptions — with pagination */}
-      <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-6">
+      {/* Redemptions */}
+      <div className="mb-6">
         <SectionHeader icon={ShoppingBag} title="Redemptions" count={redemptions.length} />
-        <RedemptionsTable redemptions={redemptions} />
+        <DataTable<MemberRedemption>
+          hideToolbar
+          data={redRows}
+          columns={REDEMPTION_COLUMNS}
+          total={redTotal}
+          page={redPage}
+          limit={redLimit}
+          totalPages={redTotalPages}
+          emptyTitle="No redemptions"
+          emptyDescription="Reward redemptions will appear here."
+          onQueryChange={handleRedQuery}
+          rowKey={(r) => r.id}
+        />
       </div>
 
       {/* Identity verify drawer */}
