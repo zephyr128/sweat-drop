@@ -7,26 +7,10 @@ import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 type ConfirmState = 'loading' | 'success' | 'error';
 type OtpType = EmailOtpType;
 
-function isAndroid(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /android/i.test(navigator.userAgent);
-}
-
-function buildAndroidIntent(path: string, params?: string): string {
-  const query = params ? `?${params}` : '';
-  return `intent://${path}${query}#Intent;scheme=sweatdrop;package=com.sweatdrop.app;S.browser_fallback_url=${encodeURIComponent('https://sweat-drop.com')};end`;
-}
-
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null, type: string = 'signup'): string {
   if (accessToken && refreshToken) {
     const params = `access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=${encodeURIComponent(type)}`;
-    if (isAndroid()) {
-      return buildAndroidIntent('auth/confirm', params);
-    }
     return `sweatdrop://auth/confirm?${params}`;
-  }
-  if (isAndroid()) {
-    return buildAndroidIntent('auth/confirm');
   }
   return 'sweatdrop://';
 }

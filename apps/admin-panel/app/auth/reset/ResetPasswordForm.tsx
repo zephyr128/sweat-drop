@@ -48,16 +48,12 @@ export default function ResetPasswordForm() {
       setSuccess(true);
 
       if (accessToken && refreshToken) {
-        const params =
-          `access_token=${encodeURIComponent(accessToken)}` +
+        const deepLink =
+          `sweatdrop://auth/confirm` +
+          `?access_token=${encodeURIComponent(accessToken)}` +
           `&refresh_token=${encodeURIComponent(refreshToken)}` +
           `&type=recovery` +
           `&password_updated=1`;
-
-        const isAndroid = /android/i.test(navigator.userAgent);
-        const deepLink = isAndroid
-          ? `intent://auth/confirm?${params}#Intent;scheme=sweatdrop;package=com.sweatdrop.app;S.browser_fallback_url=${encodeURIComponent('https://sweat-drop.com')};end`
-          : `sweatdrop://auth/confirm?${params}`;
 
         setTimeout(() => {
           window.location.href = deepLink;
@@ -160,16 +156,12 @@ function SuccessState() {
       const at = data.session?.access_token;
       const rt = data.session?.refresh_token;
       if (at && rt) {
-        const params =
-          `access_token=${encodeURIComponent(at)}` +
+        window.location.href =
+          `sweatdrop://auth/confirm` +
+          `?access_token=${encodeURIComponent(at)}` +
           `&refresh_token=${encodeURIComponent(rt)}` +
           `&type=recovery` +
           `&password_updated=1`;
-
-        const isAndroid = /android/i.test(navigator.userAgent);
-        window.location.href = isAndroid
-          ? `intent://auth/confirm?${params}#Intent;scheme=sweatdrop;package=com.sweatdrop.app;S.browser_fallback_url=${encodeURIComponent('https://sweat-drop.com')};end`
-          : `sweatdrop://auth/confirm?${params}`;
       }
     });
   };

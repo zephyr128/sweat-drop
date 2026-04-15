@@ -5,26 +5,10 @@ import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
 type ResetState = 'loading' | 'form' | 'success' | 'error';
 
-function isAndroid(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /android/i.test(navigator.userAgent);
-}
-
-function buildAndroidIntent(path: string, params?: string): string {
-  const query = params ? `?${params}` : '';
-  return `intent://${path}${query}#Intent;scheme=sweatdrop;package=com.sweatdrop.app;S.browser_fallback_url=${encodeURIComponent('https://sweat-drop.com')};end`;
-}
-
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null): string {
   if (accessToken && refreshToken) {
     const params = `access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&type=recovery&password_updated=1`;
-    if (isAndroid()) {
-      return buildAndroidIntent('auth/confirm', params);
-    }
     return `sweatdrop://auth/confirm?${params}`;
-  }
-  if (isAndroid()) {
-    return buildAndroidIntent('auth/confirm');
   }
   return 'sweatdrop://';
 }
@@ -287,7 +271,7 @@ export default function PasswordResetPage() {
             <p className="text-gray-400 text-base leading-relaxed mb-8">{errorMessage}</p>
 
             <button
-              onClick={() => { window.location.href = isAndroid() ? buildAndroidIntent('') : 'sweatdrop://'; }}
+              onClick={() => { window.location.href = 'sweatdrop://'; }}
               className="w-full py-4 rounded-full bg-white/10 text-white font-bold text-lg tracking-wide uppercase transition-all hover:bg-white/15 active:scale-[0.98] border border-white/10"
               style={{ fontFamily: 'var(--font-display), sans-serif' }}
             >
