@@ -5,21 +5,19 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Modal,
-  KeyboardAvoidingView,
   Platform,
-  Pressable,
   ActivityIndicator,
   Keyboard,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
-import { PlatformBlur } from '@/components/PlatformBlur';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
-import { useSession } from '@/hooks/useSession';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import { log } from '@/lib/logger';
+import { BottomSheet } from '@/components/BottomSheet';
 
 interface WaitlistBottomSheetProps {
   visible: boolean;
@@ -31,7 +29,6 @@ type SheetState = 'form' | 'submitting' | 'success' | 'already' | 'error';
 
 export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.colors.primary }: WaitlistBottomSheetProps) {
   const { t } = useTranslation('onboarding');
-  const { session } = useSession();
   const [gymName, setGymName] = useState('');
   const [city, setCity] = useState('');
   const [notes, setNotes] = useState('');
@@ -44,7 +41,7 @@ export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.color
     setState('form');
   }, []);
 
-  const handleClose = useCallback(() => {
+  const handleSheetDismissed = useCallback(() => {
     onClose();
     setTimeout(resetForm, 300);
   }, [onClose, resetForm]);
@@ -52,7 +49,6 @@ export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.color
   const handleSubmit = useCallback(async () => {
     if (!gymName.trim()) return;
 
-    // Re-fetch the session right before insert to ensure we have a valid auth token
     const { data: { session: freshSession } } = await supabase.auth.getSession();
     const userId = freshSession?.user?.id;
     if (!userId) {
@@ -92,176 +88,133 @@ export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.color
     }
   }, [gymName, city, notes]);
 
-  if (!visible) return null;
-
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={handleClose}>
+    <BottomSheet visible={visible} onClose={handleSheetDismissed} accentColor={brandColor}>
       <KeyboardAvoidingView
-        style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.kav}
       >
-        <Pressable style={styles.backdrop} onPress={Keyboard.dismiss} />
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {state === 'form' && (
+            <Animated.View entering={FadeIn.duration(300)} style={styles.content}>
+              <View style={[styles.iconCircle, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
+                <Ionicons name="business-outline" size={28} color={brandColor} />
+              </View>
+              <Text style={styles.title}>{t('homeGym.suggestGym')}</Text>
+              <Text style={styles.subtitle}>{t('homeGym.suggestGymSub')}</Text>
 
-        <Animated.View entering={FadeInDown.duration(350)} exiting={FadeOut.duration(200)} style={styles.sheet}>
-          <PlatformBlur intensity={60} tint="dark" style={styles.sheetBlur} androidColor="rgba(14,16,26,0.98)">
-            {/* Handle bar */}
-            <View style={styles.handleBar} />
+              <View style={styles.fields}>
+                <TextInput
+                  style={[styles.input, { borderColor: hexToRgba(brandColor, 0.2) }]}
+                  placeholder={t('homeGym.gymNamePlaceholder')}
+                  placeholderTextColor={theme.colors.textTertiary}
+                  value={gymName}
+                  onChangeText={setGymName}
+                  autoCapitalize="words"
+                  returnKeyType="next"
+                />
+                <TextInput
+                  style={[styles.input, { borderColor: hexToRgba(brandColor, 0.2) }]}
+                  placeholder={t('homeGym.cityPlaceholder')}
+                  placeholderTextColor={theme.colors.textTertiary}
+                  value={city}
+                  onChangeText={setCity}
+                  autoCapitalize="words"
+                  returnKeyType="next"
+                />
+                <TextInput
+                  style={[styles.input, styles.textArea, { borderColor: hexToRgba(brandColor, 0.2) }]}
+                  placeholder={t('homeGym.notesPlaceholder')}
+                  placeholderTextColor={theme.colors.textTertiary}
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
 
-            {/* Close button */}
-            <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.7}>
-              <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: brandColor, opacity: gymName.trim() ? 1 : 0.5 }]}
+                onPress={handleSubmit}
+                activeOpacity={0.85}
+                disabled={!gymName.trim()}
+              >
+                <Ionicons name="send" size={18} color="#000" />
+                <Text style={styles.submitBtnText}>{t('homeGym.submitSuggestion')}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
 
-            {state === 'form' && (
-              <Animated.View entering={FadeIn.duration(300)} style={styles.content}>
-                <View style={[styles.iconCircle, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
-                  <Ionicons name="business-outline" size={28} color={brandColor} />
-                </View>
-                <Text style={styles.title}>{t('homeGym.suggestGym')}</Text>
-                <Text style={styles.subtitle}>{t('homeGym.suggestGymSub')}</Text>
+          {state === 'submitting' && (
+            <Animated.View entering={FadeIn.duration(200)} style={styles.centerState}>
+              <ActivityIndicator size="large" color={brandColor} />
+            </Animated.View>
+          )}
 
-                <View style={styles.fields}>
-                  <TextInput
-                    style={[styles.input, { borderColor: hexToRgba(brandColor, 0.2) }]}
-                    placeholder={t('homeGym.gymNamePlaceholder')}
-                    placeholderTextColor={theme.colors.textTertiary}
-                    value={gymName}
-                    onChangeText={setGymName}
-                    autoCapitalize="words"
-                    returnKeyType="next"
-                  />
-                  <TextInput
-                    style={[styles.input, { borderColor: hexToRgba(brandColor, 0.2) }]}
-                    placeholder={t('homeGym.cityPlaceholder')}
-                    placeholderTextColor={theme.colors.textTertiary}
-                    value={city}
-                    onChangeText={setCity}
-                    autoCapitalize="words"
-                    returnKeyType="next"
-                  />
-                  <TextInput
-                    style={[styles.input, styles.textArea, { borderColor: hexToRgba(brandColor, 0.2) }]}
-                    placeholder={t('homeGym.notesPlaceholder')}
-                    placeholderTextColor={theme.colors.textTertiary}
-                    value={notes}
-                    onChangeText={setNotes}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                  />
-                </View>
+          {state === 'success' && (
+            <Animated.View entering={FadeIn.duration(300)} style={styles.centerState}>
+              <View style={[styles.successCircle, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
+                <Ionicons name="checkmark-circle" size={48} color={brandColor} />
+              </View>
+              <Text style={styles.successTitle}>{t('homeGym.thankYou')}</Text>
+              <Text style={styles.successSub}>{t('homeGym.thankYouSub')}</Text>
+              <TouchableOpacity style={styles.doneBtn} onPress={handleSheetDismissed} activeOpacity={0.7}>
+                <Text style={[styles.doneBtnText, { color: brandColor }]}>{t('homeGym.done')}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
 
-                <TouchableOpacity
-                  style={[styles.submitBtn, { backgroundColor: brandColor, opacity: gymName.trim() ? 1 : 0.5 }]}
-                  onPress={handleSubmit}
-                  activeOpacity={0.85}
-                  disabled={!gymName.trim()}
-                >
-                  <Ionicons name="send" size={18} color="#000" />
-                  <Text style={styles.submitBtnText}>{t('homeGym.submitSuggestion')}</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
+          {state === 'already' && (
+            <Animated.View entering={FadeIn.duration(300)} style={styles.centerState}>
+              <View style={[styles.successCircle, { backgroundColor: 'rgba(255, 193, 7, 0.12)' }]}>
+                <Ionicons name="information-circle" size={48} color="#FFC107" />
+              </View>
+              <Text style={styles.successTitle}>{t('homeGym.alreadySuggested')}</Text>
+              <Text style={styles.successSub}>{t('homeGym.alreadySuggestedSub')}</Text>
+              <TouchableOpacity style={styles.doneBtn} onPress={handleSheetDismissed} activeOpacity={0.7}>
+                <Text style={[styles.doneBtnText, { color: brandColor }]}>{t('homeGym.done')}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
 
-            {state === 'submitting' && (
-              <Animated.View entering={FadeIn.duration(200)} style={styles.centerState}>
-                <ActivityIndicator size="large" color={brandColor} />
-              </Animated.View>
-            )}
-
-            {state === 'success' && (
-              <Animated.View entering={FadeIn.duration(300)} style={styles.centerState}>
-                <View style={[styles.successCircle, { backgroundColor: hexToRgba(brandColor, 0.12) }]}>
-                  <Ionicons name="checkmark-circle" size={48} color={brandColor} />
-                </View>
-                <Text style={styles.successTitle}>{t('homeGym.thankYou')}</Text>
-                <Text style={styles.successSub}>{t('homeGym.thankYouSub')}</Text>
-                <TouchableOpacity style={styles.doneBtn} onPress={handleClose} activeOpacity={0.7}>
-                  <Text style={[styles.doneBtnText, { color: brandColor }]}>{t('homeGym.done')}</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-
-            {state === 'already' && (
-              <Animated.View entering={FadeIn.duration(300)} style={styles.centerState}>
-                <View style={[styles.successCircle, { backgroundColor: 'rgba(255, 193, 7, 0.12)' }]}>
-                  <Ionicons name="information-circle" size={48} color="#FFC107" />
-                </View>
-                <Text style={styles.successTitle}>{t('homeGym.alreadySuggested')}</Text>
-                <Text style={styles.successSub}>{t('homeGym.alreadySuggestedSub')}</Text>
-                <TouchableOpacity style={styles.doneBtn} onPress={handleClose} activeOpacity={0.7}>
-                  <Text style={[styles.doneBtnText, { color: brandColor }]}>{t('homeGym.done')}</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-
-            {state === 'error' && (
-              <Animated.View entering={FadeIn.duration(300)} style={styles.centerState}>
-                <View style={[styles.successCircle, { backgroundColor: 'rgba(255, 82, 82, 0.12)' }]}>
-                  <Ionicons name="alert-circle" size={48} color={theme.colors.error} />
-                </View>
-                <Text style={styles.successTitle}>{t('homeGym.submitError')}</Text>
-                <TouchableOpacity
-                  style={[styles.submitBtn, { backgroundColor: brandColor, marginTop: 16 }]}
-                  onPress={() => setState('form')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.submitBtnText}>{t('homeGym.tryAgain')}</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-          </PlatformBlur>
-        </Animated.View>
+          {state === 'error' && (
+            <Animated.View entering={FadeIn.duration(300)} style={styles.centerState}>
+              <View style={[styles.successCircle, { backgroundColor: 'rgba(255, 82, 82, 0.12)' }]}>
+                <Ionicons name="alert-circle" size={48} color={theme.colors.error} />
+              </View>
+              <Text style={styles.successTitle}>{t('homeGym.submitError')}</Text>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: brandColor, marginTop: 16 }]}
+                onPress={() => setState('form')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.submitBtnText}>{t('homeGym.tryAgain')}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </ScrollView>
       </KeyboardAvoidingView>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
+  kav: {
+    width: '100%',
   },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    maxHeight: '85%',
-  },
-  sheetBlur: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    backgroundColor: 'rgba(18, 18, 28, 0.92)',
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-  },
-  handleBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: 12,
-    right: 16,
-    zIndex: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  scrollContent: {
+    paddingHorizontal: 20,
+    // Bottom safe area comes from `BottomSheet` wrapper padding
+    paddingBottom: 12,
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingTop: 4,
     alignItems: 'center',
   },
   iconCircle: {
@@ -322,11 +275,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   centerState: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 16,
     paddingBottom: 8,
     alignItems: 'center',
-    minHeight: 220,
+    minHeight: 200,
     justifyContent: 'center',
   },
   successCircle: {

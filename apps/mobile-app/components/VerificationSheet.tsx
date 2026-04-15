@@ -22,6 +22,7 @@ import Animated, {
   Extrapolate,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -40,6 +41,8 @@ interface VerificationSheetProps {
 export function VerificationSheet({ visible, onClose, brandColor = theme.colors.primary }: VerificationSheetProps) {
   const { t } = useTranslation('profile');
   const { t: tCommon } = useTranslation('common');
+  const insets = useSafeAreaInsets();
+  const sheetBottomPad = Math.max(insets.bottom, 16) + 8;
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -125,7 +128,12 @@ export function VerificationSheet({ visible, onClose, brandColor = theme.colors.
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
           <View style={[styles.sheet, { borderColor: hexToRgba(brandColor, 0.20) }]}>
-            <PlatformBlur intensity={55} tint="dark" style={styles.blurContainer} androidColor="rgba(12,15,24,0.98)">
+            <PlatformBlur
+              intensity={55}
+              tint="dark"
+              style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+              androidColor="rgba(12,15,24,0.98)"
+            >
               <LinearGradient
                 colors={['rgba(255,255,255,0.10)', hexToRgba(brandColor, 0.06), 'rgba(12,12,22,0.0)']}
                 start={{ x: 0, y: 0 }}
@@ -218,7 +226,6 @@ const styles = StyleSheet.create({
   blurContainer: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 44,
     alignItems: 'center',
     gap: 20,
   },

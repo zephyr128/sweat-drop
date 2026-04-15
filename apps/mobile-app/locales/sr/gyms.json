@@ -6,5 +6,7 @@
   "set_home_confirm": "Postavi",
   "no_gyms": "Nema dostupnih teretana.",
   "load_failed": "Učitavanje teretana nije uspelo.",
-  "retry": "Pokušaj ponovo"
+  "retry": "Pokušaj ponovo",
+  "suggestGymTitle": "Predloži teretanu",
+  "suggestGymSub": "Napiši koju teretanu želiš na SweatDrop-u i potrudićemo se da je dodamo."
 }

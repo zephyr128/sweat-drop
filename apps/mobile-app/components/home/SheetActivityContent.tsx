@@ -95,6 +95,7 @@ export const SheetActivityContent = React.memo(function SheetActivityContent({
         weeklyCap={dropLimits.maxDropsPerWeek}
         primaryColor={branding.primary}
         isCheckedIn={checkinStatus?.already_checked_in ?? false}
+        checkinRewardDrops={checkinStatus?.checkin_drops}
         gymName={gymName}
         onCheckinPress={onCheckinPress}
         nextRewardName={homeStats.closestReward?.name ?? null}

@@ -647,7 +647,7 @@ export default function WorkoutSimScreen() {
   // ── Loading state ─────────────────────────────────────────────────────────
   if (sessionLoading) {
     return (
-      <SafeAreaView style={workoutStyles.container} edges={['top']}>
+      <SafeAreaView style={workoutStyles.container} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" color={branding.primary} style={{ flex: 1 }} />
       </SafeAreaView>
     );
@@ -655,7 +655,7 @@ export default function WorkoutSimScreen() {
 
   // ── Main render ────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={workoutStyles.container} edges={['top']}>
+    <SafeAreaView style={workoutStyles.container} edges={['top', 'bottom']}>
       {/* Background — matches workout.tsx */}
       {activeGym?.background_url && (
         <Image

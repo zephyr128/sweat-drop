@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { Gym } from '@/lib/stores/useGymStore';
-import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
+import { SuggestGymCardWithSheet } from '@/components/SuggestGymCardWithSheet';
 import { log } from '@/lib/logger';
 
 // ── Inline gym card designed for the home-gym picker ─────────────────────────
@@ -103,7 +103,6 @@ function HomeGymPickerCard({
 export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showWaitlist, setShowWaitlist] = useState(false);
   const router = useRouter();
   const { theme: currentTheme } = useTheme();
   const { t } = useTranslation('onboarding');
@@ -219,21 +218,11 @@ export default function HomeGymScreen() {
         </View>
 
         {/* Suggest Your Gym */}
-        <Animated.View entering={FadeInDown.delay(120 + gyms.length * 70).duration(380)}>
-          <TouchableOpacity
-            style={styles.suggestCard}
-            onPress={() => setShowWaitlist(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add-circle-outline" size={20} color={currentTheme.colors.primary} />
-            <View style={styles.suggestText}>
-              <Text style={[styles.suggestTitle, { color: theme.colors.textSecondary }]}>
-                {t('homeGym.comingSoon')}
-              </Text>
-              <Text style={styles.suggestSub}>{t('homeGym.comingSoonSub')}</Text>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
+        <SuggestGymCardWithSheet
+          variant="onboarding"
+          brandColor={currentTheme.colors.primary}
+          fadeInDelay={120 + gyms.length * 70}
+        />
 
         {/* Skip */}
         <Animated.View
@@ -250,11 +239,6 @@ export default function HomeGymScreen() {
         </Animated.View>
       </ScrollView>
 
-      <WaitlistBottomSheet
-        visible={showWaitlist}
-        onClose={() => setShowWaitlist(false)}
-        brandColor={currentTheme.colors.primary}
-      />
     </SafeAreaView>
   );
 }
@@ -387,36 +371,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-
-  // ── Suggest card ──
-  suggestCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderStyle: 'dashed',
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    marginBottom: 8,
-  },
-  suggestText: {
-    flex: 1,
-    gap: 2,
-  },
-  suggestTitle: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 14,
-    letterSpacing: 0.2,
-  },
-  suggestSub: {
-    ...fontStyles.body,
-    fontSize: 12,
-    color: theme.colors.textTertiary,
-    letterSpacing: 0.2,
-    lineHeight: 18,
   },
 
   // ── Skip ──

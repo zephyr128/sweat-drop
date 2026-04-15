@@ -138,7 +138,8 @@
   "cards": {
     "checkedIn": "Checked in",
     "checkIn": "Check in",
-    "checkInDrops": "+5 drops",
+    "checkInDrops": "+{{count}} drops",
+    "checkInScanHint": "Bonus when you scan",
     "dailyGoal": "DAILY GOAL",
     "kcalToday": "Drops earned today",
     "totalToday": "total today",

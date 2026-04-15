@@ -2,7 +2,6 @@ import React, { useCallback, useEffect } from 'react';
 import {
   Dimensions,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,6 +23,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -66,6 +66,8 @@ export function LeaderboardInfoSheet({
   period,
 }: LeaderboardInfoSheetProps) {
   const { t } = useTranslation('leaderboard');
+  const insets = useSafeAreaInsets();
+  const sheetBottomPad = Math.max(insets.bottom, 16);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -164,7 +166,12 @@ export function LeaderboardInfoSheet({
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
             <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.25) }]}>
-              <PlatformBlur intensity={60} tint="dark" style={styles.blurContainer} androidColor="rgba(12,15,24,0.98)">
+              <PlatformBlur
+                intensity={60}
+                tint="dark"
+                style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+                androidColor="rgba(12,15,24,0.98)"
+              >
                 <LinearGradient
                   colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
                   start={{ x: 0, y: 0 }}
@@ -365,7 +372,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     backgroundColor: 'rgba(14, 14, 24, 0.9)',
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   handle: {
     width: 36,

@@ -44,6 +44,7 @@ module.exports = {
         UIBackgroundModes: ['bluetooth-central'],
         CFBundleLocalizations: ['en', 'sr'],
         CFBundleDevelopmentRegion: 'en',
+        LSApplicationQueriesSchemes: ['comgooglemaps', 'waze'],
       },
     },
     android: {

@@ -19,7 +19,6 @@ import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
-import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -175,8 +174,6 @@ export default function ChallengeDetailScreen() {
   const router = useRouter();
   const { challengeId, gymId } = useLocalSearchParams<{ challengeId: string; gymId?: string }>();
   const { session } = useSession();
-  const branding = useBranding();
-
   const [challenge, setChallenge] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -197,7 +194,7 @@ export default function ChallengeDetailScreen() {
     try {
       // Load challenge metadata directly so description/machine_type are always available,
       // even if the progress RPC omits those columns.
-      const { data: challengeMeta, error: challengeMetaError } = await supabase
+      const challengeMetaQuery = supabase
         .from('gym_challenges')
         .select(`
           id,
@@ -215,8 +212,13 @@ export default function ChallengeDetailScreen() {
           end_date,
           badge_image_url
         `)
-        .eq('id', challengeId)
-        .maybeSingle();
+        .eq('id', challengeId);
+
+      if (gymId) {
+        challengeMetaQuery.eq('gym_id', gymId);
+      }
+
+      const { data: challengeMeta, error: challengeMetaError } = await challengeMetaQuery.maybeSingle();
 
       if (challengeMetaError) {
         log.warn('[ChallengeDetail] Failed to load challenge metadata:', challengeMetaError.message);
@@ -271,7 +273,7 @@ export default function ChallengeDetailScreen() {
         <LinearGradient colors={['#000000', '#0A0E1A', '#000000']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFillObject} />
         <ScreenHeader title={t('challengeDetails')} insetHandled />
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={branding.primary} />
+          <ActivityIndicator size="large" color={ORANGE} />
         </View>
       </SafeAreaView>
     );
@@ -351,10 +353,13 @@ export default function ChallengeDetailScreen() {
               />
 
               <View style={styles.heroContent}>
-                {/* Badge image / placeholder */}
-                <Animated.View entering={ZoomIn.delay(180).duration(350)}>
+                {/* Badge — elevated tile */}
+                <Animated.View
+                  entering={ZoomIn.delay(180).duration(350)}
+                  style={[styles.badgeShadowWrap, { shadowColor: hexToRgba(ORANGE, 0.45) }]}
+                >
                   {challenge.badge_image_url ? (
-                    <View style={[styles.badgeWrap, { borderColor: isCompleted ? 'rgba(74,222,128,0.4)' : hexToRgba(ORANGE, 0.4) }]}>
+                    <View style={[styles.badgeWrap, { borderColor: isCompleted ? 'rgba(74,222,128,0.45)' : hexToRgba(ORANGE, 0.38) }]}>
                       <Image
                         source={challenge.badge_image_url}
                         style={styles.badgeImage}
@@ -368,39 +373,39 @@ export default function ChallengeDetailScreen() {
                       )}
                     </View>
                   ) : (
-                    <View style={[styles.badgeWrap, styles.badgePlaceholder, { borderColor: hexToRgba(ORANGE, 0.3), backgroundColor: hexToRgba(ORANGE, 0.08) }]}>
-                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={36} color={ORANGE} />
+                    <View style={[styles.badgeWrap, styles.badgePlaceholder, { borderColor: hexToRgba(ORANGE, 0.32), backgroundColor: hexToRgba(ORANGE, 0.09) }]}>
+                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={38} color={ORANGE} />
                     </View>
                   )}
                 </Animated.View>
 
-                {/* Title block */}
                 <View style={styles.heroMeta}>
-                  <View style={styles.heroTopRow}>
-                    <View style={[styles.typeBadge, { backgroundColor: hexToRgba(ORANGE, 0.1), borderColor: hexToRgba(ORANGE, 0.25) }]}>
-                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={11} color={ORANGE} />
-                      <Text style={[styles.typeBadgeText, { color: ORANGE }]}>{typeLabel}</Text>
+                  <View style={styles.heroChipsRow}>
+                    <View style={[styles.typeBadge, { backgroundColor: hexToRgba(ORANGE, 0.11), borderColor: hexToRgba(ORANGE, 0.28) }]}>
+                      <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={12} color={ORANGE} />
+                      <Text style={[styles.typeBadgeText, { color: ORANGE }]} numberOfLines={1}>{typeLabel}</Text>
                     </View>
 
-                    {timeInfo && (
+                    {timeInfo ? (
                       <View style={[
                         styles.timePill,
-                        timeInfo.style === 'completed' && { backgroundColor: 'rgba(74,222,128,0.1)' },
-                        timeInfo.style === 'recurring' && { backgroundColor: 'rgba(96,165,250,0.1)' },
+                        timeInfo.style === 'completed' && { backgroundColor: 'rgba(74,222,128,0.12)', borderColor: 'rgba(74,222,128,0.28)' },
+                        timeInfo.style === 'recurring' && { backgroundColor: 'rgba(96,165,250,0.1)', borderColor: 'rgba(96,165,250,0.22)' },
+                        timeInfo.style !== 'completed' && timeInfo.style !== 'recurring' && { borderColor: 'rgba(255,255,255,0.1)' },
                       ]}>
                         <Ionicons
                           name={timeInfo.style === 'completed' ? 'checkmark-circle' : timeInfo.style === 'permanent' ? 'infinite' : timeInfo.style === 'recurring' ? 'refresh' : 'time-outline'}
-                          size={10}
+                          size={11}
                           color={timeInfo.style === 'completed' ? '#4ade80' : theme.colors.textSecondary}
                         />
-                        <Text style={[styles.timePillText, timeInfo.style === 'completed' && { color: '#4ade80' }]}>
+                        <Text style={[styles.timePillText, timeInfo.style === 'completed' && { color: '#4ade80' }]} numberOfLines={1}>
                           {timeInfo.text}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </View>
 
-                  <Text style={styles.heroTitle}>{challenge.name}</Text>
+                  <Text style={styles.heroTitle} numberOfLines={3}>{challenge.name}</Text>
 
                   {challenge.description ? (
                     <Text style={styles.heroDescription}>{challenge.description}</Text>
@@ -408,15 +413,32 @@ export default function ChallengeDetailScreen() {
                 </View>
               </View>
 
-              {/* Info pills row */}
-              <View style={styles.pillsRow}>
-                <View style={[styles.infoPill, { backgroundColor: hexToRgba(ORANGE, 0.08), borderColor: hexToRgba(ORANGE, 0.15) }]}>
-                  <Ionicons name="trophy-outline" size={13} color={ORANGE} />
-                  <Text style={[styles.infoPillText, { color: theme.colors.text }]}>{t('needed', { count: target, unit })}</Text>
+              <View style={styles.heroDivider} />
+
+              {/* Goal + reward — equal-width stat tiles */}
+              <View style={styles.heroStatsRow}>
+                <View style={[styles.statTile, { borderColor: hexToRgba(ORANGE, 0.2), backgroundColor: 'rgba(255,255,255,0.035)' }]}>
+                  <View style={styles.statTileHeader}>
+                    <View style={[styles.statTileIconBg, { backgroundColor: hexToRgba(ORANGE, 0.14) }]}>
+                      <Ionicons name="trophy-outline" size={16} color={ORANGE} />
+                    </View>
+                    <Text style={styles.statTileCaption}>{t('heroStatGoal')}</Text>
+                  </View>
+                  <Text style={[styles.statTileValue, { color: theme.colors.text }]} numberOfLines={2}>
+                    {target} {unit}
+                  </Text>
                 </View>
-                <View style={[styles.infoPill, { backgroundColor: hexToRgba(ORANGE, 0.08), borderColor: hexToRgba(ORANGE, 0.15) }]}>
-                  <Ionicons name="water" size={13} color={ORANGE} />
-                  <Text style={[styles.infoPillText, { color: theme.colors.text }]}>{t('dropsReward', { count: rewardDrops })}</Text>
+
+                <View style={[styles.statTile, { borderColor: hexToRgba(ORANGE, 0.2), backgroundColor: 'rgba(255,255,255,0.035)' }]}>
+                  <View style={styles.statTileHeader}>
+                    <View style={[styles.statTileIconBg, { backgroundColor: hexToRgba(ORANGE, 0.14) }]}>
+                      <Ionicons name="water" size={16} color={ORANGE} />
+                    </View>
+                    <Text style={styles.statTileCaption}>{t('heroStatReward')}</Text>
+                  </View>
+                  <Text style={[styles.statTileValue, { color: theme.colors.text }]} numberOfLines={2}>
+                    {t('heroStatRewardValue', { count: rewardDrops })}
+                  </Text>
                 </View>
               </View>
             </PlatformBlur>
@@ -572,7 +594,7 @@ const styles = StyleSheet.create({
   },
   /* Hero card */
   heroCard: {
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
     borderTopWidth: 1,
     borderLeftWidth: 1,
@@ -580,20 +602,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   heroBlur: {
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    padding: theme.spacing.xl,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
     backgroundColor: 'rgba(16, 16, 28, 0.82)',
   },
   heroContent: {
     flexDirection: 'row',
-    gap: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
+    alignItems: 'flex-start',
+    gap: 18,
+    marginBottom: 4,
+  },
+  badgeShadowWrap: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
   },
   badgeWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 18,
+    width: 88,
+    height: 88,
+    borderRadius: 22,
     borderWidth: 2,
     overflow: 'hidden',
     justifyContent: 'center',
@@ -604,8 +635,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   badgeImage: {
-    width: 80,
-    height: 80,
+    width: 88,
+    height: 88,
   },
   badgeCompletedOverlay: {
     position: 'absolute',
@@ -616,76 +647,111 @@ const styles = StyleSheet.create({
   },
   heroMeta: {
     flex: 1,
-    justifyContent: 'center',
-    gap: 6,
+    minWidth: 0,
+    justifyContent: 'flex-start',
+    gap: 10,
+    paddingTop: 2,
   },
-  heroTopRow: {
+  heroChipsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     flexWrap: 'wrap',
+    gap: 8,
   },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
     borderWidth: 1,
+    maxWidth: '100%',
   },
   typeBadgeText: {
     ...fontStyles.heading,
-    fontSize: 11,
-    letterSpacing: 0.8,
+    fontSize: 10,
+    letterSpacing: 0.85,
+    flexShrink: 1,
   },
   timePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    flexShrink: 0,
   },
   timePillText: {
-    ...fontStyles.body,
-    fontSize: 10,
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
     color: theme.colors.textSecondary,
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
+    flexShrink: 1,
   },
   heroTitle: {
     ...fontStyles.heading,
-    fontSize: 22,
+    fontSize: 23,
     color: theme.colors.text,
-    letterSpacing: 0.3,
+    letterSpacing: 0.8,
     lineHeight: 28,
   },
   heroDescription: {
     ...fontStyles.body,
     fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
-    lineHeight: 20,
-    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.52)',
+    lineHeight: 21,
+    letterSpacing: 0.15,
   },
-  pillsRow: {
+  heroDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: 18,
+    marginBottom: 16,
+  },
+  heroStatsRow: {
     flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 10,
+    alignItems: 'stretch',
   },
-  infoPill: {
+  statTile: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  statTileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
+    gap: 8,
   },
-  infoPillText: {
+  statTileIconBg: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statTileCaption: {
+    ...fontStyles.heading,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: 'rgba(255,255,255,0.42)',
+    textTransform: 'uppercase',
+    flex: 1,
+  },
+  statTileValue: {
     ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: 16,
     letterSpacing: 0.2,
+    lineHeight: 22,
   },
   /* Generic card */
   card: {

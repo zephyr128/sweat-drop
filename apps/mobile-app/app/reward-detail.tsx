@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Clipboard } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { log } from '@/lib/logger';
@@ -45,6 +45,7 @@ function getPeriodStart(limit: RedemptionLimit, now: Date): Date {
 
 export default function RewardDetailScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { rewardId, gymId } = useLocalSearchParams<{ rewardId: string; gymId?: string }>();
   const { session } = useSession();
   const branding = useBranding();
@@ -557,7 +558,12 @@ export default function RewardDetailScreen() {
 
       {/* Bottom Action Button */}
       <View style={styles.bottomBar}>
-        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.bottomBlur}>
+        <PlatformBlur
+          androidColor="rgba(12,12,22,0.97)"
+          intensity={80}
+          tint="dark"
+          style={[styles.bottomBlur, { paddingBottom: Math.max(insets.bottom, 12) + 20 }]}
+        >
           {claimed && redemptionStatus === 'confirmed' ? (
             <View style={[styles.claimedButton, { backgroundColor: 'rgba(74, 222, 128, 0.12)', borderColor: 'rgba(74, 222, 128, 0.3)' }]}>
               <Ionicons name="checkmark-circle" size={22} color="#4ade80" />
@@ -803,7 +809,6 @@ const styles = StyleSheet.create({
   bottomBlur: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
-    paddingBottom: 36,
   },
   redeemButton: {
     flexDirection: 'row',

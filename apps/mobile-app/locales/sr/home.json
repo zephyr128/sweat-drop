@@ -138,7 +138,8 @@
   "cards": {
     "checkedIn": "Čekiran",
     "checkIn": "Čekiraj se",
-    "checkInDrops": "+5 kapi",
+    "checkInDrops": "+{{count}} kapi",
+    "checkInScanHint": "Bonus pri skeniranju",
     "dailyGoal": "DNEVNI CILJ",
     "kcalToday": "Drops zarađeni danas",
     "totalToday": "ukupno danas",

@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   heroIconWrap: { width: 20, height: 20, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   heroEyebrow: {
     ...fontStyles.heading,
-    fontSize: 9,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.50)',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
   sideIconWrap: { width: 18, height: 18, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   sideEyebrow: {
     ...fontStyles.heading,
-    fontSize: 8,
+    fontSize: 10,
     letterSpacing: 1.0,
     textTransform: 'uppercase',
     flex: 1,

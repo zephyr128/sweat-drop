@@ -21,6 +21,7 @@ import { useGymStore, Gym } from '@/lib/stores/useGymStore';
 import { useBranding, useTheme } from '@/lib/contexts/ThemeContext';
 import { theme as baseTheme, fontStyles, hexToRgba} from '@/lib/theme';
 import { shouldRetryGymsWithoutColumnFilter } from '@/lib/mobileGymListing';
+import { SuggestGymCardWithSheet } from '@/components/SuggestGymCardWithSheet';
 // ── GymCard Component ──────────────────────────────
 function GymCard({
   gym,
@@ -289,6 +290,9 @@ export default function GymsScreen() {
         <View style={styles.emptyContainer}>
           <Ionicons name="fitness-outline" size={48} color={baseTheme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('no_gyms')}</Text>
+          <View style={styles.emptySuggestWrap}>
+            <SuggestGymCardWithSheet variant="gymsList" brandColor={branding.primary} />
+          </View>
         </View>
       ) : (
         <FlatList
@@ -296,6 +300,11 @@ export default function GymsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={
+            <View style={styles.listFooterSuggest}>
+              <SuggestGymCardWithSheet variant="gymsList" brandColor={branding.primary} />
+            </View>
+          }
           renderItem={({ item, index }) => (
             <GymCard
               gym={item}
@@ -416,6 +425,14 @@ const styles = StyleSheet.create({
     color: baseTheme.colors.text,
     textAlign: 'center',
     paddingHorizontal: baseTheme.spacing.lg,
+  },
+  emptySuggestWrap: {
+    width: '100%',
+    paddingHorizontal: baseTheme.spacing.lg,
+    marginTop: baseTheme.spacing.md,
+  },
+  listFooterSuggest: {
+    marginTop: baseTheme.spacing.md,
   },
   retryButton: {
     marginTop: baseTheme.spacing.md,

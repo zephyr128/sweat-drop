@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -25,6 +24,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -65,6 +65,8 @@ export function ReferralAcceptSheet({
 }: Props) {
   const { t } = useTranslation('socialFriends');
   const [sheetState, setSheetState] = useState<SheetState>('confirm');
+  const insets = useSafeAreaInsets();
+  const sheetBottomPad = Math.max(insets.bottom, 16) + 8;
 
   const accent = gym.primaryColor || theme.colors.primary;
 
@@ -188,7 +190,12 @@ export function ReferralAcceptSheet({
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
             <View style={[styles.sheet, { borderColor: hexToRgba(accent, 0.22) }]}>
-              <PlatformBlur intensity={55} tint="dark" style={styles.blurContainer} androidColor="rgba(12,15,24,0.98)">
+              <PlatformBlur
+                intensity={55}
+                tint="dark"
+                style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+                androidColor="rgba(12,15,24,0.98)"
+              >
                 <LinearGradient
                   colors={['rgba(255,255,255,0.08)', hexToRgba(accent, 0.05), 'rgba(12,12,22,0.0)']}
                   start={{ x: 0, y: 0 }}
@@ -349,7 +356,6 @@ const styles = StyleSheet.create({
   blurContainer: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 28,
     alignItems: 'center',
     gap: 16,
   },

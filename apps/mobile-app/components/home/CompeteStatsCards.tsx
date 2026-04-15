@@ -256,64 +256,67 @@ export function CompeteStatsCards({
             style={styles.watermark}
           />
 
-          {/* Header row */}
-          <View style={styles.rowBetween}>
-            <View style={styles.eyebrowRow}>
-              <View style={[styles.iconWrap18, { backgroundColor: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.10 : 0.14) }]}>
-                <Ionicons name="trophy-outline" size={10} color={weeklyCardColor} />
-              </View>
-              <Text style={[styles.eyebrow, { color: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.52 : 0.65) }]}>{t('compete.weekly')}</Text>
-            </View>
-            <Text style={[styles.memberCount, { color: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.38 : 0.45) }]}>
-              {weekly.totalMembers > 0 ? t('compete.outOf', { total: weekly.totalMembers }) : ''}
-            </Text>
-          </View>
-
-          {/* Rank number */}
-          <View style={styles.rankBlock}>
-            <Text style={[styles.rankNumber, { color: weeklyRankTextColor }]}>
-              {loading ? '–' : rankOrdinal(weekly.rank)}
-            </Text>
-          </View>
-
-          {/* Rival mini-list with gaps */}
-          {!loading && weekly.neighbors.length > 0 && (
-            <View style={styles.rivalList}>
-              {weekly.neighbors.map((n, i) => {
-                const dotColor = n.isMe
-                  ? weeklyCardColor
-                  : i === 0
-                  ? SILVER
-                  : 'rgba(255,255,255,0.28)';
-                const myGapToFirst = n.isMe && n.rank !== 1
-                  ? Math.max(0, weekly.leaderDrops - n.drops)
-                  : 0;
-                return (
-                  <View key={i} style={styles.rivalRow}>
-                    <View style={[styles.rivalDot, { backgroundColor: dotColor }]} />
-                    <Text
-                      style={[
-                        styles.rivalName,
-                        n.isMe && { color: weeklyCardColor, fontWeight: '700' },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {n.isMe ? `${t('compete.you')} (${rankOrdinal(n.rank)})` : `${rankOrdinal(n.rank)} ${n.username}`}
-                    </Text>
-                    <Text style={styles.rivalDrops} numberOfLines={1}>
-                      {formatK(n.drops)}
-                      {myGapToFirst > 0 && (
-                        <Text style={styles.rivalGap}>{` · +${formatK(myGapToFirst)} ${t('compete.toFirst')}`}</Text>
-                      )}
-                    </Text>
+          <View style={styles.cardColumnFill}>
+            <View style={styles.cardMainGrow}>
+              {/* Header row */}
+              <View style={styles.rowBetween}>
+                <View style={styles.eyebrowRow}>
+                  <View style={[styles.iconWrap18, { backgroundColor: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.10 : 0.14) }]}>
+                    <Ionicons name="trophy-outline" size={10} color={weeklyCardColor} />
                   </View>
-                );
-              })}
-            </View>
-          )}
+                  <Text style={[styles.eyebrow, { color: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.52 : 0.65) }]}>{t('compete.weekly')}</Text>
+                </View>
+                <Text style={[styles.memberCount, { color: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.38 : 0.45) }]}>
+                  {weekly.totalMembers > 0 ? t('compete.outOf', { total: weekly.totalMembers }) : ''}
+                </Text>
+              </View>
 
-          {/* Footer: prize CTA */}
-          <View style={[styles.cardFooter, { borderTopColor: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.08 : 0.12) }]}>
+              {/* Rank number */}
+              <View style={styles.rankBlock}>
+                <Text style={[styles.rankNumber, { color: weeklyRankTextColor }]}>
+                  {loading ? '–' : rankOrdinal(weekly.rank)}
+                </Text>
+              </View>
+
+              {/* Rival mini-list with gaps */}
+              {!loading && weekly.neighbors.length > 0 && (
+                <View style={styles.rivalList}>
+                  {weekly.neighbors.map((n, i) => {
+                    const dotColor = n.isMe
+                      ? weeklyCardColor
+                      : i === 0
+                      ? SILVER
+                      : 'rgba(255,255,255,0.28)';
+                    const myGapToFirst = n.isMe && n.rank !== 1
+                      ? Math.max(0, weekly.leaderDrops - n.drops)
+                      : 0;
+                    return (
+                      <View key={i} style={styles.rivalRow}>
+                        <View style={[styles.rivalDot, { backgroundColor: dotColor }]} />
+                        <Text
+                          style={[
+                            styles.rivalName,
+                            n.isMe && { color: weeklyCardColor, fontWeight: '700' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {n.isMe ? `${t('compete.you')} (${rankOrdinal(n.rank)})` : `${rankOrdinal(n.rank)} ${n.username}`}
+                        </Text>
+                        <Text style={styles.rivalDrops} numberOfLines={1}>
+                          {formatK(n.drops)}
+                          {myGapToFirst > 0 && (
+                            <Text style={styles.rivalGap}>{` · +${formatK(myGapToFirst)} ${t('compete.toFirst')}`}</Text>
+                          )}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* Footer: prize CTA — pinned to card bottom */}
+            <View style={[styles.cardFooter, { borderTopColor: hexToRgba(weeklyCardColor, weeklySoftGold ? 0.08 : 0.12) }]}>
             <Ionicons name="gift-outline" size={12} color={hexToRgba(GOLD, 0.70)} />
             {userWeeklyReward ? (
               <Text style={[styles.footerText, { color: GOLD }]} numberOfLines={1}>
@@ -326,6 +329,7 @@ export function CompeteStatsCards({
               </Text>
             )}
             <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.25)" style={{ marginLeft: 'auto' as any }} />
+            </View>
           </View>
           </PlatformBlur>
         </PressableCard>
@@ -337,7 +341,12 @@ export function CompeteStatsCards({
             style={[styles.sideCard, { borderColor: hexToRgba(monthlyCardColor, monthlySoftGold ? 0.18 : 0.24) }]}
             onPress={() => onLeaderboardPress?.('monthly')}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlur} androidColor="rgba(10,10,20,0.52)">
+            <PlatformBlur
+              intensity={50}
+              tint="dark"
+              style={[styles.cardBlur, styles.cardBlurSide]}
+              androidColor="rgba(10,10,20,0.52)"
+            >
             <LinearGradient
               colors={[hexToRgba(monthlyCardColor, monthlySoftGold ? 0.18 : 0.26), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -345,52 +354,56 @@ export function CompeteStatsCards({
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
-            <View style={styles.eyebrowRow}>
-              <View style={[styles.iconWrap18, { backgroundColor: hexToRgba(monthlyCardColor, monthlySoftGold ? 0.10 : 0.14) }]}>
-                <Ionicons name="calendar-outline" size={10} color={monthlyCardColor} />
+            <View style={styles.cardColumnFill}>
+              <View style={styles.cardMainGrow}>
+                <View style={styles.eyebrowRow}>
+                  <View style={[styles.iconWrap18, { backgroundColor: hexToRgba(monthlyCardColor, monthlySoftGold ? 0.10 : 0.14) }]}>
+                    <Ionicons name="calendar-outline" size={10} color={monthlyCardColor} />
+                  </View>
+                  <Text style={[styles.eyebrow, { color: hexToRgba(monthlyCardColor, monthlySoftGold ? 0.52 : 0.65) }]}>{t('compete.monthly')}</Text>
+                </View>
+                <View style={styles.sideRankRowMonthly}>
+                  <Text
+                    style={[
+                      styles.sideNumber,
+                      styles.sideNumberInRankRow,
+                      { color: monthly.rank > 0 ? monthlyRankTextColor : 'rgba(255,255,255,0.35)' },
+                    ]}
+                  >
+                    {loading ? '–' : rankOrdinal(monthly.rank)}
+                  </Text>
+                  {!loading && monthly.totalMembers > 0 && (
+                    <Text style={styles.sideSub}>{`/ ${monthly.totalMembers}`}</Text>
+                  )}
+                  {!loading && monthlyDelta !== null && monthlyDelta !== 0 && (
+                    <View style={styles.sideTrendInline}>
+                      <Ionicons
+                        name={monthlyDelta > 0 ? 'arrow-up' : 'arrow-down'}
+                        size={9}
+                        color={monthlyDelta > 0 ? GREEN : 'rgba(255,100,100,0.85)'}
+                      />
+                      <Text
+                        style={[
+                          styles.trendText,
+                          { color: monthlyDelta > 0 ? GREEN : 'rgba(255,100,100,0.85)' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {Math.abs(monthlyDelta)} {t('compete.places')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
-              <Text style={[styles.eyebrow, { color: hexToRgba(monthlyCardColor, monthlySoftGold ? 0.52 : 0.65) }]}>{t('compete.monthly')}</Text>
+              {!loading && userMonthlyReward ? (
+                <View style={[styles.sideCardFooterSlot, styles.sideRewardRow]}>
+                  <Ionicons name="gift-outline" size={9} color={hexToRgba(GOLD, 0.70)} />
+                  <Text style={[styles.sideRewardText, { color: GOLD }]} numberOfLines={1}>
+                    {userMonthlyReward.reward_name}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-            <View style={styles.sideRankRow}>
-              <Text
-                style={[
-                  styles.sideNumber,
-                  { color: monthly.rank > 0 ? monthlyRankTextColor : 'rgba(255,255,255,0.35)' },
-                ]}
-              >
-                {loading ? '–' : rankOrdinal(monthly.rank)}
-              </Text>
-              {!loading && monthly.totalMembers > 0 && (
-                <Text style={styles.sideSub}>{`/ ${monthly.totalMembers}`}</Text>
-              )}
-            </View>
-            {/* Trend delta */}
-            {!loading && monthlyDelta !== null && monthlyDelta !== 0 && (
-              <View style={styles.trendRow}>
-                <Ionicons
-                  name={monthlyDelta > 0 ? 'arrow-up' : 'arrow-down'}
-                  size={9}
-                  color={monthlyDelta > 0 ? GREEN : 'rgba(255,100,100,0.85)'}
-                />
-                <Text
-                  style={[
-                    styles.trendText,
-                    { color: monthlyDelta > 0 ? GREEN : 'rgba(255,100,100,0.85)' },
-                  ]}
-                >
-                  {Math.abs(monthlyDelta)} {t('compete.places')}
-                </Text>
-              </View>
-            )}
-            {/* Reward for user's monthly rank */}
-            {!loading && userMonthlyReward ? (
-              <View style={styles.sideRewardRow}>
-                <Ionicons name="gift-outline" size={9} color={hexToRgba(GOLD, 0.70)} />
-                <Text style={[styles.sideRewardText, { color: GOLD }]} numberOfLines={1}>
-                  {userMonthlyReward.reward_name}
-                </Text>
-              </View>
-            ) : null}
             </PlatformBlur>
           </PressableCard>
 
@@ -402,7 +415,12 @@ export function CompeteStatsCards({
             ]}
             onPress={() => onLeaderboardPress?.('all_time')}
           >
-            <PlatformBlur intensity={50} tint="dark" style={styles.cardBlur} androidColor="rgba(10,10,20,0.52)">
+            <PlatformBlur
+              intensity={50}
+              tint="dark"
+              style={[styles.cardBlur, styles.cardBlurSide]}
+              androidColor="rgba(10,10,20,0.52)"
+            >
             <LinearGradient
               colors={[hexToRgba(allTimeCardColor, allTimeSoftGold ? 0.18 : 0.26), 'rgba(10,10,20,0)']}
               start={{ x: 0, y: 0 }}
@@ -410,55 +428,58 @@ export function CompeteStatsCards({
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
-            <View style={styles.eyebrowRow}>
-              <View
-                style={[
-                  styles.iconWrap18,
-                  { backgroundColor: hexToRgba(allTimeCardColor, allTimeSoftGold ? 0.10 : 0.14) },
-                ]}
-              >
-                <Ionicons
-                  name={allTime.rank === 1 ? 'trophy' : allTime.rank > 1 && allTime.rank <= 3 ? 'medal-outline' : 'podium-outline'}
-                  size={10}
-                  color={allTimeCardColor}
-                />
+            <View style={styles.cardColumnFill}>
+              <View style={styles.cardMainGrow}>
+                <View style={styles.eyebrowRow}>
+                  <View
+                    style={[
+                      styles.iconWrap18,
+                      { backgroundColor: hexToRgba(allTimeCardColor, allTimeSoftGold ? 0.10 : 0.14) },
+                    ]}
+                  >
+                    <Ionicons
+                      name={allTime.rank === 1 ? 'trophy' : allTime.rank > 1 && allTime.rank <= 3 ? 'medal-outline' : 'podium-outline'}
+                      size={10}
+                      color={allTimeCardColor}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.eyebrow,
+                      { color: hexToRgba(allTimeCardColor, allTimeSoftGold ? 0.52 : 0.65) },
+                    ]}
+                  >
+                    {t('compete.allTime')}
+                  </Text>
+                </View>
+                <View style={styles.sideRankRow}>
+                  <Text
+                    style={[
+                      styles.sideNumber,
+                      {
+                        color:
+                          allTime.rank > 0
+                            ? allTimeRankTextColor
+                            : 'rgba(255,255,255,0.35)',
+                      },
+                    ]}
+                  >
+                    {loading ? '–' : rankOrdinal(allTime.rank)}
+                  </Text>
+                  {!loading && allTime.totalMembers > 0 && (
+                    <Text style={styles.sideSub}>{`/ ${allTime.totalMembers}`}</Text>
+                  )}
+                </View>
               </View>
-              <Text
-                style={[
-                  styles.eyebrow,
-                  { color: hexToRgba(allTimeCardColor, allTimeSoftGold ? 0.52 : 0.65) },
-                ]}
-              >
-                {t('compete.allTime')}
-              </Text>
+              {!loading && allTime.rank === 1 ? (
+                <View style={[styles.sideCardFooterSlot, styles.trendRow]}>
+                  <Ionicons name="star" size={9} color={GOLD} />
+                  <Text style={[styles.trendText, { color: GOLD }]}>
+                    {t('compete.allTimeRecord')}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-            <View style={styles.sideRankRow}>
-              <Text
-                style={[
-                  styles.sideNumber,
-                  {
-                    color:
-                      allTime.rank > 0
-                        ? allTimeRankTextColor
-                        : 'rgba(255,255,255,0.35)',
-                  },
-                ]}
-              >
-                {loading ? '–' : rankOrdinal(allTime.rank)}
-              </Text>
-              {!loading && allTime.totalMembers > 0 && (
-                <Text style={styles.sideSub}>{`/ ${allTime.totalMembers}`}</Text>
-              )}
-            </View>
-            {/* All-time #1: star celebration; otherwise sub-text */}
-            {!loading && allTime.rank === 1 ? (
-              <View style={styles.trendRow}>
-                <Ionicons name="star" size={9} color={GOLD} />
-                <Text style={[styles.trendText, { color: GOLD }]}>
-                  {t('compete.allTimeRecord')}
-                </Text>
-              </View>
-            ) : null}
             </PlatformBlur>
           </PressableCard>
         </View>
@@ -586,6 +607,24 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     gap: 4,
   },
+  /** Monthly: rank + /N + delta trend on one row */
+  sideRankRowMonthly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    gap: 4,
+  },
+  sideNumberInRankRow: {
+    marginTop: 0,
+  },
+  sideTrendInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginLeft: 6,
+    flexShrink: 1,
+    minWidth: 0,
+  },
   sideSub: {
     ...fontStyles.body,
     fontSize: 9,
@@ -595,11 +634,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginTop: 3,
+    marginTop: 2,
+  },
+  /** Bottom slot on small side cards (reward / all-time #1 line) */
+  sideCardFooterSlot: {
+    flexShrink: 0,
+    width: '100%',
   },
   sideRewardText: {
     ...fontStyles.body,
     fontSize: 9,
+    lineHeight: 11,
     flex: 1,
   },
 
@@ -648,8 +693,33 @@ const styles = StyleSheet.create({
   /* Shared — flex:1 fills fixed-height parents (weekly / side cards) */
   cardBlur: {
     flex: 1,
-    padding: 12,
+    flexDirection: 'column',
+    minHeight: 0,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
     justifyContent: 'flex-start',
+  },
+  /** Tighter insets on stacked side cards (~82px tall) so footer is not clipped */
+  cardBlurSide: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  /** Fills blur; middle grows so footer stays at bottom of card */
+  cardColumnFill: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    flexDirection: 'column',
+    minHeight: 0,
+  },
+  cardMainGrow: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minHeight: 0,
+    overflow: 'hidden',
   },
   rowBetween: {
     flexDirection: 'row',
@@ -665,7 +735,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     ...fontStyles.heading,
-    fontSize: 8,
+    fontSize: 10,
     color: 'rgba(255,255,255,0.45)',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
@@ -685,7 +755,7 @@ const styles = StyleSheet.create({
   /* Rank block */
   rankBlock: {
     marginBottom: 6,
-    minHeight: 38,
+    minHeight: 34,
     justifyContent: 'center',
   },
   rankNumber: {
@@ -698,7 +768,6 @@ const styles = StyleSheet.create({
   /* Rival list */
   rivalList: {
     gap: 4,
-    marginBottom: 6,
   },
   rivalRow: {
     flexDirection: 'row',
@@ -734,18 +803,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  /* Card footer */
+  /* Card footer — sibling after flex-growing main; stays at bottom of weekly card */
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 6,
-    marginTop: 'auto',
     paddingTop: 8,
+    paddingBottom: 3,
+    minHeight: 32,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   footerText: {
     ...fontStyles.body,
     fontSize: 11,
+    lineHeight: 15,
     flex: 1,
   },
   footerTextBold: {
@@ -763,6 +835,7 @@ const styles = StyleSheet.create({
   trendText: {
     ...fontStyles.body,
     fontSize: 8,
+    lineHeight: 11,
     letterSpacing: 0.2,
     flexShrink: 1,
   },

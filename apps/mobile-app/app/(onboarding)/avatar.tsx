@@ -13,7 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useTranslation } from 'react-i18next';
-import { theme, fontStyles } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
+import { useBranding } from '@/lib/contexts/ThemeContext';
 import { PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
 import { OnboardingProgress } from '@/components/OnboardingProgress';
 import { log } from '@/lib/logger';
@@ -29,6 +30,7 @@ export default function AvatarScreen() {
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const isEdit = edit === 'true';
   const { t } = useTranslation('onboarding');
+  const branding = useBranding();
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
   const profile = useAuthStore((s) => s.profile);
@@ -37,6 +39,10 @@ export default function AvatarScreen() {
     isEdit && profile?.avatar_url ? profile.avatar_url : null,
   );
   const [loading, setLoading] = useState(false);
+
+  /** Settings → change avatar: gym branding. Onboarding (pre-flow): global cyan theme. */
+  const primary = isEdit ? branding.primary : theme.colors.primary;
+  const onPrimary = isEdit ? branding.onPrimary : '#000000';
 
   const navigateNext = () => {
     if (isEdit) {
@@ -86,7 +92,7 @@ export default function AvatarScreen() {
 
         {isEdit && (
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="arrow-back" size={24} color={hexToRgba(branding.primary, 0.88)} />
           </TouchableOpacity>
         )}
 
@@ -99,15 +105,14 @@ export default function AvatarScreen() {
             style={[
               styles.previewRing,
               {
-                borderColor: selected
-                  ? theme.colors.primary
-                  : 'rgba(255,255,255,0.10)',
+                borderColor: selected ? primary : 'rgba(255,255,255,0.10)',
+                backgroundColor: hexToRgba(primary, 0.06),
               },
             ]}
           >
             {selected ? (
               <>
-                <View style={styles.previewGlow} />
+                <View style={[styles.previewGlow, { backgroundColor: primary }]} />
                 <Text style={styles.previewEmoji}>{selected}</Text>
               </>
             ) : (
@@ -143,7 +148,13 @@ export default function AvatarScreen() {
                 key={index}
                 style={[
                   styles.emojiButton,
-                  isSelected && styles.emojiButtonSelected,
+                  isSelected && [
+                    styles.emojiButtonSelected,
+                    {
+                      borderColor: primary,
+                      backgroundColor: hexToRgba(primary, 0.08),
+                    },
+                  ],
                 ]}
                 onPress={() => setSelected(emoji)}
                 activeOpacity={0.7}
@@ -164,6 +175,7 @@ export default function AvatarScreen() {
           <TouchableOpacity
             style={[
               styles.primaryButton,
+              { backgroundColor: primary, shadowColor: primary },
               (!selected || loading) && { opacity: 0.6 },
             ]}
             onPress={handleContinue}
@@ -172,19 +184,16 @@ export default function AvatarScreen() {
           >
             <View style={styles.primaryButtonInner}>
               {loading ? (
-                <ActivityIndicator
-                  size="small"
-                  color={theme.colors.background}
-                />
+                <ActivityIndicator size="small" color={onPrimary} />
               ) : (
                 <>
-                  <Text style={styles.buttonText}>
+                  <Text style={[styles.buttonText, { color: onPrimary }]}>
                     {isEdit ? (t('common:save') || 'Save') : t('common:continue')}
                   </Text>
                   <Ionicons
                     name={isEdit ? 'checkmark' : 'arrow-forward'}
                     size={20}
-                    color={theme.colors.background}
+                    color={onPrimary}
                   />
                 </>
               )}
@@ -238,7 +247,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(0,229,255,0.06)',
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
@@ -249,7 +257,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: theme.colors.primary,
     opacity: 0.08,
   },
   previewEmoji: {
@@ -294,8 +301,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emojiButtonSelected: {
-    backgroundColor: 'rgba(0,229,255,0.08)',
-    borderColor: theme.colors.primary,
     borderWidth: 2,
   },
   emojiText: {
@@ -308,10 +313,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   primaryButton: {
-    backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.full,
     overflow: 'hidden',
-    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.45,
     shadowRadius: 20,
@@ -327,7 +330,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     ...fontStyles.heading,
-    color: '#000000',
     fontSize: 18,
   },
   secondaryButton: {

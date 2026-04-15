@@ -40,7 +40,7 @@ import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
-import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
+import { SuggestGymCardWithSheet } from '@/components/SuggestGymCardWithSheet';
 import { log } from '@/lib/logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -261,7 +261,6 @@ export default function HomeScreen() {
   const hasLoadedOnce = useRef(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showWaitlist, setShowWaitlist] = useState(false);
   const [sheetLogoLoadFailed, setSheetLogoLoadFailed] = useState(false);
   const activityRingsRef = useRef<ActivityRingsHandle>(null);
   const insets = useSafeAreaInsets();
@@ -889,78 +888,85 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* ─── SECTION 5 — AVAILABLE GYMS ─── */}
-            {availableGyms.length > 0 && (
-              <Animated.View entering={FadeInDown.delay(300).duration(500)}>
-                <View style={es.gymsSection}>
-                  <View style={es.gymsSectionHeader}>
-                    <Text style={es.gymsSectionTitle}>{t('availableGyms')}</Text>
-                    <Text style={es.gymsSectionCount}>{t('gymsCount', { count: availableGyms.length })}</Text>
-                  </View>
+            {/* ─── SECTION 5 — AVAILABLE GYMS + SUGGEST ─── */}
+            <Animated.View entering={FadeInDown.delay(300).duration(500)}>
+              <View style={es.gymsSection}>
+                {availableGyms.length > 0 && (
+                  <>
+                    <View style={es.gymsSectionHeader}>
+                      <Text style={es.gymsSectionTitle}>{t('availableGyms')}</Text>
+                      <Text style={es.gymsSectionCount}>{t('gymsCount', { count: availableGyms.length })}</Text>
+                    </View>
 
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={es.gymScrollContent}
-                  >
-                    {availableGyms.map((gym) => {
-                      const gymColor = gym.primary_color || branding.primary;
-                      return (
-                        <TouchableOpacity
-                          key={gym.id}
-                          activeOpacity={0.75}
-                          onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
-                        >
-                          <PlatformBlur intensity={50} tint="dark" style={[es.gymCard, { borderColor: hexToRgba(gymColor, 0.18) }]} androidColor="rgba(14,14,24,0.97)">
-                            {/* Top accent line */}
-                            <View style={[es.gymCardAccent, { backgroundColor: hexToRgba(gymColor, 0.5) }]} />
-                            <View style={es.gymCardInner}>
-                              {/* Logo */}
-                              <View style={es.gymLogoWrap}>
-                                {gym.logo_url ? (
-                                  <Image source={gym.logo_url} style={es.gymLogo} contentFit="contain" transition={200} />
-                                ) : (
-                                  <View style={[es.gymLogoPlaceholder, { borderColor: hexToRgba(gymColor, 0.3), backgroundColor: hexToRgba(gymColor, 0.1) }]}>
-                                    <Ionicons name="fitness" size={24} color={gymColor} />
-                                  </View>
-                                )}
-                              </View>
-                              {/* Info */}
-                              <View style={es.gymInfo}>
-                                <Text style={es.gymName} numberOfLines={2}>{gym.name}</Text>
-                                {(gym.city || gym.address) && (
-                                  <View style={es.gymLocationRow}>
-                                    <Ionicons name="location-outline" size={11} color="rgba(255,255,255,0.3)" />
-                                    <Text style={es.gymCity} numberOfLines={1}>{gym.city || gym.address}</Text>
-                                  </View>
-                                )}
-                              </View>
-                              {/* CTA */}
-                              <View style={[es.gymSelectBtn, { borderColor: hexToRgba(gymColor, 0.35), backgroundColor: hexToRgba(gymColor, 0.1) }]}>
-                                <Text style={[es.gymSelectBtnText, { color: gymColor }]}>{t('viewGym')}</Text>
-                              </View>
-                            </View>
-                          </PlatformBlur>
-                        </TouchableOpacity>
-                      );
-                    })}
-
-                    {/* Suggest gym card */}
-                    <TouchableOpacity
-                      style={[es.gymPlaceholderCard, { borderColor: hexToRgba(branding.primary, 0.12) }]}
-                      onPress={() => setShowWaitlist(true)}
-                      activeOpacity={0.7}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={es.gymScrollContent}
                     >
-                      <View style={[es.gymPlaceholderIconWrap, { backgroundColor: hexToRgba(branding.primary, 0.08), borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                        <Ionicons name="add" size={22} color={hexToRgba(branding.primary, 0.7)} />
-                      </View>
-                      <Text style={[es.gymPlaceholderText, { color: 'rgba(255,255,255,0.5)' }]}>{t('notYourGym')}</Text>
-                      <Text style={[es.gymPlaceholderSub, { color: hexToRgba(branding.primary, 0.55) }]}>{t('suggestGym')}</Text>
-                    </TouchableOpacity>
-                  </ScrollView>
-                </View>
-              </Animated.View>
-            )}
+                      {availableGyms.map((gym) => {
+                        const gymColor = gym.primary_color || branding.primary;
+                        return (
+                          <TouchableOpacity
+                            key={gym.id}
+                            activeOpacity={0.75}
+                            onPress={() => router.push({ pathname: '/gym-detail', params: { gymId: gym.id } })}
+                          >
+                            <PlatformBlur intensity={50} tint="dark" style={[es.gymCard, { borderColor: hexToRgba(gymColor, 0.18) }]} androidColor="rgba(14,14,24,0.97)">
+                              {/* Top accent line */}
+                              <View style={[es.gymCardAccent, { backgroundColor: hexToRgba(gymColor, 0.5) }]} />
+                              <View style={es.gymCardInner}>
+                                {/* Logo */}
+                                <View style={es.gymLogoWrap}>
+                                  {gym.logo_url ? (
+                                    <Image source={gym.logo_url} style={es.gymLogo} contentFit="contain" transition={200} />
+                                  ) : (
+                                    <View style={[es.gymLogoPlaceholder, { borderColor: hexToRgba(gymColor, 0.3), backgroundColor: hexToRgba(gymColor, 0.1) }]}>
+                                      <Ionicons name="fitness" size={24} color={gymColor} />
+                                    </View>
+                                  )}
+                                </View>
+                                {/* Info */}
+                                <View style={es.gymInfo}>
+                                  <Text style={es.gymName} numberOfLines={2}>{gym.name}</Text>
+                                  {(gym.city || gym.address) && (
+                                    <View style={es.gymLocationRow}>
+                                      <Ionicons name="location-outline" size={11} color="rgba(255,255,255,0.3)" />
+                                      <Text style={es.gymCity} numberOfLines={1}>{gym.city || gym.address}</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                {/* CTA */}
+                                <View style={[es.gymSelectBtn, { borderColor: hexToRgba(gymColor, 0.35), backgroundColor: hexToRgba(gymColor, 0.1) }]}>
+                                  <Text style={[es.gymSelectBtnText, { color: gymColor }]}>{t('viewGym')}</Text>
+                                </View>
+                              </View>
+                            </PlatformBlur>
+                          </TouchableOpacity>
+                        );
+                      })}
+
+                      <SuggestGymCardWithSheet variant="homeCarousel" brandColor={branding.primary} />
+                    </ScrollView>
+                  </>
+                )}
+
+                {availableGyms.length === 0 && (
+                  <>
+                    <View style={es.emptyGymsIntro}>
+                      <Text style={es.gymsSectionTitle}>{t('suggestGym')}</Text>
+                      <Text style={es.emptyGymsIntroSub}>{t('suggestGymSub')}</Text>
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={es.gymScrollContent}
+                    >
+                      <SuggestGymCardWithSheet variant="homeCarousel" brandColor={branding.primary} />
+                    </ScrollView>
+                  </>
+                )}
+              </View>
+            </Animated.View>
 
             {/* ─── SECTION 6 — PREVIEW CARDS (locked features) ─── */}
             <Animated.View entering={FadeInDown.delay(400).duration(500)}>
@@ -1012,11 +1018,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <WaitlistBottomSheet
-            visible={showWaitlist}
-            onClose={() => setShowWaitlist(false)}
-            brandColor={branding.primary}
-          />
         </SafeAreaView>
       </Animated.View>
     );
@@ -2348,6 +2349,16 @@ const es = StyleSheet.create({
     fontSize: 13,
     color: '#B0B0B0',
   },
+  emptyGymsIntro: {
+    marginBottom: 12,
+    gap: 6,
+  },
+  emptyGymsIntroSub: {
+    ...fontStyles.body,
+    fontSize: 13,
+    color: '#B0B0B0',
+    lineHeight: 18,
+  },
   gymScrollContent: {
     gap: 10,
     paddingRight: 16,
@@ -2419,40 +2430,6 @@ const es = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.2,
   },
-  gymPlaceholderCard: {
-    width: 220,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(14,14,24,0.50)',
-    paddingVertical: 28,
-    paddingHorizontal: 16,
-  },
-  gymPlaceholderIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gymPlaceholderText: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 13,
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.5)',
-    lineHeight: 18,
-  },
-  gymPlaceholderSub: {
-    ...fontStyles.body,
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-
   /* ── Preview Cards (locked features) ── */
   referralBanner: {
     marginHorizontal: 16,

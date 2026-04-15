@@ -2837,7 +2837,7 @@ export default function WorkoutScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Gym background image */}
       {activeGym?.background_url && (
         <Image

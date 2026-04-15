@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,6 +71,8 @@ export interface StatsCardsProps {
   weeklyCap: number;
   primaryColor: string;
   isCheckedIn: boolean;
+  /** From gym / get_checkin_status; drives “+N drops” on the check-in card */
+  checkinRewardDrops?: number;
   gymName: string;
   onCheckinPress: () => void;
   nextRewardName: string | null;
@@ -177,6 +179,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
   weeklyCap,
   primaryColor,
   isCheckedIn,
+  checkinRewardDrops,
   gymName,
   onCheckinPress,
   nextRewardName,
@@ -202,6 +205,14 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
   const hasBonusDrops = todayBonusDrops > 0;
   const checkinColor = isCheckedIn ? GREEN : 'rgba(255,255,255,0.55)';
   const hhColor = isHappyHourActive ? GOLD : nextHappyHour ? GOLD : 'rgba(255,255,255,0.25)';
+
+  const checkInSubtitle = useMemo(() => {
+    if (isCheckedIn) return gymName || t('cards.checkedIn');
+    if (typeof checkinRewardDrops === 'number' && Number.isFinite(checkinRewardDrops)) {
+      return t('cards.checkInDrops', { count: checkinRewardDrops });
+    }
+    return t('cards.checkInScanHint');
+  }, [isCheckedIn, gymName, checkinRewardDrops, t]);
 
   const dailyPct = dailyCap > 0 ? Math.min((todayDrops / dailyCap) * 100, 100) : 0;
 
@@ -416,7 +427,7 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
                   {isCheckedIn ? t('cards.checkedIn') : t('cards.checkIn')}
                 </Text>
                 <Text style={styles.actionSub} numberOfLines={1}>
-                  {isCheckedIn ? (gymName || t('cards.checkedIn')) : t('cards.checkInDrops')}
+                  {checkInSubtitle}
                 </Text>
               </View>
               {!isCheckedIn && <Ionicons name="chevron-forward" size={13} color="rgba(255,255,255,0.20)" />}
@@ -465,7 +476,12 @@ export const StatsCards: React.FC<StatsCardsProps> = React.memo(function StatsCa
                       </View>
                     )}
                   </View>
-                  <Text style={styles.actionSub} numberOfLines={1}>
+                  <Text
+                    style={[styles.actionSub, styles.hhActionSub]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={Platform.OS === 'ios' ? 0.55 : 0.65}
+                  >
                     {isHappyHourActive && nextHappyHour
                       ? (() => {
                           if (hhSecondsLeft !== null) {
@@ -570,7 +586,7 @@ const styles = StyleSheet.create({
   },
   heroEyebrow: {
     ...fontStyles.heading,
-    fontSize: 10,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.55)',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
@@ -641,7 +657,7 @@ const styles = StyleSheet.create({
   },
   sideEyebrow: {
     ...fontStyles.heading,
-    fontSize: 8,
+    fontSize: 10,
     color: 'rgba(255,255,255,0.50)',
     letterSpacing: 1.0,
     textTransform: 'uppercase',
@@ -712,7 +728,7 @@ const styles = StyleSheet.create({
   hhMultiplierBadge: {
     backgroundColor: 'rgba(255, 215, 0, 0.18)',
     borderRadius: 6,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingVertical: 1,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.40)',
@@ -759,9 +775,14 @@ const styles = StyleSheet.create({
   },
   actionSub: {
     ...fontStyles.body,
-    fontSize: 10,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.40)',
     marginTop: 2,
+  },
+  /** Happy Hour gray line only — smaller + auto-shrink so “UŽIVO · …” fits the narrow card */
+  hhActionSub: {
+    fontSize: 9,
+    lineHeight: 12,
   },
 
   /* ── Next Reward Card ── */
@@ -802,7 +823,7 @@ const styles = StyleSheet.create({
   },
   rewardEyebrow: {
     ...fontStyles.heading,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.5,
     color: 'rgba(255,255,255,0.38)',
   },

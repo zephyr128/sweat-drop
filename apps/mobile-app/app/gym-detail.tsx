@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Linking,
   ActivityIndicator,
-  Platform,
   Dimensions,
   FlatList,
 } from 'react-native';
@@ -35,6 +34,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import BackButton from '@/components/BackButton';
 import { GalleryViewer } from '@/components/GalleryViewer';
+import { GymMapsPickerSheet } from '@/components/GymMapsPickerSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GALLERY_HEIGHT = 360;
@@ -156,6 +156,7 @@ export default function GymDetailScreen() {
   const [galleryViewerVisible, setGalleryViewerVisible] = useState(false);
   const [galleryViewerIndex, setGalleryViewerIndex] = useState(0);
   const [activeGallerySlide, setActiveGallerySlide] = useState(0);
+  const [mapsPickerOpen, setMapsPickerOpen] = useState(false);
 
   const brandColor = gym?.primary_color ?? appBranding.primary;
   const isHome = gym?.id === homeGymId;
@@ -164,8 +165,6 @@ export default function GymDetailScreen() {
   const dbLng = gym ? parseCoord((gym as any).longitude ?? (gym as any).lng) : null;
   const mapLat = dbLat ?? geocoded?.lat ?? null;
   const mapLng = dbLng ?? geocoded?.lng ?? null;
-  const hasMapCoords = mapLat != null && mapLng != null;
-
   // Scroll tracking
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -313,38 +312,6 @@ export default function GymDetailScreen() {
     } catch { showModal({ title: t('common:error'), body: t('failedToSetGym') }); }
     finally { setSettingHome(false); }
   };
-
-  const openInAppleMaps = useCallback(() => {
-    if (!gym) return;
-    if (mapLat != null && mapLng != null) {
-      Linking.openURL(`maps:0,0?q=${encodeURIComponent(gym.name)}@${mapLat},${mapLng}`);
-    } else if (gym.address) {
-      const q = encodeURIComponent(`${gym.address}, ${gym.city || ''}`);
-      Linking.openURL(`maps:0,0?q=${q}`);
-    }
-  }, [gym, mapLat, mapLng]);
-
-  const openInGoogleMaps = useCallback(() => {
-    if (!gym) return;
-    if (mapLat != null && mapLng != null) {
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${mapLat},${mapLng}`);
-    } else if (gym.address) {
-      const q = encodeURIComponent(`${gym.address}, ${gym.city || ''}`);
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`);
-    }
-  }, [gym, mapLat, mapLng]);
-
-  const openInMaps = useCallback(() => {
-    if (!gym) return;
-    if (mapLat != null && mapLng != null) {
-      const url = Platform.select({ ios: `maps:0,0?q=${gym.name}@${mapLat},${mapLng}`, android: `geo:${mapLat},${mapLng}?q=${mapLat},${mapLng}(${gym.name})` });
-      if (url) Linking.openURL(url);
-    } else if (gym.address) {
-      const q = encodeURIComponent(`${gym.address}, ${gym.city || ''}`);
-      const url = Platform.select({ ios: `maps:0,0?q=${q}`, android: `geo:0,0?q=${q}` });
-      if (url) Linking.openURL(url);
-    }
-  }, [gym, mapLat, mapLng]);
 
   const openInstagram = () => { if (gym?.instagram) Linking.openURL(`https://instagram.com/${gym.instagram.replace('@', '')}`); };
   const callPhone = () => { if (gym?.phone) Linking.openURL(`tel:${gym.phone}`); };
@@ -574,17 +541,19 @@ export default function GymDetailScreen() {
                 </View>
               )}
 
-              {/* Map buttons */}
+              {/* Open in maps — sheet lists Apple (iOS), Google, Waze, Android geo picker */}
               {!!fullAddress && (
                 <View style={[styles.mapBtnRow, { borderTopColor: hexToRgba(brandColor, 0.08) }]}>
-                  <TouchableOpacity style={styles.mapBtn} onPress={openInAppleMaps} activeOpacity={0.75}>
-                    <Ionicons name="map-outline" size={13} color={hexToRgba(brandColor, 0.80)} />
-                    <Text style={[styles.mapBtnText, { color: hexToRgba(brandColor, 0.80) }]}>Apple Maps</Text>
-                  </TouchableOpacity>
-                  <View style={[styles.mapBtnDivider, { backgroundColor: hexToRgba(brandColor, 0.10) }]} />
-                  <TouchableOpacity style={styles.mapBtn} onPress={openInGoogleMaps} activeOpacity={0.75}>
-                    <Ionicons name="navigate-outline" size={13} color={hexToRgba(brandColor, 0.80)} />
-                    <Text style={[styles.mapBtnText, { color: hexToRgba(brandColor, 0.80) }]}>Google Maps</Text>
+                  <TouchableOpacity
+                    style={styles.mapBtnSingle}
+                    onPress={() => setMapsPickerOpen(true)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.mapBtnSingleLeft}>
+                      <Ionicons name="map-outline" size={16} color={hexToRgba(brandColor, 0.85)} />
+                      <Text style={[styles.mapBtnText, { color: hexToRgba(brandColor, 0.88) }]}>{t('openInMaps')}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.28)" />
                   </TouchableOpacity>
                 </View>
               )}
@@ -755,7 +724,12 @@ export default function GymDetailScreen() {
       {/* Sticky CTA */}
       {!isHome && session && (
         <View style={styles.bottomBar}>
-          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={80} tint="dark" style={styles.bottomBlur}>
+          <PlatformBlur
+            androidColor="rgba(12,12,22,0.97)"
+            intensity={80}
+            tint="dark"
+            style={[styles.bottomBlur, { paddingBottom: Math.max(insets.bottom, 12) + 20 }]}
+          >
             <TouchableOpacity
               style={[styles.ctaButton, { backgroundColor: brandColor }]}
               onPress={handleSetHomeGym}
@@ -781,6 +755,17 @@ export default function GymDetailScreen() {
         images={galleryImages}
         initialIndex={galleryViewerIndex}
         onClose={() => setGalleryViewerVisible(false)}
+      />
+
+      <GymMapsPickerSheet
+        visible={mapsPickerOpen}
+        onClose={() => setMapsPickerOpen(false)}
+        accentColor={brandColor}
+        target={
+          gym
+            ? { gymName: gym.name, fullAddress, lat: mapLat, lng: mapLng }
+            : null
+        }
       />
     </View>
   );
@@ -1023,28 +1008,26 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
-  // Map buttons (inside hero card)
+  // Map CTA (inside hero card)
   mapBtnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     borderTopWidth: 1,
     marginTop: 10,
   },
-  mapBtn: {
-    flex: 1,
+  mapBtnSingle: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 13,
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
   },
-  mapBtnDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 18,
+  mapBtnSingleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   mapBtnText: {
     ...fontStyles.bodySemiBold,
-    fontSize: 13,
+    fontSize: 14,
     letterSpacing: 0.1,
   },
 
@@ -1215,7 +1198,6 @@ const styles = StyleSheet.create({
   bottomBlur: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
-    paddingBottom: 36,
   },
   ctaButton: {
     flexDirection: 'row',

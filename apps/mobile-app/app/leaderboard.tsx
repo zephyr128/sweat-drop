@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo, useRef, type ComponentProps } from 'react';
@@ -90,6 +90,14 @@ const GOLD = '#EAB308';
 const SILVER = '#94A3B8';
 const BRONZE = '#CD7F32';
 const MEDAL_COLORS = [GOLD, SILVER, BRONZE] as const;
+
+/** Rank # color on leaderboard: gold / silver / bronze for top 3, gray for everyone else. */
+function leaderboardRankColor(rank: number): string {
+  if (rank === 1) return GOLD;
+  if (rank === 2) return SILVER;
+  if (rank === 3) return BRONZE;
+  return theme.colors.textTertiary;
+}
 
 function getArenaColors(arena: AvailableArena, fallbackPrimary: string) {
   return {
@@ -540,7 +548,8 @@ export default function LeaderboardScreen() {
             {
               backgroundColor: isCurrent ? hexToRgba(branding.primary, 0.08) : 'rgba(20, 20, 30, 0.75)',
               borderColor: isCurrent ? hexToRgba(branding.primary, 0.25) : 'rgba(255,255,255,0.06)',
-              borderLeftWidth: isCurrent ? 3 : 1,
+              // Same left border width on every row so rank/avatar columns line up; color shows "you" stripe
+              borderLeftWidth: 3,
               borderLeftColor: isCurrent ? branding.primary : 'rgba(255,255,255,0.06)',
               borderRightWidth: 1,
             },
@@ -563,15 +572,15 @@ export default function LeaderboardScreen() {
           </View>
 
           {/* Avatar */}
-          <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary, borderWidth: 2 }]}>
+          <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary }]}>
             {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-              <Image source={entry.avatar_url} style={styles.listAvatar} transition={200} />
+              <Image source={entry.avatar_url} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
             ) : entry.avatar_url ? (
-              <View style={styles.listAvatarPlaceholder}>
+              <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                 <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
               </View>
             ) : (
-              <View style={styles.listAvatarPlaceholder}>
+              <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                 <Text style={styles.listAvatarInitial}>
                   {(entry.username || 'U').charAt(0).toUpperCase()}
                 </Text>
@@ -910,39 +919,37 @@ export default function LeaderboardScreen() {
 
             // Reward for user's rank (banner)
             const userReward = ps.rewards.find(r => r.rank_position === ps.currentUserRank);
+            const bannerRankColor =
+              ps.currentUserRank != null ? leaderboardRankColor(ps.currentUserRank) : theme.colors.textTertiary;
 
             const pageHeader = (
               <>
                 {/* ── User Context Banner ── */}
                 {!ps.loading && pageCurrentUserEntry && ps.currentUserRank != null && (
-                  <Animated.View entering={FadeInDown.duration(300)} style={[styles.userBanner, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
-                    <LinearGradient
-                      colors={[hexToRgba(branding.primary, 0.16), hexToRgba(branding.primary, 0.04)]}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFillObject}
-                    />
-                    {/* Rank bubble */}
-                    <View style={[styles.userBannerRankBubble, { backgroundColor: hexToRgba(branding.primary, 0.18), borderColor: hexToRgba(branding.primary, 0.4) }]}>
-                      <Text style={[styles.userBannerRankText, { color: branding.primary }]}>#{ps.currentUserRank}</Text>
+                  <Animated.View entering={FadeInDown.duration(300)} style={styles.userBanner}>
+                    <View style={styles.userBannerRankCol}>
+                      <Text style={[styles.userBannerRankGlyph, { color: bannerRankColor }]}>
+                        #{ps.currentUserRank}
+                      </Text>
                     </View>
-                    {/* Info */}
                     <View style={styles.userBannerInfo}>
                       <View style={styles.userBannerScoreRow}>
-                        <Ionicons name="water" size={13} color={branding.primary} />
-                        <Text style={[styles.userBannerScore, { color: branding.primary }]}>{cleanScore(pageCurrentUserEntry.score_label)}</Text>
-                        <Text style={styles.userBannerScoreLabel}>{t('drops')}</Text>
+                        <Ionicons name="water" size={12} color={bannerRankColor} />
+                        <Text style={[styles.userBannerScore, { color: bannerRankColor }]}>
+                          {cleanScore(pageCurrentUserEntry.score_label)}
+                        </Text>
+                        <Text style={[styles.userBannerScoreLabel, { color: bannerRankColor }]}>{t('drops')}</Text>
                       </View>
                       {ps.currentUserRank === 1 ? (
-                        <Text style={styles.userBannerGap}>
+                        <Text style={[styles.userBannerGap, { color: bannerRankColor }]}>
                           {t('youAreFirst')}{userReward ? ` · ${t('prizeBanner', { name: userReward.reward_name })}` : ''}
                         </Text>
                       ) : userGapToLeader != null ? (
-                        <Text style={styles.userBannerGap}>
+                        <Text style={[styles.userBannerGap, { color: bannerRankColor }]}>
                           {t('gapToFirstBanner', { drops: userGapToLeader.toLocaleString() })}{userReward ? ` · ${t('prizeBanner', { name: userReward.reward_name })}` : ''}
                         </Text>
                       ) : null}
                     </View>
-                    {/* Winner badge */}
                     {winnerBanner && !bannerDismissed && winnerBanner.period === p && (
                       <TouchableOpacity
                         style={styles.yourRankWinBadge}
@@ -1165,7 +1172,7 @@ export default function LeaderboardScreen() {
                               {
                                 backgroundColor: isCurrent ? hexToRgba(branding.primary, 0.08) : 'rgba(20, 20, 30, 0.75)',
                                 borderColor: isCurrent ? hexToRgba(branding.primary, 0.25) : 'rgba(255,255,255,0.06)',
-                                borderLeftWidth: isCurrent ? 3 : 1,
+                                borderLeftWidth: 3,
                                 borderLeftColor: isCurrent ? branding.primary : 'rgba(255,255,255,0.06)',
                                 borderRightWidth: 1,
                               },
@@ -1182,15 +1189,15 @@ export default function LeaderboardScreen() {
                                 <Text style={[styles.rankText, { color: isCurrent ? branding.primary : theme.colors.textTertiary }]}>#{rankNum}</Text>
                               )}
                             </View>
-                            <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary, borderWidth: 2 }]}>
+                            <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary }]}>
                               {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                                <Image source={entry.avatar_url} style={styles.listAvatar} transition={200} />
+                                <Image source={entry.avatar_url} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
                               ) : entry.avatar_url ? (
-                                <View style={styles.listAvatarPlaceholder}>
+                                <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                                   <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
                                 </View>
                               ) : (
-                                <View style={styles.listAvatarPlaceholder}>
+                                <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                                   <Text style={styles.listAvatarInitial}>
                                     {(entry.username || 'U').charAt(0).toUpperCase()}
                                   </Text>
@@ -1258,15 +1265,15 @@ export default function LeaderboardScreen() {
                         <View style={styles.rankContainer}>
                           <Text style={[styles.rankText, { color: branding.primary }]}>#{currentUserEntry.rank}</Text>
                         </View>
-                        <View style={[styles.listAvatarWrap, { borderColor: branding.primary, borderWidth: 2 }]}>
+                        <View style={[styles.listAvatarWrap, { borderColor: branding.primary }]}>
                           {currentUserEntry.avatar_url && currentUserEntry.avatar_url.startsWith('http') ? (
-                            <Image source={currentUserEntry.avatar_url} style={styles.listAvatar} transition={200} />
+                            <Image source={currentUserEntry.avatar_url} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
                           ) : currentUserEntry.avatar_url ? (
-                            <View style={styles.listAvatarPlaceholder}>
+                            <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                               <Text style={styles.listAvatarEmoji}>{currentUserEntry.avatar_url}</Text>
                             </View>
                           ) : (
-                            <View style={styles.listAvatarPlaceholder}>
+                            <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                               <Text style={styles.listAvatarInitial}>
                                 {(currentUserEntry.username || 'U').charAt(0).toUpperCase()}
                               </Text>
@@ -1678,7 +1685,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: theme.spacing.md,
+    paddingLeft: 12,
+    paddingRight: 12,
     overflow: 'hidden',
   },
   listItemFirst: {
@@ -1693,9 +1701,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255, 255, 255, 0.07)',
   },
+  /* Medal bubble is 38 wide; flex-start so # sits on the left of this column (no hollow before rank) */
   rankContainer: {
-    width: 48,
-    alignItems: 'center',
+    width: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   rankMedalBubble: {
     width: 38,
@@ -1719,18 +1729,25 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginLeft: 6,
-    borderWidth: 0,
+    borderWidth: 2,
+    borderColor: 'transparent',
     overflow: 'hidden',
+    position: 'relative',
   },
+  /** Fill the wrap; 2px ring slot + inset keeps all rows aligned */
   listAvatar: {
-    width: 40,
-    height: 40,
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
   },
+  listAvatarInset: {
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderRadius: 18,
+  },
   listAvatarPlaceholder: {
-    width: 40,
-    height: 40,
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.07)',
     justifyContent: 'center',
@@ -1738,15 +1755,20 @@ const styles = StyleSheet.create({
   },
   listAvatarEmoji: {
     fontSize: 20,
+    lineHeight: 22,
+    textAlign: 'center',
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
   listAvatarInitial: {
     ...fontStyles.heading,
     fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'center',
     color: theme.colors.textSecondary,
   },
   userInfo: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: 8,
   },
   userNameRow: {
     flexDirection: 'row',
@@ -1940,58 +1962,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  /* ── User Context Banner ── */
+  /* ── User context row (aligned with list rows — not a separate “card”) ── */
   userBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    overflow: 'hidden',
-    padding: 12,
-    marginBottom: 12,
+    paddingVertical: 12,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.md,
+    marginBottom: 10,
     gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  userBannerRankBubble: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    alignItems: 'center',
+  userBannerRankCol: {
+    flexShrink: 0,
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
-  userBannerRankText: {
+  userBannerRankGlyph: {
     ...fontStyles.heading,
-    fontSize: 18,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+    fontSize: 36,
+    letterSpacing: 0.3,
   },
   userBannerInfo: {
     flex: 1,
-    gap: 2,
+    gap: 0,
+    minWidth: 0,
   },
   userBannerScoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 2,
+    marginBottom: -1,
   },
   userBannerScore: {
-    ...fontStyles.number,
-    fontSize: 16,
-    color: '#FFFFFF',
+    ...getNumberStyle(16),
+    lineHeight: 18,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
   userBannerScoreLabel: {
     ...fontStyles.body,
     fontSize: 12,
-    color: theme.colors.textTertiary,
+    lineHeight: 16,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
   userBannerGap: {
     ...fontStyles.body,
     fontSize: 11,
-    color: theme.colors.textTertiary,
+    lineHeight: 13,
     letterSpacing: 0.2,
+    marginTop: -1,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
   yourRankWinBadge: {
     flexDirection: 'row',

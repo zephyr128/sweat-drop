@@ -6,5 +6,7 @@
   "set_home_confirm": "Set as Home",
   "no_gyms": "No gyms available.",
   "load_failed": "Could not load gyms.",
-  "retry": "Try again"
+  "retry": "Try again",
+  "suggestGymTitle": "Suggest a gym",
+  "suggestGymSub": "Tell us which gym you want on SweatDrop and we will do our best to add it."
 }

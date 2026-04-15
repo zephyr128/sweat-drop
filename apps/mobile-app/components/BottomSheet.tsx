@@ -22,6 +22,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { theme, hexToRgba } from '@/lib/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DISMISS_THRESHOLD = 80;
@@ -37,6 +38,8 @@ interface BottomSheetProps {
 }
 
 export function BottomSheet({ visible, onClose, accentColor = theme.colors.primary, children }: BottomSheetProps) {
+  const insets = useSafeAreaInsets();
+  const sheetBottomPad = Math.max(insets.bottom, 16);
   const translateY      = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
   const startY          = useSharedValue(0);
@@ -104,7 +107,12 @@ export function BottomSheet({ visible, onClose, accentColor = theme.colors.prima
           <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
             <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.22) }]}>
               {Platform.OS === 'ios' ? (
-                <PlatformBlur intensity={60} tint="dark" style={styles.blurContainer} androidColor="rgba(12,12,22,0.97)">
+                <PlatformBlur
+                  intensity={60}
+                  tint="dark"
+                  style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+                  androidColor="rgba(12,12,22,0.97)"
+                >
                   <LinearGradient
                     colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
                     start={{ x: 0, y: 0 }}
@@ -119,7 +127,7 @@ export function BottomSheet({ visible, onClose, accentColor = theme.colors.prima
                   {children}
                 </PlatformBlur>
               ) : (
-                <View style={[styles.blurContainer, styles.androidSheet]}>
+                <View style={[styles.blurContainer, styles.androidSheet, { paddingBottom: sheetBottomPad }]}>
                   <LinearGradient
                     colors={['rgba(255,255,255,0.06)', hexToRgba(accentColor, 0.03), 'transparent']}
                     start={{ x: 0, y: 0 }}
