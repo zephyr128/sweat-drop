@@ -169,3 +169,25 @@ export function buildOwnerInvitationEmailHtml(vars: {
     ctaLabel: 'Accept Invitation',
   });
 }
+
+/**
+ * Admin-panel-specific password reset email.
+ *
+ * SECURITY: The CTA link MUST live on admin.sweat-drop.com (or localhost in dev)
+ * because the consumer domain sweat-drop.com is bound to the mobile app via
+ * Android App Links / iOS Universal Links. An admin session that lands on
+ * sweat-drop.com is silently imported into the mobile app, leaking elevated
+ * privileges. This email is sent directly via Resend (bypassing Supabase's
+ * email template) so the URL is entirely under our control.
+ */
+export function buildAdminPasswordResetEmailHtml(vars: {
+  resetUrl: string;
+}): string {
+  return wrapEmailHtml({
+    heading: 'Reset your admin password',
+    bodyText:
+      'We received a request to reset the password for your <strong style="color:#fff">SweatDrop admin account</strong>. Use the button below to choose a new password in your browser. This link opens the admin panel — not the consumer mobile app.',
+    acceptUrl: vars.resetUrl,
+    ctaLabel: 'Reset Password',
+  });
+}

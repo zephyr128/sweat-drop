@@ -1,55 +1,35 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase-client';
+import { sendAdminPasswordResetEmail } from '@/lib/actions/password-reset-actions';
 
 export default function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfoMessage(null);
     setLoading(true);
 
     try {
-      // SECURITY: redirectTo MUST point at the admin panel domain so the reset
-      // email never lands on sweat-drop.com (which is bound to the mobile app
-      // via Android App Links / iOS Universal Links).
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+      // SECURITY: we use a server action (not supabase.auth.resetPasswordForEmail)
+      // so the email is sent directly via Resend with a URL that ALWAYS lives
+      // on admin.sweat-drop.com. This fully bypasses Supabase's email template
+      // and the consumer domain, which is bound to the mobile app via App Links.
+      const result = await sendAdminPasswordResetEmail(email);
 
-      if (!appUrl) {
-        // Fail loudly in production rather than silently falling back to the
-        // current origin, which could be a misconfigured deployment.
-        throw new Error(
-          'NEXT_PUBLIC_APP_URL is not set. Password reset cannot proceed safely. ' +
-          'Please contact your administrator.',
-        );
-      }
-
-      // Belt-and-suspenders: if someone misconfigures NEXT_PUBLIC_APP_URL to
-      // point at the consumer domain the mobile app would intercept the link.
-      const appHost = new URL(appUrl).hostname;
-      if (appHost === 'sweat-drop.com' || appHost === 'www.sweat-drop.com') {
-        throw new Error(
-          'NEXT_PUBLIC_APP_URL must not point at sweat-drop.com. ' +
-          'Admin password reset links must stay on the admin domain.',
-        );
-      }
-
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-        { redirectTo: `${appUrl}/auth/confirm` },
-      );
-
-      if (resetError) {
-        setError(resetError.message);
+      if (!result.success) {
+        setError(result.message);
         setLoading(false);
         return;
       }
 
+      setInfoMessage(result.message);
       setSent(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -74,7 +54,10 @@ export default function ForgotPasswordForm() {
           <div className="space-y-6">
             <div className="rounded-md bg-[#00E5FF]/10 border border-[#00E5FF]/30 p-4">
               <p className="text-sm text-[#00E5FF] text-center">
-                Check your email for a password reset link. It may take a minute to arrive.
+                {infoMessage ?? 'Check your email for a password reset link. It may take a minute to arrive.'}
+              </p>
+              <p className="text-xs text-[#808080] text-center mt-3">
+                The link opens at admin.sweat-drop.com — not the mobile app.
               </p>
             </div>
             <div className="text-center">
