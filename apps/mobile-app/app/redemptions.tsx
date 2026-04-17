@@ -11,7 +11,7 @@ import {
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
@@ -28,16 +28,27 @@ import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { BottomSheet } from '@/components/BottomSheet';
+import { VerificationSheet } from '@/components/VerificationSheet';
+import {
+  getRedemptionDisplayState,
+  DISPLAY_STATE_COLOR,
+  DISPLAY_STATE_ICON,
+  DISPLAY_STATE_LABEL_KEY,
+  type RedemptionDisplayState,
+} from '@/lib/redemption-state';
 
 const PAGE_SIZE = 20;
 
 type StatusFilter = 'all' | 'pending' | 'confirmed' | 'cancelled' | 'expired';
 
+// Legacy status colours used only for the filter pill in the filter sheet.
+// Card-level colours are driven by DISPLAY_STATE_COLOR from lib/redemption-state.ts.
 const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  pending:   { color: '#fbbf24', icon: 'time-outline'         },
-  confirmed: { color: '#4ade80', icon: 'checkmark-circle'     },
-  cancelled: { color: '#f87171', icon: 'close-circle'         },
-  expired:   { color: '#94a3b8', icon: 'alert-circle-outline' },
+  pending:                { color: '#fbbf24', icon: 'time-outline'         },
+  pending_verification:   { color: '#f59e0b', icon: 'shield-outline'       },
+  confirmed:              { color: '#4ade80', icon: 'checkmark-circle'     },
+  cancelled:              { color: '#f87171', icon: 'close-circle'         },
+  expired:                { color: '#94a3b8', icon: 'alert-circle-outline' },
 };
 
 const FILTER_OPTIONS: {
@@ -180,7 +191,7 @@ const filterStyles = StyleSheet.create({
 
 export default function RedemptionsScreen() {
   const { t } = useTranslation('redemptions');
-  const { highlight } = useLocalSearchParams<{ highlight?: string }>();
+  const { highlight, verify } = useLocalSearchParams<{ highlight?: string; verify?: string }>();
   const showModal = useAppModal((s) => s.showModal);
   const insets = useSafeAreaInsets();
   const { session } = useSession();
@@ -190,10 +201,18 @@ export default function RedemptionsScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const cardPositions = useRef<Record<string, number>>({});
   const [highlightId, setHighlightId] = useState<string | null>(highlight ?? null);
+  // Auto-open VerificationSheet when arriving from a "requires verification" push tap.
+  useEffect(() => {
+    if (verify === '1') {
+      const timer = setTimeout(() => setVerificationSheetVisible(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [verify]);
 
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('all');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [verificationSheetVisible, setVerificationSheetVisible] = useState(false);
 
   const [tabStates, setTabStates] = useState<Record<StatusFilter, TabState>>(() => {
     const init = {} as Record<StatusFilter, TabState>;
@@ -212,12 +231,17 @@ export default function RedemptionsScreen() {
 
     let query = supabase
       .from('redemptions')
-      .select(`*, rewards:reward_id (id, name, reward_type, price_drops, image_url), gyms:gym_id (id, name)`)
+      .select(`*, fulfilled_at, rewards:reward_id (id, name, reward_type, price_drops, image_url), gyms:gym_id (id, name)`)
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    if (filter !== 'all') query = query.eq('status', filter);
+    if (filter === 'pending') {
+      // Show both pending and pending_verification under the "pending" filter tab.
+      query = query.in('status', ['pending', 'pending_verification']);
+    } else if (filter !== 'all') {
+      query = query.eq('status', filter);
+    }
 
     const { data, error } = await query;
     if (error) { log.error('[Redemptions] fetch error:', error); return; }
@@ -352,11 +376,34 @@ export default function RedemptionsScreen() {
   };
 
   const renderCard = useCallback(({ item: redemption, index }: { item: any; index: number }) => {
-    const status = STATUS_CONFIG[redemption.status] || STATUS_CONFIG.cancelled;
+    const displayState: RedemptionDisplayState = getRedemptionDisplayState({
+      status: redemption.status,
+      fulfilled_at: redemption.fulfilled_at ?? null,
+      source_type: redemption.source_type ?? null,
+      expires_at: redemption.expires_at ?? null,
+    });
+    const stateColor = DISPLAY_STATE_COLOR[displayState];
+    const stateIcon = DISPLAY_STATE_ICON[displayState] as keyof typeof Ionicons.glyphMap;
+    const stateLabelKey = DISPLAY_STATE_LABEL_KEY[displayState];
+
     const imageUrl = redemption.rewards?.image_url;
     const sourceIcon = getSourceIcon(redemption.source_type);
-    const isPending = redemption.status === 'pending';
     const isHighlighted = highlightId === redemption.id;
+
+    // States where the code section is shown
+    const showCode = (
+      displayState === 'pending_verification' ||
+      displayState === 'pending_not_fulfilled' ||
+      displayState === 'pending_ready'
+    ) && redemption.redemption_code;
+
+    // Code is greyed for unverified; full colour for ready states
+    const codeOpacity = displayState === 'pending_verification' || displayState === 'pending_not_fulfilled' ? 0.40 : 1;
+
+    // Cancel button only available for actionable pending states
+    const canCancel = displayState === 'pending_verification' || displayState === 'pending_not_fulfilled' || displayState === 'pending_ready';
+
+    const gymName = redemption.gyms?.name || t('unknownGym');
 
     return (
       <Animated.View
@@ -364,18 +411,20 @@ export default function RedemptionsScreen() {
         onLayout={(e) => { cardPositions.current[redemption.id] = e.nativeEvent.layout.y; }}
       >
         <View style={[styles.card, {
-          borderTopColor:    hexToRgba(status.color, isHighlighted ? 0.70 : 0.30),
-          borderLeftColor:   hexToRgba(status.color, isHighlighted ? 0.50 : 0.12),
-          borderRightColor:  isHighlighted ? hexToRgba(status.color, 0.30) : 'rgba(255,255,255,0.04)',
-          borderBottomColor: isHighlighted ? hexToRgba(status.color, 0.20) : 'rgba(255,255,255,0.03)',
+          borderTopColor:    hexToRgba(stateColor, isHighlighted ? 0.70 : 0.30),
+          borderLeftColor:   hexToRgba(stateColor, isHighlighted ? 0.50 : 0.12),
+          borderRightColor:  isHighlighted ? hexToRgba(stateColor, 0.30) : 'rgba(255,255,255,0.04)',
+          borderBottomColor: isHighlighted ? hexToRgba(stateColor, 0.20) : 'rgba(255,255,255,0.03)',
         }]}>
           <PlatformBlur intensity={50} tint="dark" style={styles.cardBlur} androidColor="rgba(12,12,22,0.97)">
             <LinearGradient
-              colors={[hexToRgba(status.color, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
+              colors={[hexToRgba(stateColor, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
+
+            {/* ── Header row ── */}
             <View style={styles.cardRow}>
               {imageUrl ? (
                 <Image
@@ -396,26 +445,56 @@ export default function RedemptionsScreen() {
 
               <View style={styles.cardInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>{getRedemptionName(redemption)}</Text>
-                <Text style={styles.itemGym} numberOfLines={1}>{redemption.gyms?.name || t('unknownGym')}</Text>
+                <Text style={styles.itemGym} numberOfLines={1}>{gymName}</Text>
                 <Text style={styles.itemDate}>
                   {fmtDate(redemption.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}
                 </Text>
               </View>
 
-              <View style={[styles.statusPill, { backgroundColor: status.color + '18' }]}>
-                <Ionicons name={status.icon} size={14} color={status.color} />
-                <Text style={[styles.statusLabel, { color: status.color }]}>{t(redemption.status)}</Text>
+              <View style={[styles.statusPill, { backgroundColor: hexToRgba(stateColor, 0.14) }]}>
+                <Ionicons name={stateIcon} size={14} color={stateColor} />
+                <Text style={[styles.statusLabel, { color: stateColor }]}>{t(stateLabelKey)}</Text>
               </View>
             </View>
 
-            {isPending && redemption.redemption_code && (
+            {/* ── pending_verification: amber info banner + verify CTA ── */}
+            {displayState === 'pending_verification' && (
+              <View style={[styles.infoBanner, { backgroundColor: hexToRgba('#f59e0b', 0.08), borderColor: hexToRgba('#f59e0b', 0.22) }]}>
+                <Ionicons name="shield-outline" size={15} color="#f59e0b" style={styles.infoBannerIcon} />
+                <Text style={[styles.infoBannerText, { color: 'rgba(255,255,255,0.75)' }]}>
+                  {t('states.pendingVerification.body')}
+                </Text>
+              </View>
+            )}
+
+            {/* ── pending_not_fulfilled: neutral info banner ── */}
+            {displayState === 'pending_not_fulfilled' && (
+              <View style={[styles.infoBanner, { backgroundColor: hexToRgba('#60a5fa', 0.07), borderColor: hexToRgba('#60a5fa', 0.20) }]}>
+                <Ionicons name="cube-outline" size={15} color="#60a5fa" style={styles.infoBannerIcon} />
+                <Text style={[styles.infoBannerText, { color: 'rgba(255,255,255,0.75)' }]}>
+                  {t('states.pendingNotFulfilled.body', { gymName })}
+                </Text>
+              </View>
+            )}
+
+            {/* ── Code section ── */}
+            {showCode && (
               <View style={styles.codeSection}>
-                <View style={[styles.codeBanner, { backgroundColor: hexToRgba(status.color, 0.06), borderColor: hexToRgba(status.color, 0.15) }]}>
+                <View style={[styles.codeBanner, {
+                  backgroundColor: hexToRgba(stateColor, 0.06),
+                  borderColor: hexToRgba(stateColor, 0.18),
+                  opacity: codeOpacity,
+                }]}>
                   <View style={styles.codeLeft}>
                     <Text style={styles.codeLabel}>{t('code')}</Text>
-                    <Text style={[styles.codeText, getNumberStyle(20), { color: branding.primary }]}>
-                      {redemption.redemption_code}
-                    </Text>
+                    <View style={styles.codeInnerRow}>
+                      {displayState === 'pending_verification' && (
+                        <Ionicons name="lock-closed-outline" size={14} color={hexToRgba(branding.primary, 0.50)} style={{ marginRight: 6 }} />
+                      )}
+                      <Text style={[styles.codeText, getNumberStyle(20), { color: branding.primary }]}>
+                        {redemption.redemption_code}
+                      </Text>
+                    </View>
                   </View>
                   <TouchableOpacity
                     style={[styles.copyBtn, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}
@@ -424,14 +503,30 @@ export default function RedemptionsScreen() {
                     <Ionicons name="copy-outline" size={16} color={branding.primary} />
                   </TouchableOpacity>
                 </View>
-                <View style={styles.hintRow}>
-                  <Ionicons name="information-circle-outline" size={14} color={status.color} />
-                  <Text style={[styles.hintText, { color: status.color }]}>{t('showCodeToStaff')}</Text>
-                </View>
+
+                {displayState === 'pending_ready' && (
+                  <View style={styles.hintRow}>
+                    <Ionicons name="information-circle-outline" size={14} color={stateColor} />
+                    <Text style={[styles.hintText, { color: stateColor }]}>{t('showCodeToStaff')}</Text>
+                  </View>
+                )}
               </View>
             )}
 
-            {isPending && (
+            {/* ── pending_verification: "Why verify?" CTA ── */}
+            {displayState === 'pending_verification' && (
+              <TouchableOpacity
+                style={[styles.verifyCta, { borderColor: hexToRgba('#f59e0b', 0.35) }]}
+                onPress={() => setVerificationSheetVisible(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="help-circle-outline" size={15} color="#f59e0b" />
+                <Text style={styles.verifyCtaText}>{t('states.pendingVerification.cta')}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* ── Cancel button (all non-terminal pending states) ── */}
+            {canCancel && (
               <TouchableOpacity
                 style={[styles.cancelBtn, { borderColor: hexToRgba('#f87171', 0.35) }]}
                 onPress={() => handleCancelRedemption(redemption)}
@@ -448,7 +543,8 @@ export default function RedemptionsScreen() {
               </TouchableOpacity>
             )}
 
-            {redemption.status === 'expired' && (
+            {/* ── Expired notice ── */}
+            {displayState === 'expired' && (
               <View style={[styles.expiredRow, { backgroundColor: hexToRgba('#94a3b8', 0.07) }]}>
                 <Ionicons name="alert-circle-outline" size={14} color="#94a3b8" />
                 <Text style={[styles.expiredLabel, { color: '#94a3b8' }]}>{t('expiredDesc')}</Text>
@@ -575,6 +671,13 @@ export default function RedemptionsScreen() {
         branding={branding}
         t={t}
         bottomInset={insets.bottom}
+      />
+
+      {/* ── Verification info sheet ── */}
+      <VerificationSheet
+        visible={verificationSheetVisible}
+        onClose={() => setVerificationSheetVisible(false)}
+        brandColor={branding.primary}
       />
     </View>
   );
@@ -844,6 +947,42 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  infoBannerIcon: {
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  infoBannerText: {
+    ...fontStyles.body,
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
+  },
+  verifyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  verifyCtaText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 13,
+    color: '#f59e0b',
+    letterSpacing: 0.2,
+  },
   codeSection: {
     marginTop: 12,
     gap: 8,
@@ -858,6 +997,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   codeLeft: { gap: 2 },
+  codeInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   codeLabel: {
     ...fontStyles.body,
     fontSize: 11,

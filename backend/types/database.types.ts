@@ -2336,6 +2336,9 @@ export type Database = {
           description: string | null
           drops_spent: number
           expires_at: string | null
+          fulfilled_at: string | null
+          fulfilled_by: string | null
+          fulfillment_notes: string | null
           gym_id: string | null
           id: string
           redemption_code: string | null
@@ -2354,6 +2357,9 @@ export type Database = {
           description?: string | null
           drops_spent: number
           expires_at?: string | null
+          fulfilled_at?: string | null
+          fulfilled_by?: string | null
+          fulfillment_notes?: string | null
           gym_id?: string | null
           id?: string
           redemption_code?: string | null
@@ -2372,6 +2378,9 @@ export type Database = {
           description?: string | null
           drops_spent?: number
           expires_at?: string | null
+          fulfilled_at?: string | null
+          fulfilled_by?: string | null
+          fulfillment_notes?: string | null
           gym_id?: string | null
           id?: string
           redemption_code?: string | null
@@ -2382,6 +2391,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "redemptions_fulfilled_by_fkey"
+            columns: ["fulfilled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "redemptions_gym_id_fkey"
             columns: ["gym_id"]
@@ -3585,6 +3601,25 @@ export type Database = {
         Returns: Json
       }
       get_admin_gym_id: { Args: { p_user_id: string }; Returns: string }
+      get_arena_fulfillment_manifest: {
+        Args: { p_arena_id: string }
+        Returns: {
+          confirmed_at: string
+          expires_at: string
+          fulfilled_at: string
+          fulfilled_by: string
+          full_name: string
+          gym_id: string
+          gym_name: string
+          prize_description: string
+          rank: number
+          redemption_code: string
+          redemption_id: string
+          status: string
+          user_id: string
+          username: string
+        }[]
+      }
       get_arena_results: {
         Args: { p_arena_id: string }
         Returns: {
@@ -4241,6 +4276,10 @@ export type Database = {
       is_gym_active: { Args: { p_gym_id: string }; Returns: boolean }
       is_gym_admin: { Args: { p_user_id: string }; Returns: boolean }
       is_gym_owner: { Args: { p_user_id: string }; Returns: boolean }
+      is_member_verified: {
+        Args: { p_gym_id: string; p_user_id: string }
+        Returns: boolean
+      }
       is_receptionist: { Args: { p_user_id: string }; Returns: boolean }
       is_superadmin: { Args: { p_user_id: string }; Returns: boolean }
       is_superadmin_from_auth: { Args: { p_user_id: string }; Returns: boolean }
@@ -4260,6 +4299,10 @@ export type Database = {
       }
       mark_all_notifications_read: { Args: never; Returns: number }
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: number }
+      mark_redemption_fulfilled: {
+        Args: { p_notes?: string; p_redemption_id: string }
+        Returns: Json
+      }
       mark_staff_invitation_email_delivery: {
         Args: {
           p_error_text?: string

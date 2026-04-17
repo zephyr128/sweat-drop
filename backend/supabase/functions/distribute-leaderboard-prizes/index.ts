@@ -32,6 +32,11 @@
 //   - Per-user push failures are logged but do not abort the gym loop.
 //   - Missing redemption rows (e.g. DB migration not yet applied) fall back to
 //     the legacy push body gracefully — no crash.
+//
+// AGENT NOTE: [2026-04-17] - edge-function-agent (verification gate Phase 2)
+// Reference: docs/plans/exec_verification_gate_fulfillment_v1.md — Phase 2a
+//   - Redemptions may be status pending_verification; push copy + data branch.
+//   - client_ref leaderboard_prize_unverified for telemetry separation.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -138,27 +143,28 @@ serve(async (req) => {
       if (winners > 0) {
         // Fetch the redemption rows just created for this gym/period so we
         // can include redemption_id and redemption_code in the push payload.
-        // We filter by source_type='leaderboard_prize' and status='pending'
-        // (Phase-1 migration) or 'claimed' (legacy) created within the last 5 minutes.
+        // We filter by source_type='leaderboard_prize' and status in
+        // pending / pending_verification / claimed (legacy), created within the last 5 minutes.
         const { data: newRedemptions } = await supabase
           .from('redemptions')
-          .select('id, user_id, redemption_code, description')
+          .select('id, user_id, redemption_code, description, status')
           .eq('gym_id', gym.id)
           .eq('source_type', 'leaderboard_prize')
-          .in('status', ['pending', 'claimed'])
+          .in('status', ['pending', 'pending_verification', 'claimed'])
           .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false });
 
         // Build a map user_id → redemption for O(1) lookup
         const redemptionByUser = new Map<
           string,
-          { id: string; code: string | null }
+          { id: string; code: string | null; status: string }
         >();
         for (const r of newRedemptions || []) {
           if (!redemptionByUser.has(r.user_id)) {
             redemptionByUser.set(r.user_id, {
               id: r.id,
               code: r.redemption_code ?? null,
+              status: typeof r.status === 'string' ? r.status : 'pending',
             });
           }
         }
@@ -184,11 +190,15 @@ serve(async (req) => {
 
             const redemption = redemptionByUser.get(user.user_id);
             const hasCode = redemption?.code != null;
+            const redemptionStatus = redemption?.status ?? 'pending';
+            const needsVerification = redemptionStatus === 'pending_verification';
 
             // Push body: include collect CTA if redemption code exists (Phase-1 migration applied)
-            const pushBody = hasCode
-              ? `You finished ${ordinal(user.rank)} at ${gym.name} this ${period}! Show code ${redemption!.code} at the desk to collect your prize. 🎁`
-              : `Congratulations! You finished ${ordinal(user.rank)} on the ${period} leaderboard at ${gym.name}! 🏆`;
+            const pushBody = !hasCode
+              ? `Congratulations! You finished ${ordinal(user.rank)} on the ${period} leaderboard at ${gym.name}! 🏆`
+              : needsVerification
+              ? `You finished ${ordinal(user.rank)} at ${gym.name} this ${period}! 🏆 Verify your membership at reception first, then collect with code ${redemption!.code}.`
+              : `You finished ${ordinal(user.rank)} at ${gym.name} this ${period}! Show code ${redemption!.code} at the desk to collect your prize. 🎁`;
 
             // Push data: include redemption_id for deep-link navigation
             const pushData: Record<string, string> = {
@@ -196,6 +206,8 @@ serve(async (req) => {
               gym_id: gym.id,
               rank: String(user.rank),
               period,
+              redemption_status: redemptionStatus,
+              requires_verification: needsVerification ? 'true' : 'false',
             };
             if (redemption?.id) {
               pushData.redemption_id = redemption.id;
@@ -211,7 +223,9 @@ serve(async (req) => {
                 Authorization: `Bearer ${serviceRoleKey}`,
               },
               body: JSON.stringify({
-                client_ref: 'leaderboard_prize',
+                client_ref: needsVerification
+                  ? 'leaderboard_prize_unverified'
+                  : 'leaderboard_prize',
                 tokens: [profile.expo_push_token],
                 user_ids: [user.user_id],
                 title: '🏆 You Won a Leaderboard Prize!',
@@ -226,6 +240,7 @@ serve(async (req) => {
             pushMetrics.push({
               user_id_prefix: String(user.user_id).slice(0, 8),
               rank: user.rank,
+              redemption_status: redemptionStatus,
               has_redemption: !!redemption?.id,
               has_code: hasCode,
               ...compactSendPushMetrics(pushJson),

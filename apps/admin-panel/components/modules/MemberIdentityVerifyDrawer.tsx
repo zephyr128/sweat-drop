@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   X,
@@ -36,6 +37,7 @@ export function MemberIdentityVerifyDrawer({
   onClose,
   onVerified,
 }: MemberIdentityVerifyDrawerProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [candidate, setCandidate] = useState<IdentityCandidate | null>(null);
@@ -78,6 +80,9 @@ export function MemberIdentityVerifyDrawer({
     );
     if (res.success) {
       toast.success('Member identity verified');
+      // Refresh server-component caches so redemption rows reflect the
+      // auto-promoted status (DB trigger fires on is_verified = true).
+      router.refresh();
       onVerified(userId);
       onClose();
     } else {

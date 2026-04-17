@@ -2,6 +2,10 @@
 // Description: Finalizes ended arenas by calling finalize_arena() RPC and sending push notifications.
 // Called by cron job: Daily at 00:30 UTC
 //
+// AGENT NOTE: [2026-04-17] - edge-function-agent (verification gate Phase 2b)
+// Reference: docs/plans/exec_verification_gate_fulfillment_v1.md — per-winner pushes,
+//   pending_verification copy, data.gym_name + redemption_status / requires_verification.
+//
 // AGENT NOTE: [2026-03-11] - supabase-dba
 // Reference: docs/plans/arena_expiration_and_results_flow.md — Step 1
 //
@@ -14,7 +18,11 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { deliveryCountFromSendPushBody, isExpoPushToken } from '../_shared/expo-push.ts';
+import {
+  compactSendPushMetrics,
+  deliveryCountFromSendPushBody,
+  isExpoPushToken,
+} from '../_shared/expo-push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,6 +32,22 @@ const corsHeaders = {
 
 interface FinalizeRequest {
   arena_id?: string;
+}
+
+/** Rank suffix helper: 1→1st, 2→2nd, 3→3rd */
+function ordinal(n: number): string {
+  if (n === 1) return '1st';
+  if (n === 2) return '2nd';
+  if (n === 3) return '3rd';
+  return `${n}th`;
+}
+
+interface ArenaWinnerRedemptionEmbed {
+  id: string;
+  redemption_code: string | null;
+  status: string;
+  gym_id: string | null;
+  gyms: { name: string } | null;
 }
 
 serve(async (req) => {
@@ -116,46 +140,66 @@ serve(async (req) => {
         const winnerUserIds: string[] = [];
 
         if (winners_count > 0) {
-          // Fetch winners with prizes + redemption details
+          // Fetch winners with redemption status + gym name (verification gate Phase 2b)
           const { data: winnerResults } = await supabase
             .from('arena_results')
-            .select('user_id, rank, redemption_id, redemptions!inner(id, redemption_code)')
+            .select(
+              'user_id, rank, redemption_id, redemptions!inner(id, redemption_code, status, gym_id, gyms(name))'
+            )
             .eq('arena_id', arena.id)
             .not('redemption_id', 'is', null);
 
-          const winnerIds = winnerResults?.map((r: any) => r.user_id) || [];
+          const winnerIds = winnerResults?.map((r) => r.user_id) || [];
           winnerUserIds.push(...winnerIds);
 
           if (winnerIds.length > 0) {
-            // Fetch winners' push tokens
             const { data: winnerProfiles } = await supabase
               .from('profiles')
               .select('id, expo_push_token')
-              .in('id', winnerIds)
-              .not('expo_push_token', 'is', null);
+              .in('id', winnerIds);
 
-            const winnerTokens = (winnerProfiles || [])
-              .map((p: any) => p.expo_push_token)
-              .filter((t: string | null) => isExpoPushToken(t));
-
-            // Build per-winner redemption lookup
-            const redemptionByUser = new Map<string, { id: string; code: string | null; rank: number }>();
-            for (const wr of winnerResults || []) {
-              const redemption = wr.redemptions as any;
-              redemptionByUser.set(wr.user_id, {
-                id: redemption?.id ?? wr.redemption_id,
-                code: redemption?.redemption_code ?? null,
-                rank: wr.rank,
-              });
+            const tokenByUser = new Map<string, string>();
+            for (const p of winnerProfiles || []) {
+              if (p.expo_push_token && isExpoPushToken(p.expo_push_token)) {
+                tokenByUser.set(p.id, p.expo_push_token);
+              }
             }
 
-            if (winnerTokens.length > 0) {
-              // Find first winner's code for the shared push body
-              const firstWinner = winnerResults?.[0];
-              const sampleCode = (firstWinner?.redemptions as any)?.redemption_code;
-              const pushBody = sampleCode
-                ? `Congratulations! You won a prize in ${arena.name}. Show code ${sampleCode} at the desk to collect! 🎁`
-                : `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`;
+            for (const wr of winnerResults || []) {
+              const token = tokenByUser.get(wr.user_id);
+              if (!token) continue;
+
+              const redemption = wr.redemptions as ArenaWinnerRedemptionEmbed | null;
+              const code = redemption?.redemption_code ?? null;
+              const redemptionStatus = redemption?.status ?? 'pending';
+              const needsVerification = redemptionStatus === 'pending_verification';
+              const gymName = redemption?.gyms?.name ?? 'the gym';
+              const rank = typeof wr.rank === 'number' ? wr.rank : 0;
+
+              const pushBody = !code
+                ? `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`
+                : needsVerification
+                ? `You finished ${ordinal(rank)} in ${arena.name}! 🏆 Verify your membership at ${gymName} reception first, then collect with code ${code}.`
+                : `You finished ${ordinal(rank)} in ${arena.name}! 🏆 Show code ${code} at ${gymName} reception to collect your prize.`;
+
+              const pushData: Record<string, string> = {
+                type: 'arena_prize',
+                arena_id: arena.id,
+                arena_name: arena.name,
+                redemption_status: redemptionStatus,
+                requires_verification: needsVerification ? 'true' : 'false',
+                rank: String(rank),
+              };
+              if (redemption?.gym_id) {
+                pushData.gym_id = redemption.gym_id;
+              }
+              pushData.gym_name = gymName;
+              if (redemption?.id) {
+                pushData.redemption_id = redemption.id;
+              }
+              if (code) {
+                pushData.redemption_code = code;
+              }
 
               const pushResponse = await fetch(
                 `${supabaseUrl}/functions/v1/send-push`,
@@ -166,16 +210,14 @@ serve(async (req) => {
                     Authorization: `Bearer ${supabaseServiceKey}`,
                   },
                   body: JSON.stringify({
-                    client_ref: 'finalize_arena_winners',
-                    tokens: winnerTokens,
-                    user_ids: winnerIds,
+                    client_ref: needsVerification
+                      ? 'arena_prize_unverified'
+                      : 'arena_prize',
+                    tokens: [token],
+                    user_ids: [wr.user_id],
                     title: '🏆 Arena Prize Won!',
                     body: pushBody,
-                    data: {
-                      type: 'arena_prize',
-                      arena_id: arena.id,
-                      arena_name: arena.name,
-                    },
+                    data: pushData,
                   }),
                 }
               );
@@ -184,6 +226,15 @@ serve(async (req) => {
               if (pushResponse.ok) {
                 winnersNotified += deliveryCountFromSendPushBody(wBody);
               }
+
+              console.log(JSON.stringify({
+                event: 'finalize-arena-winner-push',
+                arena_id: arena.id,
+                user_id_prefix: String(wr.user_id).slice(0, 8),
+                rank,
+                redemption_status: redemptionStatus,
+                ...compactSendPushMetrics(wBody),
+              }));
             }
           }
         }

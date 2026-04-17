@@ -44,5 +44,26 @@
   "cancelSuccessDesc": "{{drops}} drops je vraćeno na tvoj balans.",
   "cancelError": "Neuspešno otkazivanje",
   "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo.",
-  "loadMore": "Učitaj još"
+  "loadMore": "Učitaj još",
+  "states": {
+    "pendingVerification": {
+      "badge": "Verifikujte na recepciji",
+      "body": "Posetite recepciju sa dokumentom. Nakon verifikacije, nagrada postaje dostupna za preuzimanje.",
+      "cta": "Zašto verifikacija?"
+    },
+    "pendingNotFulfilled": {
+      "badge": "Nagrada je na putu",
+      "body": "Tvoja nagrada će biti isporučena u {{gymName}}. Obavestićemo te kad bude spremna za preuzimanje."
+    },
+    "pendingReady": {
+      "badge": "Spremno za preuzimanje",
+      "body": "Pokaži ovaj kod na recepciji teretane {{gymName}}."
+    }
+  },
+  "push": {
+    "prizeReady": {
+      "title": "🎁 Tvoja nagrada je spremna!",
+      "body": "Pokaži kod na recepciji teretane {{gymName}} da je preuzmeš."
+    }
+  }
 }

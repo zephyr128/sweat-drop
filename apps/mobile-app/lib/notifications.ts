@@ -76,6 +76,7 @@ type NotificationTrigger =
   | 'arena_prize'
   | 'arena_ended'
   | 'leaderboard_prize'
+  | 'prize_ready'
   | 'reminder'
   | 'comeback_offer'
   | 'happy_hour'
@@ -285,10 +286,16 @@ interface NotificationData {
   /** Campaign-specific fields */
   campaign_id?: string;
   discount_code?: string;
-  /** Leaderboard prize redemption fields (Phase-1 migration) */
+  /** Leaderboard / arena prize fields */
   redemption_id?: string;
   redemption_code?: string;
   rank?: string;
+  /** 'pending' | 'pending_verification' — set by edge functions (Phase 2) */
+  redemption_status?: string;
+  /** 'true' | 'false' string — mobile should pattern-match this string */
+  requires_verification?: string;
+  /** Gym name included by finalize-arena edge function */
+  gym_name?: string;
 }
 
 /**
@@ -335,16 +342,23 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
       return '/wallet';
 
     case 'arena_prize':
-      if (data.arena_id) return `/arena/${data.arena_id}`;
-      return '/redemptions';
+    case 'leaderboard_prize': {
+      // When requires_verification is 'true', append verify=1 so the redemptions
+      // screen can auto-open the VerificationSheet to explain the verify step.
+      const needsVerify = data.requires_verification === 'true';
+      if (data.redemption_id) {
+        const base = `/redemptions?highlight=${data.redemption_id}`;
+        return needsVerify ? `${base}&verify=1` : base;
+      }
+      return needsVerify ? '/redemptions?verify=1' : '/redemptions';
+    }
 
     case 'arena_ended':
       if (data.arena_id) return `/arena/${data.arena_id}`;
       return '/arenas';
 
-    case 'leaderboard_prize':
-      // Deep-link to the specific redemption card when redemption_id is available,
-      // otherwise fall back to the full redemptions list.
+    case 'prize_ready':
+      // Fired by send-prize-ready-push edge function when staff marks prize fulfilled.
       if (data.redemption_id) {
         return `/redemptions?highlight=${data.redemption_id}`;
       }

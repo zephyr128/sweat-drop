@@ -44,5 +44,26 @@
   "cancelSuccessDesc": "{{drops}} drops have been refunded to your balance.",
   "cancelError": "Could not cancel",
   "cancelErrorDesc": "Something went wrong. Please try again.",
-  "loadMore": "Load more"
+  "loadMore": "Load more",
+  "states": {
+    "pendingVerification": {
+      "badge": "Verify at reception",
+      "body": "Visit reception with your ID. After verification, this prize becomes collectible.",
+      "cta": "Why verify?"
+    },
+    "pendingNotFulfilled": {
+      "badge": "Prize on the way",
+      "body": "Your prize will be delivered to {{gymName}}. We'll notify you when it's ready to collect."
+    },
+    "pendingReady": {
+      "badge": "Ready to collect",
+      "body": "Show this code at {{gymName}} reception."
+    }
+  },
+  "push": {
+    "prizeReady": {
+      "title": "🎁 Your prize is ready!",
+      "body": "Show your code at {{gymName}} reception to collect it."
+    }
+  }
 }

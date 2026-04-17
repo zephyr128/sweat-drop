@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import {
   Trophy,
   Medal,
@@ -25,6 +26,7 @@ import {
   Mail,
   Copy,
   ClipboardCheck,
+  PackageCheck,
 } from 'lucide-react';
 import {
   getArenaParticipants,
@@ -335,7 +337,7 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-[#1A1A1A]">
+      <div className="flex items-center border-b border-[#1A1A1A]">
         {(['leaderboard', ...(arena.is_finalized ? ['results'] as const : []), ...(isSuperadmin ? ['invitations'] as const : [])] as Tab[]).map((tab) => (
           <button
             key={tab}
@@ -351,6 +353,14 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
              `Invitations${invitations.length > 0 ? ` (${invitations.length})` : ''}`}
           </button>
         ))}
+        {/* Fulfillment tab — links to dedicated page visible to all gym staff */}
+        <Link
+          href={`/dashboard/super/arenas/${arena.id}/fulfillment`}
+          className="ml-auto px-5 py-3 text-sm font-medium text-[#808080] border-b-2 border-transparent hover:text-white transition-colors flex items-center gap-1.5"
+        >
+          <PackageCheck className="w-3.5 h-3.5" />
+          Fulfillment
+        </Link>
       </div>
 
       {/* Leaderboard Tab */}
