@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -66,7 +67,8 @@ export function ReferralAcceptSheet({
   const { t } = useTranslation('socialFriends');
   const [sheetState, setSheetState] = useState<SheetState>('confirm');
   const insets = useSafeAreaInsets();
-  const sheetBottomPad = Math.max(insets.bottom, 16) + 8;
+  const sheetBottomPad =
+    Math.max(insets.bottom, Platform.OS === 'android' ? 48 : 16) + (Platform.OS === 'ios' ? 8 : 0);
 
   const accent = gym.primaryColor || theme.colors.primary;
 
@@ -186,26 +188,28 @@ export function ReferralAcceptSheet({
           />
         </Animated.View>
 
-        {/* Sheet */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
-            <View style={[styles.sheet, { borderColor: hexToRgba(accent, 0.22) }]}>
-              <PlatformBlur
-                intensity={55}
-                tint="dark"
-                style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
-                androidColor="rgba(12,15,24,0.98)"
-              >
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.08)', hexToRgba(accent, 0.05), 'rgba(12,12,22,0.0)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
+        {/* Sheet — pan only on handle so inner content is not blocked on Android */}
+        <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
+          <View style={[styles.sheet, { borderColor: hexToRgba(accent, 0.22) }]}>
+            <PlatformBlur
+              intensity={55}
+              tint="dark"
+              style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+              androidColor="rgba(12,15,24,0.98)"
+            >
+              <LinearGradient
+                colors={['rgba(255,255,255,0.08)', hexToRgba(accent, 0.05), 'rgba(12,12,22,0.0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
 
-                {/* Drag handle */}
-                <View style={styles.handle} />
+              <GestureDetector gesture={panGesture}>
+                <View style={styles.dragHandleZone}>
+                  <View style={styles.handle} />
+                </View>
+              </GestureDetector>
 
                 {/* ── CONFIRM ── */}
                 {sheetState === 'confirm' && (
@@ -323,10 +327,9 @@ export function ReferralAcceptSheet({
                     </Pressable>
                   </View>
                 )}
-              </PlatformBlur>
-            </View>
-          </Animated.View>
-        </GestureDetector>
+            </PlatformBlur>
+          </View>
+        </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -359,13 +362,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
+  dragHandleZone: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
+    minHeight: 36,
+  },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignSelf: 'center',
-    marginBottom: 4,
   },
   gymLogoWrap: {
     width: 72,

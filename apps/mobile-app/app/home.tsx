@@ -691,7 +691,10 @@ export default function HomeScreen() {
   const navToStatsToday = useCallback(() => router.push('/stats?period=today' as any), [router]);
   const navToStatsWeek = useCallback(() => router.push('/stats?period=week' as any), [router]);
   const navToStore = useCallback(() => router.push('/store'), [router]);
-  const navToLeaderboard = useCallback((period: string) => router.push({ pathname: '/leaderboard', params: { period } } as any), [router]);
+  const navToLeaderboard = useCallback(
+    (period: string) => router.push(`/leaderboard?period=${encodeURIComponent(period)}` as any),
+    [router],
+  );
   const navToInviteFriend = useCallback(() => router.push('/invite-friend'), [router]);
   const navToSmartCoach = useCallback(() => { if (isUnlocked) router.push('/smartcoach'); }, [router, isUnlocked]);
   const navToChallenge = useCallback((id: string) => router.push({ pathname: '/challenge-detail', params: { challengeId: id, gymId: activeGymId || '' } }), [router, activeGymId]);
@@ -1572,8 +1575,8 @@ const styles = StyleSheet.create({
   },
   notifBadge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
+    top: -4,
+    right: -4,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -1581,7 +1584,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    borderWidth: 1.5,
+    borderWidth: 0.75,
     borderColor: '#000',
   },
   notifBadgeText: {

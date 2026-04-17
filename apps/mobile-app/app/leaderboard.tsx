@@ -256,7 +256,7 @@ function ExpandableRows({ expanded, children }: { expanded: boolean; children: R
 
 export default function LeaderboardScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ period?: string }>();
+  const params = useLocalSearchParams<{ period?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
@@ -293,7 +293,8 @@ export default function LeaderboardScreen() {
   });
 
   useEffect(() => {
-    const incomingPeriod = params.period;
+    const raw = params.period;
+    const incomingPeriod = Array.isArray(raw) ? raw[raw.length - 1] : raw;
     if (incomingPeriod === 'weekly' || incomingPeriod === 'monthly' || incomingPeriod === 'all_time') {
       setPeriod(incomingPeriod);
     }

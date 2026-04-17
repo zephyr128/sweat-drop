@@ -1,3 +1,8 @@
+// SECURITY: This route MUST stay on the admin panel domain (admin.sweat-drop.com).
+// NEVER redirect to sweat-drop.com or sweatdrop:// from here.
+// The consumer mobile app intercepts links on sweat-drop.com via Android App Links /
+// iOS Universal Links — routing an admin session there would expose elevated
+// privileges inside the consumer app.
 import { createClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';

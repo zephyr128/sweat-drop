@@ -15,7 +15,29 @@ export default function ForgotPasswordForm() {
     setLoading(true);
 
     try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      // SECURITY: redirectTo MUST point at the admin panel domain so the reset
+      // email never lands on sweat-drop.com (which is bound to the mobile app
+      // via Android App Links / iOS Universal Links).
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+      if (!appUrl) {
+        // Fail loudly in production rather than silently falling back to the
+        // current origin, which could be a misconfigured deployment.
+        throw new Error(
+          'NEXT_PUBLIC_APP_URL is not set. Password reset cannot proceed safely. ' +
+          'Please contact your administrator.',
+        );
+      }
+
+      // Belt-and-suspenders: if someone misconfigures NEXT_PUBLIC_APP_URL to
+      // point at the consumer domain the mobile app would intercept the link.
+      const appHost = new URL(appUrl).hostname;
+      if (appHost === 'sweat-drop.com' || appHost === 'www.sweat-drop.com') {
+        throw new Error(
+          'NEXT_PUBLIC_APP_URL must not point at sweat-drop.com. ' +
+          'Admin password reset links must stay on the admin domain.',
+        );
+      }
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email.trim(),

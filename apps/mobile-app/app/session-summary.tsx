@@ -993,7 +993,6 @@ export default function SessionSummaryScreen() {
                   <Text style={styles.badgesSectionTitle}>
                     {t('summary.newBadge', { count: earnedBadges.length })}
                   </Text>
-                  <Text style={styles.badgesTapHint}>{t('summary.tapToView')}</Text>
                 </Animated.View>
                 <View style={styles.badgesGrid}>
                   {earnedBadges.map((badge: any, index: number) => (
@@ -1601,12 +1600,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFD700',
     flex: 1,
-  },
-  badgesTapHint: {
-    ...fontStyles.body,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
-    letterSpacing: 0.2,
   },
   badgesGrid: {
     flexDirection: 'row',

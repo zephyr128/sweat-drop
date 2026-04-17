@@ -34,12 +34,19 @@ interface BottomSheetProps {
   visible: boolean;
   onClose: () => void;
   accentColor?: string;
+  hasScrollContent?: boolean;
   children: React.ReactNode;
 }
 
-export function BottomSheet({ visible, onClose, accentColor = theme.colors.primary, children }: BottomSheetProps) {
+export function BottomSheet({
+  visible,
+  onClose,
+  accentColor = theme.colors.primary,
+  hasScrollContent = false,
+  children,
+}: BottomSheetProps) {
   const insets = useSafeAreaInsets();
-  const sheetBottomPad = Math.max(insets.bottom, 16);
+  const sheetBottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 48 : 16);
   const translateY      = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
   const startY          = useSharedValue(0);
@@ -102,49 +109,82 @@ export function BottomSheet({ visible, onClose, accentColor = theme.colors.prima
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
 
-        {/* Sheet */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
-            <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.22) }]}>
-              {Platform.OS === 'ios' ? (
-                <PlatformBlur
-                  intensity={60}
-                  tint="dark"
-                  style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
-                  androidColor="rgba(12,12,22,0.97)"
-                >
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                  />
-                  <View style={styles.handle} />
-                  {children}
-                  <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
-                    <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-                  </Pressable>
-                </PlatformBlur>
-              ) : (
-                <View style={[styles.blurContainer, styles.androidSheet, { paddingBottom: sheetBottomPad }]}>
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.06)', hexToRgba(accentColor, 0.03), 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                  />
-                  <View style={styles.handle} />
-                  {children}
-                  <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
-                    <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          </Animated.View>
-        </GestureDetector>
+        {/* If content scrolls, keep dismiss gesture on handle area only.
+            If it does not scroll, allow dragging from whole sheet content. */}
+        <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
+          <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.22) }]}>
+            {Platform.OS === 'ios' ? (
+              <PlatformBlur
+                intensity={60}
+                tint="dark"
+                style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+                androidColor="rgba(12,12,22,0.97)"
+              >
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+                {hasScrollContent ? (
+                  <>
+                    <GestureDetector gesture={panGesture}>
+                      <View style={styles.dragHandleZone}>
+                        <View style={styles.handle} />
+                      </View>
+                    </GestureDetector>
+                    {children}
+                  </>
+                ) : (
+                  <GestureDetector gesture={panGesture}>
+                    <View style={styles.fullPanZone}>
+                      <View style={styles.dragHandleZone}>
+                        <View style={styles.handle} />
+                      </View>
+                      {children}
+                    </View>
+                  </GestureDetector>
+                )}
+                <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
+                  <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                </Pressable>
+              </PlatformBlur>
+            ) : (
+              <View style={[styles.blurContainer, styles.androidSheet, { paddingBottom: sheetBottomPad }]}>
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.06)', hexToRgba(accentColor, 0.03), 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+                {hasScrollContent ? (
+                  <>
+                    <GestureDetector gesture={panGesture}>
+                      <View style={styles.dragHandleZone}>
+                        <View style={styles.handle} />
+                      </View>
+                    </GestureDetector>
+                    {children}
+                  </>
+                ) : (
+                  <GestureDetector gesture={panGesture}>
+                    <View style={styles.fullPanZone}>
+                      <View style={styles.dragHandleZone}>
+                        <View style={styles.handle} />
+                      </View>
+                      {children}
+                    </View>
+                  </GestureDetector>
+                )}
+                <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
+                  <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -178,13 +218,22 @@ const styles = StyleSheet.create({
   androidSheet: {
     backgroundColor: '#0E1118',
   },
+  dragHandleZone: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 12,
+    minHeight: 40,
+  },
+  fullPanZone: {
+    alignSelf: 'stretch',
+  },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.20)',
     alignSelf: 'center',
-    marginBottom: 14,
   },
   closeBtn: {
     position: 'absolute',

@@ -21,6 +21,7 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { theme } from '@/lib/theme';
+import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAccount';
 
 function isRecoveryType(value: string | null | undefined): boolean {
   if (!value) return false;
@@ -167,6 +168,18 @@ export default function AuthConfirmScreen() {
           }
         }
         if (cancelled) return;
+        // Defense-in-depth: check role before allowing recovery to proceed.
+        const { data: vtUserData } = await supabase.auth.getUser();
+        const vtRole =
+          (vtUserData?.user?.app_metadata?.role as string | undefined) ??
+          (vtUserData?.user?.user_metadata?.role as string | undefined);
+        if (vtRole !== undefined && !isConsumerRole(vtRole)) {
+          log.warn('[AuthConfirm] verifyOtp: elevated role detected, rejecting', { role: vtRole });
+          navigatedRef.current = true;
+          await rejectElevatedSession('confirm_verify_otp_elevated_role', vtRole);
+          if (!cancelled) setTokensProcessed(true);
+          return;
+        }
         if (isRecoveryType(type)) {
           useAuthStore.setState({ pendingPasswordRecovery: true });
           navigatedRef.current = true; // _layout.tsx handles recovery navigation
@@ -195,6 +208,18 @@ export default function AuthConfirmScreen() {
           log.warn('[AuthConfirm] setSession exception:', e);
         }
         if (cancelled) return;
+        // Defense-in-depth: check role before allowing recovery to proceed.
+        const { data: ssUserData } = await supabase.auth.getUser();
+        const ssRole =
+          (ssUserData?.user?.app_metadata?.role as string | undefined) ??
+          (ssUserData?.user?.user_metadata?.role as string | undefined);
+        if (ssRole !== undefined && !isConsumerRole(ssRole)) {
+          log.warn('[AuthConfirm] setSession: elevated role detected, rejecting', { role: ssRole });
+          navigatedRef.current = true;
+          await rejectElevatedSession('confirm_set_session_elevated_role', ssRole);
+          if (!cancelled) setTokensProcessed(true);
+          return;
+        }
         if (isRecoveryType(type)) {
           useAuthStore.setState({ pendingPasswordRecovery: true });
           navigatedRef.current = true;

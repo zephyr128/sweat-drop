@@ -37,6 +37,7 @@ import {
 } from '@/lib/notifications';
 import { log } from '@/lib/logger';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAccount';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
@@ -295,6 +296,27 @@ export default function RootLayout() {
             log.warn('[App] setSession from deep link failed:', error.message);
             if (isRecovery) {
               useAuthStore.getState().clearPendingPasswordRecovery();
+            }
+          } else {
+            // Defense-in-depth: check role BEFORE allowing recovery flow to proceed.
+            // An admin resetting their password on mobile must be rejected here so that
+            // pendingPasswordRecovery never becomes visible to the in-app reset screen.
+            const { data: userData } = await supabase.auth.getUser();
+            if (userData?.user) {
+              // Wait briefly for authStore to settle its profile fetch triggered by
+              // onAuthStateChange SIGNED_IN (which also checks role). If the profile
+              // isn't ready yet, read role from app_metadata as a fast fallback.
+              const appMetaRole =
+                (userData.user.app_metadata?.role as string | undefined) ??
+                (userData.user.user_metadata?.role as string | undefined);
+              if (appMetaRole !== undefined && !isConsumerRole(appMetaRole)) {
+                log.warn('[App] Deep-link setSession: elevated role detected, rejecting', { role: appMetaRole });
+                if (isRecovery) {
+                  useAuthStore.getState().clearPendingPasswordRecovery();
+                }
+                await rejectElevatedSession('deep_link_elevated_role', appMetaRole);
+                return;
+              }
             }
           }
         } catch (e) {

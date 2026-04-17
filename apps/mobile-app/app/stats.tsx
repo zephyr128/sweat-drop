@@ -515,7 +515,7 @@ const TodayTimeline: React.FC<{
             </View>
           ) : (
             sessions.map((s, i) => {
-              const time = fmtTime(s.startedAt, { hour: '2-digit', minute: '2-digit' });
+              const time = fmtTime(s.startedAt, { hour: '2-digit', minute: '2-digit', hour12: false });
               const mins = Math.round(s.durationSeconds / 60);
               return (
                 <Animated.View
@@ -835,7 +835,7 @@ const styles = StyleSheet.create({
     ...fontStyles.body,
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
-    width: 72,
+    width: 80,
   },
   originBarOuter: {
     flex: 1,
@@ -845,13 +845,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   originCount: {
-    width: 38,
+    width: 44,
     textAlign: 'right',
     color: 'rgba(255,255,255,0.70)',
     fontSize: 12,
   },
   originPct: {
-    width: 30,
+    width: 32,
     textAlign: 'right',
     color: 'rgba(255,255,255,0.35)',
     fontSize: 11,
@@ -878,7 +878,7 @@ const styles = StyleSheet.create({
     ...fontStyles.bodySemiBold,
     fontSize: 12,
     color: 'rgba(255,255,255,0.45)',
-    width: 48,
+    width: 44,
   },
   timelineDot: {
     width: 12,

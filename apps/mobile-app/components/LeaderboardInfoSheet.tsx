@@ -4,7 +4,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -32,6 +31,8 @@ const DISMISS_THRESHOLD = 80;
 const OPEN_CONFIG = { duration: 340, easing: Easing.out(Easing.cubic) };
 const CLOSE_CONFIG = { duration: 260, easing: Easing.in(Easing.cubic) };
 const SNAP_BACK = { damping: 22, stiffness: 280, mass: 0.9 };
+
+const AnimatedSheetScrollView = Animated.ScrollView;
 
 const MEDAL_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] as const;
 const MEDAL_EMOJIS = ['🥇', '🥈', '🥉'] as const;
@@ -68,10 +69,10 @@ export function LeaderboardInfoSheet({
 }: LeaderboardInfoSheetProps) {
   const { t } = useTranslation('leaderboard');
   const insets = useSafeAreaInsets();
-  // On Android with 3-button or gesture navigation the insets.bottom can be 0
-  // even though the system nav bar occludes content. Use a minimum of 24 dp so
-  // the "Got it" CTA is never hidden behind the navigation bar.
-  const sheetBottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16);
+  // Android 3-button nav often reports insets.bottom === 0; ~48dp clears the bar.
+  // Blur paddingBottom is the single source for nav clearance — keep ScrollView
+  // content padding modest so the CTA is not double-lifted.
+  const sheetBottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 48 : 16);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -166,36 +167,43 @@ export function LeaderboardInfoSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
 
-        {/* Sheet */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
-            <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.25) }]}>
-              <PlatformBlur
-                intensity={60}
-                tint="dark"
-                style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
-                androidColor="rgba(12,15,24,0.98)"
-              >
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
+        {/* Sheet — pan only on handle so ScrollView receives vertical drags on Android */}
+        <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
+          <View style={[styles.sheet, { borderColor: hexToRgba(accentColor, 0.25) }]}>
+            <PlatformBlur
+              intensity={60}
+              tint="dark"
+              style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+              androidColor="rgba(12,15,24,0.98)"
+            >
+              <LinearGradient
+                colors={['rgba(255,255,255,0.07)', hexToRgba(accentColor, 0.04), 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
 
-                {/* Drag handle */}
-                <View style={styles.handle} />
+              <GestureDetector gesture={panGesture}>
+                <View style={styles.dragHandleZone}>
+                  <View style={styles.handle} />
+                </View>
+              </GestureDetector>
 
-                {/* Close button */}
-                <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
-                  <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-                </Pressable>
+              {/* Close button */}
+              <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={8}>
+                <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+              </Pressable>
 
-                <ScrollView
-                  style={styles.scrollArea}
-                  contentContainerStyle={styles.scrollContent}
+              <AnimatedSheetScrollView
+                  style={[styles.scrollArea, { maxHeight: SCREEN_HEIGHT * 0.88 - 52 - sheetBottomPad }]}
+                  contentContainerStyle={[
+                    styles.scrollContent,
+                    { paddingBottom: Platform.OS === 'android' ? 12 : 10 },
+                  ]}
                   showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled
+                  bounces
                 >
                   {/* Title */}
                   <View style={styles.titleRow}>
@@ -339,11 +347,10 @@ export function LeaderboardInfoSheet({
                   >
                     <Text style={styles.closeButtonText}>{t('infoSheetClose')}</Text>
                   </Pressable>
-                </ScrollView>
-              </PlatformBlur>
-            </View>
-          </Animated.View>
-        </GestureDetector>
+                </AnimatedSheetScrollView>
+            </PlatformBlur>
+          </View>
+        </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -377,13 +384,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(14, 14, 24, 0.9)',
     paddingTop: 12,
   },
+  dragHandleZone: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
+    minHeight: 36,
+  },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignSelf: 'center',
-    marginBottom: 8,
   },
   closeBtn: {
     position: 'absolute',
@@ -398,13 +411,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollArea: {
-    // 0.88 × screen − handle (20) − paddingTop (12) − bottom safe area padding (max ~40)
-    maxHeight: SCREEN_HEIGHT * 0.88 - 72,
+    flexGrow: 0,
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 4,
-    paddingBottom: Platform.OS === 'android' ? 20 : 8,
     gap: 20,
   },
   /* Title */

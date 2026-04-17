@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,7 +43,8 @@ export function VerificationSheet({ visible, onClose, brandColor = theme.colors.
   const { t } = useTranslation('profile');
   const { t: tCommon } = useTranslation('common');
   const insets = useSafeAreaInsets();
-  const sheetBottomPad = Math.max(insets.bottom, 16) + 8;
+  // Keep bottom inset behavior aligned with LeaderboardInfoSheet.
+  const sheetBottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 48 : 16);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -124,79 +126,82 @@ export function VerificationSheet({ visible, onClose, brandColor = theme.colors.
         <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
       </Animated.View>
 
-      {/* Sheet */}
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
-          <View style={[styles.sheet, { borderColor: hexToRgba(brandColor, 0.20) }]}>
-            <PlatformBlur
-              intensity={55}
-              tint="dark"
-              style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
-              androidColor="rgba(12,15,24,0.98)"
-            >
-              <LinearGradient
-                colors={['rgba(255,255,255,0.10)', hexToRgba(brandColor, 0.06), 'rgba(12,12,22,0.0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
+      {/* No scrollable content here, so whole sheet content can respond to drag gesture. */}
+      <Animated.View style={[styles.sheetWrapper, sheetStyle]}>
+        <View style={[styles.sheet, { borderColor: hexToRgba(brandColor, 0.20) }]}>
+          <PlatformBlur
+            intensity={55}
+            tint="dark"
+            style={[styles.blurContainer, { paddingBottom: sheetBottomPad }]}
+            androidColor="rgba(12,15,24,0.98)"
+          >
+            <LinearGradient
+              colors={['rgba(255,255,255,0.10)', hexToRgba(brandColor, 0.06), 'rgba(12,12,22,0.0)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
 
-              {/* Drag handle */}
-              <View style={styles.handle} />
+            <GestureDetector gesture={panGesture}>
+              <View style={styles.fullPanZone}>
+                <View style={styles.dragHandleZone}>
+                  <View style={styles.handle} />
+                </View>
 
-              {/* Icon */}
-              <View style={styles.iconWrap}>
-                <View style={[styles.iconCircle, { backgroundColor: hexToRgba(brandColor, 0.10), borderColor: hexToRgba(brandColor, 0.20) }]}>
-                  <Ionicons name="shield-outline" size={36} color={brandColor} />
+                {/* Icon */}
+                <View style={styles.iconWrap}>
+                  <View style={[styles.iconCircle, { backgroundColor: hexToRgba(brandColor, 0.10), borderColor: hexToRgba(brandColor, 0.20) }]}>
+                    <Ionicons name="shield-outline" size={36} color={brandColor} />
+                  </View>
+                </View>
+
+                {/* Title + subtitle */}
+                <View style={styles.textBlock}>
+                  <Text style={styles.title}>{t('verification.title')}</Text>
+                  <Text style={styles.subtitle}>{t('verification.subtitle')}</Text>
+                </View>
+
+                {/* Steps */}
+                <View style={styles.stepsContainer}>
+                  {steps.map((step, i) => (
+                    <View key={i} style={styles.stepRow}>
+                      <View style={[styles.stepIconWrap, { backgroundColor: hexToRgba(brandColor, 0.10) }]}>
+                        <Ionicons name={step.icon} size={18} color={brandColor} />
+                      </View>
+                      <Text style={styles.stepText}>{step.text}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Info chip */}
+                <View style={[styles.infoChip, { backgroundColor: hexToRgba(brandColor, 0.07), borderColor: hexToRgba(brandColor, 0.15) }]}>
+                  <Ionicons name="information-circle-outline" size={15} color={hexToRgba(brandColor, 0.8)} />
+                  <Text style={[styles.infoChipText, { color: hexToRgba(brandColor, 0.8) }]}>
+                    {t('verification.oneTimeNote')}
+                  </Text>
+                </View>
+
+                {/* Close button */}
+                <View style={styles.buttonWrap}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.closeButton,
+                      {
+                        backgroundColor: pressed ? hexToRgba(brandColor, 0.18) : hexToRgba(brandColor, 0.12),
+                        borderColor: hexToRgba(brandColor, 0.25),
+                      },
+                    ]}
+                    onPress={handleClose}
+                  >
+                    <Text style={[styles.closeButtonText, { color: brandColor }]}>{tCommon('gotIt')}</Text>
+                  </Pressable>
                 </View>
               </View>
-
-              {/* Title + subtitle */}
-              <View style={styles.textBlock}>
-                <Text style={styles.title}>{t('verification.title')}</Text>
-                <Text style={styles.subtitle}>{t('verification.subtitle')}</Text>
-              </View>
-
-              {/* Steps */}
-              <View style={styles.stepsContainer}>
-                {steps.map((step, i) => (
-                  <View key={i} style={styles.stepRow}>
-                    <View style={[styles.stepIconWrap, { backgroundColor: hexToRgba(brandColor, 0.10) }]}>
-                      <Ionicons name={step.icon} size={18} color={brandColor} />
-                    </View>
-                    <Text style={styles.stepText}>{step.text}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Info chip */}
-              <View style={[styles.infoChip, { backgroundColor: hexToRgba(brandColor, 0.07), borderColor: hexToRgba(brandColor, 0.15) }]}>
-                <Ionicons name="information-circle-outline" size={15} color={hexToRgba(brandColor, 0.8)} />
-                <Text style={[styles.infoChipText, { color: hexToRgba(brandColor, 0.8) }]}>
-                  {t('verification.oneTimeNote')}
-                </Text>
-              </View>
-
-              {/* Close button */}
-              <View style={styles.buttonWrap}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.closeButton,
-                    {
-                      backgroundColor: pressed ? hexToRgba(brandColor, 0.18) : hexToRgba(brandColor, 0.12),
-                      borderColor: hexToRgba(brandColor, 0.25),
-                    },
-                  ]}
-                  onPress={handleClose}
-                >
-                  <Text style={[styles.closeButtonText, { color: brandColor }]}>{tCommon('gotIt')}</Text>
-                </Pressable>
-              </View>
-            </PlatformBlur>
-          </View>
-        </Animated.View>
-      </GestureDetector>
+            </GestureDetector>
+          </PlatformBlur>
+        </View>
+      </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -229,13 +234,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
   },
+  dragHandleZone: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
+    minHeight: 36,
+  },
+  fullPanZone: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 20,
+  },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignSelf: 'center',
-    marginBottom: 4,
   },
   iconWrap: {
     alignItems: 'center',

@@ -16,6 +16,7 @@ import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { PUSH_NOTIFICATIONS_ENABLED, clearPushToken } from '@/lib/notifications';
 import { setUser as setSentryUser } from '@/lib/sentry';
+import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAccount';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -220,6 +221,16 @@ export const useAuthStore = create<AuthState>()(
             if (session?.user) {
               try {
                 await get().fetchProfile();
+                // Defense-in-depth: reject admin/staff sessions on cold start.
+                // Covers the exploit scenario: admin tokens were persisted to
+                // AsyncStorage before this fix landed; kill + reopen must sign out.
+                const profile = get().profile;
+                if (profile && !isConsumerRole(profile.role)) {
+                  rejectElevatedSession('initialize_elevated_role', profile.role).catch(() => {});
+                  clearTimeout(safetyTimer);
+                  if (!get().isInitialized) set({ isInitialized: true });
+                  return;
+                }
               } catch {
                 // Non-fatal — profile will be fetched on next SIGNED_IN
               }
@@ -247,7 +258,17 @@ export const useAuthStore = create<AuthState>()(
 
             if (event === 'SIGNED_IN' && session?.user) {
               setSentryUser(session.user.id, session.user.email);
-              get().fetchProfile().catch(() => {});
+              get()
+                .fetchProfile()
+                .then(() => {
+                  // Defense-in-depth: reject admin/staff sessions the moment
+                  // SIGNED_IN fires. This covers warm deep-link and OAuth flows.
+                  const profile = get().profile;
+                  if (profile && !isConsumerRole(profile.role)) {
+                    rejectElevatedSession('signed_in_elevated_role', profile.role).catch(() => {});
+                  }
+                })
+                .catch(() => {});
             }
 
             if (event === 'PASSWORD_RECOVERY' && session) {

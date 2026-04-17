@@ -39,27 +39,7 @@ export default function ResetPasswordForm() {
         return;
       }
 
-      // Grab the fresh session tokens so the mobile app can authenticate
-      // without requiring the user to log in again.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      const refreshToken = sessionData.session?.refresh_token;
-
       setSuccess(true);
-
-      if (accessToken && refreshToken) {
-        const deepLink =
-          `sweatdrop://auth/confirm` +
-          `?access_token=${encodeURIComponent(accessToken)}` +
-          `&refresh_token=${encodeURIComponent(refreshToken)}` +
-          `&type=recovery` +
-          `&password_updated=1`;
-
-        setTimeout(() => {
-          window.location.href = deepLink;
-        }, 800);
-      }
-      // If no session (edge case), just stay on the success screen — user can open app manually.
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
       setLoading(false);
@@ -151,41 +131,20 @@ export default function ResetPasswordForm() {
 }
 
 function SuccessState() {
-  const handleOpenApp = () => {
-    supabase.auth.getSession().then(({ data }) => {
-      const at = data.session?.access_token;
-      const rt = data.session?.refresh_token;
-      if (at && rt) {
-        window.location.href =
-          `sweatdrop://auth/confirm` +
-          `?access_token=${encodeURIComponent(at)}` +
-          `&refresh_token=${encodeURIComponent(rt)}` +
-          `&type=recovery` +
-          `&password_updated=1`;
-      }
-    });
-  };
-
   return (
     <div className="space-y-6 text-center">
       <div className="rounded-md bg-[#00E5FF]/10 border border-[#00E5FF]/30 p-6 space-y-3">
         <p className="text-2xl">✅</p>
-        <p className="text-lg font-bold text-white">Password Updated!</p>
+        <p className="text-lg font-bold text-white">Password updated</p>
         <p className="text-sm text-[#808080]">
-          Your password has been changed. Opening SweatDrop…
+          You can now sign in to the admin panel with your new password.
         </p>
       </div>
-      <button
-        onClick={handleOpenApp}
-        className="w-full py-3 px-4 rounded-md text-black bg-[#00E5FF] hover:bg-[#00B8CC] font-semibold text-sm transition-colors"
-      >
-        Open SweatDrop →
-      </button>
       <a
         href="/login"
-        className="block text-sm text-[#808080] hover:text-[#00E5FF] transition-colors"
+        className="block w-full py-3 px-4 rounded-md text-black bg-[#00E5FF] hover:bg-[#00B8CC] font-semibold text-sm transition-colors text-center"
       >
-        Back to login
+        Back to admin panel login
       </a>
     </div>
   );

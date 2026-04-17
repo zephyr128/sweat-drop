@@ -89,7 +89,12 @@ export function WaitlistBottomSheet({ visible, onClose, brandColor = theme.color
   }, [gymName, city, notes]);
 
   return (
-    <BottomSheet visible={visible} onClose={handleSheetDismissed} accentColor={brandColor}>
+    <BottomSheet
+      visible={visible}
+      onClose={handleSheetDismissed}
+      accentColor={brandColor}
+      hasScrollContent
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.kav}
