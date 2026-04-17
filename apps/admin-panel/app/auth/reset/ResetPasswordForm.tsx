@@ -39,6 +39,14 @@ export default function ResetPasswordForm() {
         return;
       }
 
+      // Supabase's recovery flow leaves the user signed in after verifyOtp.
+      // If we don't sign them out here, clicking "Back to login" would send
+      // them through middleware with an active session and land them on
+      // /dashboard/... instead of the login form. Signing out now also
+      // matches user expectation: "I forgot my password → I reset it → I
+      // sign in fresh with the new one."
+      await supabase.auth.signOut();
+
       setSuccess(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
