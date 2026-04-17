@@ -102,12 +102,20 @@ serve(async (req) => {
         let sentCount = 0;
         let failedCount = 0;
 
+        const inboxData: Record<string, unknown> = {
+          type: notifType,
+          campaign_id: campaign.id,
+          ...(deepLink ? { deep_link: deepLink } : {}),
+        };
+
         for (let i = 0; i < deliveries.length; i += BATCH_SIZE) {
           const batch = deliveries.slice(i, i + BATCH_SIZE);
 
           const tokens: string[] = [];
           const userIds: string[] = [];
           const deliveryIds: string[] = [];
+          const tokenlessUserIds: string[] = [];
+          const tokenlessDeliveryIds: string[] = [];
 
           for (const d of batch) {
             const token = (d as any).profiles?.expo_push_token;
@@ -115,17 +123,52 @@ serve(async (req) => {
               tokens.push(token);
               userIds.push(d.user_id);
               deliveryIds.push(d.id);
+            } else {
+              tokenlessUserIds.push(d.user_id);
+              tokenlessDeliveryIds.push(d.id);
             }
           }
 
-          if (tokens.length === 0) {
-            // Mark as failed — no valid tokens
-            const failIds = batch.map((d) => d.id);
+          // Users without a valid push token (declined notifications, stale
+          // DeviceNotRegistered tokens cleared by send-push, fresh reinstalls)
+          // must still receive the campaign in their in-app inbox. send-push
+          // handles inbox persistence for users who DO have tokens via its
+          // user_ids input; for everyone else we persist directly here and
+          // mark their delivery as failed with a clear reason so retry/cron
+          // won't re-process them and the dashboard counts stay honest.
+          if (tokenlessDeliveryIds.length > 0) {
+            const inboxRows = [...new Set(tokenlessUserIds)]
+              .filter((uid) => typeof uid === 'string' && uid.length > 0)
+              .map((uid) => ({
+                user_id: uid,
+                type: notifType,
+                title: campaign.title,
+                body: campaign.body,
+                data: inboxData,
+              }));
+            if (inboxRows.length > 0) {
+              const { error: inboxErr } = await supabase
+                .from('user_notifications')
+                .insert(inboxRows);
+              if (inboxErr) {
+                errors.push(
+                  `Campaign ${campaign.id} inbox insert (tokenless): ${inboxErr.message}`,
+                );
+              }
+            }
             await supabase
               .from('engagement_campaign_deliveries')
-              .update({ status: 'failed', error_text: 'no_valid_token', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-              .in('id', failIds);
-            failedCount += failIds.length;
+              .update({
+                status: 'failed',
+                error_text: 'no_valid_token',
+                sent_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .in('id', tokenlessDeliveryIds);
+            failedCount += tokenlessDeliveryIds.length;
+          }
+
+          if (tokens.length === 0) {
             continue;
           }
 
@@ -141,11 +184,7 @@ serve(async (req) => {
               user_ids: userIds,
               title: campaign.title,
               body: campaign.body,
-              data: {
-                type: notifType,
-                campaign_id: campaign.id,
-                ...(deepLink ? { deep_link: deepLink } : {}),
-              },
+              data: inboxData,
             }),
           });
 
