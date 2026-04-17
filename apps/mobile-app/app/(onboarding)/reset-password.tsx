@@ -21,19 +21,28 @@ import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { log } from '@/lib/logger';
+import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAccount';
 
 /**
  * Password reset screen.
  *
- * The user arrives here via a deep-link from the password-reset email
- * (sweatdrop://auth/confirm → PASSWORD_RECOVERY event → _layout.tsx
- * navigates here).  The actual password form lives in the browser / web
- * landing page, so by the time the app opens this screen the password has
- * already been updated.  We just need to re-authenticate the user with the
- * recovery session Supabase gave us and then send them to the home screen.
+ * Two ways the user can land here:
  *
- * If for some reason the session is missing we fall back to showing the
- * password form so the user is never stuck.
+ *   1. Web flow (preferred): browser opens landing page → user submits the
+ *      form there → updateUser succeeds on the web → landing page deep-links
+ *      into the app with access_token + refresh_token + password_updated=1.
+ *      In that case passwordAlreadyReset === true and we just render the
+ *      success state.
+ *
+ *   2. In-app flow (fallback): Android App Link / iOS Universal Link
+ *      intercepted the email URL and opened auth/confirm.tsx directly with a
+ *      recovery token_hash. confirm.tsx stashed the token_hash in authStore
+ *      WITHOUT consuming it. We render the password form here and perform
+ *      verifyOtp(token_hash) + updateUser(password) as one atomic operation
+ *      on submit. This avoids any window where the recovery session could be
+ *      invalidated between verifyOtp and updateUser (navigation, fetchProfile
+ *      role checks, AsyncStorage persistence races), which used to surface
+ *      as "Auth session missing!" when the user clicked Save.
  */
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -43,7 +52,12 @@ export default function ResetPasswordScreen() {
   const passwordAlreadyReset = useAuthStore((s) => s.passwordAlreadyReset);
 
   useEffect(() => {
-    return () => { useAuthStore.setState({ passwordAlreadyReset: false }); };
+    return () => {
+      useAuthStore.setState({
+        passwordAlreadyReset: false,
+        pendingRecoveryTokenHash: null,
+      });
+    };
   }, []);
 
   const [loading, setLoading] = useState(false);
@@ -88,6 +102,47 @@ export default function ResetPasswordScreen() {
 
     setLoading(true);
     try {
+      // If confirm.tsx stashed a recovery token_hash (deep-link flow), consume
+      // it right here: verifyOtp immediately followed by updateUser. Doing
+      // both in the same tick means there is no window for the recovery
+      // session to be invalidated in between.
+      const tokenHash = useAuthStore.getState().consumePendingRecoveryTokenHash();
+      if (tokenHash) {
+        log.debug('[ResetPassword] Atomic verifyOtp + updateUser via stashed token_hash');
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'recovery',
+        });
+        if (verifyError) {
+          log.warn('[ResetPassword] verifyOtp error:', verifyError.message);
+          showModal({
+            title: t('common:error'),
+            body: t('auth.verifySessionHint'),
+          });
+          router.replace('/(onboarding)/auth');
+          return;
+        }
+
+        // Defense-in-depth: elevated roles are not allowed in the consumer app.
+        // For recovery links, role lives in profiles.role (not auth metadata),
+        // so check it immediately after verifyOtp before allowing updateUser.
+        const { data: verifiedUserData } = await supabase.auth.getUser();
+        const verifiedUserId = verifiedUserData.user?.id;
+        if (verifiedUserId) {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', verifiedUserId)
+            .maybeSingle();
+          const role = (profileRow as { role: string | null } | null)?.role ?? null;
+          if (role && !isConsumerRole(role)) {
+            await rejectElevatedSession('reset_password_verify_otp_elevated_role', role);
+            router.replace('/(onboarding)/auth');
+            return;
+          }
+        }
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
@@ -106,6 +161,14 @@ export default function ResetPasswordScreen() {
     } catch (err: unknown) {
       log.error('[ResetPassword] updateUser error:', err);
       const msg = err instanceof Error ? err.message : t('auth.somethingWentWrong');
+      if (typeof msg === 'string' && msg.toLowerCase().includes('auth session missing')) {
+        showModal({
+          title: t('common:error'),
+          body: t('auth.verifySessionHint'),
+        });
+        router.replace('/(onboarding)/auth');
+        return;
+      }
       showModal({ title: t('common:error'), body: msg });
     } finally {
       setLoading(false);

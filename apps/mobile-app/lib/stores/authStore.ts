@@ -70,6 +70,14 @@ interface AuthState {
   /** True when the deep link comes from the web form (password was already changed in browser) */
   passwordAlreadyReset: boolean;
   /**
+   * Token_hash from the recovery email, stashed by auth/confirm.tsx BEFORE we
+   * call verifyOtp. reset-password.tsx then consumes both verifyOtp AND
+   * updateUser in a single atomic submission, avoiding any window where the
+   * recovery session could be invalidated by a fetchProfile / role check /
+   * navigation hop. Never persisted — cleared on sign-out and on consumption.
+   */
+  pendingRecoveryTokenHash: string | null;
+  /**
    * Temporary in-memory credentials stored after signUp when Supabase returns
    * session: null (email confirmation required).  verify-email uses these to
    * poll via signInWithPassword.  NEVER persisted to disk.
@@ -89,6 +97,8 @@ interface AuthState {
   setOnboardingStep: (step: OnboardingStep) => void;
   setPendingPasswordRecovery: (passwordAlreadyReset?: boolean) => void;
   clearPendingPasswordRecovery: () => void;
+  setPendingRecoveryTokenHash: (tokenHash: string | null) => void;
+  consumePendingRecoveryTokenHash: () => string | null;
   setPendingVerification: (email: string, password: string) => void;
   clearPendingVerification: () => void;
   signOut: () => Promise<void>;
@@ -176,6 +186,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       pendingPasswordRecovery: false,
       passwordAlreadyReset: false,
+      pendingRecoveryTokenHash: null,
       pendingVerificationEmail: null,
       pendingVerificationPassword: null,
 
@@ -210,8 +221,12 @@ export const useAuthStore = create<AuthState>()(
               set({
                 profile: null,
                 onboardingStep: 'auth',
-                pendingPasswordRecovery: false,
-                passwordAlreadyReset: false,
+                // NOTE: do NOT clear pendingPasswordRecovery / pendingRecoveryTokenHash
+                // here. These flags are set BEFORE verifyOtp runs (cold-start deep
+                // link from recovery email) and this branch runs on cold start
+                // before any session exists. Clearing them would race with the
+                // recovery flow and drop the user on the auth screen instead of
+                // the reset-password screen.
                 pendingVerificationEmail: null,
                 pendingVerificationPassword: null,
               });
@@ -403,6 +418,16 @@ export const useAuthStore = create<AuthState>()(
         set({ pendingPasswordRecovery: false });
       },
 
+      setPendingRecoveryTokenHash: (tokenHash: string | null) => {
+        set({ pendingRecoveryTokenHash: tokenHash });
+      },
+
+      consumePendingRecoveryTokenHash: () => {
+        const hash = get().pendingRecoveryTokenHash;
+        set({ pendingRecoveryTokenHash: null });
+        return hash;
+      },
+
       setPendingVerification: (email: string, password: string) => {
         set({ pendingVerificationEmail: email, pendingVerificationPassword: password });
       },
@@ -464,6 +489,7 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
           pendingPasswordRecovery: false,
           passwordAlreadyReset: false,
+          pendingRecoveryTokenHash: null,
           pendingVerificationEmail: null,
           pendingVerificationPassword: null,
         });

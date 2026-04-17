@@ -87,6 +87,15 @@ function extractParamsFromUrl(url: string): {
   return result;
 }
 
+async function hasActiveAuthSession(): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return !!data.session;
+  } catch {
+    return false;
+  }
+}
+
 export default function AuthConfirmScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -152,39 +161,60 @@ export default function AuthConfirmScreen() {
 
       if (cancelled) return;
 
-      // ── verifyOtp (Universal Link with token_hash) ──
+      // ── token_hash flow (email link → Universal/App Link) ──
       if (tokenHash) {
+        // Recovery is special: verifyOtp BURNS the token, so we must defer it
+        // to the exact moment we also call updateUser(password). Otherwise any
+        // navigation hop, fetchProfile call, role-check, or AsyncStorage
+        // persistence race between verifyOtp and updateUser can leave the
+        // Supabase client without a session → "Auth session missing!" when
+        // the user finally submits the form.
+        //
+        // Stash the token_hash in the auth store and jump straight to the
+        // reset-password screen. That screen performs verifyOtp + updateUser
+        // as one atomic step.
+        if (isRecoveryType(type)) {
+          log.debug('[AuthConfirm] Stashing recovery token_hash for in-app reset');
+          useAuthStore.getState().setPendingRecoveryTokenHash(tokenHash);
+          useAuthStore.setState({ pendingPasswordRecovery: true });
+          navigatedRef.current = true; // _layout.tsx handles recovery navigation
+          if (!cancelled) setTokensProcessed(true);
+          return;
+        }
+
+        // Non-recovery (signup / magiclink / invite / email_change): verify now.
         log.debug('[AuthConfirm] Verifying OTP, type:', type);
         const otpType = normalizeOtpType(type);
+        let authEstablished = false;
         if (otpType) {
           try {
-            const { error } = await supabase.auth.verifyOtp({
+            const { data, error } = await supabase.auth.verifyOtp({
               token_hash: tokenHash,
               type: otpType,
             });
-            if (error) log.warn('[AuthConfirm] verifyOtp error:', error.message);
+            if (error) {
+              log.warn('[AuthConfirm] verifyOtp error:', error.message);
+            } else {
+              authEstablished = !!data.session || (await hasActiveAuthSession());
+            }
           } catch (e) {
             log.warn('[AuthConfirm] verifyOtp exception:', e);
           }
         }
         if (cancelled) return;
-        // Defense-in-depth: check role before allowing recovery to proceed.
-        const { data: vtUserData } = await supabase.auth.getUser();
-        const vtRole =
-          (vtUserData?.user?.app_metadata?.role as string | undefined) ??
-          (vtUserData?.user?.user_metadata?.role as string | undefined);
-        if (vtRole !== undefined && !isConsumerRole(vtRole)) {
-          log.warn('[AuthConfirm] verifyOtp: elevated role detected, rejecting', { role: vtRole });
-          navigatedRef.current = true;
-          await rejectElevatedSession('confirm_verify_otp_elevated_role', vtRole);
-          if (!cancelled) setTokensProcessed(true);
-          return;
-        }
-        if (isRecoveryType(type)) {
-          useAuthStore.setState({ pendingPasswordRecovery: true });
-          navigatedRef.current = true; // _layout.tsx handles recovery navigation
-          if (!cancelled) setTokensProcessed(true);
-          return;
+        // Defense-in-depth: check role before allowing session to persist.
+        if (authEstablished) {
+          const { data: vtUserData } = await supabase.auth.getUser();
+          const vtRole =
+            (vtUserData?.user?.app_metadata?.role as string | undefined) ??
+            (vtUserData?.user?.user_metadata?.role as string | undefined);
+          if (vtRole !== undefined && !isConsumerRole(vtRole)) {
+            log.warn('[AuthConfirm] verifyOtp: elevated role detected, rejecting', { role: vtRole });
+            navigatedRef.current = true;
+            await rejectElevatedSession('confirm_verify_otp_elevated_role', vtRole);
+            if (!cancelled) setTokensProcessed(true);
+            return;
+          }
         }
         useAuthStore.getState().clearPendingVerification();
         if (!cancelled) setTokensProcessed(true);
@@ -194,8 +224,9 @@ export default function AuthConfirmScreen() {
       // ── setSession (custom scheme with access_token + refresh_token) ──
       if (accessToken && refreshToken) {
         log.debug('[AuthConfirm] Setting session from tokens, type:', type);
+        let authEstablished = false;
         try {
-          const { error } = await supabase.auth.setSession({
+          const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
@@ -203,11 +234,18 @@ export default function AuthConfirmScreen() {
             log.warn('[AuthConfirm] setSession error:', error.message);
           } else {
             log.debug('[AuthConfirm] setSession succeeded');
+            authEstablished = !!data.session || (await hasActiveAuthSession());
           }
         } catch (e) {
           log.warn('[AuthConfirm] setSession exception:', e);
         }
         if (cancelled) return;
+        if (!authEstablished && isRecoveryType(type)) {
+          log.warn('[AuthConfirm] Recovery setSession did not produce an active session');
+          useAuthStore.getState().clearPendingPasswordRecovery();
+          if (!cancelled) setTokensProcessed(true);
+          return;
+        }
         // Defense-in-depth: check role before allowing recovery to proceed.
         const { data: ssUserData } = await supabase.auth.getUser();
         const ssRole =
