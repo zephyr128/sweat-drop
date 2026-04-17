@@ -520,12 +520,31 @@ export default function RootLayout() {
   // Guard with isInitialized so this fires after index.tsx has already run and
   // the navigator is ready. Without this, a cold-start deep link would set the
   // flag before the router is mounted and index.tsx would overwrite the navigation.
+  //
+  // CRITICAL: skip the navigation if we're ALREADY on /reset-password. The
+  // in-app fallback flow calls supabase.auth.verifyOtp({type:'recovery'}) from
+  // inside the reset-password screen, which fires a second PASSWORD_RECOVERY
+  // auth event → authStore flips pendingPasswordRecovery=true again → without
+  // this guard router.replace remounts the screen, its unmount cleanup wipes
+  // passwordAlreadyReset/pendingRecoveryTokenHash and local formDone state
+  // resets to false, so the user sees the password form a second time right
+  // after successful update. Just clear the flag and stay put.
   useEffect(() => {
     if (!isInitialized) return;
     if (!pendingPasswordRecovery) return;
+    const inOnboarding = segments[0] === '(onboarding)';
+    const onResetPassword =
+      inOnboarding && (segments as string[])[1] === 'reset-password';
     clearPendingPasswordRecovery();
+    if (onResetPassword) return;
     router.replace('/(onboarding)/reset-password');
-  }, [isInitialized, pendingPasswordRecovery, clearPendingPasswordRecovery, router]);
+  }, [
+    isInitialized,
+    pendingPasswordRecovery,
+    clearPendingPasswordRecovery,
+    router,
+    segments,
+  ]);
 
   if (!fontsLoaded && !fontError) {
     return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
