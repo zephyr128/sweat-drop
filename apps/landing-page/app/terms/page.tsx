@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { TermsContent } from '@/components/legal/TermsContent';
+import { LegalLangSync } from '@/components/legal/LegalLangSync';
 
 type SearchParams = Promise<{ lang?: string; standalone?: string }>;
 
@@ -27,6 +29,9 @@ export default async function TermsPage({ searchParams }: { searchParams: Search
   return (
     <>
       {!standalone && <Navigation />}
+      <Suspense fallback={null}>
+        <LegalLangSync urlLang={lang} />
+      </Suspense>
       <main className="min-h-screen">
         <TermsContent lang={lang} />
       </main>

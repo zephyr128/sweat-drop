@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { PrivacyContent } from '@/components/legal/PrivacyContent';
+import { LegalLangSync } from '@/components/legal/LegalLangSync';
 
 type SearchParams = Promise<{ lang?: string; standalone?: string }>;
 
@@ -27,6 +29,9 @@ export default async function PrivacyPage({ searchParams }: { searchParams: Sear
   return (
     <>
       {!standalone && <Navigation />}
+      <Suspense fallback={null}>
+        <LegalLangSync urlLang={lang} />
+      </Suspense>
       <main className="min-h-screen">
         <PrivacyContent lang={lang} />
       </main>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/use-language';
 
 export const Footer = memo(function Footer() {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
 
   const footerLinks = [
     { href: '/#pricing', label: t.footer.forGyms },
@@ -48,9 +48,21 @@ export const Footer = memo(function Footer() {
           {/* Right: Language + Copyright */}
           <div className="flex flex-col items-center md:items-end gap-4">
             <div className="flex items-center gap-2 text-sm text-text-2">
-              <button className="hover:text-text transition-colors">EN</button>
+              <button
+                onClick={() => setLanguage('en')}
+                aria-pressed={language === 'en'}
+                className={`transition-colors ${language === 'en' ? 'text-text font-semibold' : 'hover:text-text'}`}
+              >
+                EN
+              </button>
               <span className="text-border">|</span>
-              <button className="hover:text-text transition-colors">SR</button>
+              <button
+                onClick={() => setLanguage('sr')}
+                aria-pressed={language === 'sr'}
+                className={`transition-colors ${language === 'sr' ? 'text-text font-semibold' : 'hover:text-text'}`}
+              >
+                SR
+              </button>
             </div>
             <p className="text-xs text-text-3 mono">
               {t.footer.copyright}
