@@ -3,7 +3,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
-type ResetState = 'loading' | 'form' | 'success' | 'error';
+type ResetState = 'loading' | 'form' | 'success' | 'error' | 'admin_surface';
+
+const CONSUMER_ROLE = 'user';
+const ADMIN_PANEL_URL = 'https://admin.sweat-drop.com';
+
+function isConsumerRole(role: string | null | undefined): boolean {
+  return role === CONSUMER_ROLE;
+}
 
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null): string {
   if (accessToken && refreshToken) {
@@ -20,6 +27,7 @@ export default function PasswordResetPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState('');
+  const [isConsumer, setIsConsumer] = useState(false);
   const tokensRef = useRef<{ access: string | null; refresh: string | null }>({ access: null, refresh: null });
 
   useEffect(() => {
@@ -45,13 +53,31 @@ export default function PasswordResetPage() {
 
     supabase.auth
       .setSession({ access_token: accessToken, refresh_token: refreshToken ?? '' })
-      .then(({ error }) => {
+      .then(async ({ error }) => {
         if (error) {
           setErrorMessage('This reset link has expired or is no longer valid. Please request a new one.');
           setState('error');
-        } else {
-          setState('form');
+          return;
         }
+
+        // Check role immediately after establishing the session.
+        // Admin accounts must never use the landing-page reset form — they have
+        // their own reset flow at admin.sweat-drop.com. This is belt-and-suspenders
+        // for stale pre-fix emails that still point at www.sweat-drop.com.
+        const { data: userData } = await supabase!.auth.getUser();
+        const role =
+          (userData.user?.app_metadata?.role as string | undefined) ??
+          (userData.user?.user_metadata?.role as string | undefined) ??
+          null;
+
+        if (!isConsumerRole(role)) {
+          await supabase!.auth.signOut();
+          setState('admin_surface');
+          return;
+        }
+
+        setIsConsumer(true);
+        setState('form');
       });
   }, []);
 
@@ -92,6 +118,54 @@ export default function PasswordResetPage() {
       setState('success');
     }
   };
+
+  if (state === 'admin_surface') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="mx-auto w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center mb-8">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-10 h-10 text-yellow-400"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+
+          <h1
+            className="text-3xl tracking-wider text-white mb-3"
+            style={{ fontFamily: 'var(--font-display), sans-serif' }}
+          >
+            ADMIN ACCOUNT
+          </h1>
+
+          <p className="text-gray-400 text-base leading-relaxed mb-8">
+            This reset link was issued for an admin account.
+            <br />
+            Please complete the password reset at the admin panel.
+          </p>
+
+          <a
+            href={`${ADMIN_PANEL_URL}/login`}
+            className="block w-full py-4 rounded-full bg-white/10 text-white font-bold text-lg tracking-wide uppercase transition-all hover:bg-white/15 active:scale-[0.98] border border-white/10"
+            style={{ fontFamily: 'var(--font-display), sans-serif' }}
+          >
+            GO TO ADMIN PANEL
+          </a>
+
+          <p className="text-gray-600 text-xs mt-8">
+            The SweatDrop mobile app is for gym members only.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-6">
@@ -222,23 +296,43 @@ export default function PasswordResetPage() {
               PASSWORD UPDATED
             </h1>
 
-            <p className="text-gray-400 text-base leading-relaxed mb-8">
-              Your password has been changed successfully.
-              <br />
-              You can now sign in to the SweatDrop app.
-            </p>
+            {isConsumer ? (
+              <>
+                <p className="text-gray-400 text-base leading-relaxed mb-8">
+                  Your password has been changed successfully.
+                  <br />
+                  You can now sign in to the SweatDrop app.
+                </p>
 
-            <button
-              onClick={() => { window.location.href = buildAppDeepLink(tokensRef.current.access, tokensRef.current.refresh); }}
-              className="w-full py-4 rounded-full bg-cyan-400 text-black font-bold text-lg tracking-wide uppercase transition-all hover:bg-cyan-300 hover:shadow-[0_0_30px_rgba(0,229,255,0.4)] active:scale-[0.98]"
-              style={{ fontFamily: 'var(--font-display), sans-serif' }}
-            >
-              OPEN SWEATDROP
-            </button>
+                <button
+                  onClick={() => { window.location.href = buildAppDeepLink(tokensRef.current.access, tokensRef.current.refresh); }}
+                  className="w-full py-4 rounded-full bg-cyan-400 text-black font-bold text-lg tracking-wide uppercase transition-all hover:bg-cyan-300 hover:shadow-[0_0_30px_rgba(0,229,255,0.4)] active:scale-[0.98]"
+                  style={{ fontFamily: 'var(--font-display), sans-serif' }}
+                >
+                  OPEN SWEATDROP
+                </button>
 
-            <p className="text-gray-600 text-xs mt-8">
-              If the app doesn&apos;t open, make sure SweatDrop is installed on your device.
-            </p>
+                <p className="text-gray-600 text-xs mt-8">
+                  If the app doesn&apos;t open, make sure SweatDrop is installed on your device.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-400 text-base leading-relaxed mb-8">
+                  Your password has been changed successfully.
+                  <br />
+                  You can now sign in to the admin panel.
+                </p>
+
+                <a
+                  href={`${ADMIN_PANEL_URL}/login`}
+                  className="block w-full py-4 rounded-full bg-white/10 text-white font-bold text-lg tracking-wide uppercase transition-all hover:bg-white/15 active:scale-[0.98] border border-white/10"
+                  style={{ fontFamily: 'var(--font-display), sans-serif' }}
+                >
+                  GO TO ADMIN PANEL
+                </a>
+              </>
+            )}
           </>
         )}
 

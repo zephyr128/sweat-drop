@@ -4,8 +4,28 @@ import { useEffect, useState, useRef } from 'react';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
-type ConfirmState = 'loading' | 'success' | 'error';
+type ConfirmState = 'loading' | 'success' | 'error' | 'admin_surface';
 type OtpType = EmailOtpType;
+
+const CONSUMER_ROLE = 'user';
+const ADMIN_PANEL_URL = 'https://admin.sweat-drop.com';
+
+function isConsumerRole(role: string | null | undefined): boolean {
+  return role === CONSUMER_ROLE;
+}
+
+async function signOutAndReturnRole(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data: userData } = await supabase.auth.getUser();
+  const role =
+    (userData.user?.app_metadata?.role as string | undefined) ??
+    (userData.user?.user_metadata?.role as string | undefined) ??
+    null;
+  if (!isConsumerRole(role)) {
+    await supabase.auth.signOut();
+  }
+  return role;
+}
 
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null, type: string = 'signup'): string {
   if (accessToken && refreshToken) {
@@ -36,7 +56,7 @@ export default function EmailConfirmPage() {
       authTypeRef.current = tokenType;
       supabase.auth
         .verifyOtp({ token_hash: tokenHash, type: tokenType })
-        .then(({ data, error }) => {
+        .then(async ({ data, error }) => {
           if (error) {
             setConfirmState('error');
             return;
@@ -44,9 +64,14 @@ export default function EmailConfirmPage() {
 
           const s = data.session;
 
-          // Recovery flow: redirect to /auth/reset with session tokens
-          // so the user can set a new password in the browser.
+          // Recovery flow: check role before redirecting — admin resets must never
+          // reach the mobile app deep-link path (belt-and-suspenders for stale emails).
           if (tokenType === 'recovery' && s) {
+            const role = await signOutAndReturnRole();
+            if (!isConsumerRole(role)) {
+              setConfirmState('admin_surface');
+              return;
+            }
             window.location.href = `/auth/reset#access_token=${encodeURIComponent(s.access_token)}&refresh_token=${encodeURIComponent(s.refresh_token)}&type=recovery`;
             return;
           }
@@ -68,9 +93,22 @@ export default function EmailConfirmPage() {
     const type = params.get('type');
     if (type) authTypeRef.current = type;
 
-    // Recovery via hash fragment: redirect to reset page directly
+    // Recovery via hash fragment: check role before redirecting to reset page.
     if (accessToken && type === 'recovery') {
-      window.location.href = `/auth/reset#${hash}`;
+      supabase.auth
+        .setSession({ access_token: accessToken, refresh_token: refreshToken ?? '' })
+        .then(async ({ error }) => {
+          if (error) {
+            setConfirmState('error');
+            return;
+          }
+          const role = await signOutAndReturnRole();
+          if (!isConsumerRole(role)) {
+            setConfirmState('admin_surface');
+            return;
+          }
+          window.location.href = `/auth/reset#${hash}`;
+        });
       return;
     }
 
@@ -126,6 +164,54 @@ export default function EmailConfirmPage() {
       authTypeRef.current,
     );
   };
+
+  if (confirmState === 'admin_surface') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="mx-auto w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center mb-8">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-10 h-10 text-yellow-400"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+
+          <h1
+            className="text-3xl tracking-wider text-white mb-3"
+            style={{ fontFamily: 'var(--font-display), sans-serif' }}
+          >
+            ADMIN ACCOUNT
+          </h1>
+
+          <p className="text-gray-400 text-base leading-relaxed mb-8">
+            This reset link was issued for an admin account.
+            <br />
+            Please complete the password reset at the admin panel.
+          </p>
+
+          <a
+            href={`${ADMIN_PANEL_URL}/login`}
+            className="block w-full py-4 rounded-full bg-white/10 text-white font-bold text-lg tracking-wide uppercase transition-all hover:bg-white/15 active:scale-[0.98] border border-white/10"
+            style={{ fontFamily: 'var(--font-display), sans-serif' }}
+          >
+            GO TO ADMIN PANEL
+          </a>
+
+          <p className="text-gray-600 text-xs mt-8">
+            The SweatDrop mobile app is for gym members only.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (confirmState === 'loading') {
     return (
