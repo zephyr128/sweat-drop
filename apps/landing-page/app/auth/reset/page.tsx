@@ -5,12 +5,16 @@ import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 
 type ResetState = 'loading' | 'form' | 'success' | 'error' | 'admin_surface';
 
-const CONSUMER_ROLE = 'user';
 const ADMIN_PANEL_URL = 'https://admin.sweat-drop.com';
 
-function isConsumerRole(role: string | null | undefined): boolean {
-  return role === CONSUMER_ROLE;
-}
+// Elevated (non-consumer) roles. These exist ONLY in profiles.role — they are
+// NOT mirrored into auth.users.app_metadata / user_metadata in this codebase.
+const ELEVATED_ROLES = new Set([
+  'superadmin',
+  'gym_owner',
+  'gym_admin',
+  'receptionist',
+]);
 
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null): string {
   if (accessToken && refreshToken) {
@@ -60,17 +64,31 @@ export default function PasswordResetPage() {
           return;
         }
 
-        // Check role immediately after establishing the session.
-        // Admin accounts must never use the landing-page reset form — they have
-        // their own reset flow at admin.sweat-drop.com. This is belt-and-suspenders
-        // for stale pre-fix emails that still point at www.sweat-drop.com.
-        const { data: userData } = await supabase!.auth.getUser();
-        const role =
-          (userData.user?.app_metadata?.role as string | undefined) ??
-          (userData.user?.user_metadata?.role as string | undefined) ??
-          null;
+        // Check role from the profiles table (NOT app_metadata/user_metadata,
+        // which are not populated in this codebase — role lives only in
+        // public.profiles.role). We default to consumer on any error so that
+        // the common mobile reset flow is never blocked by a transient DB
+        // issue. Admin leakage to this surface is prevented upstream (admin
+        // panel sends its own email via Resend with an admin-domain URL).
+        let isElevated = false;
+        try {
+          const { data: userData } = await supabase!.auth.getUser();
+          const userId = userData.user?.id;
+          if (userId) {
+            const { data: profileRow } = await supabase!
+              .from('profiles')
+              .select('role')
+              .eq('id', userId)
+              .maybeSingle();
+            const role = (profileRow as { role: string | null } | null)?.role ?? null;
+            isElevated = !!role && ELEVATED_ROLES.has(role);
+          }
+        } catch {
+          // Ignore — default to consumer (safer for UX).
+          isElevated = false;
+        }
 
-        if (!isConsumerRole(role)) {
+        if (isElevated) {
           await supabase!.auth.signOut();
           setState('admin_surface');
           return;
@@ -120,6 +138,12 @@ export default function PasswordResetPage() {
   };
 
   if (state === 'admin_surface') {
+    // Stale admin email landed on the consumer reset page. The setSession call
+    // above already consumed the recovery token — there is no way to forward
+    // it to the admin panel. Route the user to /forgot-password on the admin
+    // domain to request a fresh link rather than /login (which could silently
+    // drop them on /dashboard via a pre-existing admin cookie, hiding the fact
+    // that their password was never updated).
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-6">
         <div className="max-w-md w-full text-center">
@@ -142,21 +166,22 @@ export default function PasswordResetPage() {
             className="text-3xl tracking-wider text-white mb-3"
             style={{ fontFamily: 'var(--font-display), sans-serif' }}
           >
-            ADMIN ACCOUNT
+            LINK NOT VALID HERE
           </h1>
 
           <p className="text-gray-400 text-base leading-relaxed mb-8">
-            This reset link was issued for an admin account.
+            This reset link was issued for an admin account and cannot be used on
+            this page.
             <br />
-            Please complete the password reset at the admin panel.
+            Please request a fresh reset link from the admin panel.
           </p>
 
           <a
-            href={`${ADMIN_PANEL_URL}/login`}
+            href={`${ADMIN_PANEL_URL}/forgot-password`}
             className="block w-full py-4 rounded-full bg-white/10 text-white font-bold text-lg tracking-wide uppercase transition-all hover:bg-white/15 active:scale-[0.98] border border-white/10"
             style={{ fontFamily: 'var(--font-display), sans-serif' }}
           >
-            GO TO ADMIN PANEL
+            REQUEST NEW RESET LINK
           </a>
 
           <p className="text-gray-600 text-xs mt-8">

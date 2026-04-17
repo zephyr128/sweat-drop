@@ -7,24 +7,54 @@ import { hasSupabasePublicEnv, supabase } from '@/lib/supabase';
 type ConfirmState = 'loading' | 'success' | 'error' | 'admin_surface';
 type OtpType = EmailOtpType;
 
-const CONSUMER_ROLE = 'user';
 const ADMIN_PANEL_URL = 'https://admin.sweat-drop.com';
 
-function isConsumerRole(role: string | null | undefined): boolean {
-  return role === CONSUMER_ROLE;
+// Elevated (non-consumer) roles. These exist ONLY in profiles.role — they are
+// NOT mirrored into auth.users.app_metadata / user_metadata in this codebase.
+const ELEVATED_ROLES = new Set([
+  'superadmin',
+  'gym_owner',
+  'gym_admin',
+  'receptionist',
+]);
+
+/**
+ * Fetch the current user's role from `profiles` via RLS (self-read policy
+ * `profiles_select_own` allows this). Falls back to false (consumer) on
+ * any error or missing data — we'd rather let a rare admin through than
+ * block the common consumer flow. Admin leakage to this domain is already
+ * prevented upstream (admin resets are sent via Resend with admin-domain
+ * URLs), so this check is only a safety net for stale pre-fix emails.
+ */
+async function detectElevatedRole(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) return false;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error || !data) return false;
+    const role = (data as { role: string | null }).role;
+    if (!role) return false;
+    return ELEVATED_ROLES.has(role);
+  } catch {
+    return false;
+  }
 }
 
-async function signOutAndReturnRole(): Promise<string | null> {
-  if (!supabase) return null;
-  const { data: userData } = await supabase.auth.getUser();
-  const role =
-    (userData.user?.app_metadata?.role as string | undefined) ??
-    (userData.user?.user_metadata?.role as string | undefined) ??
-    null;
-  if (!isConsumerRole(role)) {
+async function signOutAndReturnIsElevated(): Promise<boolean> {
+  if (!supabase) return false;
+  const isElevated = await detectElevatedRole();
+  if (isElevated) {
     await supabase.auth.signOut();
   }
-  return role;
+  return isElevated;
 }
 
 function buildAppDeepLink(accessToken: string | null, refreshToken: string | null, type: string = 'signup'): string {
@@ -67,8 +97,8 @@ export default function EmailConfirmPage() {
           // Recovery flow: check role before redirecting — admin resets must never
           // reach the mobile app deep-link path (belt-and-suspenders for stale emails).
           if (tokenType === 'recovery' && s) {
-            const role = await signOutAndReturnRole();
-            if (!isConsumerRole(role)) {
+            const isElevated = await signOutAndReturnIsElevated();
+            if (isElevated) {
               setConfirmState('admin_surface');
               return;
             }
@@ -102,8 +132,8 @@ export default function EmailConfirmPage() {
             setConfirmState('error');
             return;
           }
-          const role = await signOutAndReturnRole();
-          if (!isConsumerRole(role)) {
+          const isElevated = await signOutAndReturnIsElevated();
+          if (isElevated) {
             setConfirmState('admin_surface');
             return;
           }
@@ -166,6 +196,12 @@ export default function EmailConfirmPage() {
   };
 
   if (confirmState === 'admin_surface') {
+    // This branch only fires for STALE pre-fix reset emails that still pointed
+    // at www.sweat-drop.com. The token has already been consumed by
+    // verifyOtp/setSession above — it cannot be reused. We must not send the
+    // user to /login (they may have a live admin cookie session that would
+    // land them on /dashboard, masking the fact that their password was NEVER
+    // updated). Send them to /forgot-password for a fresh link instead.
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-6">
         <div className="max-w-md w-full text-center">
@@ -188,21 +224,22 @@ export default function EmailConfirmPage() {
             className="text-3xl tracking-wider text-white mb-3"
             style={{ fontFamily: 'var(--font-display), sans-serif' }}
           >
-            ADMIN ACCOUNT
+            LINK NOT VALID HERE
           </h1>
 
           <p className="text-gray-400 text-base leading-relaxed mb-8">
-            This reset link was issued for an admin account.
+            This reset link was issued for an admin account and cannot be used on
+            this page.
             <br />
-            Please complete the password reset at the admin panel.
+            Please request a fresh reset link from the admin panel.
           </p>
 
           <a
-            href={`${ADMIN_PANEL_URL}/login`}
+            href={`${ADMIN_PANEL_URL}/forgot-password`}
             className="block w-full py-4 rounded-full bg-white/10 text-white font-bold text-lg tracking-wide uppercase transition-all hover:bg-white/15 active:scale-[0.98] border border-white/10"
             style={{ fontFamily: 'var(--font-display), sans-serif' }}
           >
-            GO TO ADMIN PANEL
+            REQUEST NEW RESET LINK
           </a>
 
           <p className="text-gray-600 text-xs mt-8">
