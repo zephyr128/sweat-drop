@@ -4,12 +4,13 @@
 // Depends on Phase 1 migration: mark_redemption_fulfilled RPC +
 // get_arena_fulfillment_manifest RPC + fulfilled_at/fulfilled_by columns on redemptions.
 // Related files:
-//   - apps/admin-panel/components/modules/ArenaFulfillmentTable.tsx (UI)
-//   - apps/admin-panel/app/dashboard/super/arenas/[arenaId]/fulfillment/page.tsx (page)
+//   - apps/admin-panel/components/modules/ArenaFulfillmentTable.tsx (arena manifest UI)
+//   - apps/admin-panel/components/modules/RedemptionsManager.tsx (inline per-redemption "Mark received" action)
+//   - apps/admin-panel/app/dashboard/arenas/[arenaId]/fulfillment/page.tsx (arena fulfillment page)
 
-import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { getCurrentProfile } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { createClient as createServerClient } from '@/lib/supabase-server';
 
 export interface FulfillmentRow {
   redemption_id: string;
@@ -41,10 +42,12 @@ export async function markRedemptionFulfilled(
       return { success: false, error: 'Unauthorized' };
     }
 
-    const admin = getAdminClient();
-    if (!admin) return { success: false, error: 'Admin client not available' };
+    // Use the authenticated server client (cookie/JWT context), not service-role.
+    // SQL RPC uses auth.uid() via _admin_check_gym_access(), so calling it through
+    // the admin client would strip caller identity and fail auth checks.
+    const supabase = await createServerClient();
 
-    const { data, error } = await (admin.rpc('mark_redemption_fulfilled', {
+    const { data, error } = await (supabase.rpc('mark_redemption_fulfilled', {
       p_redemption_id: redemptionId,
       p_notes: notes ?? null,
     } as any) as any);
@@ -73,8 +76,10 @@ export async function markRedemptionFulfilled(
       });
     }
 
-    revalidatePath('/dashboard/super/arenas/[arenaId]/fulfillment', 'page');
+    revalidatePath('/dashboard/arenas/[arenaId]/fulfillment', 'page');
     revalidatePath('/dashboard/gym/[id]/redemptions', 'page');
+    revalidatePath('/dashboard/owner', 'page');
+    revalidatePath('/dashboard/super', 'page');
     return { success: true };
   } catch (err) {
     return {
@@ -96,10 +101,10 @@ export async function getArenaFulfillmentManifest(
       return { success: false, error: 'Unauthorized' };
     }
 
-    const admin = getAdminClient();
-    if (!admin) return { success: false, error: 'Admin client not available' };
+    // Must preserve auth context for SQL-side access checks.
+    const supabase = await createServerClient();
 
-    const { data, error } = await (admin.rpc('get_arena_fulfillment_manifest', {
+    const { data, error } = await (supabase.rpc('get_arena_fulfillment_manifest', {
       p_arena_id: arenaId,
     } as any) as any);
 

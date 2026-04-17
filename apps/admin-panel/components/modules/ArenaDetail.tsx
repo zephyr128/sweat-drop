@@ -355,7 +355,7 @@ export function ArenaDetail({ arena, isSuperadmin, viewingGymId, onBack }: Arena
         ))}
         {/* Fulfillment tab — links to dedicated page visible to all gym staff */}
         <Link
-          href={`/dashboard/super/arenas/${arena.id}/fulfillment`}
+          href={`/dashboard/arenas/${arena.id}/fulfillment`}
           className="ml-auto px-5 py-3 text-sm font-medium text-[#808080] border-b-2 border-transparent hover:text-white transition-colors flex items-center gap-1.5"
         >
           <PackageCheck className="w-3.5 h-3.5" />

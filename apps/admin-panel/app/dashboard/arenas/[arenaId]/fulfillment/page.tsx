@@ -1,4 +1,6 @@
 // Route is auto-dynamic (reads cookies via auth check)
+// Accessible to: superadmin, gym_owner, gym_admin, receptionist
+// (NOT under /dashboard/super so middleware allows all authenticated gym staff)
 
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -18,6 +20,13 @@ interface ArenaRow {
   finalized_at: string | null;
 }
 
+function backHref(role: string, assignedGymId: string | null): string {
+  if (role === 'superadmin') return '/dashboard/super';
+  if (role === 'gym_owner') return '/dashboard/owner';
+  if (assignedGymId) return `/dashboard/gym/${assignedGymId}/dashboard`;
+  return '/dashboard';
+}
+
 export default async function ArenaFulfillmentPage({ params }: FulfillmentPageProps) {
   const { arenaId } = await params;
 
@@ -30,23 +39,22 @@ export default async function ArenaFulfillmentPage({ params }: FulfillmentPagePr
   const admin = getAdminClient();
   if (!admin) notFound();
 
-  const arenaQuery = await (admin.from('sweat_arenas') as any)
+  const { data: arena, error } = await (admin.from('sweat_arenas') as any)
     .select('id, name, is_finalized, finalized_at')
     .eq('id', arenaId)
-    .single();
-  const arena = arenaQuery.data as ArenaRow | null;
-  const error = arenaQuery.error as { message: string } | null;
+    .single() as { data: ArenaRow | null; error: unknown };
 
   if (error || !arena) notFound();
 
   const isSuperAdmin = profile.role === 'superadmin';
+  const back = backHref(profile.role, profile.assigned_gym_id ?? null);
 
   return (
     <div className="min-h-screen md:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-start gap-4">
         <Link
-          href="/dashboard/super"
+          href={back}
           className="p-2 rounded-lg bg-[#1A1A1A] border border-[#333] text-zinc-400 hover:text-white transition-colors shrink-0 mt-0.5"
         >
           <ArrowLeft className="w-4 h-4" />

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { confirmRedemption, cancelRedemption } from '@/lib/actions/redemption-actions';
+import { markRedemptionFulfilled } from '@/lib/actions/redemption-fulfillment-actions';
 import {
   CheckCircle2,
   XCircle,
@@ -274,6 +275,34 @@ export function RedemptionsManager({
     }
   };
 
+  const handleMarkFulfilled = async (redemption: Redemption) => {
+    const rewardName = getRewardName(redemption);
+    const userLabel = redemption.profiles?.username
+      ? `@${redemption.profiles.username}`
+      : 'the recipient';
+    if (!(await confirmAction({
+      title: 'Mark prize as received?',
+      message: `Confirm that "${rewardName}" has arrived at the gym and is ready for pickup. ${userLabel} will be notified via push notification.`,
+      confirmLabel: 'Mark as received',
+      variant: 'default',
+    }))) return;
+
+    setProcessingId(redemption.id);
+    try {
+      const result = await markRedemptionFulfilled(redemption.id);
+      if (result.success) {
+        await refreshRedemptions();
+        toast.success('Prize marked as received. Recipient notified.');
+      } else {
+        toast.error(`Failed: ${result.error ?? 'Unknown error'}`);
+      }
+    } catch (error: unknown) {
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handleVerified = async () => {
     // After verify the DB trigger auto-promotes the row; refetch to reflect it.
     await refreshRedemptions();
@@ -442,18 +471,30 @@ export function RedemptionsManager({
 
                         {/* Actions */}
                         <div className="flex flex-col gap-2 shrink-0">
-                          <button
-                            onClick={() => handleConfirm(redemption)}
-                            disabled={processingId === redemption.id}
-                            className={`px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-                              needsVerify
-                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-not-allowed'
-                                : 'bg-[#00E5FF] text-black hover:bg-[#00B8CC]'
-                            }`}
-                          >
-                            <CheckCircle2 className="w-5 h-5" />
-                            {processingId === redemption.id ? 'Confirming...' : 'Confirm'}
-                          </button>
+                          {IS_PRIZE_SOURCE(redemption.source_type) && !redemption.fulfilled_at ? (
+                            <button
+                              onClick={() => handleMarkFulfilled(redemption)}
+                              disabled={processingId === redemption.id}
+                              title="Mark that the prize has arrived at the gym and notify the recipient"
+                              className="px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-blue-500 text-white hover:bg-blue-400"
+                            >
+                              <PackageCheck className="w-5 h-5" />
+                              {processingId === redemption.id ? 'Saving...' : 'Mark as received'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleConfirm(redemption)}
+                              disabled={processingId === redemption.id}
+                              className={`px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+                                needsVerify
+                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-not-allowed'
+                                  : 'bg-[#00E5FF] text-black hover:bg-[#00B8CC]'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-5 h-5" />
+                              {processingId === redemption.id ? 'Confirming...' : 'Confirm'}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleCancel(redemption.id)}
                             disabled={processingId === redemption.id}
