@@ -14,9 +14,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Force entire app dynamic to skip all static prerender (including error fallbacks)
-export const dynamic = 'force-dynamic';
-
 export default function RootLayout({
   children,
 }: {

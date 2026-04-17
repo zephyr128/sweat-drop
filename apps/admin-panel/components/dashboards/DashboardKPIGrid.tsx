@@ -12,7 +12,7 @@ import {
   TrendingDown,
   ArrowRight,
 } from 'lucide-react';
-import type { DashboardOverview } from '@/lib/actions/dashboard-actions';
+import type { DashboardOverview } from '@/lib/actions/dashboard-types';
 
 interface DashboardKPIGridProps {
   kpis: DashboardOverview['kpis'];

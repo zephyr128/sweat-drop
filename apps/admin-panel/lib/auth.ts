@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from './supabase-server';
 import { User } from '@supabase/supabase-js';
 
@@ -13,7 +14,10 @@ export interface UserProfile {
   home_gym_id: string | null;
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+// cache() deduplicates all calls within a single RSC render pass.
+// Middleware runs in a separate Edge runtime and cannot share this cache,
+// but all Server Components + Server Actions on the same request do.
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   try {
     const supabase = await createClient();
     const { data: { user }, error } = await supabase.auth.getUser();
@@ -22,15 +26,15 @@ export async function getCurrentUser(): Promise<User | null> {
   } catch {
     return null;
   }
-}
+});
 
-export async function getCurrentProfile(): Promise<UserProfile | null> {
+export const getCurrentProfile = cache(async (): Promise<UserProfile | null> => {
   const user = await getCurrentUser();
   if (!user) return null;
 
   try {
     const supabase = await createClient();
-    
+
     const { data, error } = await supabase
       .from('profiles')
       .select('id, email, username, role, assigned_gym_id, owner_id, home_gym_id')
@@ -57,7 +61,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
     console.error('Unexpected error in getCurrentProfile:', error);
     return null;
   }
-}
+});
 
 export async function isSuperadmin(): Promise<boolean> {
   const profile = await getCurrentProfile();

@@ -6,12 +6,8 @@ import {
   Search, QrCode, Gift, ScrollText, ChevronLeft, ChevronRight,
   Dumbbell, TimerOff, Play, XCircle,
 } from 'lucide-react';
-import {
-  getGymActivityLog,
-  type ActivityLogItem,
-  type ActivityFilterKind,
-  type ActivityKind,
-} from '@/lib/actions/activity-log-actions';
+import { getGymActivityLog } from '@/lib/actions/activity-log-actions';
+import type { ActivityLogItem, ActivityFilterKind, ActivityKind } from '@/lib/actions/activity-log-types';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
 

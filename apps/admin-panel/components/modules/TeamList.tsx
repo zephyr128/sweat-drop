@@ -11,7 +11,8 @@ import {
   RefreshCw, Copy, AlertCircle, Send,
 } from 'lucide-react';
 import { DataTable, type ColumnDef, type DataTableQuery } from '@/components/ui/DataTable';
-import { listStaff, type StaffRow } from '@/lib/actions/list-actions';
+import { listStaff } from '@/lib/actions/list-actions';
+import type { StaffRow } from '@/lib/actions/list-helpers';
 import {
   createStaffInvitation,
   cancelInvitation,

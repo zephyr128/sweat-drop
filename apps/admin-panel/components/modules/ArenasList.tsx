@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
-import { listArenas, type ArenaRow } from '@/lib/actions/list-actions';
+import { listArenas } from '@/lib/actions/list-actions';
+import type { ArenaRow } from '@/lib/actions/list-helpers';
 import { getArenaById, type Arena } from '@/lib/actions/arena-actions';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 import { ArenaDetail } from './ArenaDetail';

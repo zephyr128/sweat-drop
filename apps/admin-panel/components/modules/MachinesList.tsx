@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Cpu, CheckCircle2, XCircle, Wrench, Bluetooth, Activity } from 'lucide-react';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
-import { listMachines, type MachineRow } from '@/lib/actions/list-actions';
+import { listMachines } from '@/lib/actions/list-actions';
+import type { MachineRow } from '@/lib/actions/list-helpers';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 
 interface MachinesListProps {

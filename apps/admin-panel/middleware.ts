@@ -4,9 +4,7 @@ import type { NextRequest } from 'next/server';
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
-    request: {
-      headers: req.headers,
-    },
+    request: { headers: req.headers },
   });
 
   const supabase = createServerClient(
@@ -17,28 +15,24 @@ export async function middleware(req: NextRequest) {
         get(name: string) {
           return req.cookies.get(name)?.value;
         },
-        set(name: string, value: string, options: any) {
-          req.cookies.set({ name, value: value, ...options });
-          res = NextResponse.next({
-            request: { headers: req.headers },
-          });
-          res.cookies.set({ name, value: value, ...options });
+        set(name: string, value: string, options: Record<string, unknown>) {
+          req.cookies.set({ name, value, ...options });
+          res = NextResponse.next({ request: { headers: req.headers } });
+          res.cookies.set({ name, value, ...options });
         },
-        remove(name: string, options: any) {
+        remove(name: string, options: Record<string, unknown>) {
           req.cookies.set({ name, value: '', ...options });
-          res = NextResponse.next({
-            request: { headers: req.headers },
-          });
+          res = NextResponse.next({ request: { headers: req.headers } });
           res.cookies.set({ name, value: '', ...options });
         },
       },
-    }
+    },
   );
 
   const { data: { user } } = await supabase.auth.getUser();
   const pathname = req.nextUrl.pathname;
 
-  // 1. Redirect unauthenticated users from /dashboard to /login
+  // 1. Unauthenticated → login
   if (!user && pathname.startsWith('/dashboard')) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/login';
@@ -46,224 +40,199 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // 2. If user is authenticated
-  if (user) {
-    // Fetch profile with gym status check
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role, assigned_gym_id, owner_id')
-      .eq('id', user.id)
-      .single();
+  if (!user) return res;
 
-    if (profileError || !profile) {
-      console.error('Error fetching profile in middleware:', profileError);
-      // CRITICAL: If user is authenticated but has no profile, redirect to login
-      // This prevents access to dashboard without profile and avoids redirect loops
-      if (pathname.startsWith('/dashboard')) {
+  // 2. Hoist gym ID extraction so we can fire the gym query in parallel with profile
+  const gymRouteMatch = pathname.match(/^\/dashboard\/gym\/([^/]+)/);
+  const gymIdFromUrl = gymRouteMatch ? gymRouteMatch[1] : null;
+
+  // 3. Kick off profile + gym query in parallel
+  const profilePromise = supabase
+    .from('profiles')
+    .select('role, assigned_gym_id, owner_id')
+    .eq('id', user.id)
+    .single();
+
+  // Only fetch gym row when the URL actually has a gym segment — saves a
+  // round-trip on all non-gym routes (super, owner, desk, etc.)
+  const gymPromise = gymIdFromUrl
+    ? supabase
+        .from('gyms')
+        .select('owner_id, status, is_suspended')
+        .eq('id', gymIdFromUrl)
+        .single()
+    : Promise.resolve({ data: null, error: null });
+
+  const [{ data: profile, error: profileError }, { data: gym }] = await Promise.all([
+    profilePromise,
+    gymPromise,
+  ]);
+
+  if (profileError || !profile) {
+    console.error('Error fetching profile in middleware:', profileError);
+    if (pathname.startsWith('/dashboard')) {
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = '/login';
+      redirectUrl.searchParams.set('error', 'profile_not_found');
+      return NextResponse.redirect(redirectUrl);
+    }
+    return res;
+  }
+
+  // 4. Gym suspend check (gym_admin / receptionist)
+  if (profile.role === 'gym_admin' || profile.role === 'receptionist') {
+    if (profile.assigned_gym_id) {
+      // If we already fetched this gym above, reuse; otherwise fetch it now
+      const suspendedGym = gymIdFromUrl === profile.assigned_gym_id
+        ? gym
+        : await supabase
+            .from('gyms')
+            .select('id, status, is_suspended')
+            .eq('id', profile.assigned_gym_id)
+            .single()
+            .then((r) => r.data);
+
+      if (suspendedGym && (suspendedGym.status === 'suspended' || suspendedGym.is_suspended)) {
+        await supabase.auth.signOut();
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = '/login';
-        redirectUrl.searchParams.set('error', 'profile_not_found');
+        redirectUrl.searchParams.set('error', 'gym_suspended');
         return NextResponse.redirect(redirectUrl);
       }
-      return res;
+    }
+  } else if (profile.role === 'gym_owner') {
+    const { data: activeGyms } = await supabase
+      .from('gyms')
+      .select('id')
+      .eq('owner_id', user.id)
+      .eq('status', 'active')
+      .eq('is_suspended', false)
+      .limit(1);
+
+    if (!activeGyms || activeGyms.length === 0) {
+      await supabase.auth.signOut();
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = '/login';
+      redirectUrl.searchParams.set('error', 'all_gyms_suspended');
+      return NextResponse.redirect(redirectUrl);
+    }
+  }
+
+  // 5. Redirect from /login when already authenticated
+  if (pathname === '/login' && profile) {
+    const redirectUrl = req.nextUrl.clone();
+    if (profile.role === 'superadmin') {
+      redirectUrl.pathname = '/dashboard/super';
+    } else if (profile.role === 'gym_owner') {
+      redirectUrl.pathname = '/dashboard/owner';
+    } else if (profile.role === 'receptionist' && profile.assigned_gym_id) {
+      redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/desk`;
+    } else if (profile.role === 'gym_admin' && profile.assigned_gym_id) {
+      redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/dashboard`;
+    } else {
+      redirectUrl.pathname = '/dashboard';
+    }
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // 6. RBAC route protection
+  if (pathname.startsWith('/dashboard')) {
+    // ── SUPERADMIN ────────────────────────────────────────────────────────────
+    if (profile.role === 'superadmin') {
+      if (pathname === '/dashboard' || pathname === '/dashboard/') {
+        return NextResponse.redirect(new URL('/dashboard/super', req.url));
+      }
+      // Superadmin can access any route (super/*, gym/*, arenas/*, etc.)
     }
 
-    // 3. GYM SUSPEND CHECK - Block login if gym is suspended
-    if (profile.role === 'gym_admin' || profile.role === 'receptionist') {
-      if (profile.assigned_gym_id) {
-        const { data: gym } = await supabase
-          .from('gyms')
-          .select('id, status, is_suspended')
-          .eq('id', profile.assigned_gym_id)
-          .single();
+    // ── GYM OWNER ─────────────────────────────────────────────────────────────
+    else if (profile.role === 'gym_owner') {
+      if (pathname.startsWith('/dashboard/super')) {
+        return NextResponse.redirect(new URL('/dashboard/owner', req.url));
+      }
+      if (pathname === '/dashboard' || pathname === '/dashboard/') {
+        return NextResponse.redirect(new URL('/dashboard/owner', req.url));
+      }
+      if (gymIdFromUrl) {
+        if (!gym || (gym as { owner_id: string | null }).owner_id !== user.id) {
+          return NextResponse.redirect(new URL('/dashboard/owner', req.url));
+        }
+        if ((gym as { status: string; is_suspended: boolean }).status === 'suspended' ||
+            (gym as { status: string; is_suspended: boolean }).is_suspended) {
+          return NextResponse.redirect(new URL('/dashboard/owner', req.url));
+        }
+      }
+    }
 
-        if (gym && (gym.status === 'suspended' || gym.is_suspended)) {
-          // Gym is suspended - block access and sign out
+    // ── GYM ADMIN ─────────────────────────────────────────────────────────────
+    else if (profile.role === 'gym_admin') {
+      if (pathname.startsWith('/dashboard/super') || pathname.startsWith('/dashboard/owner')) {
+        const dest = profile.assigned_gym_id
+          ? `/dashboard/gym/${profile.assigned_gym_id}/dashboard`
+          : '/404';
+        return NextResponse.redirect(new URL(dest, req.url));
+      }
+      if (gymIdFromUrl) {
+        if (profile.assigned_gym_id !== gymIdFromUrl) {
+          return NextResponse.redirect(
+            new URL(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`, req.url),
+          );
+        }
+        if (gym && ((gym as { status: string; is_suspended: boolean }).status === 'suspended' ||
+                    (gym as { status: string; is_suspended: boolean }).is_suspended)) {
           await supabase.auth.signOut();
           const redirectUrl = req.nextUrl.clone();
           redirectUrl.pathname = '/login';
           redirectUrl.searchParams.set('error', 'gym_suspended');
           return NextResponse.redirect(redirectUrl);
         }
-      }
-    } else if (profile.role === 'gym_owner') {
-      // Check if any owned gym is active (at least one must be active)
-      const { data: activeGyms } = await supabase
-        .from('gyms')
-        .select('id')
-        .eq('owner_id', user.id)
-        .eq('status', 'active')
-        .eq('is_suspended', false)
-        .limit(1);
-
-      if (!activeGyms || activeGyms.length === 0) {
-        // All gyms are suspended - block access
-        await supabase.auth.signOut();
-        const redirectUrl = req.nextUrl.clone();
-        redirectUrl.pathname = '/login';
-        redirectUrl.searchParams.set('error', 'all_gyms_suspended');
-        return NextResponse.redirect(redirectUrl);
-      }
-    }
-
-    // 4. REDIRECT FROM LOGIN PAGE (if already logged in AND has profile)
-    // CRITICAL: Only redirect from /login if profile exists (avoid loop if profile fetch failed)
-    if (pathname === '/login' && profile) {
-      const redirectUrl = req.nextUrl.clone();
-      
-      if (profile.role === 'superadmin') {
-        redirectUrl.pathname = '/dashboard/super';
-      } else if (profile.role === 'gym_owner') {
-        redirectUrl.pathname = '/dashboard/owner';
-      } else if (profile.role === 'receptionist' && profile.assigned_gym_id) {
-        redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/desk`;
-      } else if (profile.role === 'gym_admin' && profile.assigned_gym_id) {
-        redirectUrl.pathname = `/dashboard/gym/${profile.assigned_gym_id}/dashboard`;
-      } else {
-        redirectUrl.pathname = '/dashboard';
-      }
-      return NextResponse.redirect(redirectUrl);
-    }
-
-    // 5. PROTECT DASHBOARD ROUTES BASED ON ROLE
-    if (pathname.startsWith('/dashboard')) {
-      const gymRouteMatch = pathname.match(/^\/dashboard\/gym\/([^/]+)/);
-      const gymIdFromUrl = gymRouteMatch ? gymRouteMatch[1] : null;
-
-      // SUPERADMIN LOGIC
-      if (profile.role === 'superadmin') {
-        if (pathname.startsWith('/dashboard/super')) {
-          // Allow access
-        } else if (pathname.startsWith('/dashboard/gym/')) {
-          // SuperAdmin can access any gym dashboard
-        } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
-          return NextResponse.redirect(new URL('/dashboard/super', req.url));
-        }
-      }
-      // GYM OWNER LOGIC
-      else if (profile.role === 'gym_owner') {
-        // Block superadmin routes
-        if (pathname.startsWith('/dashboard/super')) {
-          return NextResponse.redirect(new URL('/dashboard/owner', req.url));
-        }
-        
-        // Redirect /dashboard to /dashboard/owner
-        if (pathname === '/dashboard' || pathname === '/dashboard/') {
-          return NextResponse.redirect(new URL('/dashboard/owner', req.url));
-        }
-        
-        // Check gym access for gym-specific routes
-        if (gymIdFromUrl) {
-          const { data: gym } = await supabase
-            .from('gyms')
-            .select('owner_id, status, is_suspended')
-            .eq('id', gymIdFromUrl)
-            .single();
-          
-          if (!gym || gym.owner_id !== user.id) {
-            // Redirect to owner dashboard
-            return NextResponse.redirect(new URL('/dashboard/owner', req.url));
-          }
-          if (gym.status === 'suspended' || gym.is_suspended) {
-            // Gym is suspended - redirect to owner dashboard
-            return NextResponse.redirect(new URL('/dashboard/owner', req.url));
-          }
-        }
-      }
-      // GYM ADMIN LOGIC
-      else if (profile.role === 'gym_admin') {
-        // Block superadmin routes
-        if (pathname.startsWith('/dashboard/super')) {
-          if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`, req.url));
-          }
-          return NextResponse.redirect(new URL('/404', req.url));
-        }
-        
-        // Block owner routes
-        if (pathname.startsWith('/dashboard/owner')) {
-          if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`, req.url));
-          }
-          return NextResponse.redirect(new URL('/404', req.url));
-        }
-        
-        // Must access their assigned gym only
-        if (gymIdFromUrl) {
-          if (profile.assigned_gym_id !== gymIdFromUrl) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`, req.url));
-          }
-          
-          // Check if gym is suspended
-          const { data: gym } = await supabase
-            .from('gyms')
-            .select('id, status, is_suspended')
-            .eq('id', gymIdFromUrl)
-            .single();
-          
-          if (gym && (gym.status === 'suspended' || gym.is_suspended)) {
-            // Gym is suspended - sign out and redirect
-            await supabase.auth.signOut();
-            const redirectUrl = req.nextUrl.clone();
-            redirectUrl.pathname = '/login';
-            redirectUrl.searchParams.set('error', 'gym_suspended');
-            return NextResponse.redirect(redirectUrl);
-          }
-        } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
-          if (profile.assigned_gym_id) {
-            return NextResponse.redirect(new URL(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`, req.url));
-          }
-        }
-      }
-      // RECEPTIONIST LOGIC — desk operator, strict path whitelist
-      else if (profile.role === 'receptionist') {
-        const deskUrl = profile.assigned_gym_id
-          ? `/dashboard/gym/${profile.assigned_gym_id}/desk`
-          : '/404';
-
-        // Block superadmin / owner routes
-        if (pathname.startsWith('/dashboard/super') || pathname.startsWith('/dashboard/owner')) {
-          return NextResponse.redirect(new URL(deskUrl, req.url));
-        }
-
-        // Receptionist allowed sub-paths (after /dashboard/gym/[id])
-        // /members is read-only detail opened from checkin row context
-        const RECEPTIONIST_ALLOWED = ['/desk', '/checkin', '/activity', '/members'];
-
-        if (gymIdFromUrl) {
-          // Must only access assigned gym
-          if (profile.assigned_gym_id !== gymIdFromUrl) {
-            return NextResponse.redirect(new URL(deskUrl, req.url));
-          }
-
-          // Check if gym is suspended
-          const { data: gym } = await supabase
-            .from('gyms')
-            .select('id, status, is_suspended')
-            .eq('id', gymIdFromUrl)
-            .single();
-
-          if (gym && (gym.status === 'suspended' || gym.is_suspended)) {
-            await supabase.auth.signOut();
-            const redirectUrl = req.nextUrl.clone();
-            redirectUrl.pathname = '/login';
-            redirectUrl.searchParams.set('error', 'gym_suspended');
-            return NextResponse.redirect(redirectUrl);
-          }
-
-          const pathAfterGym = pathname.replace(`/dashboard/gym/${gymIdFromUrl}`, '');
-          const isAllowed = RECEPTIONIST_ALLOWED.some(
-            (p) => pathAfterGym === p || pathAfterGym.startsWith(p + '/') || pathAfterGym.startsWith(p + '?'),
+      } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
+        if (profile.assigned_gym_id) {
+          return NextResponse.redirect(
+            new URL(`/dashboard/gym/${profile.assigned_gym_id}/dashboard`, req.url),
           );
-          if (!isAllowed) {
-            return NextResponse.redirect(new URL(deskUrl, req.url));
-          }
-        } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
-          return NextResponse.redirect(new URL(deskUrl, req.url));
-        } else {
-          // Any other /dashboard/* path not under a gym
+        }
+      }
+    }
+
+    // ── RECEPTIONIST ──────────────────────────────────────────────────────────
+    else if (profile.role === 'receptionist') {
+      const deskUrl = profile.assigned_gym_id
+        ? `/dashboard/gym/${profile.assigned_gym_id}/desk`
+        : '/404';
+
+      if (pathname.startsWith('/dashboard/super') || pathname.startsWith('/dashboard/owner')) {
+        return NextResponse.redirect(new URL(deskUrl, req.url));
+      }
+
+      const RECEPTIONIST_ALLOWED = ['/desk', '/checkin', '/activity', '/members'];
+
+      if (gymIdFromUrl) {
+        if (profile.assigned_gym_id !== gymIdFromUrl) {
           return NextResponse.redirect(new URL(deskUrl, req.url));
         }
+        if (gym && ((gym as { status: string; is_suspended: boolean }).status === 'suspended' ||
+                    (gym as { status: string; is_suspended: boolean }).is_suspended)) {
+          await supabase.auth.signOut();
+          const redirectUrl = req.nextUrl.clone();
+          redirectUrl.pathname = '/login';
+          redirectUrl.searchParams.set('error', 'gym_suspended');
+          return NextResponse.redirect(redirectUrl);
+        }
+        const pathAfterGym = pathname.replace(`/dashboard/gym/${gymIdFromUrl}`, '');
+        const isAllowed = RECEPTIONIST_ALLOWED.some(
+          (p) =>
+            pathAfterGym === p ||
+            pathAfterGym.startsWith(`${p}/`) ||
+            pathAfterGym.startsWith(`${p}?`),
+        );
+        if (!isAllowed) {
+          return NextResponse.redirect(new URL(deskUrl, req.url));
+        }
+      } else if (pathname === '/dashboard' || pathname === '/dashboard/') {
+        return NextResponse.redirect(new URL(deskUrl, req.url));
+      } else {
+        return NextResponse.redirect(new URL(deskUrl, req.url));
       }
     }
   }

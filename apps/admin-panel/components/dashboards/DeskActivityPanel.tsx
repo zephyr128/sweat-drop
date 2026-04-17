@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowRight, QrCode, Gift, Clock, Dumbbell, TimerOff } from 'lucide-react';
-import type { DashboardOverview, DeskFeedKind } from '@/lib/actions/dashboard-actions';
+import type { DashboardOverview, DeskFeedKind } from '@/lib/actions/dashboard-types';
 
 interface DeskActivityPanelProps {
   deskFeed: DashboardOverview['deskFeed'];

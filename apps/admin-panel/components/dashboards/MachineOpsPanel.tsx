@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Bar } from 'react-chartjs-2';
 import { ArrowRight, Cpu, Clock, Zap } from 'lucide-react';
 import '@/lib/chart-setup';
-import type { DashboardOverview } from '@/lib/actions/dashboard-actions';
+import type { DashboardOverview } from '@/lib/actions/dashboard-types';
 
 interface MachineOpsPanelProps {
   machineOps: DashboardOverview['machineOps'];

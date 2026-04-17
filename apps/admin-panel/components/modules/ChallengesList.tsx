@@ -13,7 +13,8 @@ import {
   Trophy, ArrowRight, Clock, Repeat, Milestone,
 } from 'lucide-react';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
-import { listChallenges, type ChallengeRow } from '@/lib/actions/list-actions';
+import { listChallenges } from '@/lib/actions/list-actions';
+import type { ChallengeRow } from '@/lib/actions/list-helpers';
 import {
   createChallenge, updateChallenge, deleteChallenge,
   toggleChallengeStatus, getChallengeCompletionStats,

@@ -13,12 +13,11 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
-import { listMembers, type MemberRow } from '@/lib/actions/list-actions';
+import { listMembers } from '@/lib/actions/list-actions';
+import type { MemberRow, PaginatedResult } from '@/lib/actions/list-helpers';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { MemberIdentityVerifyDrawer } from '@/components/modules/MemberIdentityVerifyDrawer';
 import { RetentionStats } from './RetentionStats';
-import type { PaginatedResult } from '@/lib/actions/list-helpers';
-
 interface MembersPageTabsProps {
   gymId: string;
 }

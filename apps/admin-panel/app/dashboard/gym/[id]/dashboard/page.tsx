@@ -22,46 +22,61 @@ interface GymData {
   country: string | null;
   owner_id: string | null;
   smartcoach_enabled: boolean;
+  address: string | null;
+  lat: number | null;
 }
 
 export default async function GymDashboardPage({ params }: DashboardPageProps) {
   const { id } = await params;
 
-  const profile = await requireGymAccess(id);
-
+  // Fire all three independent fetches in parallel immediately.
+  // requireGymAccess reuses the React.cache()-memoized getCurrentProfile(),
+  // so it shares the already-in-flight auth call — no extra round-trip.
   const supabase = await createClient();
-  const { data: gymData, error: gymError } = await supabase
-    .from('gyms')
-    .select('*')
-    .eq('id', id)
-    .single();
 
-  if (gymError || !gymData) notFound();
-
-  const gym = gymData as GymData;
-  if (typeof gym.smartcoach_enabled !== 'boolean') gym.smartcoach_enabled = false;
-
-  const [overviewResult, referralResult] = await Promise.all([
+  const [profile, gymResult, overviewResult, referralResult] = await Promise.all([
+    requireGymAccess(id),
+    supabase.from('gyms').select('*').eq('id', id).single(),
     getGymDashboardOverview(id),
     getReferralData(id),
   ]);
+
+  const { data: gymData, error: gymError } = gymResult;
+  if (gymError || !gymData) notFound();
+
+  const gym = gymData as unknown as GymData;
+  if (typeof gym.smartcoach_enabled !== 'boolean') gym.smartcoach_enabled = false;
+
   const overview = overviewResult.data ?? null;
   const referralData = referralResult.data ?? null;
 
-  // Setup checklist for owners/admins
+  // Setup checklist — only for owners/admins when setup is incomplete
   let setupStatus: SetupStatus | null = null;
-  if ((profile.role === 'gym_owner' || profile.role === 'gym_admin') && overview && !overview.setupComplete) {
-    const hasName = Boolean(gym.name && gym.name.trim());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const hasAddress = Boolean((gym as any).address && String((gym as any).address).trim());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const gymLat = (gymData as any).lat;
-    const hasCheckinCoords = typeof gymLat === 'number' && gymLat !== 0;
+  if (
+    (profile.role === 'gym_owner' || profile.role === 'gym_admin') &&
+    overview &&
+    !overview.setupComplete
+  ) {
+    const hasName = Boolean(gym.name?.trim());
+    const hasAddress = Boolean(gym.address?.trim());
+    const hasCheckinCoords = typeof gym.lat === 'number' && gym.lat !== 0;
 
+    // Three count queries — already parallel
     const [rewardCount, machineCount, staffCount] = await Promise.all([
-      supabase.from('rewards').select('id', { count: 'exact', head: true }).eq('gym_id', id).eq('is_active', true),
-      supabase.from('machines').select('id', { count: 'exact', head: true }).eq('gym_id', id),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('assigned_gym_id', id).in('role', ['gym_admin', 'receptionist']),
+      supabase
+        .from('rewards')
+        .select('id', { count: 'exact', head: true })
+        .eq('gym_id', id)
+        .eq('is_active', true),
+      supabase
+        .from('machines')
+        .select('id', { count: 'exact', head: true })
+        .eq('gym_id', id),
+      supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('assigned_gym_id', id)
+        .in('role', ['gym_admin', 'receptionist']),
     ]);
 
     setupStatus = {
@@ -72,8 +87,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
       invitedStaff: (staffCount.count ?? 0) > 0,
     };
 
-    const allDone = Object.values(setupStatus).every(Boolean);
-    if (allDone) setupStatus = null;
+    if (Object.values(setupStatus).every(Boolean)) setupStatus = null;
   }
 
   const ownerId = gym.owner_id || profile.id;
@@ -94,7 +108,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         )}
       </div>
 
-      {/* Setup checklist (only if incomplete) — above network toggle */}
+      {/* Setup checklist (only if incomplete) */}
       {setupStatus && <SetupChecklist gymId={id} status={setupStatus} />}
 
       {/* Network toggle (multi-gym owners) */}
@@ -102,7 +116,7 @@ export default async function GymDashboardPage({ params }: DashboardPageProps) {
         <NetworkOverviewToggle ownerId={ownerId} currentGymId={id} />
       )}
 
-      {/* Dashboard shell (client) renders KPIs, panels, cards */}
+      {/* Dashboard shell */}
       {overview ? (
         <DashboardShell overview={overview} basePath={basePath} gymId={id} referralData={referralData} />
       ) : (

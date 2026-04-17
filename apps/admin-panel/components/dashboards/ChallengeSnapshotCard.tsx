@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Target, Trophy, ArrowRight } from 'lucide-react';
-import type { DashboardOverview } from '@/lib/actions/dashboard-actions';
+import type { DashboardOverview } from '@/lib/actions/dashboard-types';
 
 interface ChallengeSnapshotCardProps {
   snapshot: DashboardOverview['challengeSnapshot'];

@@ -4,6 +4,158 @@ import { getCurrentProfile, type UserProfile, type UserRole } from '../auth';
 
 // ─── Shared List Contract ─────────────────────────────────────────
 
+// Row / filter types live here (not in list-actions.ts which has 'use server')
+// so client components can safely import them without hitting the
+// "Only async functions are allowed to be exported in a 'use server' file" error.
+
+export interface MemberFilters {
+  status?: 'all' | 'active' | 'at_risk' | 'churned';
+}
+
+export interface MemberRow {
+  id: string;
+  username: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  total_drops: number;
+  streak_days: number;
+  last_visit_date: string | null;
+  is_newcomer: boolean;
+  local_drops_balance: number;
+  joined_at: string;
+}
+
+export interface RedemptionFilters {
+  status?: 'all' | 'pending' | 'confirmed' | 'cancelled';
+}
+
+export interface RedemptionRow {
+  id: string;
+  user_id: string;
+  username: string | null;
+  avatar_url: string | null;
+  reward_id: string;
+  reward_name: string | null;
+  drops_spent: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  redemption_code: string;
+  source_type: string | null;
+  description: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+}
+
+export interface StoreItemFilters {
+  active?: boolean | 'all';
+  rewardType?: string;
+}
+
+export interface StoreItemRow {
+  id: string;
+  name: string;
+  description: string | null;
+  reward_type: string;
+  price_drops: number;
+  stock: number | null;
+  is_active: boolean;
+  image_url: string | null;
+  sponsor_name: string | null;
+  price_calc_mode: string | null;
+  discount_percent: number | null;
+  base_price_rsd: number | null;
+  available_from: string | null;
+  available_until: string | null;
+  redemption_limit: string | null;
+  created_at: string;
+}
+
+export interface MachineFilters {
+  type?: string;
+}
+
+export interface MachineRow {
+  id: string;
+  name: string;
+  type: string;
+  zone: string | null;
+  unique_qr_code: string | null;
+  qr_uuid: string | null;
+  is_active: boolean;
+  is_busy: boolean;
+  is_under_maintenance: boolean;
+  sensor_id: string | null;
+  ble_protocol: string | null;
+  protocol_verified: boolean;
+  current_user_id: string | null;
+  last_heartbeat: string | null;
+  last_rpm: number | null;
+  created_at: string;
+}
+
+export interface StaffFilters {
+  role?: 'all' | 'gym_admin' | 'receptionist';
+}
+
+export interface StaffRow {
+  id: string;
+  username: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: string;
+  created_at: string;
+}
+
+export interface ChallengeFilters {
+  active?: boolean | 'all';
+}
+
+export interface ChallengeRow {
+  id: string;
+  name: string;
+  description: string | null;
+  challenge_type: string;
+  target_drops: number;
+  reward_drops: number;
+  streak_days: number | null;
+  milestone_threshold: number | null;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  scoring_model: string | null;
+  sponsor_name: string | null;
+  sponsor_logo: string | null;
+  badge_image_url: string | null;
+  prize_description: string | null;
+  tiers: unknown[] | null;
+  created_at: string;
+}
+
+export interface ArenaFilters {
+  active?: boolean | 'all';
+}
+
+export interface ArenaRow {
+  id: string;
+  name: string;
+  description: string | null;
+  arena_scope: string;
+  scoring_model: string;
+  sponsor_name: string | null;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_finalized: boolean;
+  opt_in_type: string | null;
+  opt_in_value: number | null;
+  card_color: string | null;
+  card_text_color: string | null;
+  card_gradient_end: string | null;
+  participant_count: number;
+  gym_count: number;
+}
+
 export interface ListQueryInput<F = Record<string, unknown>> {
   q?: string;
   page?: number;

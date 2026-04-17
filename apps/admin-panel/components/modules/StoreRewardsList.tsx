@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect, useTransition, useMemo } from 'react'
 import { Droplet, ShoppingBag, CheckCircle2, XCircle, Power } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
-import { listStoreItems, type StoreItemRow } from '@/lib/actions/list-actions';
+import { listStoreItems } from '@/lib/actions/list-actions';
+import type { StoreItemRow } from '@/lib/actions/list-helpers';
 import { toggleStoreItemActive } from '@/lib/actions/store-actions';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 import { StoreManager, type StoreItem } from './StoreManager';

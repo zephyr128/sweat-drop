@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
-import { listRedemptions, type RedemptionRow } from '@/lib/actions/list-actions';
+import { listRedemptions } from '@/lib/actions/list-actions';
+import type { RedemptionRow } from '@/lib/actions/list-helpers';
 import { confirmRedemption, cancelRedemption } from '@/lib/actions/redemption-actions';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';

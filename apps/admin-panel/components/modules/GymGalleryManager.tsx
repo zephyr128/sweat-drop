@@ -294,15 +294,12 @@ function SortableGalleryCard({
 
       {/* Overlay controls */}
       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between p-2">
-        {/* Drag handle — only this element triggers drag so click targets below work normally */}
+        {/* Drag handle — only this element triggers drag */}
         <button
           {...attributes}
           {...listeners}
           className="p-0.5 text-zinc-400 hover:text-white cursor-grab active:cursor-grabbing"
           aria-label="Drag to reorder"
-          onPointerDown={(e) => e.stopPropagation()}
-          // Re-attach dnd-kit listeners explicitly via spread above; stopPropagation
-          // prevents the card's own pointer events from interfering.
         >
           <GripVertical className="w-4 h-4" />
         </button>

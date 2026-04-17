@@ -7,7 +7,7 @@ import { ChallengeSnapshotCard } from '@/components/dashboards/ChallengeSnapshot
 import { ReferralPilotCard } from '@/components/dashboards/ReferralPilotCard';
 import { TopPerformersWidget } from '@/components/analytics/TopPerformersWidget';
 import { HappyHourTeaser } from '@/components/economy/HappyHourTeaser';
-import type { DashboardOverview } from '@/lib/actions/dashboard-actions';
+import type { DashboardOverview } from '@/lib/actions/dashboard-types';
 import type { ReferralData } from '@/lib/actions/referral-pilot-actions';
 
 interface DashboardShellProps {

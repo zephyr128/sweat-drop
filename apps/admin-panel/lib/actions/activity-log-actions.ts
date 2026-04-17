@@ -1,31 +1,12 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
-import type { ActivityKind } from './dashboard-actions';
-
-export { type ActivityKind } from './dashboard-actions';
-
-export interface ActivityLogItem {
-  id: string;
-  kind: ActivityKind;
-  title: string;
-  memberId: string | null;
-  memberName: string;
-  memberAvatarUrl: string | null;
-  at: string;
-  status: string;
-  details: string;
-}
-
-export interface ActivityLogResult {
-  items: ActivityLogItem[];
-  total: number;
-  page: number;
-  perPage: number;
-  totalPages: number;
-}
-
-export type ActivityFilterKind = 'all' | 'checkin' | 'redemption' | 'workout';
+import type {
+  ActivityKind,
+  ActivityLogItem,
+  ActivityLogResult,
+  ActivityFilterKind,
+} from './activity-log-types';
 
 const VALID_ACTIVITY_KINDS = new Set<ActivityKind>([
   'checkin', 'redemption',
