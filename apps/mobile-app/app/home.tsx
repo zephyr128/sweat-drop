@@ -7,7 +7,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, useDerivedValue, withTiming, withRepeat, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, useDerivedValue, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
+import { SkeletonShimmer } from '@/components/SkeletonShimmer';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
@@ -63,22 +64,9 @@ const ARENAS_ACCENT = '#22D3EE';
 // COLD-START SKELETON — shown only on first mount while data loads
 // ═══════════════════════════════════════════════════════════
 
-function ShimmerBlock({ style }: { style: any }) {
-  const shimmer = useSharedValue(0);
-
-  useEffect(() => {
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true,
-    );
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(shimmer.value, [0, 1], [0.06, 0.12]),
-  }));
-
-  return <Animated.View style={[style, { backgroundColor: '#fff' }, animatedStyle]} />;
+// Thin wrapper kept for skeleton readability — real animation lives in SkeletonShimmer.
+function ShimmerBlock({ style, delayMs = 0 }: { style: any; delayMs?: number }) {
+  return <SkeletonShimmer style={style} delayMs={delayMs} />;
 }
 
 function ColdStartSkeleton({ branding }: { branding: ReturnType<typeof useBranding> }) {
@@ -275,7 +263,6 @@ export default function HomeScreen() {
   // Measured hero block height (set via onLayout)
   const heroH = useSharedValue(230);
 
-  // Scroll handler — one place, no nested handlers
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       'worklet';

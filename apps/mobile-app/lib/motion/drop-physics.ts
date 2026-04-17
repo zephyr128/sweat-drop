@@ -7,25 +7,22 @@
 
 export const DROP_PHYSICS = {
   /** Distance (px) past which releasing the pull triggers a refresh. */
-  PULL_THRESHOLD: 80,
-  /** Distance (px) used to clamp progress 0..1 for visual scaling. */
-  MAX_STRETCH: 140,
-  /** Head radius of the drop when at rest (progress=0). */
-  HEAD_RADIUS_MIN: 10,
-  /** Head radius at full stretch (progress=1). */
-  HEAD_RADIUS_MAX: 16,
-  /** Anchor (top) radius at rest — visually the "tap" the drop hangs from. */
-  TOP_RADIUS_MIN: 9,
-  /** Anchor radius at full stretch (surface tension thins). */
-  TOP_RADIUS_MAX: 2,
-  /** Damping factor applied to Android pan translations to mimic iOS bounce feel. */
-  ANDROID_PAN_DAMPING: 0.55,
+  PULL_THRESHOLD: 70,
+  /**
+   * Distance (px) at which the drop reaches its full visual size.
+   * Tuned so the user sees the drop go from tiny → full well before they
+   * release, giving clear feedback that "pulling further does something".
+   */
+  MAX_STRETCH: 110,
+  /**
+   * Damping factor applied to Android pan translations. iOS already has
+   * natural bounce resistance; on Android we fake it so both feel alike.
+   */
+  ANDROID_PAN_DAMPING: 0.7,
   /** Canvas total height available for the drop to render in. */
   CANVAS_HEIGHT: 140,
-  /** Duration (ms) for springback when the pull is released below threshold. */
-  SPRINGBACK_MS: 220,
-  /** Full fall + reform cycle duration (ms) used while refreshing. */
-  REFRESH_CYCLE_MS: 1100,
+  /** Full "breathing" cycle duration (ms) used while refreshing. */
+  REFRESH_CYCLE_MS: 1000,
 } as const;
 
 export type DropPhysics = typeof DROP_PHYSICS;
