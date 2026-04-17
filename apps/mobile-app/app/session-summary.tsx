@@ -1159,11 +1159,20 @@ export default function SessionSummaryScreen() {
                   log.warn('[SessionSummary] Failed to sync state:', e);
                 }
 
+                // Always dismiss to the root AND replace with /home.
+                // dismissAll() alone collapses the stack back to whatever the
+                // first route happens to be — if the user's onboarding ran via
+                // the (onboarding) group Stack, expo-router v6 can keep the
+                // last onboarding screen (e.g. verify-email in its "Email
+                // Verified!" success state) in the root navigator even after
+                // the final router.replace('/home') at the end of onboarding.
+                // Without the explicit replace, Collect & close on the very
+                // first workout after sign-up drops the user back onto that
+                // stale verify-email screen.
                 if (router.canDismiss()) {
                   router.dismissAll();
-                } else {
-                  router.replace('/home');
                 }
+                router.replace('/home');
               }}
               activeOpacity={0.8}
             >
