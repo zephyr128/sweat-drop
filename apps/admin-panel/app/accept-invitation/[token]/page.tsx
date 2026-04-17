@@ -15,11 +15,6 @@ export default async function AcceptInvitationPage({
 }: {
   params: Promise<{ token: string }>;
 }) {
-  // CRITICAL: Prevent rendering during build phase to avoid React.cache calls
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
-    return null;
-  }
-
   // CRITICAL: In Next.js 14+, params is a Promise - must await it
   const { token } = await params;
 

@@ -10,10 +10,6 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
-    return null;
-  }
-
   let profile = null;
   try {
     profile = await getCurrentProfile();
