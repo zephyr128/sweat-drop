@@ -4,6 +4,22 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { ImagePlus, X, GripVertical, Pencil, Check, Camera } from 'lucide-react';
 import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   getGymGallery,
   uploadAndAddGalleryImage,
   deleteGalleryImage,
@@ -24,10 +40,12 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
   const [uploading, setUploading] = useState(false);
   const [editingCaption, setEditingCaption] = useState<string | null>(null);
   const [captionDraft, setCaptionDraft] = useState('');
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const dragIdxRef = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
 
   const fetchImages = useCallback(async () => {
     const res = await getGymGallery(gymId);
@@ -103,28 +121,16 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
     }
   };
 
-  const handleDragStart = (idx: number) => {
-    dragIdxRef.current = idx;
-    setDragIdx(idx);
-  };
-  const handleDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    setDragOverIdx(idx);
-  };
-  const handleDrop = async (dropTargetIdx: number) => {
-    const from = dragIdxRef.current;
-    dragIdxRef.current = null;
-    setDragIdx(null);
-    setDragOverIdx(null);
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-    if (from === null || from === dropTargetIdx) return;
+    const from = images.findIndex((i) => i.id === active.id);
+    const to = images.findIndex((i) => i.id === over.id);
+    const next = arrayMove(images, from, to);
+    setImages(next);
 
-    const newOrder = [...images];
-    const [moved] = newOrder.splice(from, 1);
-    newOrder.splice(dropTargetIdx, 0, moved);
-    setImages(newOrder);
-
-    const res = await reorderGalleryImages(gymId, newOrder.map((i) => i.id));
+    const res = await reorderGalleryImages(gymId, next.map((i) => i.id));
     if (!res.success) {
       toast.error('Failed to save order');
       await fetchImages();
@@ -171,109 +177,54 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {images.map((img, idx) => (
-                <div
-                  key={img.id}
-                  draggable
-                  onDragStart={() => handleDragStart(idx)}
-                  onDragOver={(e) => handleDragOver(e, idx)}
-                  onDrop={() => handleDrop(idx)}
-                  onDragEnd={() => {
-                    dragIdxRef.current = null;
-                    setDragIdx(null);
-                    setDragOverIdx(null);
-                  }}
-                  className={`relative group rounded-lg overflow-hidden border transition-all cursor-grab active:cursor-grabbing ${
-                    dragOverIdx === idx
-                      ? 'border-[#00E5FF] scale-[1.02]'
-                      : 'border-[#1A1A1A] hover:border-[#333]'
-                  } ${dragIdx === idx ? 'opacity-40' : ''}`}
-                >
-                  <div className="aspect-square bg-[#111]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.image_url}
-                      alt={img.caption || `Gallery image ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={images.map((i) => i.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {images.map((img, idx) => (
+                    <SortableGalleryCard
+                      key={img.id}
+                      img={img}
+                      idx={idx}
+                      editingCaption={editingCaption}
+                      captionDraft={captionDraft}
+                      onEditCaption={() => {
+                        setEditingCaption(img.id);
+                        setCaptionDraft(img.caption || '');
+                      }}
+                      onCaptionChange={setCaptionDraft}
+                      onCaptionSave={() => handleCaptionSave(img.id)}
+                      onCaptionCancel={() => setEditingCaption(null)}
+                      onDelete={() => handleDelete(img)}
                     />
-                  </div>
+                  ))}
 
-                  {/* Overlay controls */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between p-2">
-                    <div className="text-zinc-400">
-                      <GripVertical className="w-4 h-4" />
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          setEditingCaption(img.id);
-                          setCaptionDraft(img.caption || '');
-                        }}
-                        className="p-1 bg-zinc-800/80 rounded hover:bg-zinc-700 transition-colors"
-                        title="Edit caption"
-                      >
-                        <Pencil className="w-3 h-3 text-zinc-300" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(img)}
-                        className="p-1 bg-red-900/80 rounded hover:bg-red-800 transition-colors"
-                        title="Delete"
-                      >
-                        <X className="w-3 h-3 text-red-300" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Caption display / edit */}
-                  {editingCaption === img.id ? (
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-2 flex gap-1">
-                      <input
-                        type="text"
-                        value={captionDraft}
-                        onChange={(e) => setCaptionDraft(e.target.value)}
-                        placeholder="Caption…"
-                        className="flex-1 bg-[#111] border border-[#333] rounded px-2 py-1 text-[10px] text-white"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleCaptionSave(img.id);
-                          if (e.key === 'Escape') setEditingCaption(null);
-                        }}
-                      />
-                      <button
-                        onClick={() => handleCaptionSave(img.id)}
-                        className="p-1 bg-[#00E5FF] rounded"
-                      >
-                        <Check className="w-3 h-3 text-black" />
-                      </button>
-                    </div>
-                  ) : img.caption ? (
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1">
-                      <p className="text-[10px] text-zinc-300 truncate">{img.caption}</p>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-
-              {/* Add more button */}
-              {images.length < MAX_IMAGES && (
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  className="aspect-square rounded-lg border-2 border-dashed border-[#1A1A1A] hover:border-[#00E5FF]/50 flex flex-col items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                >
-                  {uploading ? (
-                    <div className="h-5 w-5 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <ImagePlus className="w-5 h-5 text-zinc-500" />
-                      <span className="text-[10px] text-zinc-500">Add</span>
-                    </>
+                  {/* Add more button — outside SortableContext so it is never a sortable item */}
+                  {images.length < MAX_IMAGES && (
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      disabled={uploading}
+                      className="aspect-square rounded-lg border-2 border-dashed border-[#1A1A1A] hover:border-[#00E5FF]/50 flex flex-col items-center justify-center gap-1 transition-colors disabled:opacity-50"
+                    >
+                      {uploading ? (
+                        <div className="h-5 w-5 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <ImagePlus className="w-5 h-5 text-zinc-500" />
+                          <span className="text-[10px] text-zinc-500">Add</span>
+                        </>
+                      )}
+                    </button>
                   )}
-                </button>
-              )}
-            </div>
+                </div>
+              </SortableContext>
+            </DndContext>
 
             <p className="text-[10px] text-zinc-600 mt-2">Drag to reorder. First image is the cover photo.</p>
           </>
@@ -288,6 +239,122 @@ export function GymGalleryManager({ gymId }: GymGalleryManagerProps) {
           className="hidden"
         />
       </div>
+    </div>
+  );
+}
+
+interface SortableGalleryCardProps {
+  img: GalleryImage;
+  idx: number;
+  editingCaption: string | null;
+  captionDraft: string;
+  onEditCaption: () => void;
+  onCaptionChange: (v: string) => void;
+  onCaptionSave: () => void;
+  onCaptionCancel: () => void;
+  onDelete: () => void;
+}
+
+function SortableGalleryCard({
+  img,
+  idx,
+  editingCaption,
+  captionDraft,
+  onEditCaption,
+  onCaptionChange,
+  onCaptionSave,
+  onCaptionCancel,
+  onDelete,
+}: SortableGalleryCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: img.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : undefined,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative group rounded-lg overflow-hidden border border-[#1A1A1A] hover:border-[#333] transition-all"
+    >
+      <div className="aspect-square bg-[#111]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={img.image_url}
+          alt={img.caption || `Gallery image ${idx + 1}`}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
+
+      {/* Overlay controls */}
+      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between p-2">
+        {/* Drag handle — only this element triggers drag so click targets below work normally */}
+        <button
+          {...attributes}
+          {...listeners}
+          className="p-0.5 text-zinc-400 hover:text-white cursor-grab active:cursor-grabbing"
+          aria-label="Drag to reorder"
+          onPointerDown={(e) => e.stopPropagation()}
+          // Re-attach dnd-kit listeners explicitly via spread above; stopPropagation
+          // prevents the card's own pointer events from interfering.
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+        <div className="flex gap-1">
+          <button
+            onClick={() => onEditCaption()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="p-1 bg-zinc-800/80 rounded hover:bg-zinc-700 transition-colors"
+            title="Edit caption"
+          >
+            <Pencil className="w-3 h-3 text-zinc-300" />
+          </button>
+          <button
+            onClick={() => onDelete()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="p-1 bg-red-900/80 rounded hover:bg-red-800 transition-colors"
+            title="Delete"
+          >
+            <X className="w-3 h-3 text-red-300" />
+          </button>
+        </div>
+      </div>
+
+      {/* Caption display / edit */}
+      {editingCaption === img.id ? (
+        <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-2 flex gap-1">
+          <input
+            type="text"
+            value={captionDraft}
+            onChange={(e) => onCaptionChange(e.target.value)}
+            placeholder="Caption…"
+            className="flex-1 bg-[#111] border border-[#333] rounded px-2 py-1 text-[10px] text-white"
+            autoFocus
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onCaptionSave();
+              if (e.key === 'Escape') onCaptionCancel();
+            }}
+          />
+          <button
+            onClick={() => onCaptionSave()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="p-1 bg-[#00E5FF] rounded"
+          >
+            <Check className="w-3 h-3 text-black" />
+          </button>
+        </div>
+      ) : img.caption ? (
+        <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1">
+          <p className="text-[10px] text-zinc-300 truncate">{img.caption}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

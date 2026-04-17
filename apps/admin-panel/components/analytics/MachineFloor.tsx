@@ -19,8 +19,8 @@ import {
   getMachineQRMap,
 } from '@/lib/actions/machine-actions';
 import { StatusSummaryBar } from './StatusSummaryBar';
-import { MachineGrid } from './MachineGrid';
 import type { MachineCardAction } from './MachineGrid';
+import { MachineFloorGrid } from './MachineFloorGrid';
 import { ActiveWorkoutsList } from './ActiveWorkoutsList';
 import { MachineQRPrint } from '@/components/MachineQRPrint';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
@@ -497,15 +497,15 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
       </div>
 
       <StatusSummaryBar summary={data.summary} isConnected={isConnected} />
-      <MachineGrid
-        machines={data.machines}
+
+      <MachineFloorGrid
+        gymId={gymId}
+        userRole={userRole}
+        liveMachines={data.machines}
         fetchedAt={fetchedAt}
         tick={tick}
-        gymId={gymId}
-        onAction={handleCardAction}
-        canEdit={canEditMachines}
-        isSuperAdmin={isSuperAdmin}
       />
+
       <ActiveWorkoutsList machines={data.machines} fetchedAt={fetchedAt} tick={tick} />
 
       {/* ---- MODALS ---- */}
