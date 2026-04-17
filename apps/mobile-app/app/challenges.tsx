@@ -23,10 +23,11 @@ import { SliderTabs } from '@/components/SliderTabs';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import i18n from '@/lib/i18n';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 
 const ORANGE = '#FF9F4A';
+const GREEN = '#4ade80';
+const GREEN_DARK = '#22c55e';
 
 // ── Helper functions (module-level, no hooks) ────────────────────────────────
 
@@ -113,6 +114,142 @@ function getChallengeTypeLabel(
   }
 }
 
+// ── SectionHeader (inline — only used in this file) ─────────────────────────
+
+interface SectionHeaderProps {
+  label: string;
+  count: number;
+  tone?: 'default' | 'success';
+  icon?: keyof typeof Ionicons.glyphMap;
+}
+
+function SectionHeader({ label, count, tone = 'default', icon }: SectionHeaderProps) {
+  const labelColor = tone === 'success' ? GREEN : theme.colors.textSecondary;
+  return (
+    <View style={sectionHeaderStyles.wrapper}>
+      <View style={sectionHeaderStyles.left}>
+        {icon && (
+          <Ionicons name={icon} size={14} color={labelColor} style={{ marginRight: 5 }} />
+        )}
+        <Text style={[sectionHeaderStyles.label, { color: labelColor }]}>
+          {label.toUpperCase()}
+        </Text>
+        <View style={sectionHeaderStyles.countPill}>
+          <Text style={sectionHeaderStyles.countText}>{count}</Text>
+        </View>
+      </View>
+      <View style={sectionHeaderStyles.divider} />
+    </View>
+  );
+}
+
+const sectionHeaderStyles = StyleSheet.create({
+  wrapper: {
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  label: {
+    ...fontStyles.heading,
+    fontSize: 11,
+    letterSpacing: 1.5,
+  },
+  countPill: {
+    marginLeft: 7,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  countText: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+});
+
+// ── AllDoneBanner (shown when pending=0, done>0) ─────────────────────────────
+
+interface AllDoneBannerProps {
+  title: string;
+  subtitle: string;
+  primary: string;
+}
+
+function AllDoneBanner({ title, subtitle, primary }: AllDoneBannerProps) {
+  return (
+    <Animated.View entering={FadeInDown.duration(380)} style={[bannerStyles.card, { borderColor: hexToRgba(GREEN_DARK, 0.30) }]}>
+      <PlatformBlur intensity={50} tint="dark" style={bannerStyles.blur} androidColor="rgba(10,20,14,0.92)">
+        <LinearGradient
+          colors={['rgba(74,222,128,0.08)', 'rgba(34,197,94,0.03)', 'transparent']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={bannerStyles.inner}>
+          <View style={[bannerStyles.iconWrap, { backgroundColor: hexToRgba(primary, 0.12) }]}>
+            <Ionicons name="flame" size={22} color={primary} />
+          </View>
+          <View style={bannerStyles.textWrap}>
+            <Text style={bannerStyles.title}>{title}</Text>
+            <Text style={bannerStyles.subtitle}>{subtitle}</Text>
+          </View>
+        </View>
+      </PlatformBlur>
+    </Animated.View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  blur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(10,20,14,0.82)',
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+  },
+  iconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  textWrap: { flex: 1 },
+  title: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
+    color: GREEN,
+    letterSpacing: 0.2,
+    marginBottom: 3,
+  },
+  subtitle: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    letterSpacing: 0.2,
+  },
+});
+
 // ── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ChallengesScreen() {
@@ -128,7 +265,6 @@ export default function ChallengesScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
-  // Prevents flashing the full-screen spinner on every back-navigation focus
   const hasLoadedRef = useRef(false);
 
   useFocusEffect(
@@ -198,14 +334,12 @@ export default function ChallengesScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!hasLoadedRef.current) {
-        // First visit — show full-screen spinner
         setLoading(true);
         load().finally(() => {
           hasLoadedRef.current = true;
           setLoading(false);
         });
       } else {
-        // Returning from detail screen — refresh silently, no spinner
         load();
       }
     }, [load]),
@@ -217,15 +351,30 @@ export default function ChallengesScreen() {
     setRefreshing(false);
   }, [load]);
 
-  // ── Split active vs completed ────────────────────────────────────────────
+  // ── Split into three groups ──────────────────────────────────────────────
+  // pendingChallenges    — not completed, shown first in Today tab
+  // doneRecurringChallenges — completed daily/weekly, stay in Today tab (will reset)
+  // completedChallenges — completed milestone/permanent, go to Milestones tab
 
-  const activeChallenges = useMemo(() =>
-    challenges.filter((c) => {
+  const { pendingChallenges, doneRecurringChallenges } = useMemo(() => {
+    const pending: any[] = [];
+    const done: any[] = [];
+    for (const c of challenges) {
       const isCompleted = progress[c.id]?.is_completed || false;
-      if (!isCompleted) return true;
-      return c.challenge_type === 'daily' || c.challenge_type === 'weekly';
-    }),
-  [challenges, progress]);
+      if (!isCompleted) {
+        pending.push(c);
+      } else if (c.challenge_type === 'daily' || c.challenge_type === 'weekly') {
+        done.push(c);
+      }
+    }
+    // Most recently completed first
+    done.sort((a, b) => {
+      const aAt = progress[a.id]?.completed_at ?? '';
+      const bAt = progress[b.id]?.completed_at ?? '';
+      return bAt.localeCompare(aAt);
+    });
+    return { pendingChallenges: pending, doneRecurringChallenges: done };
+  }, [challenges, progress]);
 
   const completedChallenges = useMemo(() =>
     challenges.filter((c) => {
@@ -260,6 +409,186 @@ export default function ChallengesScreen() {
     return { target, current, pct, unit };
   };
 
+  // ── Render an active-style challenge card ────────────────────────────────
+  // isDone=true applies dimming + done-state visuals (Step 3)
+
+  const renderActiveCard = (challenge: any, index: number, animOffset: number, isDone: boolean) => {
+    const userProgress = progress[challenge.id];
+    const isCompleted = userProgress?.is_completed || false;
+    const { target, current, pct, unit } = getProgressValues(challenge, userProgress);
+    const typeLabel = getChallengeTypeLabel(challenge.challenge_type, t);
+    const timeInfo = getChallengeTimeDisplay(challenge.challenge_type, challenge.end_date, isCompleted, t);
+
+    return (
+      <Animated.View
+        key={challenge.id}
+        entering={FadeInDown.delay(animOffset + index * 70).duration(380)}
+      >
+        <TouchableOpacity
+          style={[
+            styles.activeCard,
+            isDone && styles.activeCardDone,
+            {
+              borderTopColor: hexToRgba(isDone ? GREEN_DARK : ORANGE, isDone ? 0.35 : 0.28),
+              borderLeftColor: hexToRgba(isDone ? GREEN_DARK : ORANGE, isDone ? 0.15 : 0.1),
+              borderRightColor: 'rgba(255,255,255,0.05)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            },
+          ]}
+          onPress={() => router.push({ pathname: '/challenge-detail', params: { challengeId: challenge.id, gymId: challenge.gym_id } })}
+          activeOpacity={isDone ? 0.65 : 0.8}
+        >
+          <PlatformBlur intensity={50} tint="dark" style={styles.activeBlur} androidColor="rgba(16,16,28,0.97)">
+            <LinearGradient
+              colors={isDone
+                ? ['rgba(74,222,128,0.09)', 'rgba(34,197,94,0.03)', 'transparent']
+                : [hexToRgba(ORANGE, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+
+            {/* ── DONE ribbon (top-right corner, Step 3a) ── */}
+            {isDone && (
+              <View style={styles.doneRibbonWrap} pointerEvents="none">
+                <View style={styles.doneRibbon}>
+                  <Text style={styles.doneRibbonText}>{t('doneRibbon')}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* ── Header row: icon + meta + badge image ── */}
+            <View style={styles.activeCardHeader}>
+              <View style={styles.activeCardMeta}>
+                <View style={[
+                  styles.typeIconWrap,
+                  { backgroundColor: hexToRgba(isDone ? GREEN_DARK : ORANGE, 0.10) },
+                ]}>
+                  <Ionicons
+                    name={isDone ? 'checkmark-circle' : getChallengeIcon(challenge.challenge_type)}
+                    size={18}
+                    color={isDone ? GREEN : ORANGE}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.typeLabel, { color: isDone ? GREEN : ORANGE }]}>{typeLabel}</Text>
+                  <Text style={styles.challengeName} numberOfLines={2}>{challenge.name}</Text>
+                </View>
+              </View>
+
+              {/* Badge image */}
+              {challenge.badge_image_url ? (
+                <Image
+                  source={challenge.badge_image_url}
+                  style={[styles.badgeImage, isDone && styles.badgeImageDone]}
+                  contentFit="contain"
+                  transition={200}
+                />
+              ) : (
+                <View style={[
+                  styles.badgePlaceholder,
+                  { backgroundColor: hexToRgba(isDone ? GREEN_DARK : ORANGE, 0.08), borderColor: hexToRgba(isDone ? GREEN_DARK : ORANGE, 0.2) },
+                ]}>
+                  <Ionicons
+                    name={isDone ? 'shield-checkmark' : 'shield-outline'}
+                    size={22}
+                    color={hexToRgba(isDone ? GREEN : ORANGE, 0.6)}
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Description */}
+            {challenge.description ? (
+              <Text style={styles.description} numberOfLines={2}>{challenge.description}</Text>
+            ) : null}
+
+            {/* ── Progress area: success strip when done, progress bar when pending (Step 3b) ── */}
+            {isDone ? (
+              <View style={styles.doneStrip}>
+                <View style={styles.doneStripLeft}>
+                  <Ionicons name="checkmark-circle" size={15} color={GREEN} />
+                  <Text style={styles.doneStripValues}>
+                    <Text style={[getNumberStyle(12), { color: GREEN }]}>{current}</Text>
+                    <Text style={{ color: 'rgba(74,222,128,0.55)' }}> / </Text>
+                    <Text style={[getNumberStyle(12), { color: 'rgba(74,222,128,0.7)' }]}>{target}</Text>
+                    <Text style={{ color: 'rgba(74,222,128,0.5)', fontSize: 11 }}> {unit}</Text>
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.progressTrack}>
+                  <LinearGradient
+                    colors={[ORANGE, hexToRgba(ORANGE, 0.7)]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={[styles.progressFill, { width: `${pct}%` }]}
+                  />
+                </View>
+                <View style={styles.progressMetaRow}>
+                  <Text style={styles.progressMeta}>
+                    <Text style={[getNumberStyle(13), { color: ORANGE }]}>{current}</Text>
+                    <Text style={styles.progressSlash}> / </Text>
+                    <Text style={[getNumberStyle(13), { color: theme.colors.textSecondary }]}>{target}</Text>
+                    <Text style={styles.progressUnit}> {unit}</Text>
+                  </Text>
+                  <Text style={[getNumberStyle(12), { color: theme.colors.textSecondary }]}>
+                    {Math.round(pct)}%
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {/* ── Footer: time pill + reward ── */}
+            <View style={styles.activeCardFooter}>
+              {timeInfo && (
+                <View style={[
+                  styles.timePill,
+                  // Step 3c: stronger green border+bg when done
+                  isDone
+                    ? { backgroundColor: 'rgba(74,222,128,0.12)', borderWidth: 1, borderColor: 'rgba(74,222,128,0.32)' }
+                    : timeInfo.style === 'recurring'
+                      ? { backgroundColor: 'rgba(96,165,250,0.1)' }
+                      : {},
+                ]}>
+                  <Ionicons
+                    name={isDone ? 'refresh' : timeInfo.style === 'permanent' ? 'infinite' : 'time-outline'}
+                    size={11}
+                    color={isDone ? GREEN : theme.colors.textSecondary}
+                  />
+                  <Text style={[styles.timePillText, isDone && { color: GREEN }]}>
+                    {timeInfo.text}
+                  </Text>
+                </View>
+              )}
+
+              {/* Step 3d: "Come back tomorrow / Resets Sunday" hint when done */}
+              {isDone && challenge.challenge_type === 'daily' && (
+                <Text style={styles.comeBackHint} numberOfLines={1}>
+                  {t('comeBackTomorrow', { drops: challenge.reward_drops ?? 0 })}
+                </Text>
+              )}
+              {isDone && challenge.challenge_type === 'weekly' && (
+                <Text style={styles.comeBackHint} numberOfLines={1}>
+                  {t('resetsSundayExplicit')}
+                </Text>
+              )}
+
+              {!isDone && challenge.reward_drops > 0 && (
+                <View style={styles.rewardPill}>
+                  <Ionicons name="water" size={11} color={ORANGE} />
+                  <Text style={[styles.rewardPillText, { color: ORANGE }]}>
+                    +{challenge.reward_drops}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </PlatformBlur>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
   // ── Loading ──────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -285,6 +614,8 @@ export default function ChallengesScreen() {
     />
   );
 
+  const hasTodayContent = pendingChallenges.length > 0 || doneRecurringChallenges.length > 0;
+
   const activePage = (
     <ScrollView
       style={styles.page}
@@ -292,138 +623,52 @@ export default function ChallengesScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
     >
-      {activeChallenges.length === 0 ? (
+      {!hasTodayContent ? (
         <View style={styles.emptyState}>
           <Ionicons name="flash-outline" size={56} color={theme.colors.textSecondary} />
           <Text style={styles.emptyText}>{t('noActive')}</Text>
           <Text style={styles.emptySubtext}>{t('checkBackSoon')}</Text>
         </View>
       ) : (
-        activeChallenges.map((challenge, index) => {
-          const userProgress = progress[challenge.id];
-          const isCompleted = userProgress?.is_completed || false;
-          const { target, current, pct, unit } = getProgressValues(challenge, userProgress);
-          const typeLabel = getChallengeTypeLabel(challenge.challenge_type, t);
-          const timeInfo = getChallengeTimeDisplay(challenge.challenge_type, challenge.end_date, isCompleted, t);
+        <>
+          {/* ── All-done celebration banner (no pending, some done) ── */}
+          {pendingChallenges.length === 0 && doneRecurringChallenges.length > 0 && (
+            <AllDoneBanner
+              title={t('allDoneTitle')}
+              subtitle={t('allDoneSubtitle')}
+              primary={branding.primary}
+            />
+          )}
 
-          return (
-            <Animated.View key={challenge.id} entering={FadeInDown.delay(80 + index * 70).duration(380)}>
-              <TouchableOpacity
-                style={[
-                  styles.activeCard,
-                  {
-                    borderTopColor: hexToRgba(ORANGE, isCompleted ? 0.45 : 0.28),
-                    borderLeftColor: hexToRgba(ORANGE, isCompleted ? 0.2 : 0.1),
-                    borderRightColor: 'rgba(255,255,255,0.05)',
-                    borderBottomColor: 'rgba(255,255,255,0.03)',
-                  },
-                ]}
-                onPress={() => router.push({ pathname: '/challenge-detail', params: { challengeId: challenge.id, gymId: challenge.gym_id } })}
-                activeOpacity={0.8}
-              >
-                <PlatformBlur intensity={50} tint="dark" style={styles.activeBlur} androidColor="rgba(16,16,28,0.97)">
-                  <LinearGradient
-                    colors={isCompleted
-                      ? ['rgba(74,222,128,0.06)', 'transparent']
-                      : [hexToRgba(ORANGE, 0.07), 'rgba(255,255,255,0.02)', 'transparent']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                  />
+          {/* ── TO DO section ── */}
+          {pendingChallenges.length > 0 && (
+            <>
+              <SectionHeader
+                label={t('sectionToDo')}
+                count={pendingChallenges.length}
+                tone="default"
+              />
+              {pendingChallenges.map((challenge, index) =>
+                renderActiveCard(challenge, index, 60, false),
+              )}
+            </>
+          )}
 
-                  {/* ── Header row: icon + meta + badge image ── */}
-                  <View style={styles.activeCardHeader}>
-                    <View style={styles.activeCardMeta}>
-                      <View style={[styles.typeIconWrap, { backgroundColor: hexToRgba(ORANGE, 0.1) }]}>
-                        <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={18} color={ORANGE} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.typeLabel, { color: ORANGE }]}>{typeLabel}</Text>
-                        <Text style={styles.challengeName} numberOfLines={2}>{challenge.name}</Text>
-                      </View>
-                    </View>
-
-                    {/* Badge image */}
-                    {challenge.badge_image_url ? (
-                      <Image
-                        source={challenge.badge_image_url}
-                        style={styles.badgeImage}
-                        contentFit="contain"
-                        transition={200}
-                      />
-                    ) : (
-                      <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(ORANGE, 0.08), borderColor: hexToRgba(ORANGE, 0.2) }]}>
-                        <Ionicons name="shield-outline" size={22} color={hexToRgba(ORANGE, 0.5)} />
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Description */}
-                  {challenge.description ? (
-                    <Text style={styles.description} numberOfLines={2}>{challenge.description}</Text>
-                  ) : null}
-
-                  {/* Progress bar */}
-                  <View style={styles.progressTrack}>
-                    <LinearGradient
-                      colors={isCompleted
-                        ? ['#4ade80', '#22c55e']
-                        : [ORANGE, hexToRgba(ORANGE, 0.7)]}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                      style={[styles.progressFill, { width: `${pct}%` }]}
-                    />
-                  </View>
-
-                  {/* Progress meta row */}
-                  <View style={styles.progressMetaRow}>
-                    <Text style={styles.progressMeta}>
-                      <Text style={[getNumberStyle(13), { color: isCompleted ? '#4ade80' : ORANGE }]}>{current}</Text>
-                      <Text style={styles.progressSlash}> / </Text>
-                      <Text style={[getNumberStyle(13), { color: theme.colors.textSecondary }]}>{target}</Text>
-                      <Text style={styles.progressUnit}> {unit}</Text>
-                    </Text>
-                    <Text style={[getNumberStyle(12), { color: isCompleted ? '#4ade80' : theme.colors.textSecondary }]}>
-                      {Math.round(pct)}%
-                    </Text>
-                  </View>
-
-                  {/* Footer row: time badge + reward */}
-                  <View style={styles.activeCardFooter}>
-                    {timeInfo && (
-                      <View style={[
-                        styles.timePill,
-                        timeInfo.style === 'completed' && { backgroundColor: 'rgba(74,222,128,0.1)' },
-                        timeInfo.style === 'recurring' && { backgroundColor: 'rgba(96,165,250,0.1)' },
-                      ]}>
-                        <Ionicons
-                          name={
-                            timeInfo.style === 'completed' ? 'checkmark-circle' :
-                            timeInfo.style === 'permanent' ? 'infinite' :
-                            timeInfo.style === 'recurring' ? 'refresh' :
-                            'time-outline'
-                          }
-                          size={11}
-                          color={timeInfo.style === 'completed' ? '#4ade80' : theme.colors.textSecondary}
-                        />
-                        <Text style={[styles.timePillText, timeInfo.style === 'completed' && { color: '#4ade80' }]}>
-                          {timeInfo.text}
-                        </Text>
-                      </View>
-                    )}
-                    {challenge.reward_drops > 0 && (
-                      <View style={styles.rewardPill}>
-                        <Ionicons name="water" size={11} color={ORANGE} />
-                        <Text style={[styles.rewardPillText, { color: ORANGE }]}>
-                          +{challenge.reward_drops}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </PlatformBlur>
-              </TouchableOpacity>
-            </Animated.View>
-          );
-        })
+          {/* ── DONE FOR TODAY section ── */}
+          {doneRecurringChallenges.length > 0 && (
+            <>
+              <SectionHeader
+                label={t('sectionDoneForToday')}
+                count={doneRecurringChallenges.length}
+                tone="success"
+                icon="checkmark-circle"
+              />
+              {doneRecurringChallenges.map((challenge, index) =>
+                renderActiveCard(challenge, index, pendingChallenges.length * 70 + 80, true),
+              )}
+            </>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -463,7 +708,6 @@ export default function ChallengesScreen() {
                     pointerEvents="none"
                   />
 
-                  {/* Badge + info */}
                   <View style={styles.completedRow}>
                     {challenge.badge_image_url ? (
                       <Image source={challenge.badge_image_url} style={styles.completedBadgeImg} contentFit="cover" transition={200} />
@@ -485,7 +729,7 @@ export default function ChallengesScreen() {
 
                     <View style={styles.completedReward}>
                       <View style={[styles.completedCheckCircle, { backgroundColor: 'rgba(74,222,128,0.12)', borderColor: 'rgba(74,222,128,0.3)' }]}>
-                        <Ionicons name="checkmark" size={14} color="#4ade80" />
+                        <Ionicons name="checkmark" size={14} color={GREEN} />
                       </View>
                       <Text style={[styles.completedDrops, { color: ORANGE }]}>
                         +{challenge.reward_drops || 0}
@@ -553,6 +797,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
   },
+
   /* Empty states */
   emptyState: {
     paddingTop: theme.spacing['3xl'],
@@ -573,6 +818,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     paddingHorizontal: theme.spacing.xl,
   },
+
   /* Active challenge card */
   activeCard: {
     borderRadius: 18,
@@ -582,6 +828,9 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
+  },
+  activeCardDone: {
+    opacity: 0.80,
   },
   activeBlur: {
     borderRadius: 18,
@@ -622,12 +871,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     lineHeight: 20,
   },
+
   /* Badge image */
   badgeImage: {
     width: 52,
     height: 52,
     borderRadius: 12,
     flexShrink: 0,
+  },
+  badgeImageDone: {
+    opacity: 0.65,
   },
   badgePlaceholder: {
     width: 52,
@@ -646,7 +899,39 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     letterSpacing: 0.2,
   },
-  /* Progress */
+
+  /* DONE ribbon (Step 3a) */
+  doneRibbonWrap: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 72,
+    height: 72,
+    overflow: 'hidden',
+    zIndex: 10,
+  },
+  doneRibbon: {
+    position: 'absolute',
+    top: 14,
+    right: -20,
+    width: 88,
+    backgroundColor: GREEN_DARK,
+    paddingVertical: 4,
+    alignItems: 'center',
+    transform: [{ rotate: '45deg' }],
+    shadowColor: 'rgba(74,222,128,0.4)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    shadowOpacity: 1,
+  },
+  doneRibbonText: {
+    ...fontStyles.heading,
+    fontSize: 9,
+    letterSpacing: 2,
+    color: '#000',
+  },
+
+  /* Progress bar (pending cards) */
   progressTrack: {
     height: 5,
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -675,6 +960,29 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textTertiary,
   },
+
+  /* Done success strip (Step 3b) */
+  doneStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.32)',
+    backgroundColor: 'rgba(74,222,128,0.10)',
+    paddingHorizontal: 10,
+    marginBottom: theme.spacing.md,
+  },
+  doneStripLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  doneStripValues: {
+    fontSize: 12,
+  },
+
   /* Footer */
   activeCardFooter: {
     flexDirection: 'row',
@@ -697,6 +1005,13 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     letterSpacing: 0.2,
   },
+  comeBackHint: {
+    ...fontStyles.body,
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    letterSpacing: 0.1,
+    flexShrink: 1,
+  },
   rewardPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -712,7 +1027,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 1,
   },
-  /* Completed card */
+
+  /* Milestones tab card */
   completedCard: {
     borderRadius: 16,
     overflow: 'hidden',
