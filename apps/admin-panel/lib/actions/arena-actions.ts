@@ -689,11 +689,13 @@ export async function cancelArena(arenaId: string): Promise<{ success: boolean; 
           .select('user_id, profiles:user_id(expo_push_token)')
           .eq('arena_id', arenaId);
 
-        const tokens = ((participantTokens || []) as any[])
+        const participants = (participantTokens || []) as any[];
+        const participantUserIds = participants.map((p) => p.user_id).filter(Boolean);
+        const tokens = participants
           .map((p) => p.profiles?.expo_push_token)
           .filter(Boolean);
 
-        if (tokens.length > 0) {
+        if (participantUserIds.length > 0) {
           const arenaName = (arenaData as any)?.name || 'Unknown';
           const isDropsArena = (arenaData as any)?.opt_in_type === 'drops';
           const optInValue = (arenaData as any)?.opt_in_value || 0;
@@ -705,6 +707,7 @@ export async function cancelArena(arenaId: string): Promise<{ success: boolean; 
           await supabaseAdmin.functions.invoke('send-push', {
             body: JSON.stringify({
               tokens,
+              user_ids: participantUserIds,
               title: '⚠️ Arena otkazana',
               body,
               data: { type: 'arena_cancelled', arena_id: arenaId },
@@ -782,18 +785,17 @@ export async function notifyArenaParticipants(
         .map((p) => p.expo_push_token)
         .filter((t: string) => t?.startsWith('ExponentPushToken'));
 
-      if (tokens.length > 0) {
-        await supabaseAdmin.functions.invoke('send-push', {
-          body: JSON.stringify({
-            tokens,
-            title: '🏆 You won a prize!',
-            body: `You won a prize in ${arena.name}! Check your results.`,
-            data: { type: 'arena_prize', arena_id: arenaId, arena_name: arena.name },
-          }),
-        });
-      }
+      await supabaseAdmin.functions.invoke('send-push', {
+        body: JSON.stringify({
+          tokens,
+          user_ids: winnerUserIds,
+          title: '🏆 You won a prize!',
+          body: `You won a prize in ${arena.name}! Check your results.`,
+          data: { type: 'arena_prize', arena_id: arenaId, arena_name: arena.name },
+        }),
+      });
 
-      return { success: true, notifiedCount: tokens.length };
+      return { success: true, notifiedCount: winnerUserIds.length };
     } else {
       // Notify ALL participants
       const { data: allParticipants } = await supabaseAdmin
@@ -801,14 +803,17 @@ export async function notifyArenaParticipants(
         .select('user_id, profiles:user_id(expo_push_token)')
         .eq('arena_id', arenaId);
 
-      const tokens = ((allParticipants || []) as any[])
+      const participants = (allParticipants || []) as any[];
+      const participantUserIds = participants.map((p) => p.user_id).filter(Boolean);
+      const tokens = participants
         .map((p) => p.profiles?.expo_push_token)
         .filter((t: string) => t?.startsWith('ExponentPushToken'));
 
-      if (tokens.length > 0) {
+      if (participantUserIds.length > 0) {
         await supabaseAdmin.functions.invoke('send-push', {
           body: JSON.stringify({
             tokens,
+            user_ids: participantUserIds,
             title: '🏁 Arena Results Available',
             body: `${arena.name} has ended. Check your final ranking!`,
             data: { type: 'arena_ended', arena_id: arenaId, arena_name: arena.name },
@@ -816,7 +821,7 @@ export async function notifyArenaParticipants(
         });
       }
 
-      return { success: true, notifiedCount: tokens.length };
+      return { success: true, notifiedCount: participantUserIds.length };
     }
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Failed to send notifications';

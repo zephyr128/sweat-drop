@@ -296,7 +296,6 @@ export async function distributeLeaderboardPrizesNow(
               .single();
 
             const token = (profileRow as { expo_push_token: string | null } | null)?.expo_push_token;
-            if (!token) continue;
 
             const hasCode = !!redemption.redemption_code;
             const body = hasCode
@@ -319,7 +318,8 @@ export async function distributeLeaderboardPrizesNow(
               },
               body: JSON.stringify({
                 client_ref: 'leaderboard_prize',
-                tokens: [token],
+                tokens: token ? [token] : [],
+                user_ids: [redemption.user_id],
                 title: '🏆 You Won a Leaderboard Prize!',
                 body,
                 data: pushData,
