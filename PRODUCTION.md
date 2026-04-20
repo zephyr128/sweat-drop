@@ -686,21 +686,63 @@ Zapamti `gym_id` (UUID) — trebaće ti svuda dalje.
 
 ### 5.3 Gym owner nalog (iz superadmin panela)
 
-- `/dashboard/super/owners` → **Invite Owner**.
-- Email: `<vlasnik@vortex.rs>`, First / Last name, Phone, Gym: `Vortex`.
-- Sistem pošalje pozivnicu (Resend → mail sa link-om ka `/accept-invitation/<token>`).
-- Vlasnik klikne link → postavi šifru → auto-login → redirect na `/dashboard` (gym_owner role).
+**Preporučen flow — kada imaš vlasnikov email:**
 
-**Bez email-a (ručno, za brzi start):**
+- `/dashboard/super/owners` → **Add Owner** (ili **Invite Owner** direktno iz `/dashboard/gym/<vortex_id>/settings` → tab **Ownership**).
+- Email: `<vlasnik@vortex.rs>`, username, full name, selektuj gym: `Vortex`.
+- Sistem pošalje pozivnicu (Resend → mail sa link-om ka `/accept-invitation/<token>`).
+- Vlasnik klikne link → postavi šifru → auto-login → redirect na `/dashboard/gym/<vortex_id>/dashboard` (gym_owner role).
+- RPC `accept_owner_invitation` automatski postavlja `gyms.owner_id = <vlasnik_user_id>` i upisuje audit red u `gym_ownership_history` (vidi migraciju `20260420150000_gym_owner_transfer_and_email_change_audit.sql`).
+
+**Kada još nemaš vlasnikov email — kreiraj gym prazan:**
+
+- Kreiraj Vortex gym kroz 5.2 sa `owner_id = null` (forma ne traži email). Gym je potpuno operativan — možeš odmah da mapiraš mašine, podesiš ekonomiju i store bez vlasnika.
+- Kad dobiješ email, idi na **`/dashboard/gym/<vortex_id>/settings` → Ownership tab** (vidljiv samo superadminu) → **Invite by Email** → pošalji invitation. Vlasnik prihvata, `owner_id` se automatski popuni.
+
+**Promena vlasnika kasnije (transfer, vlasnik je prodao, email change):**
+
+Superadmin ima tri tool-a dostupna kroz **`/dashboard/gym/<gym_id>/settings` → Ownership tab**:
+
+| Akcija | Kada koristiti | Efekat |
+|---|---|---|
+| **Invite by Email** | Novi vlasnik još nema SweatDrop nalog, ili ima ali nije `gym_owner`. | Šalje invitation. Stari vlasnik zadržava pristup dok novi ne prihvati. |
+| **Assign Existing Owner** | Novi vlasnik je već `gym_owner` u sistemu (npr. vlasnik više teretana). | Trenutna reassign — stari odmah gubi pristup **ovoj** teretani (zadržava druge koje poseduje). |
+| **Remove Owner** | Vlasnik odlazi bez zamene. | `owner_id = null`. Staff i podaci ostaju. |
+
+Svaka promena je logovana u `gym_ownership_history` (dostupno kroz "Ownership History" u istom tabu).
+
+**Promena email-a postojećeg vlasnika** (vlasnik hoće drugi email):
+
+- `/dashboard/super/owners` → u tabeli pored vlasnika klikni **Change Email** dugme.
+- Unesi novi email 2× (confirm) + reason + čekiraj "I have verified out-of-band".
+- Sistem koristi `supabaseAdmin.auth.admin.updateUserById` da ažurira `auth.users` i `profiles.email`, sa `email_confirm: true` (preskače confirmation email flow).
+- Audit red se upisuje u `user_email_change_history`.
+- ⚠️ Koristi samo nakon što si telefonom / video pozivom verifikovao da novi email pripada istoj osobi. SweatDrop ne šalje confirmation mail — vlasnik može odmah da se uloguje sa novim email-om.
+
+**Bez email-a / mail provider ne radi (fallback, ručno):**
 ```sql
--- Napravi ownera direktno:
--- 1. Auth user (Studio UI) sa njegovim mailom i privremenom šifrom.
--- 2. Profile update:
+-- 1. Napravi auth user-a kroz Studio UI (Authentication → Users → Invite/Create)
+-- 2. Postavi ulogu i veži na gym:
 UPDATE public.profiles
 SET role = 'gym_owner',
-    admin_gym_id = '<VORTEX_GYM_ID>',
     email_verified_at = NOW()
 WHERE id = (SELECT id FROM auth.users WHERE email = '<vlasnik@vortex.rs>');
+
+UPDATE public.gyms
+SET owner_id = (SELECT id FROM auth.users WHERE email = '<vlasnik@vortex.rs>')
+WHERE id = '<VORTEX_GYM_ID>';
+
+-- 3. Audit (manually, jer ne ide kroz UI):
+INSERT INTO public.gym_ownership_history (
+  gym_id, old_owner_id, new_owner_id, changed_by, change_method, reason
+) VALUES (
+  '<VORTEX_GYM_ID>',
+  NULL,
+  (SELECT id FROM auth.users WHERE email = '<vlasnik@vortex.rs>'),
+  (SELECT id FROM auth.users WHERE email = 'admin@sweat-drop.com'),
+  'assign_existing',
+  'Manual assignment via SQL (email provider unavailable)'
+);
 ```
 
 ### 5.4 Mašine — mapiranje i QR kodovi
