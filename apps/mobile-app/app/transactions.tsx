@@ -426,10 +426,13 @@ export default function TransactionsScreen() {
       const rowOpacity = isCancelledClaim ? 0.45 : 1;
 
       return (
-        <Animated.View
-          entering={FadeInDown.delay(Math.min(index * 30, 300)).duration(350)}
-          style={{ opacity: rowOpacity }}
-        >
+        // Outer View holds opacity so it doesn't conflict with Reanimated's
+        // layout animation on the inner Animated.View (mixing style.opacity
+        // with entering= triggers a Reanimated warning).
+        <View style={{ opacity: rowOpacity }}>
+          <Animated.View
+            entering={FadeInDown.delay(Math.min(index * 30, 300)).duration(350)}
+          >
           <View
             style={[
               styles.txRow,
@@ -446,17 +449,17 @@ export default function TransactionsScreen() {
             </View>
 
             <View style={styles.txInfo}>
+              <Text style={styles.txLabel} numberOfLines={1}>
+                {getTxLabel(tx)}
+              </Text>
               <View style={styles.txLabelRow}>
                 {isPendingClaim && (
                   <View style={styles.pendingBadge}>
                     <Text style={styles.pendingBadgeText}>{t('pendingBadge')}</Text>
                   </View>
                 )}
-                <Text style={styles.txLabel} numberOfLines={1}>
-                  {getTxLabel(tx)}
-                </Text>
+                <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
               </View>
-              <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
             </View>
 
             <View style={styles.txRight}>
@@ -480,7 +483,8 @@ export default function TransactionsScreen() {
               )}
             </View>
           </View>
-        </Animated.View>
+          </Animated.View>
+        </View>
       );
     },
     [transactions.length, branding.primary, t],
@@ -696,7 +700,7 @@ const styles = StyleSheet.create({
   txLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     flexWrap: 'nowrap',
   },
   pendingBadge: {

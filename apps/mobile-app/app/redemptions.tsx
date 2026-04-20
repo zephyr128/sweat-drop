@@ -472,16 +472,15 @@ export default function RedemptionsScreen() {
               )}
 
               <View style={styles.cardInfo}>
-                <Text style={styles.itemName} numberOfLines={1}>{getRedemptionName(redemption)}</Text>
+                <Text style={styles.itemName} numberOfLines={2}>{getRedemptionName(redemption)}</Text>
                 <Text style={styles.itemGym} numberOfLines={1}>{gymName}</Text>
                 <Text style={styles.itemDate}>
                   {fmtDate(redemption.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}
                 </Text>
-              </View>
-
-              <View style={[styles.statusPill, { backgroundColor: hexToRgba(stateColor, 0.14) }]}>
-                <Ionicons name={stateIcon} size={14} color={stateColor} />
-                <Text style={[styles.statusLabel, { color: stateColor }]}>{t(stateLabelKey)}</Text>
+                <View style={[styles.statusPill, { backgroundColor: hexToRgba(stateColor, 0.14), marginTop: 6 }]}>
+                  <Ionicons name={stateIcon} size={13} color={stateColor} />
+                  <Text style={[styles.statusLabel, { color: stateColor }]}>{t(stateLabelKey)}</Text>
+                </View>
               </View>
             </View>
 
@@ -964,16 +963,17 @@ const styles = StyleSheet.create({
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   statusLabel: {
     ...fontStyles.bodySemiBold,
-    fontSize: 11,
+    fontSize: 10,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   infoBanner: {
     flexDirection: 'row',
