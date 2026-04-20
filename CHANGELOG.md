@@ -20,6 +20,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-04-20] - Reception Reward Flow
+
+### Overview
+Complete end-to-end flow for physical prize handling (arena_prize, leaderboard_prize) made
+operational for receptionists, with no database schema or mobile app changes.
+
+### Added (Admin Panel)
+- **`fulfilled_at` in Desk queue** — `admin_list_redemptions` RPC now returns `fulfilled_at`;
+  `RedemptionRow` type extended with `fulfilled_at` and `pending_verification` status.
+- **Two-action modal in `RedemptionsList`**:
+  - `pending_verification` → locked with identity-verification info banner.
+  - Physical prize + `fulfilled_at IS NULL` → **"Mark as received"** button only (calls `markRedemptionFulfilled`).
+  - Physical prize + `fulfilled_at IS NOT NULL` or store reward → **"Confirm & Hand Over"** button (calls `confirmRedemption`).
+- **Five-state `StatusBadge`**: Pending verification · Awaiting shipment · Ready to collect · Confirmed · Cancelled.
+- **Fulfillment sub-filter chips** in `RedemptionsList`: "Awaiting shipment" / "Ready to collect" client-side filter.
+- **Two new KPI cards in `DeskShell`**: *Awaiting shipment* (blue) and *Ready to collect* (green), derived from a single `getRedemptionKpiCounts` server action call.
+- **Arena prizes in receptionist sidebar** — `receptionistGroups` now includes a "PRIZES" group with an "Arena prizes" link to `/dashboard/arenas`.
+- **Middleware updated** — receptionist role allowed through `/dashboard/arenas` and `/dashboard/arenas/*` routes (RLS already scopes data to assigned gym via `_admin_check_gym_access`).
+
+### Added (Backend)
+- **Migration `20260420130000_admin_list_redemptions_add_fulfilled_at.sql`** — updates `admin_list_redemptions` function to include `r.fulfilled_at` in the SELECT; no schema change.
+
+### RPC mapping
+| Reception duty | RPC | Trigger |
+|---|---|---|
+| Job A — prize arrival | `mark_redemption_fulfilled` | "Mark as received" button on Desk |
+| Job B — hand over | `confirm_redemption` | "Confirm & Hand Over" button on Desk |
+| Arena manifest | `get_arena_fulfillment_manifest` | Arena prizes page (fulfillment tab) |
+
+---
+
 ## [2026-03-30] - Pre-Production Dead Feature Cleanup
 
 ### Removed

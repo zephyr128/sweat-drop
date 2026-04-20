@@ -56,6 +56,12 @@ The mobile app has undergone a **complete UI/UX redesign** establishing a premiu
 - ✅ **Redeem validation** - Approve/reject reward redemptions
 - ✅ **Leaderboard rewards** - Configure rewards for top 3 users
 - ✅ **Gym branding** - Custom colors, logos, backgrounds
+- ✅ **Reception reward flow (2026-04-20)** — Two-duty model for physical prizes:
+  - **Job A — prize arrival**: Desk queue shows "Awaiting shipment" for arena/leaderboard prizes with `fulfilled_at IS NULL`. Receptionist clicks "Mark as received" → calls `mark_redemption_fulfilled` → fires `prize_ready` push to member.
+  - **Job B — hand over to member**: Once `fulfilled_at` is set (or for store rewards), card becomes "Ready to collect". Receptionist clicks "Confirm & Hand Over" → calls `confirm_redemption`.
+  - Desk KPIs show separate **Awaiting shipment** and **Ready to collect** counters.
+  - Sidebar for receptionist now includes **Arena prizes** link (`/dashboard/arenas`) for direct access to fulfillment manifest.
+  - Middleware updated to allow receptionist access to `/dashboard/arenas/*`.
 
 ### Mobile App Features
 - ✅ **Onboarding flow** - Email/Apple/Google auth, username setup
