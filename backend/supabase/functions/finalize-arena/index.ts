@@ -2,6 +2,10 @@
 // Description: Finalizes ended arenas by calling finalize_arena() RPC and sending push notifications.
 // Called by cron job: Daily at 00:30 UTC
 //
+// AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 1.1)
+//   Winners loop: token check removed — send-push called with tokens:[] when no token, user_ids always present.
+//   Non-winner loop: token filter removed from DB query; gated on user count, not token count.
+//
 // AGENT NOTE: [2026-04-17] - edge-function-agent (verification gate Phase 2b)
 // Reference: docs/plans/exec_verification_gate_fulfillment_v1.md — per-winner pushes,
 //   pending_verification copy, data.gym_name + redemption_status / requires_verification.
@@ -167,7 +171,8 @@ serve(async (req) => {
 
             for (const wr of winnerResults || []) {
               const token = tokenByUser.get(wr.user_id);
-              if (!token) continue;
+              // Always call send-push — inbox row is written regardless of token presence.
+              // send-push handles tokens:[] gracefully (skip_reason: no_tokens + inbox write).
 
               const redemption = wr.redemptions as ArenaWinnerRedemptionEmbed | null;
               const code = redemption?.redemption_code ?? null;
@@ -213,7 +218,7 @@ serve(async (req) => {
                     client_ref: needsVerification
                       ? 'arena_prize_unverified'
                       : 'arena_prize',
-                    tokens: [token],
+                    tokens: token ? [token] : [],
                     user_ids: [wr.user_id],
                     title: '🏆 Arena Prize Won!',
                     body: pushBody,
@@ -239,21 +244,22 @@ serve(async (req) => {
           }
         }
 
-        // Notify ALL participants (non-winners) that the arena has ended
+        // Notify ALL participants (non-winners) that the arena has ended.
+        // Token filter removed — users without tokens still get an inbox row.
         const { data: allParticipants } = await supabase
           .from('arena_participants')
           .select('user_id, profiles!inner(expo_push_token)')
-          .eq('arena_id', arena.id)
-          .not('profiles.expo_push_token', 'is', null);
+          .eq('arena_id', arena.id);
 
         const nonWinnerParticipants = (allParticipants || [])
           .filter((p: any) => !winnerUserIds.includes(p.user_id));
+
+        const nonWinnerUserIds = nonWinnerParticipants.map((p: any) => p.user_id);
         const nonWinnerTokens = nonWinnerParticipants
           .map((p: any) => p.profiles?.expo_push_token)
           .filter((t: string | null) => isExpoPushToken(t));
-        const nonWinnerUserIds = nonWinnerParticipants.map((p: any) => p.user_id);
 
-        if (nonWinnerTokens.length > 0) {
+        if (nonWinnerUserIds.length > 0) {
           const pushResponse = await fetch(
             `${supabaseUrl}/functions/v1/send-push`,
             {
@@ -264,8 +270,8 @@ serve(async (req) => {
               },
               body: JSON.stringify({
                 client_ref: 'finalize_arena_participants',
-                tokens: nonWinnerTokens,
-                user_ids: nonWinnerUserIds,
+                tokens: nonWinnerTokens,       // may be empty array — inbox still written
+                user_ids: nonWinnerUserIds,    // always present
                 title: '🏁 Arena Ended',
                 body: `${arena.name} has ended. Check your final ranking!`,
                 data: {

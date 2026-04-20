@@ -4,6 +4,9 @@
 //   upcoming window, deduplicates via happy_hour_reminder_logs, and dispatches
 //   via the shared send-push edge function.
 //
+// AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 2.2)
+//   Added user_ids: [membership.user_id] to per-recipient send-push call for inbox parity.
+//
 // AGENT NOTE: [2026-03-27] - edge-function-agent
 // Reference: docs/plans/happy_hour_visibility_and_reminders_plan.md — Step 2
 //
@@ -157,9 +160,10 @@ serve(async (req) => {
 
           if (userOffset !== offset) continue;
 
-          if (!isExpoPushToken(token)) {
+          const hasValidToken = isExpoPushToken(token);
+          if (!hasValidToken) {
             summary.skipped_no_token++;
-            continue;
+            // Still fall through — tokenless users receive an inbox row via send-push.
           }
 
           // ── 4. Dedupe check via INSERT … ON CONFLICT ──────────
@@ -185,6 +189,7 @@ serve(async (req) => {
           }
 
           // ── 5. Send push via send-push edge function ──────────
+          // tokens may be empty for tokenless users — send-push writes inbox row regardless.
           try {
             const label = rule.display_label || rule.name;
             const pushRes = await fetch(
@@ -197,7 +202,8 @@ serve(async (req) => {
                 },
                 body: JSON.stringify({
                   client_ref: 'happy_hour_reminder',
-                  tokens: [token],
+                  tokens: hasValidToken ? [token] : [],
+                  user_ids: [membership.user_id],
                   title: buildPushTitle(offset),
                   body: buildPushBody(offset, rule.multiplier),
                   data: {
@@ -234,12 +240,14 @@ serve(async (req) => {
               const delivered = deliveryCountFromSendPushBody(pushJson);
               if (delivered > 0) {
                 summary.sent++;
-              } else {
+              } else if (hasValidToken) {
+                // Had a valid token but got no successful Expo receipt — real failure.
                 summary.failed++;
                 summary.errors.push(
                   `push receipts user=${maskId(membership.user_id)}: no successful Expo tickets`
                 );
               }
+              // Tokenless users: inbox row was written (skip_reason: no_tokens), not a failure.
             }
           } catch (pushErr: unknown) {
             const msg = pushErr instanceof Error ? pushErr.message : 'Unknown push error';

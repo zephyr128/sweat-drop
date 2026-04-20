@@ -2,6 +2,9 @@
 // Description: Sends push notifications to members who haven't visited
 //              in 7 or 14 days.
 //
+// AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 2.2)
+//   Added user_ids to both 7d and 14d send-push calls for inbox parity.
+//
 // AGENT NOTE: [2026-03-02] - supabase-dba (Phase 2, Task 2.8)
 // Reference: docs/plans/mvp_full_audit_and_build_plan.md
 //
@@ -41,13 +44,13 @@ serve(async (req) => {
 
     const { data: inactive7d, error: err7 } = await supabase
       .from('profiles')
-      .select('expo_push_token, username')
-      .not('expo_push_token', 'is', null)
+      .select('id, expo_push_token, username')
       .eq('last_visit_date', sevenDayDate);
 
     if (err7) throw err7;
 
     if (inactive7d && inactive7d.length > 0) {
+      const userIds7 = inactive7d.map((m) => m.id);
       const tokens7 = inactive7d
         .map((m) => m.expo_push_token)
         .filter((t): t is string => !!t);
@@ -63,6 +66,7 @@ serve(async (req) => {
           body: JSON.stringify({
             client_ref: 'reengagement_7d',
             tokens: tokens7,
+            user_ids: userIds7,
             title: '💪 We miss you!',
             body: 'Come back and earn 2× drops this week.',
             data: { type: 'reengagement_7d' },
@@ -93,13 +97,13 @@ serve(async (req) => {
 
     const { data: inactive14d, error: err14 } = await supabase
       .from('profiles')
-      .select('expo_push_token, username')
-      .not('expo_push_token', 'is', null)
+      .select('id, expo_push_token, username')
       .eq('last_visit_date', fourteenDayDate);
 
     if (err14) throw err14;
 
     if (inactive14d && inactive14d.length > 0) {
+      const userIds14 = inactive14d.map((m) => m.id);
       const tokens14 = inactive14d
         .map((m) => m.expo_push_token)
         .filter((t): t is string => !!t);
@@ -115,6 +119,7 @@ serve(async (req) => {
           body: JSON.stringify({
             client_ref: 'reengagement_14d',
             tokens: tokens14,
+            user_ids: userIds14,
             title: "📣 It's been 2 weeks!",
             body: 'Your drops are waiting. Get back in the game.',
             data: { type: 'reengagement_14d' },

@@ -2,6 +2,10 @@
 // Description: Sends push notifications to members whose drops are about
 //              to expire (30 days and 7 days before expiry).
 //
+// AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 2.2)
+//   Added user_ids to both 30d and 7d send-push calls for inbox parity.
+//   userMap now aggregates all users (with or without token) so every user gets an inbox row.
+//
 // AGENT NOTE: [2026-03-02] - supabase-dba (Phase 2, Task 2.9)
 // Reference: docs/plans/mvp_full_audit_and_build_plan.md
 //
@@ -29,7 +33,7 @@ const corsHeaders = {
 interface ExpiringDropsRow {
   user_id: string;
   total_expiring: number;
-  expo_push_token: string;
+  expo_push_token: string | null;
 }
 
 serve(async (req) => {
@@ -72,32 +76,30 @@ serve(async (req) => {
     if (qErr30) throw qErr30;
 
     if (warn30 && warn30.length > 0) {
-      // Aggregate by user
-      const userMap = new Map<string, { total: number; token: string }>();
+      // Aggregate by user — include all users regardless of token presence
+      const userMap = new Map<string, { total: number; token: string | null }>();
       for (const row of warn30) {
         const uid = row.user_id;
-        const token = (row as any).profiles?.expo_push_token;
-        if (!token) continue;
+        const token = (row as any).profiles?.expo_push_token ?? null;
 
         const existing = userMap.get(uid);
         if (existing) {
           existing.total += row.amount;
+          if (!existing.token && token) existing.token = token;
         } else {
           userMap.set(uid, { total: row.amount, token });
         }
       }
 
-      // Send per-user notifications (personalized with drop amount)
+      const userIds30 = [...userMap.keys()];
       const tokens30: string[] = [];
-      for (const [_uid, { total, token }] of userMap) {
-        if (isExpoPushToken(token)) {
+      for (const [_uid, { token }] of userMap) {
+        if (token && isExpoPushToken(token)) {
           tokens30.push(token);
-          // For personalized messages we'd need individual sends,
-          // but for MVP we batch with a generic message
         }
       }
 
-      if (tokens30.length > 0) {
+      if (userIds30.length > 0) {
         const res30 = await fetch(
           `${supabaseUrl}/functions/v1/send-push`,
           {
@@ -109,6 +111,7 @@ serve(async (req) => {
             body: JSON.stringify({
               client_ref: 'drops_expiry_30d',
               tokens: tokens30,
+              user_ids: userIds30,
               title: '💧 Drops expiring soon',
               body: 'You have drops expiring in 30 days. Visit the reward store!',
               data: { type: 'drops_expiry_30d' },
@@ -118,7 +121,8 @@ serve(async (req) => {
 
         const body30 = await res30.json().catch(() => null);
         results['30d'] = {
-          users: tokens30.length,
+          users: userIds30.length,
+          tokens: tokens30.length,
           delivered: deliveryCountFromSendPushBody(body30),
           http_ok: res30.ok,
           push: compactSendPushMetrics(body30),
@@ -147,28 +151,30 @@ serve(async (req) => {
     if (qErr7) throw qErr7;
 
     if (warn7 && warn7.length > 0) {
-      const userMap7 = new Map<string, { total: number; token: string }>();
+      // Aggregate by user — include all users regardless of token presence
+      const userMap7 = new Map<string, { total: number; token: string | null }>();
       for (const row of warn7) {
         const uid = row.user_id;
-        const token = (row as any).profiles?.expo_push_token;
-        if (!token) continue;
+        const token = (row as any).profiles?.expo_push_token ?? null;
 
         const existing = userMap7.get(uid);
         if (existing) {
           existing.total += row.amount;
+          if (!existing.token && token) existing.token = token;
         } else {
           userMap7.set(uid, { total: row.amount, token });
         }
       }
 
+      const userIds7 = [...userMap7.keys()];
       const tokens7: string[] = [];
       for (const [_uid, { token }] of userMap7) {
-        if (isExpoPushToken(token)) {
+        if (token && isExpoPushToken(token)) {
           tokens7.push(token);
         }
       }
 
-      if (tokens7.length > 0) {
+      if (userIds7.length > 0) {
         const res7 = await fetch(
           `${supabaseUrl}/functions/v1/send-push`,
           {
@@ -180,6 +186,7 @@ serve(async (req) => {
             body: JSON.stringify({
               client_ref: 'drops_expiry_7d',
               tokens: tokens7,
+              user_ids: userIds7,
               title: '⚠️ Drops expiring in 7 days',
               body: 'Spend them in the reward store before they expire!',
               data: { type: 'drops_expiry_7d' },
@@ -189,7 +196,8 @@ serve(async (req) => {
 
         const body7w = await res7.json().catch(() => null);
         results['7d'] = {
-          users: tokens7.length,
+          users: userIds7.length,
+          tokens: tokens7.length,
           delivered: deliveryCountFromSendPushBody(body7w),
           http_ok: res7.ok,
           push: compactSendPushMetrics(body7w),

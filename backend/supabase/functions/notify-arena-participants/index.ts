@@ -2,6 +2,11 @@
 // Description: Re-sends push notifications for a finalized arena.
 // Called by admin panel "Notify Winners" / "Notify All Participants" buttons.
 //
+// AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 2.2)
+//   Added user_ids to both winners and non-winner send-push calls for inbox parity.
+//   Token filter on winner profiles query removed — inbox written for all winners.
+//   Non-winner query token filter removed — gated on user count.
+//
 // AGENT NOTE: [2026-03-11] - supabase-dba
 // Reference: docs/plans/arena_expiration_and_results_flow.md — Step 1c
 //
@@ -76,67 +81,66 @@ serve(async (req) => {
 
     const winnerUserIds = winnerResults?.map((r: any) => r.user_id) || [];
 
-    // Notify winners
+    // Notify winners — token filter removed; inbox written for all winners
     if (winnerUserIds.length > 0) {
       const { data: winnerProfiles } = await supabase
         .from('profiles')
         .select('id, expo_push_token')
-        .in('id', winnerUserIds)
-        .not('expo_push_token', 'is', null);
+        .in('id', winnerUserIds);
 
       const winnerTokens = (winnerProfiles || [])
         .map((p: any) => p.expo_push_token)
         .filter((t: string | null) => isExpoPushToken(t));
 
-      if (winnerTokens.length > 0) {
-        const pushResponse = await fetch(
-          `${supabaseUrl}/functions/v1/send-push`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${supabaseServiceKey}`,
+      const pushResponse = await fetch(
+        `${supabaseUrl}/functions/v1/send-push`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({
+            client_ref: 'notify_arena_winners',
+            tokens: winnerTokens,
+            user_ids: winnerUserIds,
+            title: '🏆 Arena Prize Won!',
+            body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
+            data: {
+              type: 'arena_prize',
+              arena_id: arena.id,
+              arena_name: arena.name,
             },
-            body: JSON.stringify({
-              client_ref: 'notify_arena_winners',
-              tokens: winnerTokens,
-              title: '🏆 Arena Prize Won!',
-              body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
-              data: {
-                type: 'arena_prize',
-                arena_id: arena.id,
-                arena_name: arena.name,
-              },
-            }),
-          }
-        );
-
-        const winnerPushBody = await pushResponse.json().catch(() => null);
-        const winnerDelivered = deliveryCountFromSendPushBody(winnerPushBody);
-        if (pushResponse.ok && winnerDelivered > 0) {
-          notified += winnerDelivered;
-        } else if (!pushResponse.ok) {
-          errors.push(`Failed to send winner notifications: HTTP ${pushResponse.status}`);
-        } else {
-          errors.push('Winner push returned no successful Expo tickets');
+          }),
         }
+      );
+
+      const winnerPushBody = await pushResponse.json().catch(() => null);
+      const winnerDelivered = deliveryCountFromSendPushBody(winnerPushBody);
+      if (pushResponse.ok) {
+        notified += winnerDelivered;
+      } else {
+        errors.push(`Failed to send winner notifications: HTTP ${pushResponse.status}`);
       }
     }
 
     // Notify non-winners (all participants except winners)
+    // Token filter removed — inbox written for all participants regardless of token.
     if (!winners_only) {
       const { data: allParticipants } = await supabase
         .from('arena_participants')
         .select('user_id, profiles!inner(expo_push_token)')
-        .eq('arena_id', arena_id)
-        .not('profiles.expo_push_token', 'is', null);
+        .eq('arena_id', arena_id);
 
-      const nonWinnerTokens = (allParticipants || [])
-        .filter((p: any) => !winnerUserIds.includes(p.user_id))
+      const nonWinnerParticipants = (allParticipants || [])
+        .filter((p: any) => !winnerUserIds.includes(p.user_id));
+
+      const nonWinnerUserIds = nonWinnerParticipants.map((p: any) => p.user_id);
+      const nonWinnerTokens = nonWinnerParticipants
         .map((p: any) => p.profiles?.expo_push_token)
         .filter((t: string | null) => isExpoPushToken(t));
 
-      if (nonWinnerTokens.length > 0) {
+      if (nonWinnerUserIds.length > 0) {
         const pushResponse = await fetch(
           `${supabaseUrl}/functions/v1/send-push`,
           {
@@ -148,6 +152,7 @@ serve(async (req) => {
             body: JSON.stringify({
               client_ref: 'notify_arena_participants',
               tokens: nonWinnerTokens,
+              user_ids: nonWinnerUserIds,
               title: '🏁 Arena Ended',
               body: `${arena.name} has ended. Check your final ranking!`,
               data: {
@@ -161,12 +166,10 @@ serve(async (req) => {
 
         const partPushBody = await pushResponse.json().catch(() => null);
         const partDelivered = deliveryCountFromSendPushBody(partPushBody);
-        if (pushResponse.ok && partDelivered > 0) {
+        if (pushResponse.ok) {
           notified += partDelivered;
-        } else if (!pushResponse.ok) {
-          errors.push(`Failed to send participant notifications: HTTP ${pushResponse.status}`);
         } else {
-          errors.push('Participant push returned no successful Expo tickets');
+          errors.push(`Failed to send participant notifications: HTTP ${pushResponse.status}`);
         }
       }
     }

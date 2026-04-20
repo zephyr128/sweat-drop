@@ -9,6 +9,11 @@
 // AGENT NOTE: [2026-03-27] - edge-function-agent — batch resilience, structured metrics, no secrets in logs.
 // AGENT NOTE: [2026-03-02] - supabase-dba (Phase 2, Task 2.6)
 //
+// AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 1.2)
+//   Inbox write is now performed BEFORE the early returns for no_tokens / no_valid_tokens.
+//   This means callers that pass tokens:[] + user_ids:[...] still get an inbox row
+//   (e.g. arena winners without a registered push token).
+//
 // INTERFACE CONTRACT (v2 response; backward-compatible fields):
 //   Input:  { tokens: string[], title: string, body: string, data?: object, client_ref?: string }
 //   Output: {
@@ -68,9 +73,53 @@ serve(async (req) => {
     }
 
     const { tokens, title, body, data, client_ref, include_raw_batches, user_ids } = parsed.value;
+
+    // Supabase admin client — used for inbox writes and stale token clearing.
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    /** Write user_notifications rows for each user_id. Returns count inserted. */
+    async function persistInbox(): Promise<number> {
+      if (!user_ids || user_ids.length === 0) return 0;
+      try {
+        const notifType = (data?.type as string) || client_ref || 'general';
+        const rows = [...new Set(user_ids)]
+          .filter((uid) => typeof uid === 'string' && uid.length > 0)
+          .map((uid) => ({
+            user_id: uid,
+            type: notifType,
+            title,
+            body,
+            data: data ?? {},
+          }));
+        if (rows.length === 0) return 0;
+        const { count, error: inboxErr } = await supabaseAdmin
+          .from('user_notifications')
+          .insert(rows, { count: 'exact' });
+        if (inboxErr) {
+          console.error(JSON.stringify({
+            event: 'send-push:inbox_persist_error',
+            error: (inboxErr.message ?? '').slice(0, 160),
+          }));
+          return 0;
+        }
+        return count ?? rows.length;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'unknown';
+        console.error(JSON.stringify({
+          event: 'send-push:inbox_persist_exception',
+          error: msg.slice(0, 160),
+        }));
+        return 0;
+      }
+    }
+
     const requested = tokens.length;
 
     if (requested === 0) {
+      const inbox_persisted = await persistInbox();
       const payload = {
         ok: true,
         version: '2' as const,
@@ -85,6 +134,7 @@ serve(async (req) => {
         batches_failed: 0,
         batch_summaries: [] as Array<Record<string, unknown>>,
         skip_reason: 'no_tokens' as const,
+        inbox_persisted,
         result: { skipped: 'no tokens' },
       };
       console.log(JSON.stringify({
@@ -128,6 +178,7 @@ serve(async (req) => {
     const valid_tokens = messages.length;
 
     if (valid_tokens === 0) {
+      const inbox_persisted = await persistInbox();
       const payload = {
         ok: true,
         version: '2' as const,
@@ -142,6 +193,7 @@ serve(async (req) => {
         batches_failed: 0,
         batch_summaries: [],
         skip_reason: 'no_valid_tokens' as const,
+        inbox_persisted,
         result: { skipped: 'no valid tokens' },
       };
       console.log(JSON.stringify({
@@ -161,13 +213,6 @@ serve(async (req) => {
   let receipt_error = 0;
   let batches_failed = 0;
   let tokens_cleared = 0;
-
-  // Supabase admin client for clearing stale push tokens (DeviceNotRegistered).
-  // Uses service-role key auto-injected by Supabase — no manual secrets needed.
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  );
 
   for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
     const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
@@ -285,41 +330,7 @@ serve(async (req) => {
   }
 
   // Persist to in-app notification inbox when caller provides user_ids.
-  // Runs after push delivery so inbox latency doesn't block the response.
-  let inbox_persisted = 0;
-  if (user_ids && user_ids.length > 0) {
-    try {
-      const notifType = (data?.type as string) || client_ref || 'general';
-      const rows = [...new Set(user_ids)]
-        .filter((uid) => typeof uid === 'string' && uid.length > 0)
-        .map((uid) => ({
-          user_id: uid,
-          type: notifType,
-          title,
-          body,
-          data: data ?? {},
-        }));
-      if (rows.length > 0) {
-        const { count, error: inboxErr } = await supabaseAdmin
-          .from('user_notifications')
-          .insert(rows, { count: 'exact' });
-        if (inboxErr) {
-          console.error(JSON.stringify({
-            event: 'send-push:inbox_persist_error',
-            error: (inboxErr.message ?? '').slice(0, 160),
-          }));
-        } else {
-          inbox_persisted = count ?? rows.length;
-        }
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'unknown';
-      console.error(JSON.stringify({
-        event: 'send-push:inbox_persist_exception',
-        error: msg.slice(0, 160),
-      }));
-    }
-  }
+  const inbox_persisted = await persistInbox();
 
   const batches_attempted = batch_summaries.length;
   const sent = valid_tokens;
