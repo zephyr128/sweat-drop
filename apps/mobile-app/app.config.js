@@ -52,7 +52,7 @@ module.exports = {
         foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
         backgroundColor: '#0A0E1A', // Dark navy background
       },
-      versionCode: 15,
+      versionCode: 16,
       package: 'com.sweatdrop.app',
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON || './google-services.json',
