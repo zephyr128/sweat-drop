@@ -86,6 +86,9 @@ export default function SessionSummaryScreen() {
   const [gymName, setGymName] = useState<string | null>(null);
   const [challengeProgress, setChallengeProgress] = useState<ChallengeProgressItem[]>([]);
   const [completedChallenges, setCompletedChallenges] = useState<ChallengeProgressItem[]>([]);
+  // Snapshot of challenge IDs already completed BEFORE side effects run for
+  // this session. Used to show only newly-completed challenges in the summary.
+  const [preSessionCompletedIds, setPreSessionCompletedIds] = useState<Set<string>>(new Set());
   const [streakDays, setStreakDays] = useState<number>(0);
   const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -226,6 +229,28 @@ export default function SessionSummaryScreen() {
     if (session) {
       calculatePercentile();
       (async () => {
+        // Snapshot which challenges are already completed BEFORE side effects
+        // run. This lets us show only challenges that newly completed during
+        // THIS session, not ones completed by earlier workouts or backfill
+        // triggers (e.g. checkin_streak challenges completed in a prior session
+        // or backfilled when the admin created the challenge before this workout).
+        let alreadyDoneIds: Set<string> = new Set();
+        try {
+          const { data: preSideEffectsData } = await supabase.rpc('get_my_challenges', {
+            p_gym_id: gymId,
+          });
+          if (preSideEffectsData) {
+            alreadyDoneIds = new Set(
+              preSideEffectsData
+                .filter((c: any) => c.is_completed === true)
+                .map((c: any) => String(c.challenge_id)),
+            );
+          }
+        } catch (err) {
+          log.warn('[SessionSummary] Pre-snapshot fetch failed:', err);
+        }
+        setPreSessionCompletedIds(alreadyDoneIds);
+
         try {
           await supabase.rpc('process_session_side_effects_eager', {
             p_session_id: session.id,
@@ -233,7 +258,7 @@ export default function SessionSummaryScreen() {
         } catch (err) {
           log.warn('[SessionSummary] Eager side effects failed, data may be stale:', err);
         }
-        loadChallengeProgress(session.started_at);
+        loadChallengeProgress(session.started_at, alreadyDoneIds);
         await loadEarnedBadges(session.started_at);
       })();
     }
@@ -428,7 +453,10 @@ export default function SessionSummaryScreen() {
     }
   };
 
-  const loadChallengeProgress = async (sessionStartedAt?: string) => {
+  const loadChallengeProgress = async (
+    sessionStartedAt?: string,
+    alreadyCompletedIds?: Set<string>,
+  ) => {
     if (!authSession?.user || !gymId) return;
 
     try {
@@ -459,11 +487,28 @@ export default function SessionSummaryScreen() {
         };
       });
 
+      // Primary approach: use the pre-session snapshot taken before side effects
+      // ran. A challenge is "newly completed this session" iff it is now completed
+      // AND was NOT already completed before this session started.
+      // This correctly handles:
+      //   • Test1 completed by workout 1 (already in snapshot) → excluded
+      //   • Test2 backfilled by trigger before workout 2 (already in snapshot) → excluded
+      //   • Test2 completed for the first time by workout 2 (not in snapshot) → included
+      const resolvedAlreadyDone = alreadyCompletedIds ?? preSessionCompletedIds;
+
       const sessionStart = sessionStartedAt ? new Date(sessionStartedAt).getTime() : 0;
-      const justCompleted = items.filter((item) =>
-        item.is_completed && item.reward_drops > 0 && item.completed_at &&
-        new Date(item.completed_at).getTime() >= sessionStart
-      );
+
+      const justCompleted = items.filter((item) => {
+        if (!item.is_completed || item.reward_drops <= 0) return false;
+        if (resolvedAlreadyDone.size > 0) {
+          // Snapshot available — use it as the definitive source of truth
+          return !resolvedAlreadyDone.has(item.challenge_id);
+        }
+        // Fallback when snapshot is unavailable: filter by completed_at window
+        if (!item.completed_at) return false;
+        return new Date(item.completed_at).getTime() >= sessionStart;
+      });
+
       const inProgress = items.filter((item) => !item.is_completed && item.current_drops > 0);
       setCompletedChallenges(justCompleted);
       setChallengeProgress(inProgress);

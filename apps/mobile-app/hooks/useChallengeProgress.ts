@@ -95,6 +95,13 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
           ? Math.min((current / target) * 100, 100)
           : 0;
 
+        // Treat as completed when the backend flag is true OR when progress has
+        // already reached/exceeded the target. The latter guards against rows
+        // where the DB trigger hasn't flipped is_completed yet (e.g. legacy
+        // checkin_streak rows — see migration 20260420140000).
+        const dbCompleted = c.is_completed || false;
+        const effectivelyCompleted = dbCompleted || (target > 0 && current >= target);
+
         return {
           challenge_id: c.challenge_id,
           challenge_name: c.challenge_name,
@@ -106,7 +113,7 @@ export function useChallengeProgress(gymId: string | null, machineType: string |
           reward_drops: toNumber(c.reward_drops),
           current_drops: current,
           current_streak_days: toNumber(c.current_streak_days),
-          is_completed: c.is_completed || false,
+          is_completed: effectivelyCompleted,
           progress_percentage: Number(progressPercent.toFixed(2)),
           start_date: c.start_date,
           end_date: c.end_date,

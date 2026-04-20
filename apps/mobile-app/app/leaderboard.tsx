@@ -255,6 +255,12 @@ function ExpandableRows({ expanded, children }: { expanded: boolean; children: R
   );
 }
 
+function parsePeriodParam(raw: string | string[] | undefined): LeaderboardPeriod {
+  const val = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+  if (val === 'monthly' || val === 'all_time') return val;
+  return 'weekly';
+}
+
 export default function LeaderboardScreen() {
   const router = useThrottledRouter();
   const params = useLocalSearchParams<{ period?: string | string[] }>();
@@ -266,7 +272,10 @@ export default function LeaderboardScreen() {
   const { t } = useTranslation('leaderboard');
 
   const [activeTab, setActiveTab] = useState<TabType>('gym');
-  const [period, setPeriod] = useState<LeaderboardPeriod>('weekly');
+  // Initialize from the URL param so TabView renders the correct tab on the
+  // first frame — avoids the Android race where TabView fires onIndexChange(0)
+  // before the useEffect below can apply the incoming period value.
+  const [period, setPeriod] = useState<LeaderboardPeriod>(() => parsePeriodParam(params.period));
   const [newcomerOnly, setNewcomerOnly] = useState(false);
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
   const [arenasLoading, setArenasLoading] = useState(false);

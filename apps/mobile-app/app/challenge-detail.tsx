@@ -367,15 +367,15 @@ export default function ChallengeDetailScreen() {
                         contentFit="contain"
                         transition={250}
                       />
-                      {isCompleted && (
-                        <View style={styles.badgeCompletedOverlay}>
-                          <Ionicons name="checkmark-circle" size={28} color="#4ade80" />
-                        </View>
-                      )}
                     </View>
                   ) : (
                     <View style={[styles.badgeWrap, styles.badgePlaceholder, { borderColor: hexToRgba(ORANGE, 0.32), backgroundColor: hexToRgba(ORANGE, 0.09) }]}>
                       <Ionicons name={getChallengeIcon(challenge.challenge_type)} size={38} color={ORANGE} />
+                    </View>
+                  )}
+                  {isCompleted && (
+                    <View style={styles.badgeCompletedOverlay}>
+                      <Ionicons name="checkmark-circle" size={28} color="#4ade80" />
                     </View>
                   )}
                 </Animated.View>
@@ -621,6 +621,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 10,
+    // Must not clip children so the completed checkmark badge
+    // can overflow the bottom-right corner of the badge tile.
   },
   badgeWrap: {
     width: 88,
@@ -641,10 +643,12 @@ const styles = StyleSheet.create({
   },
   badgeCompletedOverlay: {
     position: 'absolute',
-    bottom: -4,
-    right: -4,
+    bottom: -6,
+    right: -6,
     backgroundColor: '#000',
     borderRadius: 14,
+    // Sits outside badgeWrap (overflow:hidden) — parent is badgeShadowWrap
+    // which has no overflow clip, so the icon renders fully.
   },
   heroMeta: {
     flex: 1,
