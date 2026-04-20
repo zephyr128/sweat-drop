@@ -356,16 +356,45 @@ export default function ChallengesScreen() {
   // pendingChallenges    — not completed, shown first in Today tab
   // doneRecurringChallenges — completed daily/weekly, stay in Today tab (will reset)
   // completedChallenges — completed milestone/permanent, go to Milestones tab
+  //
+  // NOTE: A challenge is treated as "effectively completed" when either the
+  // backend flag `is_completed` is true OR the user's current progress has
+  // already reached/exceeded the target. The second branch guards against
+  // cases where `challenge_progress.is_completed` hasn't been flipped yet
+  // (e.g. a checkin_streak that hit its streak_days target but the RPC
+  // hasn't marked it complete yet) — without it the challenge would wrongly
+  // appear in "To do today" at 100%.
 
-  const { pendingChallenges, doneRecurringChallenges } = useMemo(() => {
+  const isChallengeEffectivelyCompleted = useCallback((challenge: any) => {
+    const userProgress = progress[challenge.id];
+    if (userProgress?.is_completed) return true;
+    const isStreak =
+      challenge.challenge_type === 'streak' ||
+      challenge.challenge_type === 'checkin_streak';
+    const target =
+      challenge.challenge_type === 'milestone'
+        ? (challenge.milestone_threshold || 0)
+        : isStreak
+          ? (challenge.streak_days || challenge.target_drops || 0)
+          : (challenge.target_drops || 0);
+    const current = isStreak
+      ? (userProgress?.current_streak_days || 0)
+      : (userProgress?.current_drops || 0);
+    return target > 0 && current >= target;
+  }, [progress]);
+
+  const { pendingChallenges, doneRecurringChallenges, completedChallenges } = useMemo(() => {
     const pending: any[] = [];
     const done: any[] = [];
+    const completed: any[] = [];
     for (const c of challenges) {
-      const isCompleted = progress[c.id]?.is_completed || false;
+      const isCompleted = isChallengeEffectivelyCompleted(c);
       if (!isCompleted) {
         pending.push(c);
       } else if (c.challenge_type === 'daily' || c.challenge_type === 'weekly') {
         done.push(c);
+      } else {
+        completed.push(c);
       }
     }
     // Most recently completed first
@@ -374,15 +403,12 @@ export default function ChallengesScreen() {
       const bAt = progress[b.id]?.completed_at ?? '';
       return bAt.localeCompare(aAt);
     });
-    return { pendingChallenges: pending, doneRecurringChallenges: done };
-  }, [challenges, progress]);
-
-  const completedChallenges = useMemo(() =>
-    challenges.filter((c) => {
-      const isCompleted = progress[c.id]?.is_completed || false;
-      return isCompleted && c.challenge_type !== 'daily' && c.challenge_type !== 'weekly';
-    }),
-  [challenges, progress]);
+    return {
+      pendingChallenges: pending,
+      doneRecurringChallenges: done,
+      completedChallenges: completed,
+    };
+  }, [challenges, progress, isChallengeEffectivelyCompleted]);
 
   const formatCompletedDate = (dateStr: string | null) => {
     if (!dateStr) return '';
@@ -415,8 +441,11 @@ export default function ChallengesScreen() {
 
   const renderActiveCard = (challenge: any, index: number, animOffset: number, isDone: boolean) => {
     const userProgress = progress[challenge.id];
-    const isCompleted = userProgress?.is_completed || false;
     const { target, current, pct, unit } = getProgressValues(challenge, userProgress);
+    // Effective completion: backend flag OR progress reached target (keeps UI
+    // consistent with pending/done/completed grouping above).
+    const isCompleted =
+      (userProgress?.is_completed || false) || (target > 0 && current >= target);
     const typeLabel = getChallengeTypeLabel(challenge.challenge_type, t);
     const timeInfo = getChallengeTimeDisplay(challenge.challenge_type, challenge.end_date, isCompleted, t);
 
