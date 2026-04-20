@@ -71,6 +71,29 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
     brandingData = ownerBranding || { primary_color: null, logo_url: null, background_url: null };
   }
 
+  // Fetch current owner profile for superadmin "Ownership" tab
+  let currentOwner: {
+    id: string;
+    email: string;
+    username: string | null;
+    full_name: string | null;
+  } | null = null;
+  if (profile.role === 'superadmin' && gym.owner_id) {
+    const { data: ownerProfile } = await supabase
+      .from('profiles')
+      .select('id, email, username, full_name')
+      .eq('id', gym.owner_id)
+      .single();
+    if (ownerProfile) {
+      currentOwner = ownerProfile as {
+        id: string;
+        email: string;
+        username: string | null;
+        full_name: string | null;
+      };
+    }
+  }
+
   return (
     <div className="min-h-screen md:p-6 max-w-[1400px] mx-auto space-y-5">
       <div>
@@ -82,6 +105,7 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
 
       <GymSetupTabs
         gymId={id}
+        gymName={gym.name}
         ownerId={gym.owner_id || profile.id}
         role={profile.role}
         gymData={{
@@ -108,6 +132,7 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
         }}
         brandingData={brandingData}
         workingHours={(gym.working_hours as GymWorkingHours) ?? null}
+        currentOwner={currentOwner}
       />
     </div>
   );

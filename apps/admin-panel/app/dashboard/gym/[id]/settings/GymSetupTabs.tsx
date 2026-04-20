@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Building2, MapPin, Palette, Clock, Camera } from 'lucide-react';
+import { Building2, MapPin, Palette, Clock, Camera, Crown } from 'lucide-react';
 import { GymGeneralForm, type GymGeneralData } from '@/components/modules/GymGeneralForm';
 import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
 import { BrandingModule } from '@/components/modules/BrandingModule';
 import { WorkingHoursForm } from '@/components/forms/WorkingHoursForm';
 import { GymGalleryManager } from '@/components/modules/GymGalleryManager';
+import { OwnerManagementModule } from '@/components/modules/OwnerManagementModule';
 import type { GymWorkingHours } from '@/lib/actions/gym-actions';
 
 interface GymSetupTabsProps {
   gymId: string;
+  gymName: string;
   ownerId: string;
   role: string;
   gymData: GymGeneralData;
@@ -32,6 +34,12 @@ interface GymSetupTabsProps {
     background_url: string | null;
   } | null;
   workingHours: GymWorkingHours | null;
+  currentOwner: {
+    id: string;
+    email: string;
+    username: string | null;
+    full_name: string | null;
+  } | null;
 }
 
 const ALL_TABS = [
@@ -40,27 +48,33 @@ const ALL_TABS = [
   { key: 'gallery', label: 'Gallery', icon: Camera },
   { key: 'location', label: 'Location & Check-in', icon: MapPin },
   { key: 'branding', label: 'Branding', icon: Palette },
+  { key: 'ownership', label: 'Ownership', icon: Crown },
 ] as const;
 
 type TabKey = (typeof ALL_TABS)[number]['key'];
 
 export function GymSetupTabs({
   gymId,
+  gymName,
   ownerId,
   role,
   gymData,
   checkinData,
   brandingData,
   workingHours,
+  currentOwner,
 }: GymSetupTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
   const showBranding = role === 'gym_owner' && brandingData !== null;
-  const visibleTabs = showBranding
-    ? ALL_TABS
-    : ALL_TABS.filter((t) => t.key !== 'branding');
+  const showOwnership = role === 'superadmin';
+  const visibleTabs = ALL_TABS.filter((t) => {
+    if (t.key === 'branding') return showBranding;
+    if (t.key === 'ownership') return showOwnership;
+    return true;
+  });
 
   const initialTab = (searchParams.get('tab') as TabKey) || 'general';
   const [activeTab, setActiveTab] = useState<TabKey>(
@@ -131,6 +145,14 @@ export function GymSetupTabs({
         <BrandingModule
           ownerId={ownerId}
           initialData={brandingData || { primary_color: null, logo_url: null, background_url: null }}
+        />
+      )}
+
+      {activeTab === 'ownership' && showOwnership && (
+        <OwnerManagementModule
+          gymId={gymId}
+          gymName={gymName}
+          currentOwner={currentOwner}
         />
       )}
     </div>

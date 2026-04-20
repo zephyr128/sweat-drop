@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createOwner, deleteOwner, getOwnersWithGyms, getPendingOwnerInvitations, resendOwnerInvitation } from '@/lib/actions/owner-actions';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-client';
-import { Trash2, Plus, X, Clock, Mail, Send } from 'lucide-react';
+import { Trash2, Plus, X, Clock, Mail, Send, AtSign } from 'lucide-react';
+import { ForceEmailChangeModal } from '@/components/modules/ForceEmailChangeModal';
 
 interface Owner {
   id: string;
@@ -57,6 +58,7 @@ export default function OwnersPage() {
   const [deletingOwnerId, setDeletingOwnerId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
+  const [emailChangeTarget, setEmailChangeTarget] = useState<Owner | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     username: '',
@@ -447,14 +449,24 @@ export default function OwnersPage() {
                         {new Date(owner.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleDeleteClick(owner.id)}
-                          disabled={deletingOwnerId === owner.id}
-                          className="px-4 py-2 bg-[#FF5252]/10 text-[#FF5252] rounded-lg text-sm font-medium hover:bg-[#FF5252]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          {deletingOwnerId === owner.id ? 'Removing...' : 'Remove'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setEmailChangeTarget(owner)}
+                            className="px-3 py-2 bg-[#FFA726]/10 text-[#FFA726] rounded-lg text-sm font-medium hover:bg-[#FFA726]/20 transition-colors flex items-center gap-2 border border-[#FFA726]/30"
+                            title="Force change email (audit-logged)"
+                          >
+                            <AtSign className="w-4 h-4" />
+                            Change Email
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(owner.id)}
+                            disabled={deletingOwnerId === owner.id}
+                            className="px-3 py-2 bg-[#FF5252]/10 text-[#FF5252] rounded-lg text-sm font-medium hover:bg-[#FF5252]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            {deletingOwnerId === owner.id ? 'Removing...' : 'Remove'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -499,6 +511,20 @@ export default function OwnersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Force Email Change Modal */}
+      {emailChangeTarget && (
+        <ForceEmailChangeModal
+          user={{
+            id: emailChangeTarget.id,
+            email: emailChangeTarget.email,
+            username: emailChangeTarget.username,
+            full_name: emailChangeTarget.full_name,
+          }}
+          onClose={() => setEmailChangeTarget(null)}
+          onSuccess={() => loadOwners()}
+        />
       )}
     </div>
   );
