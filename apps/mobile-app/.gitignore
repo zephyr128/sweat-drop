@@ -11,6 +11,11 @@ web-build/
 *.key
 *.mobileprovision
 
+# Firebase / FCM (push) — NEVER commit these
+google-services.json
+GoogleService-Info.plist
+fcm-v1-service-account*.json
+
 # Metro
 .metro-health-check*
 
