@@ -8,7 +8,7 @@ import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { CompeteStatsCards } from '@/components/home/CompeteStatsCards';
 import type { LeaderboardPeriod } from '@/components/LeaderboardPreview';
 import type { PeriodRankInfo } from '@/hooks/useCompeteStats';
@@ -54,7 +54,7 @@ export const SheetRankContent = React.memo(function SheetRankContent({
 }: SheetRankContentProps) {
   const branding = useBranding();
   const { t } = useTranslation('home');
-  const router = useRouter();
+  const router = useThrottledRouter();
 
   const firstPendingPrize = pendingLeaderboardPrizes.find((p) => p.source_type === 'leaderboard_prize') ?? null;
 

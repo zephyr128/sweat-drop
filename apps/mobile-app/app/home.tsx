@@ -4,7 +4,8 @@ import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, useDerivedValue, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
@@ -222,7 +223,7 @@ const sk = StyleSheet.create({
 });
 
 export default function HomeScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('home');
   const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();

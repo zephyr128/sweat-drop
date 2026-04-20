@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, Pressable, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -87,7 +88,7 @@ function formatTime(iso: string): string {
 
 export default function WorkoutHistoryScreen() {
   const { t } = useTranslation('history');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();

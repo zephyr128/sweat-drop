@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
@@ -11,7 +11,7 @@ import { log } from '@/lib/logger';
 SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const session = useAuthStore((s) => s.session);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);

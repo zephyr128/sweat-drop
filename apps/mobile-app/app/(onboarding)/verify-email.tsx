@@ -22,7 +22,7 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { theme, fontStyles } from '@/lib/theme';
 import { log } from '@/lib/logger';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useAppModal } from '@/lib/stores/useAppModal';
 
 // ── Email provider deep-links ─────────────────────────────────────────────────
@@ -120,7 +120,7 @@ function buildPublicWebUrl(pathname: string): string | undefined {
 export default function VerifyEmailScreen() {
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
-  const router = useRouter();
+  const router = useThrottledRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const pendingEmail = useAuthStore((s) => s.pendingVerificationEmail);

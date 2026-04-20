@@ -3,7 +3,8 @@ import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -226,7 +227,7 @@ export default function WorkoutScreen() {
   const [isResumingFromPause, setIsResumingFromPause] = useState(false);
   const [signalStatus, setSignalStatus] = useState<'ok' | 'lost'>('ok');
   const [awaitingActivityProof, setAwaitingActivityProof] = useState(false);
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { session: authSession } = useSession();
   const liquidGaugeRef = useRef<LiquidGaugeRef>(null);
   // DropEmitter now uses drops prop instead of imperative API

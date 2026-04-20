@@ -11,7 +11,7 @@ import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
 import { supabase } from '@/lib/supabase';
 import * as SplashScreen from 'expo-splash-screen';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useFonts } from 'expo-font';
 import {
   BebasNeue_400Regular,
@@ -218,7 +218,7 @@ function parseAuthTokensFromUrl(url: string | null): {
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const segments = useSegments();
   const initialize = useAuthStore((s) => s.initialize);
   const isInitialized = useAuthStore((s) => s.isInitialized);

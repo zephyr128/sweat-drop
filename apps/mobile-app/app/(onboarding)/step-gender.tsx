@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 export default function StepGenderScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const isEdit = edit === 'true';
   const { t } = useTranslation('onboarding');

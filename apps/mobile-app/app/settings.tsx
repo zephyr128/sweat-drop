@@ -13,7 +13,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -70,7 +71,7 @@ export default function SettingsScreen() {
   const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();
   const branding = useBranding();
-  const router = useRouter();
+  const router = useThrottledRouter();
   const insets = useSafeAreaInsets();
   const { activeGym } = useGymStore();
 

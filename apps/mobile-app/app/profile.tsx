@@ -2,7 +2,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -69,7 +70,7 @@ function formatMemberSince(iso: string): string {
 }
 
 export default function ProfileScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();

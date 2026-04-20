@@ -10,7 +10,8 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo, useRef, type ComponentProps } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,7 +54,7 @@ function getDaysLeft(dateStr: string): number {
 }
 
 export default function ArenasScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();

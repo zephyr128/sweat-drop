@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams} from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { log } from '@/lib/logger';
 
@@ -19,7 +20,7 @@ import { log } from '@/lib/logger';
  */
 export default function JoinCodeRoute() {
   const { code } = useLocalSearchParams<{ code: string }>();
-  const router = useRouter();
+  const router = useThrottledRouter();
   const setPendingCode = usePendingReferralStore((s) => s.setPendingCode);
 
   useEffect(() => {

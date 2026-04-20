@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -68,7 +69,7 @@ type SummaryPeriod = 'today' | 'week' | 'month' | 'allTime';
 // ────────────────────────────────────────────────────
 
 export default function WalletScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();

@@ -2,7 +2,8 @@ import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, Pressab
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo, useRef, type ComponentProps } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -255,7 +256,7 @@ function ExpandableRows({ expanded, children }: { expanded: boolean; children: R
 }
 
 export default function LeaderboardScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const params = useLocalSearchParams<{ period?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const { session } = useSession();

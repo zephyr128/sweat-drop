@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -23,7 +23,7 @@ import { OnboardingProgress } from '@/components/OnboardingProgress';
 import { log } from '@/lib/logger';
 
 export default function NotificationsScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);

@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams} from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -134,7 +135,7 @@ function getOpenStatus(workingHours: Gym['working_hours']): { isOpen: boolean; l
 }
 
 export default function GymDetailScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { session } = useSession();
   const { t } = useTranslation('gymDetails');
   const showModal = useAppModal((s) => s.showModal);

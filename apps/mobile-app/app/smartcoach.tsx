@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +26,7 @@ interface GymWithPlans {
 
 export default function SmartCoachScreen() {
   const { t } = useTranslation('smartcoach');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { session } = useSession();
   const branding = useBranding();
   const [gyms, setGyms] = useState<GymWithPlans[]>([]);

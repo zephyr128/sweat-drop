@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, AppState } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -93,7 +94,7 @@ export default function SessionSummaryScreen() {
   const [resolvedBadges, setResolvedBadges] = useState<string[] | null>(null);
   const [syncingDrops, setSyncingDrops] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { session: authSession } = useSession();
   const branding = useBranding();
   const insets = useSafeAreaInsets();

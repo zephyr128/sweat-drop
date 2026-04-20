@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,7 +40,7 @@ interface WorkoutPlanItem {
 
 export default function PlanDetailScreen() {
   const { t } = useTranslation('plans');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const params = useLocalSearchParams();
   const planId = params.planId as string;
 

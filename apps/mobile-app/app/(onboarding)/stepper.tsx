@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -24,7 +24,7 @@ const STEP_META: StepMeta[] = [
 ];
 
 export default function StepperScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const setOnboardingStep = useAuthStore((s) => s.setOnboardingStep);
 

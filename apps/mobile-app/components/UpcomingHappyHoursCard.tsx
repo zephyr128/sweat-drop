@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useTranslation } from 'react-i18next';
 import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
 import type { HappyHourWindow } from '@/hooks/useUpcomingHappyHours';
@@ -29,7 +29,7 @@ interface Props {
 
 export function UpcomingHappyHoursCard({ windows, liveWindow }: Props) {
   const { t } = useTranslation();
-  const router = useRouter();
+  const router = useThrottledRouter();
 
   const goToDetail = () => router.push('/happy-hours' as any);
 

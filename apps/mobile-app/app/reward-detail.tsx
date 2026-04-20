@@ -3,7 +3,8 @@ import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { log } from '@/lib/logger';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,7 +45,7 @@ function getPeriodStart(limit: RedemptionLimit, now: Date): Date {
 }
 
 export default function RewardDetailScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const insets = useSafeAreaInsets();
   const { rewardId, gymId } = useLocalSearchParams<{ rewardId: string; gymId?: string }>();
   const { session } = useSession();

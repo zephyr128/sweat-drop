@@ -10,7 +10,8 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -253,7 +254,7 @@ const bannerStyles = StyleSheet.create({
 // ── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ChallengesScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const insets = useSafeAreaInsets();
   const { session } = useSession();

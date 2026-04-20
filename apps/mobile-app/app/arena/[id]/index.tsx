@@ -10,7 +10,8 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo, type ComponentProps } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams} from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -88,7 +89,7 @@ const MEDAL_COLORS = [GOLD, SILVER, BRONZE] as const;
 
 export default function ArenaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('arena');

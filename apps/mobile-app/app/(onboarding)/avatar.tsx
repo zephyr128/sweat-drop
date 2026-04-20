@@ -7,7 +7,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -26,7 +27,7 @@ const AVATARS = [
 ];
 
 export default function AvatarScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const isEdit = edit === 'true';
   const { t } = useTranslation('onboarding');

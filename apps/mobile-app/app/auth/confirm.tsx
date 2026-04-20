@@ -15,7 +15,8 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { supabase } from '@/lib/supabase';
@@ -97,7 +98,7 @@ async function hasActiveAuthSession(): Promise<boolean> {
 }
 
 export default function AuthConfirmScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const params = useLocalSearchParams<{
     token_hash?: string;
     type?: string;

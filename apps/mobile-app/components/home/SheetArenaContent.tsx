@@ -7,7 +7,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { ArenasStatsCards } from '@/components/home/ArenasStatsCards';
 import type { LeaderboardPrize } from '@/hooks/useMyLeaderboardPrizes';
 import { fontStyles, hexToRgba } from '@/lib/theme';
@@ -34,7 +34,7 @@ export const SheetArenaContent = React.memo(function SheetArenaContent({
   onViewAllArenas,
 }: SheetArenaContentProps) {
   const { t } = useTranslation('home');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const arenaPrize = pendingArenaPrizes.find((p) => p.source_type === 'arena_prize') ?? null;
 
   return (

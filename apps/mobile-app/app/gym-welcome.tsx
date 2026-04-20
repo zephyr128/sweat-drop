@@ -3,7 +3,8 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams} from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
@@ -140,7 +141,7 @@ export default function GymWelcomeScreen() {
     planItemId?: string;
     exerciseIndex?: string;
   }>();
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('gymWelcome');
 
   // ── Fetch gym branding from owner_branding (the sole source of truth) ──

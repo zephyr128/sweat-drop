@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
@@ -103,7 +103,7 @@ function HomeGymPickerCard({
 export default function HomeGymScreen() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { theme: currentTheme } = useTheme();
   const { t } = useTranslation('onboarding');
 

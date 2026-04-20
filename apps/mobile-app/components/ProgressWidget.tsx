@@ -1,6 +1,7 @@
 import React, { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useAllBadges } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useUserBadges } from '@/hooks/useUserBadges';
@@ -13,7 +14,7 @@ export interface ProgressWidgetProps {
 
 export const ProgressWidget: React.FC<ProgressWidgetProps> = React.memo(function ProgressWidget({ accentColor }: ProgressWidgetProps) {
   const { t } = useTranslation('home');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const branding = useBranding();
   const { globalAchievements, gymChallenges, refresh: refreshAllBadges } = useAllBadges();
   const { badges: earnedBadges, refresh: refreshEarnedBadges } = useUserBadges();

@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 import { useGymStore, Gym } from '@/lib/stores/useGymStore';
@@ -123,7 +123,7 @@ function GymCard({
 // ── Main Gyms Screen ──────────────────────────
 export default function GymsScreen() {
   const { t } = useTranslation('gyms');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { activeGym } = useTheme();
   const branding = useBranding();
   const { gyms, setGyms, homeGymId, setLoading, isLoading } = useGymStore();

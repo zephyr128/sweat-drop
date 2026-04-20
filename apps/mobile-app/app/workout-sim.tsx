@@ -14,7 +14,8 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, AppState, AppStateStatus, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import Animated, {
   useSharedValue,
   useDerivedValue,
@@ -80,7 +81,7 @@ function formatTime(seconds: number): string {
 export default function WorkoutSimScreen() {
   useKeepAwake();
 
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('workout');
   const { branding, activeGym } = useTheme();
   useBranding();

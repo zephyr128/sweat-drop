@@ -20,7 +20,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
@@ -127,7 +128,7 @@ export function ScannerScreen() {
   // Stepper
   const [devStepperSpm, setDevStepperSpm] = useState(60);
   const [devStepperResistance, setDevStepperResistance] = useState(5);
-  const router = useRouter();
+  const router = useThrottledRouter();
   const params = useLocalSearchParams<{
     planId?: string;
     subscriptionId?: string;

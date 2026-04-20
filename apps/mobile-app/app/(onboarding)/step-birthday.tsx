@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useState, useEffect, useMemo } from 'react';
 import * as Haptics from 'expo-haptics';
 import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
@@ -30,7 +30,7 @@ function calculateAge(dateStr: string): number {
 }
 
 export default function StepBirthdayScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const branding = useBranding();
   const { data, setField, isEdit } = useOnboardingWizard();

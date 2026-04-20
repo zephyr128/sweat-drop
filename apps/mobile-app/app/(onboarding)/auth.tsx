@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -104,7 +104,7 @@ function buildPublicWebUrl(pathname: string): string | undefined {
 }
 
 export default function AuthScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);

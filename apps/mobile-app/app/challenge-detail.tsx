@@ -7,7 +7,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
@@ -171,7 +172,7 @@ function CircularProgressRing({
 
 export default function ChallengeDetailScreen() {
   const { t } = useTranslation('challenges');
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { challengeId, gymId } = useLocalSearchParams<{ challengeId: string; gymId?: string }>();
   const { session } = useSession();
   const [challenge, setChallenge] = useState<any>(null);

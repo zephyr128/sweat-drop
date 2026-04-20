@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useState, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { theme, fontStyles, getNumberStyle } from '@/lib/theme';
@@ -11,7 +11,7 @@ import { useBranding } from '@/lib/contexts/ThemeContext';
 const QUICK_VALUES = [50, 60, 70, 80, 90, 100];
 
 export default function StepWeightScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const branding = useBranding();
   const { data, setField, isEdit } = useOnboardingWizard();

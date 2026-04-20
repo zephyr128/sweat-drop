@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -114,7 +115,7 @@ function buildPublicWebUrl(pathname: string): string | undefined {
 }
 
 export default function ResetLinkSentScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { email } = useLocalSearchParams<{ email: string }>();
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);

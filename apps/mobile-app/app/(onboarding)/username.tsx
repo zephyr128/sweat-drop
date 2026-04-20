@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -21,7 +21,7 @@ import { OnboardingProgress } from '@/components/OnboardingProgress';
 import { useAppModal } from '@/lib/stores/useAppModal';
 
 export default function DisplayNameScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
   const profile = useAuthStore((s) => s.profile);

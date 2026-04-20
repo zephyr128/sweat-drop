@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useBranding } from '@/lib/contexts/ThemeContext';
@@ -40,7 +40,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(
   onPeriodChange,
   onCurrentUserRankChange,
 }) {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('home');

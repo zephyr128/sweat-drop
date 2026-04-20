@@ -1,11 +1,11 @@
 import { TouchableOpacity, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, hexToRgba } from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 
 export default function BackButton() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const branding = useBranding();
 
   return (

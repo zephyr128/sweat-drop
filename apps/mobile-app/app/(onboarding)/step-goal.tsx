@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, fontStyles, hexToRgba} from '@/lib/theme';
@@ -20,7 +20,7 @@ const GOALS: { value: FitnessGoal; icon: IoniconName; color: string; labelKey: s
 ];
 
 export default function StepGoalScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const branding = useBranding();
   const showModal = useAppModal((s) => s.showModal);

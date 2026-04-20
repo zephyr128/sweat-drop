@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, fontStyles } from '@/lib/theme';
 
 export default function NotFoundScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
 
   useEffect(() => {
     const timer = setTimeout(() => {

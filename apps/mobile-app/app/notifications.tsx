@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -123,7 +124,7 @@ export default function NotificationsScreen() {
   const { t: tNotif } = useTranslation('notifications');
   const { branding } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useThrottledRouter();
 
   const {
     items,

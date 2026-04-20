@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -45,7 +45,7 @@ import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAcco
  *      as "Auth session missing!" when the user clicked Save.
  */
 export default function ResetPasswordScreen() {
-  const router = useRouter();
+  const router = useThrottledRouter();
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
