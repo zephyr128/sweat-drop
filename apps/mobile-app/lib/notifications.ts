@@ -71,10 +71,14 @@ type NotificationTrigger =
   | 'weekly_results'
   | 'reengagement_7d'
   | 'reengagement_14d'
+  | 're_engagement'
   | 'drops_expiry_30d'
   | 'drops_expiry_7d'
+  | 'drops_expiring'
   | 'arena_prize'
+  | 'arena_prize_unverified'
   | 'arena_ended'
+  | 'arena_cancelled'
   | 'leaderboard_prize'
   | 'prize_ready'
   | 'reminder'
@@ -82,6 +86,7 @@ type NotificationTrigger =
   | 'happy_hour'
   | 'happy_hour_reminder'
   | 'campaign';
+  // TODO: friend_request, challenge_invite, direct_message — out of scope, follow-up sprint
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  NOTIFICATION HANDLER CONFIGURATION
@@ -328,6 +333,7 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
 
     case 'streak_reminder':
     case 'streak_at_risk':
+    case 're_engagement':
       return '/home';
 
     case 'weekly_results':
@@ -339,9 +345,11 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
 
     case 'drops_expiry_30d':
     case 'drops_expiry_7d':
+    case 'drops_expiring':
       return '/wallet';
 
     case 'arena_prize':
+    case 'arena_prize_unverified':
     case 'leaderboard_prize': {
       // When requires_verification is 'true', append verify=1 so the redemptions
       // screen can auto-open the VerificationSheet to explain the verify step.
@@ -354,6 +362,10 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
     }
 
     case 'arena_ended':
+      if (data.arena_id) return `/arena/${data.arena_id}`;
+      return '/arenas';
+
+    case 'arena_cancelled':
       if (data.arena_id) return `/arena/${data.arena_id}`;
       return '/arenas';
 
@@ -371,7 +383,10 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
       return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/store';
 
     case 'happy_hour':
+      return '/home';
+
     case 'happy_hour_reminder':
+      if (data.gym_id) return `/gym-detail?gymId=${data.gym_id}`;
       return '/home';
 
     case 'campaign':

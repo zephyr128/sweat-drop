@@ -3,7 +3,7 @@ import { Stack, useSegments } from 'expo-router';
 import { ThemeProvider as NavigationThemeProvider, DarkTheme } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useCallback } from 'react';
-import { Platform, Linking, View } from 'react-native';
+import { AppState, Platform, Linking, View } from 'react-native';
 import { ThemeProvider, useTheme } from '@/lib/contexts/ThemeContext';
 import { GymDataInitializer } from '@/components/GymDataInitializer';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -31,6 +31,7 @@ import {
   registerForPushNotifications,
   getPushPermissionStatus,
   savePushToken,
+  clearPushToken,
   addNotificationListeners,
   getInitialNotification,
   getDeepLinkFromNotification,
@@ -502,6 +503,36 @@ export default function RootLayout() {
     const cleanup = addNotificationListeners(handleNotificationTap);
     return cleanup;
   }, [handleNotificationTap]);
+
+  // On app foreground: if permission was revoked, clear the stale push token
+  // so the backend stops trying to send pushes and the inbox banner can appear.
+  useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED || !session?.user?.id) return;
+    const userId = session.user.id;
+
+    const checkPermissionOnForeground = async () => {
+      const status = await getPushPermissionStatus();
+      if (status === 'denied') {
+        const { data } = await supabase
+          .from('profiles')
+          .select('expo_push_token')
+          .eq('id', userId)
+          .single();
+        if (data?.expo_push_token) {
+          await clearPushToken(userId);
+          log.debug('[App] Push permission denied — stale token cleared');
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void checkPermissionOnForeground();
+      }
+    });
+
+    return () => sub.remove();
+  }, [session?.user?.id]);
 
   // Global verification guard to prevent deep-link/restore bypass.
   useEffect(() => {

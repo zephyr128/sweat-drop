@@ -32,6 +32,7 @@ export function useNotifications() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState(false);
 
   const userId = useAuthStore((s) => s.session?.user?.id);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -40,18 +41,20 @@ export function useNotifications() {
   const fetchNotifications = useCallback(async (offset = 0, append = false) => {
     if (!userId) return;
     try {
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('user_notifications')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
-      if (error) {
-        log.warn('[Notifications] fetch error:', error.message);
+      if (fetchError) {
+        log.warn('[Notifications] fetch error:', fetchError.message);
+        setError(true);
         return;
       }
 
+      setError(false);
       const rows = (data ?? []) as AppNotification[];
       setHasMore(rows.length === PAGE_SIZE);
 
@@ -62,6 +65,7 @@ export function useNotifications() {
       }
     } catch (e) {
       log.warn('[Notifications] fetch exception:', e);
+      setError(true);
     }
   }, [userId]);
 
@@ -178,6 +182,7 @@ export function useNotifications() {
       items,
       unreadCount,
       loading,
+      error,
       refreshing,
       hasMore,
       onRefresh,
@@ -185,7 +190,7 @@ export function useNotifications() {
       markRead,
       markAllRead,
     }),
-    [items, unreadCount, loading, refreshing, hasMore, onRefresh, loadMore, markRead, markAllRead],
+    [items, unreadCount, loading, error, refreshing, hasMore, onRefresh, loadMore, markRead, markAllRead],
   );
 }
 

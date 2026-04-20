@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Linking,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -18,7 +20,7 @@ import ScreenHeader from '@/components/ScreenHeader';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { theme as t, hexToRgba, fontStyles } from '@/lib/theme';
 import { useNotifications, type AppNotification } from '@/hooks/useNotifications';
-import { getDeepLinkFromNotification } from '@/lib/notifications';
+import { getDeepLinkFromNotification, getPushPermissionStatus, PUSH_NOTIFICATIONS_ENABLED } from '@/lib/notifications';
 
 // ─── Icon mapping per notification type ──────────────────────────────
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
@@ -127,12 +129,42 @@ export default function NotificationsScreen() {
     items,
     unreadCount,
     loading,
+    error,
     refreshing,
     loadMore,
     onRefresh,
     markRead,
     markAllRead,
   } = useNotifications();
+
+  // Permission banner state
+  const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined' | 'unsupported'>('granted');
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const checkPermission = useCallback(async () => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+    const status = await getPushPermissionStatus();
+    setPermissionStatus(status);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void checkPermission();
+    }, [checkPermission]),
+  );
+
+  const showPermissionBanner =
+    PUSH_NOTIFICATIONS_ENABLED &&
+    !bannerDismissed &&
+    (permissionStatus === 'denied' || permissionStatus === 'undetermined');
+
+  const openSettings = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      void Linking.openURL('app-settings:');
+    } else {
+      void Linking.openSettings();
+    }
+  }, []);
 
   const sections = useMemo(() => buildSections(items, tNotif), [items, tNotif]);
 
@@ -209,6 +241,20 @@ export default function NotificationsScreen() {
 
   const ListEmpty = useMemo(() => {
     if (loading) return null;
+    if (error) {
+      return (
+        <View style={styles.emptyWrap}>
+          <View style={[styles.emptyIcon, { backgroundColor: hexToRgba('#FF5252', 0.08) }]}>
+            <Ionicons name="alert-circle-outline" size={48} color={hexToRgba('#FF5252', 0.5)} />
+          </View>
+          <Text style={styles.emptyTitle}>{tNotif('errorTitle')}</Text>
+          <Text style={styles.emptyHint}>{tNotif('errorHint')}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRefresh} activeOpacity={0.7}>
+            <Text style={[styles.retryButtonText, { color: branding.primary }]}>{tNotif('retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
       <View style={styles.emptyWrap}>
         <View style={[styles.emptyIcon, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
@@ -218,7 +264,7 @@ export default function NotificationsScreen() {
         <Text style={styles.emptyHint}>{tNotif('emptyHint')}</Text>
       </View>
     );
-  }, [loading, branding.primary, tNotif]);
+  }, [loading, error, branding.primary, tNotif, onRefresh]);
 
   return (
     <View style={styles.container}>
@@ -243,6 +289,23 @@ export default function NotificationsScreen() {
           ) : undefined
         }
       />
+
+      {/* Permission denied / undetermined banner */}
+      {showPermissionBanner && (
+        <View style={styles.permissionBanner}>
+          <Ionicons name="notifications-off-outline" size={18} color="#FF9100" style={styles.bannerIcon} />
+          <Text style={styles.bannerText}>{tNotif('permissionBannerText')}</Text>
+          <TouchableOpacity onPress={openSettings} activeOpacity={0.7} style={styles.bannerCta}>
+            <Text style={[styles.bannerCtaText, { color: branding.primary }]}>{tNotif('permissionBannerCta')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setBannerDismissed(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close-outline" size={18} color="rgba(255,255,255,0.4)" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {loading && items.length === 0 ? (
         <View style={styles.center}>
@@ -373,7 +436,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  // Empty state
+  // Empty / error state
   emptyWrap: {
     alignItems: 'center',
     paddingHorizontal: 40,
@@ -399,5 +462,50 @@ const styles = StyleSheet.create({
     color: t.colors.textTertiary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  retryButtonText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 14,
+  },
+
+  // Permission banner
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,145,0,0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,145,0,0.2)',
+    gap: 8,
+  },
+  bannerIcon: {
+    flexShrink: 0,
+  },
+  bannerText: {
+    ...fontStyles.body,
+    fontSize: 12,
+    color: t.colors.textSecondary,
+    flex: 1,
+    lineHeight: 17,
+  },
+  bannerCta: {
+    flexShrink: 0,
+  },
+  bannerCtaText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 12,
   },
 });
