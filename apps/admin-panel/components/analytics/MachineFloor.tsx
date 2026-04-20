@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   QrCode,
   Save,
+  Printer,
 } from 'lucide-react';
 
 const POLL_INTERVAL = 15_000;
@@ -487,13 +488,27 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
             </div>
           )}
         </div>
-        <Link
-          href={`/dashboard/gym/${gymId}/machines/analytics`}
-          className="px-5 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-[#808080] hover:text-white hover:border-[#00E5FF]/50 rounded-lg font-medium transition-colors inline-flex items-center gap-2 text-sm self-start"
-        >
-          <BarChart3 className="w-4 h-4" />
-          Analytics
-        </Link>
+        <div className="flex items-center gap-2 self-start">
+          {canEditMachines && (
+            <Link
+              href={`/print-qr/batch?gymId=${gymId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-[#808080] hover:text-white hover:border-[#00E5FF]/50 rounded-lg font-medium transition-colors inline-flex items-center gap-2 text-sm"
+              title="Batch print all machine stickers + a paper install manifest"
+            >
+              <Printer className="w-4 h-4" />
+              Print Kit
+            </Link>
+          )}
+          <Link
+            href={`/dashboard/gym/${gymId}/machines/analytics`}
+            className="px-4 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-[#808080] hover:text-white hover:border-[#00E5FF]/50 rounded-lg font-medium transition-colors inline-flex items-center gap-2 text-sm"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Analytics
+          </Link>
+        </div>
       </div>
 
       <StatusSummaryBar summary={data.summary} isConnected={isConnected} />

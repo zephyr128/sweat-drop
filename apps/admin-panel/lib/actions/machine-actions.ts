@@ -155,7 +155,7 @@ export async function updateMachine(
     }
 
     // Gym owners/admins can only update name and type
-    if (profile.role === 'gym_admin' || profile.role === 'superadmin') {
+    if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'superadmin') {
       const updateData: any = {};
       if (input.name !== undefined) updateData.name = input.name;
       if (input.type !== undefined) updateData.type = input.type;
@@ -384,6 +384,88 @@ export async function toggleMaintenance(
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+}
+
+export interface PrintBatchMachine {
+  id: string;
+  name: string;
+  type: string;
+  qr_uuid: string;
+  is_active: boolean;
+  is_under_maintenance: boolean;
+}
+
+export interface PrintBatchPayload {
+  gym: { id: string; name: string };
+  machines: PrintBatchMachine[];
+}
+
+/**
+ * Returns all machines for a gym ordered for the Print Studio batch flow
+ * (name-sorted so the printed stickers and the manifest checklist line up).
+ *
+ * Used by `/print-qr/batch` to generate a single "install kit" — one multi-page
+ * sticker PDF + an A4 manifest that the installer carries into the gym.
+ */
+export async function getMachinesForPrintBatch(
+  gymId: string,
+): Promise<{ success: true; data: PrintBatchPayload } | { success: false; error: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { success: false, error: 'Not authenticated' };
+    const allowed = ['superadmin', 'gym_owner', 'gym_admin'];
+    if (!allowed.includes(profile.role)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available.' };
+    }
+
+    const gymQuery = await supabaseAdmin
+      .from('gyms')
+      .select('id, name')
+      .eq('id', gymId)
+      .single();
+    const machinesQuery = await supabaseAdmin
+      .from('machines')
+      .select('id, name, type, qr_uuid, unique_qr_code, is_active, is_under_maintenance')
+      .eq('gym_id', gymId)
+      .order('name', { ascending: true });
+
+    const gymData = gymQuery.data as any;
+    const gymError = gymQuery.error;
+    const machinesData = machinesQuery.data as any[] | null;
+    const machinesError = machinesQuery.error;
+
+    if (gymError || !gymData) {
+      return { success: false, error: gymError?.message || 'Gym not found' };
+    }
+    if (machinesError) {
+      return { success: false, error: machinesError.message };
+    }
+
+    const machines: PrintBatchMachine[] = (machinesData || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      // Fall back to `unique_qr_code` for older rows that don't have `qr_uuid` populated.
+      qr_uuid: row.qr_uuid || row.unique_qr_code || row.id,
+      is_active: !!row.is_active,
+      is_under_maintenance: !!row.is_under_maintenance,
+    }));
+
+    return {
+      success: true,
+      data: {
+        gym: { id: gymData.id, name: gymData.name },
+        machines,
+      },
+    };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to load machines' };
   }
 }
 

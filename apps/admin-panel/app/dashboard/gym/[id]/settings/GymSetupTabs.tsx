@@ -120,7 +120,11 @@ export function GymSetupTabs({
       )}
 
       {activeTab === 'location' && (
-        <CheckinSettingsModule gymId={gymId} initialData={checkinData} />
+        <CheckinSettingsModule
+          gymId={gymId}
+          gymName={gymData.name}
+          initialData={checkinData}
+        />
       )}
 
       {activeTab === 'branding' && showBranding && (

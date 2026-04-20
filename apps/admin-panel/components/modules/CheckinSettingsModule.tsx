@@ -9,6 +9,8 @@ import { updateGymCheckinSettings, type CheckinVerificationMode } from '@/lib/ac
 
 interface CheckinSettingsModuleProps {
   gymId: string;
+  /** Human-readable gym name (e.g. "Vortex") — used on the printed check-in QR. */
+  gymName: string;
   initialData: {
     checkin_drops: number;
     lat: number | null;
@@ -30,7 +32,7 @@ const RADIUS_PRESETS = [
   { label: '500m', value: 500 },
 ];
 
-export function CheckinSettingsModule({ gymId, initialData }: CheckinSettingsModuleProps) {
+export function CheckinSettingsModule({ gymId, gymName, initialData }: CheckinSettingsModuleProps) {
   const [checkinDrops, setCheckinDrops] = useState(initialData.checkin_drops);
   const [verificationMode, setVerificationMode] = useState<CheckinVerificationMode>(
     initialData.checkin_verification_mode === 'strict' ? 'strict' : 'lenient',
@@ -201,7 +203,14 @@ export function CheckinSettingsModule({ gymId, initialData }: CheckinSettingsMod
               {checkinDrops > 0 && (
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => window.open(`/print-qr?gymId=${gymId}&gymName=${encodeURIComponent(initialData.city || 'Gym')}&type=checkin`, '_blank')}
+                    onClick={() => {
+                      const params = new URLSearchParams({
+                        type: 'checkin',
+                        gymId,
+                        gymName: gymName || 'Gym',
+                      });
+                      window.open(`/print-qr?${params.toString()}`, '_blank');
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] border border-[#333] rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
                   >
                     <Printer className="w-3 h-3" />
