@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -4259,6 +4260,26 @@ export type Database = {
       get_user_role: {
         Args: { p_user_id: string }
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      get_user_transactions: {
+        Args: {
+          p_amount_sign?: string
+          p_gym_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_types?: string[]
+        }
+        Returns: {
+          amount: number
+          balance_after: number
+          created_at: string
+          description: string
+          gym_id: string
+          id: string
+          redemption_status: string
+          reference_id: string
+          transaction_type: string
+        }[]
       }
       get_wallet_summary: {
         Args: { p_gym_id?: string }
