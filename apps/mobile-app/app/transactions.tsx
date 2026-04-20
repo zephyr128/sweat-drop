@@ -1,14 +1,24 @@
 /**
  * SWEATDROP — Transaction History Screen
  *
- * AGENT NOTE: [2026-04-02] - mobile-coder
- * Reference: docs/plans/bugfix_transaction_list_cancel_redemption_push_notifications.md
- * Bug #1 Step 2: Full-screen paginated transaction history with type filters and balance_after.
+ * AGENT NOTE: [2026-04-20] - mobile-coder
+ * Reference: docs/plans/bugfix_redemption_cancel_and_pending_spent_transactions.md Step 5
+ *
+ * Changes vs previous version:
+ *   - Data source switched from drops_transactions direct select → get_user_transactions RPC
+ *     which returns redemption_status so we can distinguish confirmed vs pending reward claims.
+ *   - New TxFilter values: 'pending' and 'refunded' (per QA suggestion to separate Earned/Refunded).
+ *   - 'refund' removed from 'earned' filter; it now lives exclusively in 'refunded'.
+ *   - 'spent' filter applies client-side redemption_status guard: only confirmed reward_claim/
+ *     redemption rows count as spent. Pending ones appear under 'pending'.
+ *   - renderItem shows amber "Pending" badge + amber colour for unconfirmed reward claims,
+ *     and dims cancelled rows (shows them under 'all' / 'rewards' with strikethrough).
  *
  * Related files:
  *   - apps/mobile-app/app/wallet.tsx (entry point via "See all")
  *   - apps/mobile-app/app/home.tsx (entry point via recent activity)
  *   - apps/mobile-app/app/_layout.tsx (route registration)
+ *   - backend/supabase/migrations/20260420000003_get_user_transactions_rpc.sql (new RPC)
  */
 import {
   View,
@@ -42,7 +52,11 @@ import { formatTime as fmtTime, formatDate as fmtDate } from '@/lib/utils/format
 //  Types & constants
 // ────────────────────────────────────────────────────
 
-type TxFilter = 'all' | 'earned' | 'spent' | 'rewards' | 'expired';
+// AGENT NOTE: [2026-04-20] - mobile-coder
+// 'pending' and 'refunded' are new filter buckets. 'refund' removed from 'earned'.
+// onlyConfirmed / pendingOnly are post-fetch client-side guards on redemption_status
+// because the RPC returns all matching types and we slice by status in the render layer.
+type TxFilter = 'all' | 'earned' | 'spent' | 'pending' | 'refunded' | 'rewards' | 'expired';
 
 interface TxRow {
   id: string;
@@ -52,6 +66,8 @@ interface TxRow {
   description: string | null;
   created_at: string;
   gym_id: string | null;
+  reference_id: string | null;
+  redemption_status: string | null;
 }
 
 const TX_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -71,13 +87,29 @@ const TX_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   leaderboard_prize: 'podium-outline',
 };
 
-const FILTER_TYPES: Record<TxFilter, string[] | null> = {
-  all: null,
-  earned: ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak', 'milestone', 'refund', 'leaderboard_prize'],
-  spent: ['redemption', 'reward_claim', 'arena_entry'],
-  rewards: ['redemption', 'reward_claim', 'leaderboard_prize'],
-  expired: ['expired'],
+// onlyConfirmed: after fetching, keep only reward_claim/redemption rows whose
+//   redemption_status = 'confirmed' (others show under 'pending').
+// pendingOnly: keep only reward_claim/redemption rows whose redemption_status
+//   is 'pending' or 'pending_verification'.
+interface FilterDef {
+  types: string[] | null;
+  sign?: 'negative' | 'positive';
+  onlyConfirmed?: boolean;
+  pendingOnly?: boolean;
+}
+
+const FILTER_TYPES: Record<TxFilter, FilterDef> = {
+  all:      { types: null },
+  earned:   { types: ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward', 'streak', 'milestone', 'leaderboard_prize'], sign: 'positive' },
+  spent:    { types: ['reward_claim', 'redemption', 'arena_entry'], sign: 'negative', onlyConfirmed: true },
+  pending:  { types: ['reward_claim', 'redemption'], sign: 'negative', pendingOnly: true },
+  refunded: { types: ['refund'], sign: 'positive' },
+  rewards:  { types: ['reward_claim', 'redemption', 'leaderboard_prize'] },
+  expired:  { types: ['expired'] },
 };
+
+const isRedemptionType = (type: string) =>
+  type === 'reward_claim' || type === 'redemption';
 
 const FILTER_OPTIONS: {
   key: TxFilter;
@@ -86,11 +118,13 @@ const FILTER_OPTIONS: {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
 }[] = [
-  { key: 'all',     labelKey: 'filterAll',     descKey: 'filterAllDesc',     icon: 'list-outline',         color: '#FFFFFF'  },
-  { key: 'earned',  labelKey: 'filterEarned',   descKey: 'filterEarnedDesc',  icon: 'water-outline',        color: '#4CD964'  },
-  { key: 'spent',   labelKey: 'filterSpent',    descKey: 'filterSpentDesc',   icon: 'bag-outline',          color: '#FF3B30'  },
-  { key: 'rewards', labelKey: 'filterRewards',  descKey: 'filterRewardsDesc', icon: 'gift-outline',         color: '#FFD700'  },
-  { key: 'expired', labelKey: 'filterExpired',  descKey: 'filterExpiredDesc', icon: 'hourglass-outline',    color: '#94a3b8'  },
+  { key: 'all',      labelKey: 'filterAll',      descKey: 'filterAllDesc',      icon: 'list-outline',         color: '#FFFFFF'  },
+  { key: 'earned',   labelKey: 'filterEarned',    descKey: 'filterEarnedDesc',   icon: 'water-outline',        color: '#4CD964'  },
+  { key: 'spent',    labelKey: 'filterSpent',     descKey: 'filterSpentDesc',    icon: 'bag-outline',          color: '#FF3B30'  },
+  { key: 'pending',  labelKey: 'filterPending',   descKey: 'filterPendingDesc',  icon: 'time-outline',         color: '#fbbf24'  },
+  { key: 'refunded', labelKey: 'filterRefunded',  descKey: 'filterRefundedDesc', icon: 'arrow-undo-outline',   color: '#60a5fa'  },
+  { key: 'rewards',  labelKey: 'filterRewards',   descKey: 'filterRewardsDesc',  icon: 'gift-outline',         color: '#FFD700'  },
+  { key: 'expired',  labelKey: 'filterExpired',   descKey: 'filterExpiredDesc',  icon: 'hourglass-outline',    color: '#94a3b8'  },
 ];
 
 const PAGE_SIZE = 20;
@@ -231,57 +265,73 @@ export default function TransactionsScreen() {
   const pageRef = useRef(0);
   const loadingRef = useRef(false);
 
+  // Client-side filter applied after fetching: for spent/pending filters,
+  // gate on redemption_status to separate confirmed from in-flight claims.
+  const applyStatusFilter = useCallback(
+    (rows: TxRow[], filterDef: FilterDef): TxRow[] => {
+      if (filterDef.onlyConfirmed) {
+        return rows.filter((r) =>
+          !isRedemptionType(r.transaction_type) || r.redemption_status === 'confirmed',
+        );
+      }
+      if (filterDef.pendingOnly) {
+        return rows.filter(
+          (r) =>
+            isRedemptionType(r.transaction_type) &&
+            (r.redemption_status === 'pending' || r.redemption_status === 'pending_verification'),
+        );
+      }
+      return rows;
+    },
+    [],
+  );
+
   const loadTransactions = useCallback(
     async (page: number) => {
       if (!session?.user) return;
       if (loadingRef.current) return;
       loadingRef.current = true;
       try {
-        const from = page * PAGE_SIZE;
-        // Fetch one extra row to detect if more pages exist
-        const to = from + PAGE_SIZE;
+        const filterDef = FILTER_TYPES[activeFilter];
 
-        const filterTypes = FILTER_TYPES[activeFilter];
-        const isSpentFilter = activeFilter === 'spent';
+        // Fetch an extra row to detect if more pages exist
+        const rpcLimit = PAGE_SIZE + 1;
+        const rpcOffset = page * PAGE_SIZE;
 
-        let query = supabase
-          .from('drops_transactions')
-          .select('id, transaction_type, amount, balance_after, description, created_at, gym_id')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .range(from, to);
+        const { data, error } = await (supabase.rpc as any)('get_user_transactions', {
+          p_gym_id:       gymScope ?? null,
+          p_types:        filterDef.types ?? null,
+          p_amount_sign:  filterDef.sign ?? null,
+          p_limit:        rpcLimit,
+          p_offset:       rpcOffset,
+        });
 
-        if (gymScope) query = query.eq('gym_id', gymScope);
-        if (filterTypes) query = query.in('transaction_type', filterTypes);
-        if (isSpentFilter) query = query.lt('amount', 0);
-
-        const { data, error } = await query;
         if (error) {
           log.error('[Transactions] Load error:', error.message);
           return;
         }
 
-        const allRows = data ?? [];
-        // If we got PAGE_SIZE + 1 rows, there are more pages (range is inclusive: 0..19 = 20 rows)
-        const hasNextPage = allRows.length > PAGE_SIZE;
-        const rows: TxRow[] = allRows.slice(0, PAGE_SIZE).map((r) => ({
+        const allRows: TxRow[] = (data ?? []).map((r: any) => ({
           id: r.id,
           transaction_type: r.transaction_type,
           amount: r.amount ?? 0,
           balance_after: r.balance_after ?? null,
           description: r.description ?? null,
           created_at: r.created_at,
-          gym_id: r.gym_id,
+          gym_id: r.gym_id ?? null,
+          reference_id: r.reference_id ?? null,
+          redemption_status: r.redemption_status ?? null,
         }));
 
+        const hasNextPage = allRows.length > PAGE_SIZE;
+        const pageRows = applyStatusFilter(allRows.slice(0, PAGE_SIZE), filterDef);
+
         if (page === 0) {
-          setTransactions(rows);
+          setTransactions(pageRows);
         } else {
           setTransactions((prev) => {
-            // Deduplicate by id to prevent duplicate key warnings
             const existingIds = new Set(prev.map((t) => t.id));
-            const newRows = rows.filter((r) => !existingIds.has(r.id));
-            return [...prev, ...newRows];
+            return [...prev, ...pageRows.filter((r) => !existingIds.has(r.id))];
           });
         }
         setHasMore(hasNextPage);
@@ -292,7 +342,7 @@ export default function TransactionsScreen() {
         loadingRef.current = false;
       }
     },
-    [session?.user, activeFilter, gymScope],
+    [session?.user, activeFilter, gymScope, applyStatusFilter],
   );
 
   const refreshAll = useCallback(async () => {
@@ -359,12 +409,27 @@ export default function TransactionsScreen() {
 
   const renderItem = useCallback(
     ({ item: tx, index }: { item: TxRow; index: number }) => {
+      const isPendingClaim =
+        isRedemptionType(tx.transaction_type) &&
+        (tx.redemption_status === 'pending' || tx.redemption_status === 'pending_verification');
+      const isCancelledClaim =
+        isRedemptionType(tx.transaction_type) && tx.redemption_status === 'cancelled';
+
       const isPositive = tx.amount >= 0;
-      const amountColor = isPositive ? branding.primary : '#FF3B30';
+      // Pending claims show in amber; cancelled claims dim; everything else normal.
+      const amountColor = isPendingClaim
+        ? '#fbbf24'
+        : isPositive
+        ? branding.primary
+        : '#FF3B30';
       const amountStr = `${isPositive ? '+' : ''}${tx.amount.toLocaleString()}`;
+      const rowOpacity = isCancelledClaim ? 0.45 : 1;
 
       return (
-        <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 300)).duration(350)}>
+        <Animated.View
+          entering={FadeInDown.delay(Math.min(index * 30, 300)).duration(350)}
+          style={{ opacity: rowOpacity }}
+        >
           <View
             style={[
               styles.txRow,
@@ -381,15 +446,29 @@ export default function TransactionsScreen() {
             </View>
 
             <View style={styles.txInfo}>
-              <Text style={styles.txLabel} numberOfLines={1}>
-                {getTxLabel(tx)}
-              </Text>
+              <View style={styles.txLabelRow}>
+                {isPendingClaim && (
+                  <View style={styles.pendingBadge}>
+                    <Text style={styles.pendingBadgeText}>{t('pendingBadge')}</Text>
+                  </View>
+                )}
+                <Text style={styles.txLabel} numberOfLines={1}>
+                  {getTxLabel(tx)}
+                </Text>
+              </View>
               <Text style={styles.txDate}>{formatDate(tx.created_at)}</Text>
             </View>
 
             <View style={styles.txRight}>
               <View style={styles.txAmountRow}>
-                <Text style={[styles.txAmount, getNumberStyle(15), { color: amountColor }]}>
+                <Text
+                  style={[
+                    styles.txAmount,
+                    getNumberStyle(15),
+                    { color: amountColor },
+                    isCancelledClaim && styles.txAmountStrike,
+                  ]}
+                >
                   {amountStr}
                 </Text>
                 <Ionicons name="water" size={13} color={amountColor} />
@@ -404,7 +483,7 @@ export default function TransactionsScreen() {
         </Animated.View>
       );
     },
-    [transactions.length, branding.primary],
+    [transactions.length, branding.primary, t],
   );
 
   // ── Active filter display ──
@@ -614,11 +693,36 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 2,
   },
+  txLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'nowrap',
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(251,191,36,0.15)',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    flexShrink: 0,
+  },
+  pendingBadgeText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 9,
+    color: '#fbbf24',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   txLabel: {
     ...fontStyles.bodySemiBold,
     fontSize: 14,
     color: theme.colors.text,
     letterSpacing: 0.2,
+    flexShrink: 1,
+  },
+  txAmountStrike: {
+    textDecorationLine: 'line-through',
+    opacity: 0.6,
   },
   txDate: {
     ...fontStyles.body,

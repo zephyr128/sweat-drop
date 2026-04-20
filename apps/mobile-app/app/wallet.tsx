@@ -438,6 +438,7 @@ export default function WalletScreen() {
                       <Ionicons name="water" size={12} color="rgba(255,59,48,0.5)" />
                       <Text style={styles.summaryDropsLabel}>drops</Text>
                     </View>
+                    <Text style={styles.summarySpentHint}>{t('spentHint')}</Text>
                   </View>
                 </View>
 
@@ -754,6 +755,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1,
     color: 'rgba(255,255,255,0.25)',
+  },
+  summarySpentHint: {
+    ...fontStyles.body,
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.20)',
+    letterSpacing: 0.2,
+    marginTop: 2,
+    textAlign: 'center',
   },
   summaryDivider: {
     width: StyleSheet.hairlineWidth,

@@ -341,24 +341,52 @@ export default function RedemptionsScreen() {
     showModal({ title: t('copied'), body: t('codeCopied') });
   };
 
+  // AGENT NOTE: [2026-04-20] - mobile-coder
+  // Reference: docs/plans/bugfix_redemption_cancel_and_pending_spent_transactions.md Step 4
+  // Fixes Bug #1: item stays on-screen after cancel.
+  // Fix A — optimistic removal from ALL tab caches before showing modal so it
+  //   disappears immediately regardless of refetch timing on slow devices.
+  // Fix B — await load() instead of fire-and-forget so server state is
+  //   reconciled before the user can interact again.
+  // Fix C — also reload 'cancelled' tab so cancelled item appears there.
+  // Fix D — error branch also reloads to avoid stale state.
   const doCancel = async (redemption: any) => {
     setCancellingId(redemption.id);
     try {
       const { data, error } = await supabase.rpc('cancel_own_redemption', { p_redemption_id: redemption.id });
       if (error) {
         showModal({ title: t('cancelError'), body: error.message });
+        await load(activeFilter);
       } else {
         const result = Array.isArray(data) ? data[0] : data;
         if (result?.success) {
+          // Optimistically remove the cancelled row from every tab cache so the
+          // UI is correct before the server round-trip completes.
+          setTabStates((prev) => {
+            const next = { ...prev };
+            for (const key of Object.keys(next) as StatusFilter[]) {
+              next[key] = {
+                ...next[key],
+                data: next[key].data.filter((row: any) => row.id !== redemption.id),
+              };
+            }
+            return next;
+          });
           showModal({ title: t('cancelSuccess'), body: t('cancelSuccessDesc', { drops: redemption.drops_spent }) });
-          void load(activeFilter);
+          // Await reconciliation; also refresh 'cancelled' tab so it appears there.
+          await load(activeFilter);
+          if (activeFilter !== 'cancelled') {
+            void load('cancelled');
+          }
         } else {
           showModal({ title: t('cancelError'), body: result?.error_message || t('cancelErrorDesc') });
+          await load(activeFilter);
         }
       }
     } catch (err: any) {
       log.error('Error cancelling redemption:', err);
       showModal({ title: t('cancelError'), body: err?.message || t('cancelErrorDesc') });
+      await load(activeFilter);
     } finally {
       setCancellingId(null);
     }
