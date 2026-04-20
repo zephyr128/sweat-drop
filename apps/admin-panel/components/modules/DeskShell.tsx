@@ -13,8 +13,9 @@ import {
   Clock,
   Wifi,
   WifiOff,
-  UserPlus,
   Ticket,
+  Package,
+  PackageCheck,
 } from 'lucide-react';
 import { getGymCheckinStats, getGymCheckinsPaginated } from '@/lib/actions/gym-actions';
 import { supabase } from '@/lib/supabase-client';
@@ -22,8 +23,10 @@ import { MemberAvatar } from '@/components/MemberAvatar';
 import { MemberIdentityVerifyDrawer } from '@/components/modules/MemberIdentityVerifyDrawer';
 import { RedemptionVerifier } from '@/components/modules/RedemptionVerifier';
 import { RedemptionsList } from '@/components/modules/RedemptionsList';
+import { UnverifiedCheckinsModal } from '@/components/modules/UnverifiedCheckinsModal';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
-import { getPendingRedemptionCount } from '@/lib/actions/redemption-actions';
+import { getRedemptionKpiCounts } from '@/lib/actions/redemption-actions';
+import type { RedemptionKpiCounts } from '@/lib/actions/redemption-actions';
 
 interface DeskShellProps {
   gymId: string;
@@ -63,12 +66,22 @@ function relativeTime(dateStr: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+type FulfillmentFilter = 'all' | 'awaiting_shipment' | 'ready_to_collect';
+
 export function DeskShell({ gymId }: DeskShellProps) {
   const router = useRouter();
   const [stats, setStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pendingRedemptions, setPendingRedemptions] = useState(0);
+  const [redemptionKpi, setRedemptionKpi] = useState<RedemptionKpiCounts>({
+    pending: 0, awaitingShipment: 0, readyToCollect: 0,
+  });
+
+  // Lifted from RedemptionsList so KPI cards can drive it
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentFilter>('all');
+
+  // Unverified quick-verify modal
+  const [unverifiedModalOpen, setUnverifiedModalOpen] = useState(false);
 
   const [verifyTarget, setVerifyTarget] = useState<{
     userId: string;
@@ -78,6 +91,30 @@ export function DeskShell({ gymId }: DeskShellProps) {
 
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const dataRef = useRef<Checkin[]>([]);
+
+  // Ref for smooth scroll-to-queue on Awaiting/Ready KPI click
+  const queueRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollIntoView = (el: HTMLElement | null) => {
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // KPI click handlers — each is a single, obvious action
+  const handleClickAwaiting = useCallback(() => {
+    setFulfillmentFilter('awaiting_shipment');
+    scrollIntoView(queueRef.current);
+  }, []);
+  const handleClickReady = useCallback(() => {
+    setFulfillmentFilter('ready_to_collect');
+    scrollIntoView(queueRef.current);
+  }, []);
+  const handleClickUnverified = useCallback(() => {
+    setUnverifiedModalOpen(true);
+  }, []);
+  const handleClickToday = useCallback(() => {
+    router.push(`/dashboard/gym/${gymId}/checkin`);
+  }, [router, gymId]);
 
   const fetchCheckins = useCallback(async () => {
     const res = await getGymCheckinsPaginated(gymId, { page: 1, limit: 10, gpsFilter: 'all' });
@@ -94,9 +131,18 @@ export function DeskShell({ gymId }: DeskShellProps) {
   }, [gymId]);
 
   const fetchPendingRedemptions = useCallback(async () => {
-    const count = await getPendingRedemptionCount(gymId);
-    setPendingRedemptions(count);
+    const counts = await getRedemptionKpiCounts(gymId);
+    setRedemptionKpi(counts);
   }, [gymId]);
+
+  // After any action in the queue (Mark as received / Confirm / Cancel) the
+  // row's state often no longer matches the active fulfillment filter, which
+  // makes it look like rows "disappear". Reset filter + refetch counts so the
+  // receptionist always sees a fresh, complete queue.
+  const handleRedemptionActionComplete = useCallback(() => {
+    setFulfillmentFilter('all');
+    fetchPendingRedemptions();
+  }, [fetchPendingRedemptions]);
 
   useEffect(() => {
     fetchCheckins();
@@ -184,14 +230,16 @@ export function DeskShell({ gymId }: DeskShellProps) {
 
   return (
     <div className="space-y-5">
-      {/* ── Top: KPI Row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* ── Top: KPI Row — every card is a one-click shortcut to its job ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KPICard
           icon={Calendar}
           label="Today"
           value={stats?.today ?? 0}
           accent="text-[#00E5FF]"
           loading={loading}
+          onClick={handleClickToday}
+          hint="Open full check-in log"
         />
         <KPICard
           icon={TrendingUp}
@@ -199,13 +247,30 @@ export function DeskShell({ gymId }: DeskShellProps) {
           value={stats?.week ?? 0}
           accent="text-emerald-400"
           loading={loading}
+          onClick={handleClickToday}
+          hint="Open full check-in log"
         />
         <KPICard
-          icon={Ticket}
-          label="Pending Pickups"
-          value={pendingRedemptions}
-          accent={pendingRedemptions > 0 ? 'text-amber-400' : 'text-zinc-400'}
+          icon={Package}
+          label="Awaiting shipment"
+          value={redemptionKpi.awaitingShipment}
+          accent={redemptionKpi.awaitingShipment > 0 ? 'text-blue-400' : 'text-zinc-400'}
           loading={loading}
+          onClick={handleClickAwaiting}
+          hint="Prizes that have arrived at the gym — click to mark received"
+          active={fulfillmentFilter === 'awaiting_shipment'}
+          disabled={redemptionKpi.awaitingShipment === 0}
+        />
+        <KPICard
+          icon={PackageCheck}
+          label="Ready to collect"
+          value={redemptionKpi.readyToCollect}
+          accent={redemptionKpi.readyToCollect > 0 ? 'text-emerald-400' : 'text-zinc-400'}
+          loading={loading}
+          onClick={handleClickReady}
+          hint="Members who can collect their reward now"
+          active={fulfillmentFilter === 'ready_to_collect'}
+          disabled={redemptionKpi.readyToCollect === 0}
         />
         <KPICard
           icon={ShieldAlert}
@@ -213,6 +278,10 @@ export function DeskShell({ gymId }: DeskShellProps) {
           value={unverifiedCount}
           accent={unverifiedCount > 0 ? 'text-amber-400' : 'text-emerald-400'}
           loading={loading}
+          onClick={handleClickUnverified}
+          hint="Open list of unverified members and verify each one quickly"
+          active={unverifiedModalOpen}
+          disabled={unverifiedCount === 0}
         />
       </div>
 
@@ -327,20 +396,79 @@ export function DeskShell({ gymId }: DeskShellProps) {
       </div>
 
       {/* ── Bottom: Redemptions Queue ── */}
-      <div>
+      <div ref={queueRef} className="scroll-mt-4">
         <div className="flex items-center gap-2 mb-3">
           <Ticket className="w-4 h-4 text-zinc-500" />
           <h3 className="text-sm font-semibold text-white">Redemption Queue</h3>
-          {pendingRedemptions > 0 && (
+          {redemptionKpi.pending > 0 && (
             <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-400 min-w-[18px] text-center">
-              {pendingRedemptions}
+              {redemptionKpi.pending}
             </span>
           )}
         </div>
-        <RedemptionsList gymId={gymId} onActionComplete={fetchPendingRedemptions} />
+
+        {/* Active filter banner — makes it obvious the queue is narrowed */}
+        {fulfillmentFilter !== 'all' && (
+          <div className="mb-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[#00E5FF]/5 border border-[#00E5FF]/20">
+            <div className="flex items-center gap-2 min-w-0">
+              {fulfillmentFilter === 'awaiting_shipment' ? (
+                <Package className="w-4 h-4 text-blue-400 shrink-0" />
+              ) : (
+                <PackageCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              )}
+              <p className="text-xs text-zinc-300 truncate">
+                Showing only{' '}
+                <span className={
+                  fulfillmentFilter === 'awaiting_shipment'
+                    ? 'text-blue-400 font-semibold'
+                    : 'text-emerald-400 font-semibold'
+                }>
+                  {fulfillmentFilter === 'awaiting_shipment' ? 'Awaiting shipment' : 'Ready to collect'}
+                </span>
+                {' '}— other redemptions are hidden
+              </p>
+            </div>
+            <button
+              onClick={() => setFulfillmentFilter('all')}
+              className="shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold text-[#00E5FF] bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 transition-colors"
+            >
+              Show all
+            </button>
+          </div>
+        )}
+
+        <RedemptionsList
+          gymId={gymId}
+          onActionComplete={handleRedemptionActionComplete}
+          fulfillmentFilter={fulfillmentFilter}
+          onFulfillmentFilterChange={setFulfillmentFilter}
+        />
       </div>
 
-      {/* Verify drawer/modal */}
+      {/* Unverified quick-verify modal (z-40) — opens from Unverified KPI card */}
+      {unverifiedModalOpen && (
+        <UnverifiedCheckinsModal
+          checkins={checkins
+            .filter((c) => !c.identity_verified)
+            .map((c) => ({
+              id: c.id,
+              user_id: c.user_id,
+              username: c.username,
+              avatar_url: c.avatar_url,
+              checked_in_at: c.checked_in_at,
+            }))}
+          onClose={() => setUnverifiedModalOpen(false)}
+          onVerifyClick={(c) =>
+            setVerifyTarget({
+              userId: c.user_id,
+              username: c.username,
+              avatarUrl: c.avatar_url,
+            })
+          }
+        />
+      )}
+
+      {/* Verify drawer (z-50) — layers on top of the unverified modal when open */}
       {verifyTarget && (
         <MemberIdentityVerifyDrawer
           gymId={gymId}
@@ -361,26 +489,70 @@ function KPICard({
   value,
   accent,
   loading,
+  onClick,
+  hint,
+  active = false,
+  disabled = false,
 }: {
   icon: typeof Calendar;
   label: string;
   value: number;
   accent: string;
   loading: boolean;
+  onClick?: () => void;
+  hint?: string;
+  active?: boolean;
+  disabled?: boolean;
 }) {
-  return (
-    <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl px-4 py-3 flex items-center gap-3">
+  const isInteractive = Boolean(onClick) && !disabled;
+
+  const baseClasses =
+    'bg-[#0A0A0A] border rounded-xl px-4 py-3 flex items-center gap-3 text-left w-full transition-all';
+  const borderClasses = active
+    ? 'border-[#00E5FF]/60 ring-1 ring-[#00E5FF]/30'
+    : 'border-[#1A1A1A]';
+  const interactiveClasses = isInteractive
+    ? 'hover:border-[#2A2A2A] hover:bg-[#0F0F0F] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/40'
+    : disabled
+    ? 'opacity-70 cursor-not-allowed'
+    : '';
+
+  const content = (
+    <>
       <div className="w-8 h-8 rounded-lg bg-[#111] flex items-center justify-center shrink-0">
         <Icon className={`w-4 h-4 ${accent}`} />
       </div>
-      <div>
+      <div className="min-w-0">
         {loading ? (
           <div className="h-6 w-8 bg-zinc-800/50 rounded animate-pulse" />
         ) : (
           <div className={`text-lg font-bold ${accent}`}>{value.toLocaleString()}</div>
         )}
-        <div className="text-[10px] text-zinc-600 uppercase tracking-wider">{label}</div>
+        <div className="text-[10px] text-zinc-600 uppercase tracking-wider truncate">{label}</div>
       </div>
+    </>
+  );
+
+  if (isInteractive) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={hint}
+        aria-label={hint ? `${label} — ${hint}` : label}
+        className={`${baseClasses} ${borderClasses} ${interactiveClasses}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      title={hint}
+      className={`${baseClasses} ${borderClasses} ${interactiveClasses}`}
+    >
+      {content}
     </div>
   );
 }

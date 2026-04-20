@@ -183,7 +183,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
 
   // ── Receptionist — locked desk-operator scope ──────────────────
   // Desk already covers verify + redemptions queue + live activity.
-  // No Store link needed — avoids redundant nav.
+  // Arena prizes: receptionist handles Job A (mark received) via fulfillment page.
   const receptionistGroups = (gymId?: string | null): NavGroup[] => {
     const base = gymId ? `/dashboard/gym/${gymId}` : '/dashboard';
     return [
@@ -193,6 +193,12 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
           { href: `${base}/desk`, label: 'Desk', icon: ShieldCheck, badge: pendingRedemptionCount, badgeColor: 'amber' },
           { href: `${base}/checkin`, label: 'Check-in', icon: QrCode },
           { href: `${base}/activity`, label: 'Activity Log', icon: ScrollText },
+        ],
+      },
+      {
+        title: 'PRIZES',
+        items: [
+          { href: '/dashboard/arenas', label: 'Arena prizes', icon: Swords },
         ],
       },
     ];

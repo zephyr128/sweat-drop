@@ -3,42 +3,99 @@
 import { useState, useCallback, useEffect, useTransition, useRef } from 'react';
 import {
   Ticket, Clock, CheckCircle2, XCircle, Droplet, User,
-  Gift, Loader2, X, Trophy, Swords, ShoppingBag,
+  Gift, Loader2, X, Trophy, Swords, ShoppingBag, Package, PackageCheck, ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
 import { listRedemptions } from '@/lib/actions/list-actions';
 import type { RedemptionRow } from '@/lib/actions/list-helpers';
 import { confirmRedemption, cancelRedemption } from '@/lib/actions/redemption-actions';
+import { markRedemptionFulfilled } from '@/lib/actions/redemption-fulfillment-actions';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { LiveIndicator } from '@/components/ui/LiveIndicator';
 import type { PaginatedResult } from '@/lib/actions/list-helpers';
 
+// Fulfillment sub-filter applied client-side (no extra round-trip)
+type FulfillmentFilter = 'all' | 'awaiting_shipment' | 'ready_to_collect';
+
 interface RedemptionsListProps {
   gymId: string;
   onActionComplete?: () => void;
+  /** Optional controlled fulfillment filter. When provided, makes the chips controlled. */
+  fulfillmentFilter?: FulfillmentFilter;
+  onFulfillmentFilterChange?: (next: FulfillmentFilter) => void;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'confirmed') {
-    return (
-      <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-medium">
-        <CheckCircle2 className="w-3.5 h-3.5" /> Confirmed
-      </span>
-    );
+// ── Helpers ───────────────────────────────────────────────────────
+
+type PhysicalSourceType = 'arena_prize' | 'leaderboard_prize';
+const PHYSICAL_SOURCES: PhysicalSourceType[] = ['arena_prize', 'leaderboard_prize'];
+
+function isPhysical(row: RedemptionRow): boolean {
+  return PHYSICAL_SOURCES.includes(row.source_type as PhysicalSourceType);
+}
+
+/**
+ * Derives the display state for a redemption used by both StatusBadge and the modal action logic.
+ *
+ * - pending_verification → must verify identity first
+ * - awaiting_shipment    → physical reward, not yet received at gym
+ * - ready_to_collect     → fulfilled or store reward — member can come pick up
+ * - confirmed            → handed over
+ * - cancelled            → cancelled
+ */
+type DisplayState =
+  | 'pending_verification'
+  | 'awaiting_shipment'
+  | 'ready_to_collect'
+  | 'confirmed'
+  | 'cancelled';
+
+function getDisplayState(row: RedemptionRow): DisplayState {
+  if (row.status === 'confirmed') return 'confirmed';
+  if (row.status === 'cancelled') return 'cancelled';
+  if (row.status === 'pending_verification') return 'pending_verification';
+  // status === 'pending'
+  if (isPhysical(row) && !row.fulfilled_at) return 'awaiting_shipment';
+  return 'ready_to_collect';
+}
+
+// ── StatusBadge ───────────────────────────────────────────────────
+
+function StatusBadge({ row }: { row: RedemptionRow }) {
+  const state = getDisplayState(row);
+  switch (state) {
+    case 'confirmed':
+      return (
+        <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-medium">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Confirmed
+        </span>
+      );
+    case 'cancelled':
+      return (
+        <span className="inline-flex items-center gap-1 text-zinc-500 text-xs font-medium">
+          <XCircle className="w-3.5 h-3.5" /> Cancelled
+        </span>
+      );
+    case 'pending_verification':
+      return (
+        <span className="inline-flex items-center gap-1 text-orange-400 text-xs font-medium">
+          <ShieldAlert className="w-3.5 h-3.5" /> Pending verification
+        </span>
+      );
+    case 'awaiting_shipment':
+      return (
+        <span className="inline-flex items-center gap-1 text-blue-400 text-xs font-medium">
+          <Package className="w-3.5 h-3.5" /> Awaiting shipment
+        </span>
+      );
+    case 'ready_to_collect':
+      return (
+        <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-medium">
+          <PackageCheck className="w-3.5 h-3.5" /> Ready to collect
+        </span>
+      );
   }
-  if (status === 'cancelled') {
-    return (
-      <span className="inline-flex items-center gap-1 text-zinc-500 text-xs font-medium">
-        <XCircle className="w-3.5 h-3.5" /> Cancelled
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-amber-400 text-xs font-medium">
-      <Clock className="w-3.5 h-3.5" /> Pending
-    </span>
-  );
 }
 
 function formatDate(d: string) {
@@ -70,7 +127,6 @@ function SourceBadge({ sourceType }: { sourceType: string | null }) {
 function getDisplayName(row: RedemptionRow): string {
   if (row.reward_name) return row.reward_name;
   if (row.description) {
-    // Strip the "Leaderboard Prize: #1 ..." prefix if present, return the prize name part
     const dashIdx = row.description.indexOf(' — ');
     if (dashIdx !== -1) return row.description.slice(dashIdx + 3);
     return row.description;
@@ -120,7 +176,7 @@ const COLUMNS: ColumnDef<RedemptionRow>[] = [
     key: 'status',
     label: 'Status',
     sortable: true,
-    render: (row) => <StatusBadge status={row.status} />,
+    render: (row) => <StatusBadge row={row} />,
   },
   {
     key: 'created_at',
@@ -145,6 +201,8 @@ const FILTERS: FilterDef[] = [
   },
 ];
 
+// ── RedemptionDetailModal ─────────────────────────────────────────
+
 function RedemptionDetailModal({
   row,
   gymId,
@@ -157,6 +215,24 @@ function RedemptionDetailModal({
   onDone: () => void;
 }) {
   const [processing, setProcessing] = useState(false);
+  const state = getDisplayState(row);
+
+  const handleMarkReceived = async () => {
+    setProcessing(true);
+    try {
+      const res = await markRedemptionFulfilled(row.id);
+      if (res.success) {
+        toast.success('Prize marked as received — member notified!');
+        onDone();
+      } else {
+        toast.error(res.error || 'Failed to mark as received');
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Unexpected error');
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const handleConfirm = async () => {
     setProcessing(true);
@@ -200,11 +276,23 @@ function RedemptionDetailModal({
   };
 
   const statusColor =
-    row.status === 'pending'
-      ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-      : row.status === 'confirmed'
+    state === 'confirmed'
       ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-      : 'bg-zinc-800 text-zinc-500 border-zinc-700';
+      : state === 'cancelled'
+      ? 'bg-zinc-800 text-zinc-500 border-zinc-700'
+      : state === 'pending_verification'
+      ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+      : state === 'awaiting_shipment'
+      ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'; // ready_to_collect
+
+  const statusLabel: Record<typeof state, string> = {
+    confirmed: 'Confirmed',
+    cancelled: 'Cancelled',
+    pending_verification: 'Pending verification',
+    awaiting_shipment: 'Awaiting shipment',
+    ready_to_collect: 'Ready to collect',
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -236,7 +324,7 @@ function RedemptionDetailModal({
         <div className="p-5 space-y-4">
           <div className="flex items-center justify-center">
             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${statusColor}`}>
-              {row.status}
+              {statusLabel[state]}
             </span>
           </div>
 
@@ -271,6 +359,16 @@ function RedemptionDetailModal({
             </div>
           </div>
 
+          {row.fulfilled_at && (
+            <div className="bg-zinc-900/60 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <PackageCheck className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Received at gym</span>
+              </div>
+              <p className="text-sm text-blue-400">{formatDate(row.fulfilled_at)}</p>
+            </div>
+          )}
+
           {row.confirmed_at && (
             <div className="bg-zinc-900/60 rounded-xl p-3">
               <div className="flex items-center gap-2 mb-1">
@@ -287,32 +385,71 @@ function RedemptionDetailModal({
         </div>
 
         {/* Actions */}
-        {row.status === 'pending' && (
-          <div className="flex gap-2 p-5 pt-0">
-            <button
-              onClick={handleConfirm}
-              disabled={processing}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#00E5FF] text-black rounded-xl text-sm font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50"
-            >
-              {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Confirm & Hand Over
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={processing}
-              className="flex items-center justify-center gap-2 px-4 py-3 border border-[#FF5252]/30 text-[#FF5252] rounded-xl text-sm font-medium hover:bg-[#FF5252]/10 transition-colors disabled:opacity-50"
-            >
-              <XCircle className="w-4 h-4" />
-              Reject
-            </button>
-          </div>
-        )}
+        <div className="p-5 pt-0 space-y-2">
+          {state === 'pending_verification' && (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-orange-500/10 border border-orange-500/20">
+              <ShieldAlert className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-orange-300">
+                Member identity not yet verified. Use <strong>Verify</strong> in the Recent Check-ins panel before handing over any reward.
+              </p>
+            </div>
+          )}
+
+          {state === 'awaiting_shipment' && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleMarkReceived}
+                disabled={processing}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-500 transition-colors disabled:opacity-50"
+              >
+                {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
+                Mark as received
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={processing}
+                className="flex items-center justify-center gap-2 px-4 py-3 border border-[#FF5252]/30 text-[#FF5252] rounded-xl text-sm font-medium hover:bg-[#FF5252]/10 transition-colors disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                Reject
+              </button>
+            </div>
+          )}
+
+          {state === 'ready_to_collect' && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirm}
+                disabled={processing}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#00E5FF] text-black rounded-xl text-sm font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50"
+              >
+                {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Confirm & Hand Over
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={processing}
+                className="flex items-center justify-center gap-2 px-4 py-3 border border-[#FF5252]/30 text-[#FF5252] rounded-xl text-sm font-medium hover:bg-[#FF5252]/10 transition-colors disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                Reject
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProps) {
+// ── RedemptionsList ───────────────────────────────────────────────
+
+export function RedemptionsList({
+  gymId,
+  onActionComplete,
+  fulfillmentFilter: fulfillmentFilterProp,
+  onFulfillmentFilterChange,
+}: RedemptionsListProps) {
   const [data, setData] = useState<PaginatedResult<RedemptionRow>>({
     items: [], total: 0, page: 1, limit: 25, totalPages: 1,
   });
@@ -322,6 +459,16 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
     filters: { status: 'all' },
   });
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [fulfillmentFilterInner, setFulfillmentFilterInner] =
+    useState<FulfillmentFilter>('all');
+
+  // Controlled when prop is provided, uncontrolled otherwise
+  const fulfillmentFilter = fulfillmentFilterProp ?? fulfillmentFilterInner;
+  const setFulfillmentFilter = (next: FulfillmentFilter) => {
+    if (onFulfillmentFilterChange) onFulfillmentFilterChange(next);
+    if (fulfillmentFilterProp === undefined) setFulfillmentFilterInner(next);
+  };
+
   const [selectedRow, setSelectedRow] = useState<RedemptionRow | null>(null);
 
   const fetchData = useCallback((q: DataTableQuery) => {
@@ -333,7 +480,7 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
         sortBy: q.sortBy,
         sortDir: q.sortDir,
         filters: {
-          status: (q.filters?.status as 'all' | 'pending' | 'confirmed' | 'cancelled') || 'all',
+          status: (q.filters?.status as 'all' | 'pending' | 'pending_verification' | 'confirmed' | 'cancelled') || 'all',
         },
       });
       if (result.success) setData(result.data);
@@ -363,13 +510,18 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
     onActionComplete?.();
   }, [fetchData, query, onActionComplete]);
 
-  const displayedItems = sourceFilter === 'all'
+  // Apply source + fulfillment filters client-side
+  let displayedItems = sourceFilter === 'all'
     ? data.items
     : data.items.filter((r) => (r.source_type || 'reward_store') === sourceFilter);
 
+  if (fulfillmentFilter !== 'all') {
+    displayedItems = displayedItems.filter((r) => getDisplayState(r) === fulfillmentFilter);
+  }
+
   return (
     <>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         {/* Source type chip filter */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {(['all', 'reward_store', 'leaderboard_prize', 'arena_prize'] as const).map((st) => {
@@ -399,6 +551,41 @@ export function RedemptionsList({ gymId, onActionComplete }: RedemptionsListProp
               >
                 <Icon className="w-3 h-3" />
                 {meta.label}
+              </button>
+            );
+          })}
+
+          {/* Fulfillment sub-filter chips */}
+          <div className="w-px h-4 bg-zinc-800 mx-1" />
+          {([
+            { value: 'all' as FulfillmentFilter, label: 'All states' },
+            { value: 'awaiting_shipment' as FulfillmentFilter, label: 'Awaiting shipment', icon: Package, color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+            { value: 'ready_to_collect' as FulfillmentFilter, label: 'Ready to collect', icon: PackageCheck, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+          ]).map(({ value, label, icon: Icon, color }) => {
+            const isActive = fulfillmentFilter === value;
+            if (value === 'all') {
+              return (
+                <button
+                  key="ff-all"
+                  onClick={() => setFulfillmentFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                    isActive ? 'bg-zinc-700 text-white' : 'bg-[#1A1A1A] text-[#808080] hover:text-white border border-[#333]'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            }
+            return (
+              <button
+                key={value}
+                onClick={() => setFulfillmentFilter(value)}
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all border ${
+                  isActive ? `${color} opacity-100` : 'bg-[#1A1A1A] text-[#808080] hover:text-white border-[#333]'
+                }`}
+              >
+                {Icon && <Icon className="w-3 h-3" />}
+                {label}
               </button>
             );
           })}
