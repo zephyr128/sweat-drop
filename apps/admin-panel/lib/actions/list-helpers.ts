@@ -27,7 +27,7 @@ export interface MemberRow {
 }
 
 export interface RedemptionFilters {
-  status?: 'all' | 'pending' | 'confirmed' | 'cancelled';
+  status?: 'all' | 'pending' | 'pending_verification' | 'confirmed' | 'cancelled';
 }
 
 export interface RedemptionRow {
@@ -38,12 +38,13 @@ export interface RedemptionRow {
   reward_id: string;
   reward_name: string | null;
   drops_spent: number;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: 'pending' | 'pending_verification' | 'confirmed' | 'cancelled';
   redemption_code: string;
   source_type: string | null;
   description: string | null;
   created_at: string;
   confirmed_at: string | null;
+  fulfilled_at: string | null;
 }
 
 export interface StoreItemFilters {

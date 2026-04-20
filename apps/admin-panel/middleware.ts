@@ -207,6 +207,18 @@ export async function middleware(req: NextRequest) {
 
       const RECEPTIONIST_ALLOWED = ['/desk', '/checkin', '/activity', '/members'];
 
+      // Receptionist may access the global arenas list and individual arena
+      // fulfillment pages — RLS on get_arena_fulfillment_manifest already
+      // scopes results to their assigned gym via _admin_check_gym_access.
+      const isArenasAllowed =
+        pathname === '/dashboard/arenas' ||
+        pathname.startsWith('/dashboard/arenas/');
+
+      if (isArenasAllowed) {
+        // Allow through — no gym-id in URL for arena routes
+        return res;
+      }
+
       if (gymIdFromUrl) {
         if (profile.assigned_gym_id !== gymIdFromUrl) {
           return NextResponse.redirect(new URL(deskUrl, req.url));

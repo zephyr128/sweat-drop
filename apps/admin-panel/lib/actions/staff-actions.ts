@@ -133,7 +133,13 @@ export async function getStaffMembers(gymId: string) {
     const { data: staffData, error: staffError } = await supabase
       .rpc('get_gym_staff', { p_gym_id: gymId });
 
-    if (!staffError && staffData) {
+    // Invited staff update profiles (assigned_gym_id) but may have no gym_staff row;
+    // empty [] is truthy so we must fall through to profiles when there are no rows.
+    if (
+      !staffError &&
+      Array.isArray(staffData) &&
+      staffData.length > 0
+    ) {
       return { success: true, data: staffData };
     }
 

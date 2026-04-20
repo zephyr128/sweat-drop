@@ -27,6 +27,54 @@ export async function getPendingRedemptionCount(gymId: string): Promise<number> 
   }
 }
 
+export interface RedemptionKpiCounts {
+  pending: number;
+  awaitingShipment: number;
+  readyToCollect: number;
+}
+
+/**
+ * Returns three KPI counts for the Desk shell in a single query.
+ * awaitingShipment: physical prizes not yet received at gym
+ * readyToCollect:   store rewards + physical prizes already received
+ */
+export async function getRedemptionKpiCounts(gymId: string): Promise<RedemptionKpiCounts> {
+  const zero = { pending: 0, awaitingShipment: 0, readyToCollect: 0 };
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return zero;
+    const allowed = ['superadmin', 'gym_owner', 'gym_admin', 'receptionist'];
+    if (!allowed.includes(profile.role)) return zero;
+
+    const supabase = getAdminClient();
+    if (!supabase) return zero;
+
+    const { data, error } = await supabase
+      .from('redemptions')
+      .select('source_type, fulfilled_at')
+      .eq('gym_id', gymId)
+      .in('status', ['pending', 'pending_verification']);
+
+    if (error || !data) return zero;
+
+    let awaitingShipment = 0;
+    let readyToCollect = 0;
+    const physicalSources = ['arena_prize', 'leaderboard_prize'];
+
+    for (const r of data as { source_type: string | null; fulfilled_at: string | null }[]) {
+      if (physicalSources.includes(r.source_type ?? '') && !r.fulfilled_at) {
+        awaitingShipment++;
+      } else {
+        readyToCollect++;
+      }
+    }
+
+    return { pending: data.length, awaitingShipment, readyToCollect };
+  } catch {
+    return zero;
+  }
+}
+
 export async function confirmRedemption(redemptionId: string, gymId: string) {
   try {
     const profile = await getCurrentProfile();
