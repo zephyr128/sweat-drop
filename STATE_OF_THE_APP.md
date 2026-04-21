@@ -6,7 +6,7 @@
 
 ## 🎯 Current Focus
 
-**Mobile App UI/UX Redesign Complete — Preparing for Production Polish**
+**External pilot release - Vortex**
 
 The mobile app has undergone a **complete UI/UX redesign** establishing a premium fitness app aesthetic with dynamic gym branding, glassmorphism, and consistent design language across all 12+ screens. The BLE sensor integration remains in progress as a parallel track.
 
