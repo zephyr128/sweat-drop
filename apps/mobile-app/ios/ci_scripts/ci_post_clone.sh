@@ -55,6 +55,34 @@ ENV
 
 echo ".env generated for Xcode Cloud build"
 
+# ── 3b. Apply environment-specific iOS app icon assets ──
+# We keep ios/SweatDrop/Images.xcassets/AppIcon.appiconset/Contents.json intact
+# (it includes iPad entries), and only replace PNG assets for production builds.
+APP_ENV_VALUE="${EXPO_PUBLIC_APP_ENV:-production}"
+IOS_APPICON_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/ios/SweatDrop/Images.xcassets/AppIcon.appiconset"
+PROD_APPICON_SOURCE_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/assets/Assets.xcassets/AppIcon.appiconset"
+
+if [ "$APP_ENV_VALUE" = "production" ]; then
+  if [ -d "$IOS_APPICON_DIR" ] && [ -d "$PROD_APPICON_SOURCE_DIR" ]; then
+    echo "Applying PRODUCTION iOS app icon assets..."
+    rsync -av \
+      --exclude "Contents.json" \
+      "$PROD_APPICON_SOURCE_DIR/" \
+      "$IOS_APPICON_DIR/"
+
+    # Keep the legacy 1024 naming used by some iOS project templates in sync.
+    if [ -f "$IOS_APPICON_DIR/1024.png" ]; then
+      cp "$IOS_APPICON_DIR/1024.png" "$IOS_APPICON_DIR/App-Icon-1024x1024@1x.png"
+    fi
+  else
+    echo "WARNING: App icon directories missing, skipping production icon sync."
+    echo "  source=$PROD_APPICON_SOURCE_DIR"
+    echo "  target=$IOS_APPICON_DIR"
+  fi
+else
+  echo "Skipping production iOS icon sync (EXPO_PUBLIC_APP_ENV=$APP_ENV_VALUE)."
+fi
+
 # ── 4. Install monorepo dependencies ──
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 pnpm install --frozen-lockfile
