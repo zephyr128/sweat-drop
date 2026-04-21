@@ -202,7 +202,7 @@ function BatchPrintContent() {
       <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
         <div className="max-w-md rounded-xl border border-red-500/40 bg-red-500/5 p-6 text-center">
           <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-400" />
-          <div className="mb-1 text-sm font-semibold">Couldn't open Batch Studio</div>
+          <div className="mb-1 text-sm font-semibold">Couldn&apos;t open Batch Studio</div>
           <div className="text-xs text-zinc-400">{error ?? 'Unknown error'}</div>
         </div>
       </div>
@@ -577,8 +577,8 @@ function ManifestPages({
               </div>
               <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
                 {machines.length} {machines.length === 1 ? 'machine' : 'machines'} · Format{' '}
-                {preset.label} · Headline "{cta.line1}
-                {cta.line2 ? ` ${cta.line2}` : ''}"
+                {preset.label} · Headline &quot;{cta.line1}
+                {cta.line2 ? ` ${cta.line2}` : ''}&quot;
               </div>
             </div>
             <div style={{ textAlign: 'right', fontSize: 10, color: '#666' }}>
@@ -613,12 +613,12 @@ function ManifestPages({
                 Installer checklist
               </div>
               <div>
-                1. Keep stickers in order (1 → {machines.length}). Don't mix up the pile.
+                1. Keep stickers in order (1 → {machines.length}). Don&apos;t mix up the pile.
                 <br />
                 2. Go machine-by-machine in the order listed below.
                 <br />
                 3. Apply the sticker, scan it with your phone, verify the app opens with the
-                matching machine name, then tick the box in the "Done" column.
+                matching machine name, then tick the box in the &quot;Done&quot; column.
                 <br />
                 4. Removable vinyl — if you placed one wrong, peel and reapply (no residue).
               </div>

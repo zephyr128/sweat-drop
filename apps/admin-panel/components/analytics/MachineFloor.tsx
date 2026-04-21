@@ -18,6 +18,11 @@ import {
   registerBLEDevice,
   getMachineQRMap,
 } from '@/lib/actions/machine-actions';
+import {
+  getGymDemoMachines,
+  toggleDemoMachine,
+  type DemoMachineRow,
+} from '@/lib/actions/demo-machines';
 import { StatusSummaryBar } from './StatusSummaryBar';
 import type { MachineCardAction } from './MachineGrid';
 import { MachineFloorGrid } from './MachineFloorGrid';
@@ -88,6 +93,8 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
   }>({ step: 'idle' });
   const [isPairing, setIsPairing] = useState(false);
   const [qrMap, setQrMap] = useState<Record<string, { qr_uuid: string | null; unique_qr_code: string }>>({});
+  const [demoMachines, setDemoMachines] = useState<DemoMachineRow[]>([]);
+  const [updatingDemoMachineId, setUpdatingDemoMachineId] = useState<string | null>(null);
 
   const isSuperAdmin = userRole === 'superadmin';
   const canCreateMachines = isSuperAdmin;
@@ -109,6 +116,16 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
     setQrMap(map);
   }, [gymId]);
 
+  const fetchDemoMachines = useCallback(async () => {
+    if (!isSuperAdmin) return;
+    const result = await getGymDemoMachines(gymId);
+    if (result.success && result.data) {
+      setDemoMachines(result.data);
+      return;
+    }
+    toast.error(result.error || 'Failed to load demo machine settings');
+  }, [gymId, isSuperAdmin]);
+
   // --- Live monitor logic ---
   const fetchData = useCallback(async () => {
     const result = await getLiveMachineStatus(gymId);
@@ -122,7 +139,7 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
     setLoading(false);
   }, [gymId]);
 
-  useEffect(() => { fetchData(); fetchQRMap(); }, [fetchData, fetchQRMap]);
+  useEffect(() => { fetchData(); fetchQRMap(); fetchDemoMachines(); }, [fetchData, fetchQRMap, fetchDemoMachines]);
 
   useEffect(() => {
     tickRef.current = setInterval(() => setTick((t) => t + 1), 1000);
@@ -443,6 +460,39 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  const handleToggleDemoMachine = async (machine: DemoMachineRow) => {
+    const shouldEnable = !machine.is_demo_machine;
+    const confirmed = await confirmAction({
+      title: shouldEnable ? 'Enable Demo Machine' : 'Disable Demo Machine',
+      message: shouldEnable
+        ? 'Mark this machine as a demo machine? Apple/Google reviewers and internal QA will be able to start simulator workouts attached to this machine. Real members can still scan it normally.'
+        : 'Stop exposing this machine to demo simulators?',
+      confirmLabel: shouldEnable ? 'Enable Demo' : 'Disable Demo',
+      variant: shouldEnable ? 'default' : 'danger',
+    });
+    if (!confirmed) return;
+
+    setUpdatingDemoMachineId(machine.id);
+    try {
+      const result = await toggleDemoMachine({
+        machine_id: machine.id,
+        is_demo_machine: shouldEnable,
+      });
+      if (!result.success) {
+        toast.error(result.error || 'Failed to update demo machine flag');
+        return;
+      }
+      toast.success(
+        shouldEnable
+          ? `${machine.name} marked as demo machine`
+          : `${machine.name} removed from demo machines`,
+      );
+      await fetchDemoMachines();
+    } finally {
+      setUpdatingDemoMachineId(null);
+    }
+  };
+
   // --- Render ---
   if (loading) {
     return (
@@ -512,6 +562,84 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
       </div>
 
       <StatusSummaryBar summary={data.summary} isConnected={isConnected} />
+
+      {isSuperAdmin && (
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#1A1A1A]">
+            <h3 className="text-sm font-semibold text-white">Demo Machine Access</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Reviewer and internal QA simulator mapping. Real users still scan machines normally.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px]">
+              <thead className="bg-[#121212]">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs uppercase tracking-wide text-zinc-500">Machine</th>
+                  <th className="px-4 py-2.5 text-left text-xs uppercase tracking-wide text-zinc-500">Type</th>
+                  <th className="px-4 py-2.5 text-left text-xs uppercase tracking-wide text-zinc-500">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs uppercase tracking-wide text-zinc-500">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1A1A1A]">
+                {demoMachines.map((machine) => {
+                  const isUpdating = updatingDemoMachineId === machine.id;
+                  return (
+                    <tr key={machine.id} className="hover:bg-[#111111] transition-colors">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-white">{machine.name}</span>
+                          {machine.is_demo_machine && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                              DEMO
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-zinc-400">{machine.type}</td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border ${
+                            machine.is_demo_machine
+                              ? 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+                              : 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30'
+                          }`}
+                        >
+                          {machine.is_demo_machine ? 'Demo enabled' : 'Regular machine'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          onClick={() => handleToggleDemoMachine(machine)}
+                          disabled={isUpdating}
+                          className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                            machine.is_demo_machine
+                              ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
+                              : 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF]/30 hover:bg-[#00E5FF]/25'
+                          }`}
+                        >
+                          {isUpdating
+                            ? 'Saving...'
+                            : machine.is_demo_machine
+                              ? 'Disable demo'
+                              : 'Enable demo'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {demoMachines.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-500">
+                      No machines available for this gym.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <MachineFloorGrid
         gymId={gymId}

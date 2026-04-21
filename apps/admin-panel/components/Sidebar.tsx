@@ -114,6 +114,7 @@ export function Sidebar({ role, currentGymId, username: _username, email: _email
   const superadminLinks: NavLink[] = [
     { href: '/dashboard/super', label: 'Gyms', icon: Building2 },
     { href: '/dashboard/super/owners', label: 'Owners', icon: Users },
+    { href: '/dashboard/demo-users', label: 'Demo Users', icon: UserCog },
     { href: '/dashboard/super/waitlist', label: 'Waitlist', icon: ListTodo, badge: pendingWaitlistCount, badgeColor: 'amber' },
     { href: '/dashboard/super/machines', label: 'Global Machines', icon: Cpu },
     { href: '/dashboard/super/achievements', label: 'Achievements', icon: Award },

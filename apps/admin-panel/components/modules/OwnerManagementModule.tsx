@@ -538,7 +538,7 @@ export function OwnerManagementModule({
                     </p>
                   )}
                   {entry.reason && (
-                    <p className="text-[#808080] italic">"{entry.reason}"</p>
+                    <p className="text-[#808080] italic">&quot;{entry.reason}&quot;</p>
                   )}
                 </div>
               ))

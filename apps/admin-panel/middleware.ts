@@ -150,6 +150,9 @@ export async function middleware(req: NextRequest) {
       if (pathname.startsWith('/dashboard/super')) {
         return NextResponse.redirect(new URL('/dashboard/owner', req.url));
       }
+      if (pathname.startsWith('/dashboard/demo-users')) {
+        return NextResponse.redirect(new URL('/dashboard/owner', req.url));
+      }
       if (pathname === '/dashboard' || pathname === '/dashboard/') {
         return NextResponse.redirect(new URL('/dashboard/owner', req.url));
       }
@@ -167,6 +170,12 @@ export async function middleware(req: NextRequest) {
     // ── GYM ADMIN ─────────────────────────────────────────────────────────────
     else if (profile.role === 'gym_admin') {
       if (pathname.startsWith('/dashboard/super') || pathname.startsWith('/dashboard/owner')) {
+        const dest = profile.assigned_gym_id
+          ? `/dashboard/gym/${profile.assigned_gym_id}/dashboard`
+          : '/404';
+        return NextResponse.redirect(new URL(dest, req.url));
+      }
+      if (pathname.startsWith('/dashboard/demo-users')) {
         const dest = profile.assigned_gym_id
           ? `/dashboard/gym/${profile.assigned_gym_id}/dashboard`
           : '/404';
@@ -200,6 +209,10 @@ export async function middleware(req: NextRequest) {
       const deskUrl = profile.assigned_gym_id
         ? `/dashboard/gym/${profile.assigned_gym_id}/desk`
         : '/404';
+
+      if (pathname.startsWith('/dashboard/demo-users')) {
+        return NextResponse.redirect(new URL(deskUrl, req.url));
+      }
 
       if (pathname.startsWith('/dashboard/super') || pathname.startsWith('/dashboard/owner')) {
         return NextResponse.redirect(new URL(deskUrl, req.url));
