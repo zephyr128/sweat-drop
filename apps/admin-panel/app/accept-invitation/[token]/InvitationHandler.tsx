@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-client';
 import { toast } from 'sonner';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 export default function InvitationHandler({ token }: { token: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [invitation, setInvitation] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const hasAutoAcceptedRef = useRef(false);
 
   useEffect(() => {
     checkAuthAndLoadInvitation();
@@ -165,6 +167,16 @@ export default function InvitationHandler({ token }: { token: string }) {
     // Redirect to sign up with email pre-filled
     router.push(`/signup?email=${encodeURIComponent(invitation.email)}&invite=${token}`);
   };
+
+  useEffect(() => {
+    if (hasAutoAcceptedRef.current) return;
+    if (!invitation || !isAuthenticated || accepting) return;
+    if (searchParams.get('confirmed') !== 'true') return;
+
+    hasAutoAcceptedRef.current = true;
+    void handleAccept();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invitation, isAuthenticated, accepting, searchParams]);
 
   if (loading) {
     return (

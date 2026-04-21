@@ -191,3 +191,19 @@ export function buildAdminPasswordResetEmailHtml(vars: {
     ctaLabel: 'Reset Password',
   });
 }
+
+export function buildAdminEmailConfirmHtml(vars: {
+  confirmUrl: string;
+  gymName?: string;
+}): string {
+  const gymText = vars.gymName
+    ? ` to manage <strong style="color:#fff">${vars.gymName}</strong> on`
+    : ' to access';
+
+  return wrapEmailHtml({
+    heading: 'Verify your email',
+    bodyText: `You've been invited${gymText} <strong style="color:#00E5FF">SweatDrop Admin</strong>.<br><br>Please confirm your email address to activate your account and accept your invitation.`,
+    acceptUrl: vars.confirmUrl,
+    ctaLabel: 'Verify Email',
+  });
+}

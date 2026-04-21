@@ -10,7 +10,8 @@ import type { NextRequest } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tokenHash = searchParams.get('token_hash');
-  const type = searchParams.get('type') as 'email' | 'recovery' | null;
+  const type = searchParams.get('type') as 'email' | 'recovery' | 'magiclink' | null;
+  const next = searchParams.get('next');
 
   const baseUrl = request.nextUrl.origin;
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   const { error } = await supabase.auth.verifyOtp({
     token_hash: tokenHash,
-    type: type === 'recovery' ? 'recovery' : 'email',
+    type: type === 'recovery' ? 'recovery' : type === 'magiclink' ? 'magiclink' : 'email',
   });
 
   if (error) {
@@ -38,6 +39,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/auth/reset`);
   }
 
-  // Email confirmation — redirect to login with success flag
+  // Email/magiclink confirmation — redirect to safe local path when provided
+  if (next && next.startsWith('/')) {
+    const sep = next.includes('?') ? '&' : '?';
+    return NextResponse.redirect(`${baseUrl}${next}${sep}confirmed=true`);
+  }
+
+  // Default confirmation redirect
   return NextResponse.redirect(`${baseUrl}/login?confirmed=true`);
 }

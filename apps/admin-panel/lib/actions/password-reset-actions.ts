@@ -25,8 +25,8 @@
 //   - apps/admin-panel/app/auth/reset/ResetPasswordForm.tsx (password form)
 //   - apps/admin-panel/lib/utils/email-service.ts (email builder + Resend send)
 
-import { headers } from 'next/headers';
 import { getAdminClient } from '@/lib/utils/supabase-admin';
+import { resolveAdminAppUrl } from '@/lib/utils/admin-app-url';
 import {
   sendEmail,
   buildAdminPasswordResetEmailHtml,
@@ -43,89 +43,6 @@ export interface SendAdminPasswordResetResult {
 // regardless of whether the email exists, Supabase failed, or Resend failed.
 const GENERIC_SENT =
   'If an admin account exists for that email, a password reset link has been sent.';
-
-// Admin-only host allowlist. The reset link MUST live on one of these — never
-// on the consumer web host (sweat-drop.com / www.sweat-drop.com, which are
-// bound to the mobile app via Android App Links & iOS Universal Links).
-//
-// We pull the host from the incoming request so that a reset initiated on
-// admin.dev.sweat-drop.com emails a link back to admin.dev.sweat-drop.com —
-// not to prod. This matters because dev and prod are SEPARATE Supabase
-// projects: a token minted by dev's auth is not valid against prod's auth,
-// so crossing environments always looks "expired/invalid" to the user.
-const ADMIN_HOST_ALLOWLIST = new Set<string>([
-  'admin.sweat-drop.com',
-  'admin.dev.sweat-drop.com',
-  'localhost:3000',
-  'localhost:3001',
-  '127.0.0.1:3000',
-]);
-
-function hostToOrigin(host: string): string {
-  const isLocal = host.startsWith('localhost') || host.startsWith('127.0.0.1');
-  return `${isLocal ? 'http' : 'https'}://${host}`;
-}
-
-async function resolveAdminAppUrl(): Promise<
-  | { ok: true; appUrl: string; source: 'request' | 'env' }
-  | { ok: false; reason: string }
-> {
-  // 1) Preferred: derive the origin from the request that triggered this
-  //    server action. This is automatically correct per-environment.
-  try {
-    const h = await headers();
-    const rawHost = h.get('host')?.trim().toLowerCase() ?? '';
-    if (rawHost && ADMIN_HOST_ALLOWLIST.has(rawHost)) {
-      return { ok: true, appUrl: hostToOrigin(rawHost), source: 'request' };
-    }
-    if (rawHost) {
-      // Host was present but not allowlisted — treat as suspicious and fall
-      // through to env var (which is itself validated below). Do NOT use the
-      // raw host, otherwise a Host-header spoof could redirect the reset
-      // link to an attacker-controlled domain.
-      logger.warn(
-        '[password-reset] request host not in admin allowlist, falling back to env',
-        { rawHost },
-      );
-    }
-  } catch (err) {
-    // headers() throws if called outside a request context — extremely
-    // unlikely from a server action, but handle gracefully.
-    logger.warn('[password-reset] headers() unavailable; falling back to env', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // 2) Fallback: NEXT_PUBLIC_APP_URL from env. Validated against the same
-  //    allowlist so a misconfigured env can never generate a link pointing
-  //    at the consumer domain or an arbitrary host.
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!envUrl) {
-    return {
-      ok: false,
-      reason: 'no host in request and NEXT_PUBLIC_APP_URL is empty',
-    };
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(envUrl);
-  } catch {
-    return { ok: false, reason: `NEXT_PUBLIC_APP_URL is not a valid URL: ${envUrl}` };
-  }
-  const envHost = `${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`.toLowerCase();
-  if (!ADMIN_HOST_ALLOWLIST.has(envHost)) {
-    return {
-      ok: false,
-      reason: `NEXT_PUBLIC_APP_URL host not allowlisted: ${envHost}`,
-    };
-  }
-  // Normalise: strip trailing slash and any path, keep scheme + host + port.
-  return {
-    ok: true,
-    appUrl: `${parsed.protocol}//${envHost}`,
-    source: 'env',
-  };
-}
 
 export async function sendAdminPasswordResetEmail(
   rawEmail: string,

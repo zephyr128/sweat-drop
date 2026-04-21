@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { createAdminUser } from '@/lib/actions/signup-confirm-actions';
 
 type SignupFormProps = {
   emailParam: string;
@@ -12,11 +11,11 @@ type SignupFormProps = {
 };
 
 export default function SignupForm({ emailParam, inviteToken }: SignupFormProps) {
-  const router = useRouter();
   const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [step, setStep] = useState<'form' | 'check-email'>('form');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,40 +48,45 @@ export default function SignupForm({ emailParam, inviteToken }: SignupFormProps)
     setLoading(true);
 
     try {
-      const { data: authData, error: signupError } = await supabase.auth.signUp({
+      const result = await createAdminUser({
         email: email.trim(),
         password,
-        options: {
-          data: { username },
-          emailRedirectTo: inviteToken
-            ? `${window.location.origin}/accept-invitation/${inviteToken}`
-            : `${window.location.origin}/dashboard`,
-        },
+        username: username.trim(),
+        inviteToken,
       });
 
-      if (signupError) throw signupError;
-      if (!authData.user) throw new Error('Failed to create user');
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ username })
-        .eq('id', authData.user.id);
-
-      if (profileError) console.error('Error updating profile:', profileError);
-
-      toast.success('Account created successfully! Please check your email to confirm your account.');
-
-      if (inviteToken) {
-        setTimeout(() => router.push(`/accept-invitation/${inviteToken}`), 2000);
-      } else {
-        setTimeout(() => router.push('/login'), 2000);
+      if (!result.success) {
+        throw new Error(result.message);
       }
+
+      toast.success('Account created! Check your email to verify and accept the invitation.');
+      setStep('check-email');
     } catch (err: unknown) {
       console.error('Signup error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create account');
+    } finally {
       setLoading(false);
     }
   };
+
+  if (step === 'check-email') {
+    return (
+      <div className="min-h-screen bg-[#000000] flex items-center justify-center p-4">
+        <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-md w-full text-center">
+          <h1 className="text-3xl font-bold text-white mb-3">Check your email</h1>
+          <p className="text-[#808080] leading-relaxed">
+            We sent a verification link to <span className="text-white">{email}</span>. Open the
+            link to confirm your email and continue{inviteToken ? ' accepting your invitation' : ''}.
+          </p>
+          <div className="mt-6">
+            <Link href="/login" className="text-[#00E5FF] hover:underline text-sm font-medium">
+              Back to login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#000000] flex items-center justify-center p-4">
