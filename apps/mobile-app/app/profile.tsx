@@ -343,7 +343,12 @@ export default function ProfileScreen() {
                 )}
 
                 {/* ── Identity row: avatar + name block ── */}
-                <View style={styles.heroIdentityRow}>
+                <View
+                  style={[
+                    styles.heroIdentityRow,
+                    homeGymId && isVerified !== null && styles.heroIdentityRowWithVerification,
+                  ]}
+                >
                 {/* Flip card */}
                 <TouchableOpacity onPress={handleAvatarFlip} activeOpacity={0.92} style={styles.flipCardContainer} disabled={!highestBadge}>
                   <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
@@ -711,6 +716,8 @@ const styles = StyleSheet.create({
     paddingTop: 22,
     paddingBottom: 18,
   },
+  /** Pushes identity row below absolute top-right verification pill. */
+  heroIdentityRowWithVerification: { paddingTop: 50 },
 
   // flip card
   flipCardContainer: { width: 76, height: 90, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
@@ -741,7 +748,7 @@ const styles = StyleSheet.create({
   // name block
   heroNameBlock: { flex: 1, minWidth: 0 },
   /** Reserve space for the absolute verification pill (top-right of hero). */
-  heroNameBlockWithVerification: { paddingRight: 108 },
+  heroNameBlockWithVerification: { paddingRight: 132 },
   username: {
     ...fontStyles.heading,
     fontSize: 22,
@@ -762,7 +769,7 @@ const styles = StyleSheet.create({
 
   verifiedBadgePill: {
     position: 'absolute',
-    top: 14,
+    top: 10,
     right: 14,
     zIndex: 10,
     flexDirection: 'row',
@@ -773,7 +780,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     borderRadius: 22,
     borderWidth: 1,
-    maxWidth: '58%',
+    maxWidth: '52%',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.22,
     shadowRadius: 10,

@@ -24,7 +24,7 @@ export function DemoModeBanner() {
 
   return (
     <View
-      style={[styles.container, { paddingTop: insets.top + 6 }]}
+      style={[styles.container, { paddingTop: insets.top + 4, paddingRight: 12 }]}
       pointerEvents="none"
     >
       <Animated.View entering={FadeInDown.duration(280)}>
@@ -36,7 +36,7 @@ export function DemoModeBanner() {
             androidColor="rgba(18, 20, 28, 0.94)"
           />
           <View style={styles.pillContent}>
-            <Ionicons name="flask-outline" size={15} color={DEMO_ACCENT} />
+            <Ionicons name="flask-outline" size={13} color={DEMO_ACCENT} />
             <Text style={styles.label} numberOfLines={1}>
               {t('demoMode')}
             </Text>
@@ -51,9 +51,8 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
-    left: 0,
     right: 0,
-    alignItems: 'center',
+    alignItems: 'flex-end',
     zIndex: 900,
   },
   pillShell: {
@@ -71,15 +70,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   label: {
     ...fontStyles.bodySemiBold,
-    fontSize: theme.typography.fontSize.xs,
-    letterSpacing: 1.2,
+    fontSize: 11,
+    letterSpacing: 0.8,
     color: theme.colors.text,
     textTransform: 'uppercase',
+    maxWidth: 112,
   },
 });

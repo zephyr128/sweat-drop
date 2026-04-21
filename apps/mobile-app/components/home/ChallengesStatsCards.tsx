@@ -120,6 +120,15 @@ export function ChallengesStatsCards({
 }: ChallengesStatsCardsProps) {
   const { t } = useTranslation('home');
   const typeLabel = useChallengeTypeLabel(t);
+  const [hasResolvedOnce, setHasResolvedOnce] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!loading) setHasResolvedOnce(true);
+  }, [loading]);
+
+  // Prevent shimmer/empty-state flicker on background refresh:
+  // show skeleton placeholders only for the very first unresolved load.
+  const isInitialLoading = loading && !hasResolvedOnce;
 
   const total = challenges.length;
   const completed = challenges.filter((c) => c.is_completed).length;
@@ -202,7 +211,7 @@ export function ChallengesStatsCards({
                   <Text style={styles.heroEyebrow}>{t('challenges.nearestGoal')}</Text>
                 </View>
                 <Text style={[styles.heroNumber, { color: ORANGE }]}>
-                  {loading ? '–' : `${formatPercentLabel(nearestProgressPct)}%`}
+                  {isInitialLoading ? '–' : `${formatPercentLabel(nearestProgressPct)}%`}
                 </Text>
                 <Text style={styles.heroSub} numberOfLines={2}>
                   {nearestChallenge.challenge_name}
@@ -215,7 +224,7 @@ export function ChallengesStatsCards({
                       : `${formatK(nearestChallenge.current_drops)}/${formatK(nearestChallenge.target_drops)} · +${nearestChallenge.reward_drops} drops`}
                   </Text>
                 </View>
-                {!loading && (
+                {!isInitialLoading && (
                   <View style={styles.heroProgressWrap} pointerEvents="none">
                     <AnimBar pct={nearestProgressPct} color={ORANGE} />
                   </View>
@@ -260,8 +269,8 @@ export function ChallengesStatsCards({
                   {t('challenges.done')}
                 </Text>
               </View>
-              <Text style={[styles.sideNumber, { color: loading ? 'rgba(255,255,255,0.35)' : GREEN }]}>
-                {loading ? '–' : String(completed)}
+              <Text style={[styles.sideNumber, { color: isInitialLoading ? 'rgba(255,255,255,0.35)' : GREEN }]}>
+                {isInitialLoading ? '–' : String(completed)}
               </Text>
               <Text style={styles.sideSub} numberOfLines={1}>{t('challenges.ofTotal', { total })}</Text>
             </PlatformBlur>
@@ -289,8 +298,8 @@ export function ChallengesStatsCards({
                   {t('challenges.earned')}
                 </Text>
               </View>
-              <Text style={[styles.sideNumber, { color: loading ? 'rgba(255,255,255,0.35)' : ORANGE }]}>
-                {loading ? '–' : formatK(totalDropsEarned)}
+              <Text style={[styles.sideNumber, { color: isInitialLoading ? 'rgba(255,255,255,0.35)' : ORANGE }]}>
+                {isInitialLoading ? '–' : formatK(totalDropsEarned)}
               </Text>
               <Text style={styles.sideSub} numberOfLines={1}>{t('drops')}</Text>
             </PlatformBlur>
@@ -351,14 +360,14 @@ export function ChallengesStatsCards({
       )}
 
       {/* ── Active Challenges header ── */}
-      {!loading && sortedActive.length > 0 && (
+      {!isInitialLoading && sortedActive.length > 0 && (
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionLabel}>{t('activeChallenges').toUpperCase()}</Text>
         </View>
       )}
 
       {/* ── Challenge rows (active only) ── */}
-      {loading ? (
+      {isInitialLoading ? (
         <View style={styles.skeletonWrap}>
           {[1, 2, 3].map((i) => (
             <View key={i} style={styles.skeletonRow} />
