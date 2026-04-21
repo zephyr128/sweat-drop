@@ -35,6 +35,7 @@ describe('LeaderboardHistory', () => {
     expect(screen.getByText('Weekly')).toBeInTheDocument();
     expect(screen.getByText('Monthly')).toBeInTheDocument();
     expect(screen.getByText('All Time')).toBeInTheDocument();
-    expect(screen.getByText('History')).toBeInTheDocument();
+    expect(screen.getByText('Snapshots')).toBeInTheDocument();
+    expect(screen.getByText('Distributions')).toBeInTheDocument();
   });
 });
