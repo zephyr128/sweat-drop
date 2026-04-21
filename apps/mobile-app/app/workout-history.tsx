@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, Pressable, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,14 @@ import { useSession } from '@/hooks/useSession';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  FadeIn,
+  FadeOutUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
 import { formatDate as fmtDate, formatTime as fmtTime, formatMonthYear } from '@/lib/utils/formatDate';
@@ -85,6 +92,189 @@ function formatDate(iso: string): string {
 function formatTime(iso: string): string {
   return fmtTime(iso, { hour: '2-digit', minute: '2-digit', hour12: i18n.language !== 'sr' });
 }
+
+const SESSION_EXPAND_SPRING = { damping: 17, stiffness: 220, mass: 0.45 } as const;
+
+const WorkoutHistorySessionCard = memo(function WorkoutHistorySessionCard({
+  session: s,
+  isExpanded,
+  onToggle,
+}: {
+  session: SessionRow;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation('history');
+  const branding = useBranding();
+  const machineType = s.machine_type || 'treadmill';
+  const machineName = s.machine_name || t('unknownMachine');
+  const gymName = s.gym_name || '';
+  const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
+  const metrics = s.raw_metrics as RawMetrics | null;
+
+  const chevronRotate = useSharedValue(isExpanded ? 180 : 0);
+  useEffect(() => {
+    chevronRotate.value = withSpring(isExpanded ? 180 : 0, SESSION_EXPAND_SPRING);
+  }, [isExpanded, chevronRotate]);
+
+  const chevronAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${chevronRotate.value}deg` }],
+  }));
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onToggle}
+      style={[styles.sessionCard, {
+        borderTopColor: hexToRgba(branding.primary, isExpanded ? 0.40 : 0.22),
+        borderLeftColor: hexToRgba(branding.primary, isExpanded ? 0.18 : 0.10),
+        borderRightColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: 'rgba(255,255,255,0.03)',
+      }]}
+    >
+      <PlatformBlur intensity={45} tint="dark" style={styles.sessionCardBlur} androidColor="rgba(12,12,22,0.97)">
+        <LinearGradient
+          colors={isExpanded
+            ? [hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)', 'transparent']
+            : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)', 'transparent']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+
+        <View style={styles.sessionCardRow}>
+          <View style={[styles.machineIconCircle, {
+            backgroundColor: hexToRgba(branding.primary, 0.12),
+            borderColor: hexToRgba(branding.primary, 0.20),
+          }]}>
+            <Ionicons name={iconName} size={22} color={branding.primary} />
+          </View>
+
+          <View style={styles.sessionInfo}>
+            <Text style={styles.sessionMachine} numberOfLines={1}>{machineName}</Text>
+            <Text style={styles.sessionDate}>
+              {formatTime(s.started_at)} · {formatDuration(s.duration_seconds)}
+              {gymName ? ` · ${gymName}` : ''}
+            </Text>
+          </View>
+
+          <View style={styles.sessionStats}>
+            <View style={styles.sessionStatRow}>
+              <Ionicons name="water" size={13} color={branding.primary} />
+              <Text style={[styles.sessionDrops, getNumberStyle(16), { color: branding.primary }]}>
+                {(s.drops_earned || 0).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.chevronWrap}>
+              <Animated.View style={chevronAnimatedStyle}>
+                <Ionicons name="chevron-down" size={13} color={hexToRgba('#FFFFFF', 0.35)} />
+              </Animated.View>
+            </View>
+          </View>
+        </View>
+
+        {(() => {
+          const happyHour = metrics?.drop_calc_v2?.happy_hour;
+          const hhActive = happyHour?.active && (happyHour?.multiplier ?? 1) > 1;
+          const hasChips = !!(s.calories || hhActive);
+          if (!hasChips) return null;
+          return (
+            <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.07) }]}>
+              {s.calories ? (
+                <View style={[styles.detailChip, { backgroundColor: 'rgba(255,145,0,0.10)', borderColor: 'rgba(255,145,0,0.18)' }]}>
+                  <Ionicons name="flame-outline" size={11} color={theme.colors.secondary} />
+                  <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
+                    ~{Math.round(Number(s.calories))} {t('cal')}
+                  </Text>
+                </View>
+              ) : null}
+              {hhActive ? (
+                <View style={[styles.detailChip, { backgroundColor: 'rgba(255,215,0,0.12)', borderColor: 'rgba(255,215,0,0.30)' }]}>
+                  <Ionicons name="flash" size={11} color="#FFD700" />
+                  <Text style={[styles.detailChipText, { color: '#FFD700' }]}>
+                    ×{happyHour!.multiplier.toFixed(1)} Happy Hour
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          );
+        })()}
+
+        {isExpanded && (
+          <Animated.View
+            entering={FadeInDown.springify().damping(16).stiffness(195).mass(0.55)}
+            exiting={FadeOutUp.duration(200)}
+            style={[styles.expandedPanel, { borderTopColor: hexToRgba(branding.primary, 0.09) }]}
+          >
+            <View style={styles.expandedGrid}>
+              {[
+                { icon: 'time-outline' as const,       value: formatDuration(s.duration_seconds),                           label: t('duration'),  color: branding.primary },
+                { icon: 'flame-outline' as const,       value: s.calories ? `${Math.round(Number(s.calories))}` : null,      label: t('kcal'),      color: theme.colors.secondary },
+                metrics?.total_distance && metrics.total_distance > 0
+                  ? { icon: 'navigate-outline' as const,
+                      value: metrics.total_distance >= 1000
+                        ? `${(metrics.total_distance / 1000).toFixed(1)}`
+                        : `${Math.round(metrics.total_distance)}`,
+                      label: metrics.total_distance >= 1000 ? t('km') : 'm',
+                      color: branding.primary }
+                  : null,
+                metrics?.avg_speed_kmh && metrics.avg_speed_kmh > 0
+                  ? { icon: 'speedometer-outline' as const, value: metrics.avg_speed_kmh.toFixed(1), label: 'km/h avg', color: branding.primary }
+                  : null,
+                metrics?.max_speed_kmh && metrics.max_speed_kmh > 0
+                  ? { icon: 'flash-outline' as const, value: metrics.max_speed_kmh.toFixed(1), label: 'km/h max', color: branding.primary }
+                  : null,
+                metrics?.avg_cadence && metrics.avg_cadence > 0
+                  ? { icon: 'sync-outline' as const, value: `${Math.round(metrics.avg_cadence)}`, label: `${machineType === 'treadmill' ? 'spm' : 'rpm'} avg`, color: branding.primary }
+                  : null,
+                metrics?.avg_power_watts && metrics.avg_power_watts > 0
+                  ? { icon: 'pulse-outline' as const, value: `${metrics.avg_power_watts}`, label: 'W avg', color: branding.primary }
+                  : null,
+                metrics?.max_power_watts && metrics.max_power_watts > 0
+                  ? { icon: 'pulse-outline' as const, value: `${metrics.max_power_watts}`, label: 'W max', color: branding.primary }
+                  : null,
+              ].filter(Boolean).map((stat, i) => stat && (
+                <Animated.View
+                  key={i}
+                  entering={FadeInDown.delay(35 + i * 28).springify().damping(16).stiffness(210).mass(0.5)}
+                  style={[styles.expandedStat, {
+                    backgroundColor: stat.color === theme.colors.secondary
+                      ? 'rgba(255,145,0,0.07)'
+                      : hexToRgba(branding.primary, 0.07),
+                    borderColor: stat.color === theme.colors.secondary
+                      ? 'rgba(255,145,0,0.12)'
+                      : hexToRgba(branding.primary, 0.12),
+                  }]}
+                >
+                  <Ionicons name={stat.icon} size={15} color={stat.color} />
+                  <Text style={[styles.expandedStatValue, getNumberStyle(17), { color: '#FFFFFF' }]}>
+                    {stat.value ?? '—'}
+                  </Text>
+                  <Text style={styles.expandedStatLabel}>{stat.label}</Text>
+                </Animated.View>
+              ))}
+            </View>
+
+            {metrics?.ble_protocol && (
+              <View style={styles.protocolRow}>
+                <View style={[styles.protocolBadge, { backgroundColor: hexToRgba(branding.primary, 0.07), borderColor: hexToRgba(branding.primary, 0.12) }]}>
+                  <Ionicons name="bluetooth" size={10} color={theme.colors.textTertiary} />
+                  <Text style={styles.protocolText}>{metrics.ble_protocol.toUpperCase()}</Text>
+                </View>
+                {metrics.calories_source === 'device' && (
+                  <View style={[styles.protocolBadge, { backgroundColor: 'rgba(255,145,0,0.07)', borderColor: 'rgba(255,145,0,0.12)' }]}>
+                    <Ionicons name="checkmark-circle" size={10} color={theme.colors.secondary} />
+                    <Text style={[styles.protocolText, { color: theme.colors.secondary }]}>Device calories</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </Animated.View>
+        )}
+      </PlatformBlur>
+    </TouchableOpacity>
+  );
+});
 
 export default function WorkoutHistoryScreen() {
   const { t } = useTranslation('history');
@@ -521,7 +711,7 @@ export default function WorkoutHistoryScreen() {
                                 <Svg
                                   width={cellPx}
                                   height={cellPx}
-                                  style={StyleSheet.absoluteFillObject}
+                                  style={[StyleSheet.absoluteFillObject, { backgroundColor: 'transparent' }]}
                                 >
                                   {/* Track */}
                                   <Circle
@@ -680,163 +870,14 @@ export default function WorkoutHistoryScreen() {
           </View>
         )}
         renderItem={({ item: s }) => {
-          const machineType = s.machine_type || 'treadmill';
-          const machineName = s.machine_name || t('unknownMachine');
-          const gymName = s.gym_name || '';
-          const iconName = MACHINE_ICONS[machineType] || 'fitness-outline';
           const isExpanded = expandedSessionId === s.id;
-          const metrics = s.raw_metrics as RawMetrics | null;
-
           return (
             <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => setExpandedSessionId(isExpanded ? null : s.id)}
-                style={[styles.sessionCard, {
-                  borderTopColor: hexToRgba(branding.primary, isExpanded ? 0.40 : 0.22),
-                  borderLeftColor: hexToRgba(branding.primary, isExpanded ? 0.18 : 0.10),
-                  borderRightColor: 'rgba(255,255,255,0.05)',
-                  borderBottomColor: 'rgba(255,255,255,0.03)',
-                }]}
-              >
-                <PlatformBlur intensity={45} tint="dark" style={styles.sessionCardBlur} androidColor="rgba(12,12,22,0.97)">
-                  <LinearGradient
-                    colors={isExpanded
-                      ? [hexToRgba(branding.primary, 0.10), 'rgba(255,255,255,0.02)', 'transparent']
-                      : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)', 'transparent']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                  />
-
-                  {/* Main row */}
-                  <View style={styles.sessionCardRow}>
-                    <View style={[styles.machineIconCircle, {
-                      backgroundColor: hexToRgba(branding.primary, 0.12),
-                      borderColor: hexToRgba(branding.primary, 0.20),
-                    }]}>
-                      <Ionicons name={iconName} size={22} color={branding.primary} />
-                    </View>
-
-                    <View style={styles.sessionInfo}>
-                      <Text style={styles.sessionMachine} numberOfLines={1}>{machineName}</Text>
-                      <Text style={styles.sessionDate}>
-                        {formatTime(s.started_at)} · {formatDuration(s.duration_seconds)}
-                        {gymName ? ` · ${gymName}` : ''}
-                      </Text>
-                    </View>
-
-                    <View style={styles.sessionStats}>
-                      <View style={styles.sessionStatRow}>
-                        <Ionicons name="water" size={13} color={branding.primary} />
-                        <Text style={[styles.sessionDrops, getNumberStyle(16), { color: branding.primary }]}>
-                          {(s.drops_earned || 0).toLocaleString()}
-                        </Text>
-                      </View>
-                      <View style={styles.chevronWrap}>
-                        <Ionicons
-                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                          size={13}
-                          color={hexToRgba('#FFFFFF', 0.35)}
-                        />
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Inline chips: calories + happy hour */}
-                  {(() => {
-                    const happyHour = metrics?.drop_calc_v2?.happy_hour;
-                    const hhActive = happyHour?.active && (happyHour?.multiplier ?? 1) > 1;
-                    const hasChips = !!(s.calories || hhActive);
-                    if (!hasChips) return null;
-                    return (
-                      <View style={[styles.sessionDetailRow, { borderTopColor: hexToRgba(branding.primary, 0.07) }]}>
-                        {s.calories ? (
-                          <View style={[styles.detailChip, { backgroundColor: 'rgba(255,145,0,0.10)', borderColor: 'rgba(255,145,0,0.18)' }]}>
-                            <Ionicons name="flame-outline" size={11} color={theme.colors.secondary} />
-                            <Text style={[styles.detailChipText, { color: theme.colors.secondary }]}>
-                              ~{Math.round(Number(s.calories))} {t('cal')}
-                            </Text>
-                          </View>
-                        ) : null}
-                        {hhActive ? (
-                          <View style={[styles.detailChip, { backgroundColor: 'rgba(255,215,0,0.12)', borderColor: 'rgba(255,215,0,0.30)' }]}>
-                            <Ionicons name="flash" size={11} color="#FFD700" />
-                            <Text style={[styles.detailChipText, { color: '#FFD700' }]}>
-                              ×{happyHour!.multiplier.toFixed(1)} Happy Hour
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    );
-                  })()}
-
-                  {/* Expanded metrics grid */}
-                  {isExpanded && (
-                    <View style={[styles.expandedPanel, { borderTopColor: hexToRgba(branding.primary, 0.09) }]}>
-                      <View style={styles.expandedGrid}>
-                        {[
-                          { icon: 'time-outline' as const,       value: formatDuration(s.duration_seconds),                           label: t('duration'),  color: branding.primary },
-                          { icon: 'flame-outline' as const,       value: s.calories ? `${Math.round(Number(s.calories))}` : null,      label: t('kcal'),      color: theme.colors.secondary },
-                          metrics?.total_distance && metrics.total_distance > 0
-                            ? { icon: 'navigate-outline' as const,
-                                value: metrics.total_distance >= 1000
-                                  ? `${(metrics.total_distance / 1000).toFixed(1)}`
-                                  : `${Math.round(metrics.total_distance)}`,
-                                label: metrics.total_distance >= 1000 ? t('km') : 'm',
-                                color: branding.primary }
-                            : null,
-                          metrics?.avg_speed_kmh && metrics.avg_speed_kmh > 0
-                            ? { icon: 'speedometer-outline' as const, value: metrics.avg_speed_kmh.toFixed(1), label: 'km/h avg', color: branding.primary }
-                            : null,
-                          metrics?.max_speed_kmh && metrics.max_speed_kmh > 0
-                            ? { icon: 'flash-outline' as const, value: metrics.max_speed_kmh.toFixed(1), label: 'km/h max', color: branding.primary }
-                            : null,
-                          metrics?.avg_cadence && metrics.avg_cadence > 0
-                            ? { icon: 'sync-outline' as const, value: `${Math.round(metrics.avg_cadence)}`, label: `${machineType === 'treadmill' ? 'spm' : 'rpm'} avg`, color: branding.primary }
-                            : null,
-                          metrics?.avg_power_watts && metrics.avg_power_watts > 0
-                            ? { icon: 'pulse-outline' as const, value: `${metrics.avg_power_watts}`, label: 'W avg', color: branding.primary }
-                            : null,
-                          metrics?.max_power_watts && metrics.max_power_watts > 0
-                            ? { icon: 'pulse-outline' as const, value: `${metrics.max_power_watts}`, label: 'W max', color: branding.primary }
-                            : null,
-                        ].filter(Boolean).map((stat, i) => stat && (
-                          <View key={i} style={[styles.expandedStat, {
-                            backgroundColor: stat.color === theme.colors.secondary
-                              ? 'rgba(255,145,0,0.07)'
-                              : hexToRgba(branding.primary, 0.07),
-                            borderColor: stat.color === theme.colors.secondary
-                              ? 'rgba(255,145,0,0.12)'
-                              : hexToRgba(branding.primary, 0.12),
-                          }]}>
-                            <Ionicons name={stat.icon} size={15} color={stat.color} />
-                            <Text style={[styles.expandedStatValue, getNumberStyle(17), { color: '#FFFFFF' }]}>
-                              {stat.value ?? '—'}
-                            </Text>
-                            <Text style={styles.expandedStatLabel}>{stat.label}</Text>
-                          </View>
-                        ))}
-                      </View>
-
-                      {metrics?.ble_protocol && (
-                        <View style={styles.protocolRow}>
-                          <View style={[styles.protocolBadge, { backgroundColor: hexToRgba(branding.primary, 0.07), borderColor: hexToRgba(branding.primary, 0.12) }]}>
-                            <Ionicons name="bluetooth" size={10} color={theme.colors.textTertiary} />
-                            <Text style={styles.protocolText}>{metrics.ble_protocol.toUpperCase()}</Text>
-                          </View>
-                          {metrics.calories_source === 'device' && (
-                            <View style={[styles.protocolBadge, { backgroundColor: 'rgba(255,145,0,0.07)', borderColor: 'rgba(255,145,0,0.12)' }]}>
-                              <Ionicons name="checkmark-circle" size={10} color={theme.colors.secondary} />
-                              <Text style={[styles.protocolText, { color: theme.colors.secondary }]}>Device calories</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </PlatformBlur>
-              </TouchableOpacity>
+              <WorkoutHistorySessionCard
+                session={s}
+                isExpanded={isExpanded}
+                onToggle={() => setExpandedSessionId(isExpanded ? null : s.id)}
+              />
             </Animated.View>
           );
         }}
@@ -937,11 +978,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    borderRadius: CELL_SIZE / 2,
+    overflow: 'hidden',
   },
   dateCircle: {
     width: CELL_SIZE - 8,
     height: CELL_SIZE - 8,
     borderRadius: (CELL_SIZE - 8) / 2,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },

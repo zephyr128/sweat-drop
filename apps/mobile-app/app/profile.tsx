@@ -294,15 +294,56 @@ export default function ProfileScreen() {
             borderBottomColor: 'rgba(255,255,255,0.04)',
           }]}>
             <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={55} tint="dark" style={styles.heroBlur}>
-              <LinearGradient
-                colors={[hexToRgba(branding.primary, 0.12), 'rgba(255,255,255,0.03)', 'rgba(12,12,22,0.0)']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
+              <View style={styles.heroCardBody}>
+                <LinearGradient
+                  colors={[hexToRgba(branding.primary, 0.12), 'rgba(255,255,255,0.03)', 'rgba(12,12,22,0.0)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
 
-              {/* ── Identity row: avatar + name block ── */}
-              <View style={styles.heroIdentityRow}>
+                {homeGymId && isVerified !== null && (
+                  <TouchableOpacity
+                    onPress={() => { if (!isVerified) setShowVerificationSheet(true); }}
+                    activeOpacity={isVerified ? 1 : 0.75}
+                    style={[
+                      styles.verifiedBadgePill,
+                      isVerified ? styles.verifiedBadgePillOn : styles.verifiedBadgePillOff,
+                      {
+                        borderColor: isVerified
+                          ? hexToRgba('#4ade80', 0.42)
+                          : hexToRgba('#fbbf24', 0.38),
+                        shadowColor: isVerified ? '#4ade80' : '#fbbf24',
+                      },
+                    ]}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  >
+                    <View
+                      style={[
+                        styles.verifiedBadgeIconWrap,
+                        { backgroundColor: isVerified ? hexToRgba('#4ade80', 0.2) : hexToRgba('#fbbf24', 0.18) },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isVerified ? 'shield-checkmark' : 'shield-outline'}
+                        size={14}
+                        color={isVerified ? '#86efac' : '#fcd34d'}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.verifiedBadgePillText,
+                        { color: isVerified ? '#a7f3d0' : '#fde68a' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {isVerified ? t('verifiedBadge') : t('notVerified')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* ── Identity row: avatar + name block ── */}
+                <View style={styles.heroIdentityRow}>
                 {/* Flip card */}
                 <TouchableOpacity onPress={handleAvatarFlip} activeOpacity={0.92} style={styles.flipCardContainer} disabled={!highestBadge}>
                   <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
@@ -351,7 +392,12 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
 
                 {/* Name + meta */}
-                <View style={styles.heroNameBlock}>
+                <View
+                  style={[
+                    styles.heroNameBlock,
+                    homeGymId && isVerified !== null && styles.heroNameBlockWithVerification,
+                  ]}
+                >
                   <Text style={styles.username} numberOfLines={1}>
                     {profile?.username || t('common:user')}
                   </Text>
@@ -369,35 +415,6 @@ export default function ProfileScreen() {
                       <View style={styles.newcomerDot}>
                         <Text style={styles.newcomerDotText}>🌱</Text>
                       </View>
-                    )}
-                  </View>
-
-                  {/* Status badges row — streak + verification */}
-                  <View style={styles.heroBadgeRow}>
-                    {profile && profile.streak_days > 0 && (
-                      <View style={styles.streakBadge}>
-                        <Text style={styles.streakBadgeEmoji}>🔥</Text>
-                        <Text style={styles.streakBadgeText}>{profile.streak_days}d</Text>
-                      </View>
-                    )}
-                    {homeGymId && isVerified !== null && (
-                      <TouchableOpacity
-                        onPress={() => { if (!isVerified) setShowVerificationSheet(true); }}
-                        activeOpacity={isVerified ? 1 : 0.7}
-                        style={[
-                          styles.verifiedBadge,
-                          isVerified ? styles.verifiedBadgeOn : styles.verifiedBadgeOff,
-                        ]}
-                      >
-                        <Ionicons
-                          name={isVerified ? 'shield-checkmark' : 'shield-outline'}
-                          size={11}
-                          color={isVerified ? '#4ade80' : '#fbbf24'}
-                        />
-                        <Text style={[styles.verifiedBadgeText, { color: isVerified ? '#4ade80' : '#fbbf24' }]}>
-                          {isVerified ? t('verifiedBadge') : t('notVerified')}
-                        </Text>
-                      </TouchableOpacity>
                     )}
                   </View>
                 </View>
@@ -436,6 +453,7 @@ export default function ProfileScreen() {
                 </Text>
                 <Ionicons name="chevron-forward" size={12} color={hexToRgba(branding.primary, 0.35)} />
               </TouchableOpacity>
+              </View>
             </PlatformBlur>
           </View>
         </Animated.View>
@@ -683,6 +701,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(12,12,22,0.50)',
   },
   heroBlur: { borderRadius: 24, overflow: 'hidden' },
+  heroCardBody: { position: 'relative' },
 
   heroIdentityRow: {
     flexDirection: 'row',
@@ -721,6 +740,8 @@ const styles = StyleSheet.create({
 
   // name block
   heroNameBlock: { flex: 1, minWidth: 0 },
+  /** Reserve space for the absolute verification pill (top-right of hero). */
+  heroNameBlockWithVerification: { paddingRight: 108 },
   username: {
     ...fontStyles.heading,
     fontSize: 22,
@@ -739,18 +760,44 @@ const styles = StyleSheet.create({
   newcomerDot: { marginLeft: 2 },
   newcomerDotText: { fontSize: 11 },
 
-  heroBadgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  streakBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 8, backgroundColor: 'rgba(255,107,0,0.14)',
+  verifiedBadgePill: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    maxWidth: '58%',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  streakBadgeEmoji: { fontSize: 11 },
-  streakBadgeText: { ...fontStyles.bodySemiBold, fontSize: 11, color: '#FF6B00' },
-  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  verifiedBadgeOn: { backgroundColor: 'rgba(74,222,128,0.10)' },
-  verifiedBadgeOff: { backgroundColor: 'rgba(251,191,36,0.10)' },
-  verifiedBadgeText: { ...fontStyles.bodySemiBold, fontSize: 11 },
+  verifiedBadgePillOn: {
+    backgroundColor: 'rgba(16, 40, 28, 0.72)',
+  },
+  verifiedBadgePillOff: {
+    backgroundColor: 'rgba(45, 36, 14, 0.72)',
+  },
+  verifiedBadgeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifiedBadgePillText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.25,
+    flexShrink: 1,
+  },
 
   // stat strip
   heroStatStrip: {

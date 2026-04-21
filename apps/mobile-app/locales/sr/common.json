@@ -34,5 +34,6 @@
   "daysLeft_other": "{{count}} dana preostalo",
   "user": "Korisnik",
   "noInternet": "Nema internet konekcije",
-  "gotIt": "Važi"
+  "gotIt": "Važi",
+  "demoMode": "Demo sesija"
 }

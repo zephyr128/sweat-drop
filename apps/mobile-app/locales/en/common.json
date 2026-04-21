@@ -32,5 +32,6 @@
   "daysLeft_other": "{{count}} days left",
   "user": "User",
   "noInternet": "No internet connection",
-  "gotIt": "Got it"
+  "gotIt": "Got it",
+  "demoMode": "Demo session"
 }

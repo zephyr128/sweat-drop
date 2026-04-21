@@ -42,6 +42,7 @@ import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAcco
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
+import { DemoModeBanner } from '@/components/DemoModeBanner';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const APP_NAV_THEME = {
@@ -587,6 +588,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <GymDataInitializer />
           <StackNavigator />
+          <DemoModeBanner />
           <StatusBar style="light" />
           <OfflineBanner />
           <AppModal />

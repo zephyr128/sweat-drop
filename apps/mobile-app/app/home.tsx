@@ -8,7 +8,17 @@ import { useFocusEffect } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, useDerivedValue, withTiming, interpolate, Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedScrollHandler,
+  useDerivedValue,
+  withTiming,
+  interpolate,
+  Easing,
+  FadeInDown,
+  runOnJS,
+} from 'react-native-reanimated';
 import { SkeletonShimmer } from '@/components/SkeletonShimmer';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTranslation } from 'react-i18next';
@@ -61,164 +71,198 @@ const CHALLENGE_ACCENT = '#FF9F4A';
 const LEADERBOARD_ACCENT = '#A855F7';
 const ARENAS_ACCENT = '#22D3EE';
 
+/** Same geometry as `StatsCards` hero / side / action cards */
+const SK_CARD_GAP = 10;
+const SK_CARD_PAD = 16;
+const SK_HERO_W = (SCREEN_WIDTH - SK_CARD_PAD * 2 - SK_CARD_GAP) * 0.58;
+const SK_SIDE_W = (SCREEN_WIDTH - SK_CARD_PAD * 2 - SK_CARD_GAP) * 0.42;
+const SK_HERO_H = 162;
+const SK_SIDE_H = (SK_HERO_H - SK_CARD_GAP) / 2;
+const SK_ACTION_W = (SCREEN_WIDTH - SK_CARD_PAD * 2 - SK_CARD_GAP) / 2;
+/** ~`ActivityRings` size (290) inside `HomeHeroPager` */
+const SK_RING_D = Math.min(280, Math.round(SCREEN_WIDTH * 0.72));
+
 // ═══════════════════════════════════════════════════════════
-// COLD-START SKELETON — shown only on first mount while data loads
+// COLD-START SKELETON — mirrors fixed header, hero pager, sticky tabs, StatsCards
 // ═══════════════════════════════════════════════════════════
 
-// Thin wrapper kept for skeleton readability — real animation lives in SkeletonShimmer.
-function ShimmerBlock({ style, delayMs = 0 }: { style: any; delayMs?: number }) {
+function ShimmerBlock({ style, delayMs = 0 }: { style: object; delayMs?: number }) {
   return <SkeletonShimmer style={style} delayMs={delayMs} />;
 }
 
-function ColdStartSkeleton({ branding }: { branding: ReturnType<typeof useBranding> }) {
+function ColdStartSkeleton() {
+  const ringR = SK_RING_D / 2;
   return (
-    <View style={sk.root}>
-      {/* Header row */}
-      <View style={sk.header}>
-        <View style={sk.headerLeft}>
-          <ShimmerBlock style={sk.avatar} />
-          <ShimmerBlock style={sk.username} />
+    <ScrollView
+      style={sk.skeletonScroll}
+      contentContainerStyle={sk.skeletonScrollContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* ── Matches `styles.fixedHeader` ── */}
+      <View style={sk.skFixedHeader}>
+        <View style={sk.skHeaderLeft}>
+          <ShimmerBlock style={sk.skAvatar} />
+          <ShimmerBlock style={sk.skUsername} />
         </View>
-        <ShimmerBlock style={sk.gymLogo} />
+        <View style={sk.skHeaderActions}>
+          <ShimmerBlock style={sk.skHeaderAction} delayMs={40} />
+          <ShimmerBlock style={sk.skHeaderAction} delayMs={70} />
+        </View>
       </View>
 
-      {/* Activity rings placeholder */}
-      <View style={sk.ringsWrap}>
-        <ShimmerBlock style={sk.ringsCircle} />
+      {/* ── `HomeHeroPager`: ring + dots + `sheetLogoBadge` ── */}
+      <View style={sk.skHeroBlock}>
+        <ShimmerBlock
+          style={[sk.skRing, { width: SK_RING_D, height: SK_RING_D, borderRadius: ringR }]}
+        />
+        <ShimmerBlock style={sk.skGymBadge} />
       </View>
 
-      {/* Stats cards row */}
-      <View style={sk.statsRow}>
-        <ShimmerBlock style={sk.statCard} />
-        <ShimmerBlock style={sk.statCard} />
-        <ShimmerBlock style={sk.statCard} />
+      {/* ── `stickySection` + `SliderTabsBar` (4 tabs) ── */}
+      <View style={sk.skStickyChrome}>
+        <View style={sk.skTabBar}>
+          {[0, 1, 2, 3].map((i) => (
+            <ShimmerBlock key={i} delayMs={i * 35} style={sk.skTabSlot} />
+          ))}
+        </View>
       </View>
 
-      {/* Weekly chart placeholder */}
-      <ShimmerBlock style={sk.chartBlock} />
-
-      {/* Section header */}
-      <View style={sk.sectionRow}>
-        <ShimmerBlock style={sk.sectionTitle} />
-        <ShimmerBlock style={sk.sectionLink} />
+      {/* ── `SheetActivityContent` / `StatsCards` bento ── */}
+      <View style={sk.skSheetBody}>
+        <View style={sk.skStatsTopRow}>
+          <ShimmerBlock style={[sk.skHeroStat, { width: SK_HERO_W, height: SK_HERO_H }]} />
+          <View style={[sk.skSideCol, { width: SK_SIDE_W }]}>
+            <ShimmerBlock style={[sk.skSideStat, { height: SK_SIDE_H }]} />
+            <ShimmerBlock style={[sk.skSideStat, { height: SK_SIDE_H }]} />
+          </View>
+        </View>
+        <View style={sk.skActionsRow}>
+          <ShimmerBlock style={[sk.skActionStat, { width: SK_ACTION_W }]} />
+          <ShimmerBlock style={[sk.skActionStat, { width: SK_ACTION_W }]} />
+        </View>
+        <ShimmerBlock style={sk.skRewardRow} />
       </View>
-
-      {/* Challenge cards row */}
-      <View style={sk.cardsRow}>
-        <ShimmerBlock style={sk.challengeCard} />
-        <ShimmerBlock style={sk.challengeCardPartial} />
-      </View>
-
-      {/* Second section header */}
-      <View style={[sk.sectionRow, { marginTop: 28 }]}>
-        <ShimmerBlock style={sk.sectionTitle} />
-      </View>
-
-      {/* Bento grid */}
-      <View style={sk.bentoRow}>
-        <ShimmerBlock style={sk.bentoCard} />
-        <ShimmerBlock style={sk.bentoCard} />
-      </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const sk = StyleSheet.create({
-  root: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 4,
+  skeletonScroll: { flex: 1 },
+  skeletonScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 48,
   },
-  header: {
+  skFixedHeader: {
+    height: 56,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 2,
   },
-  headerLeft: {
+  skHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+    minWidth: 0,
   },
-  avatar: {
+  skAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
   },
-  username: {
-    width: 100,
-    height: 14,
-    borderRadius: 7,
+  skUsername: {
+    width: 128,
+    height: 15,
+    borderRadius: 8,
+    flexShrink: 0,
   },
-  gymLogo: {
+  skHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  skHeaderAction: {
     width: 38,
     height: 38,
     borderRadius: 12,
   },
-  ringsWrap: {
+  skHeroBlock: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginTop: -2,
+    marginBottom: 6,
   },
-  ringsCircle: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+  skRing: {
+    overflow: 'hidden',
   },
-  statsRow: {
+  skGymBadge: {
+    width: 94,
+    height: 34,
+    borderRadius: 17,
+    marginTop: 10,
+  },
+  skStickyChrome: {
+    marginTop: 10,
+    marginHorizontal: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: Platform.OS === 'android' ? 'rgba(24,20,38,0.85)' : 'rgba(24, 20, 38, 0.75)',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    overflow: 'hidden',
+  },
+  skTabBar: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    height: 80,
-    borderRadius: 16,
-  },
-  chartBlock: {
-    height: 100,
-    borderRadius: 16,
-    marginBottom: 28,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    gap: 6,
   },
-  sectionTitle: {
-    width: 140,
-    height: 16,
-    borderRadius: 8,
-  },
-  sectionLink: {
-    width: 50,
-    height: 12,
-    borderRadius: 6,
-  },
-  cardsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
-  challengeCard: {
-    width: SCREEN_WIDTH * 0.7,
-    height: 180,
-    borderRadius: 16,
-  },
-  challengeCardPartial: {
-    width: SCREEN_WIDTH * 0.3,
-    height: 180,
-    borderRadius: 16,
-  },
-  bentoRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  bentoCard: {
+  skTabSlot: {
     flex: 1,
-    height: 160,
-    borderRadius: 20,
+    height: 38,
+    borderRadius: 12,
+  },
+  skSheetBody: {
+    paddingHorizontal: SK_CARD_PAD,
+    paddingTop: 8,
+    paddingBottom: 100,
+    backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(24, 20, 38, 0.98)',
+  },
+  skStatsTopRow: {
+    flexDirection: 'row',
+    gap: SK_CARD_GAP,
+    height: SK_HERO_H,
+    marginBottom: SK_CARD_GAP,
+  },
+  skHeroStat: {
+    borderRadius: 18,
+  },
+  skSideCol: {
+    gap: SK_CARD_GAP,
+  },
+  skSideStat: {
+    width: '100%',
+    borderRadius: 16,
+  },
+  skActionsRow: {
+    flexDirection: 'row',
+    gap: SK_CARD_GAP,
+    marginBottom: SK_CARD_GAP,
+  },
+  skActionStat: {
+    minHeight: 64,
+    borderRadius: 16,
+  },
+  skRewardRow: {
+    height: 92,
+    borderRadius: 18,
+    marginBottom: 12,
   },
 });
 
@@ -238,12 +282,32 @@ export default function HomeScreen() {
   // Fade-in animation for smooth transition from splash
   const fadeOpacity = useSharedValue(0);
   const [hasAnimated, setHasAnimated] = useState(false);
-  
-  const fadeAnimatedStyle = useAnimatedStyle(() => {
+
+  /** 0 = cold-start skeleton overlay visible; 1 = real dashboard revealed (crossfade + scale). */
+  const coldStartReveal = useSharedValue(0);
+  const [bootOverlayMounted, setBootOverlayMounted] = useState(true);
+  const bootRevealStartedRef = useRef(false);
+
+  const fadeAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: fadeOpacity.value,
+  }));
+
+  /** Dashboard shell: combines focus fade + cold-start handoff from skeleton. */
+  const dashboardShellStyle = useAnimatedStyle(() => {
+    const reveal = coldStartReveal.value;
+    const fade = fadeOpacity.value;
     return {
-      opacity: fadeOpacity.value,
+      opacity: reveal * fade,
+      transform: [
+        { scale: interpolate(reveal, [0, 0.35, 1], [0.96, 0.985, 1]) },
+      ],
     };
   });
+
+  const bootSkeletonLayerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(coldStartReveal.value, [0, 0.55, 1], [1, 0.25, 0]),
+    transform: [{ translateY: interpolate(coldStartReveal.value, [0, 1], [0, -6]) }],
+  }));
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -432,6 +496,27 @@ export default function HomeScreen() {
       setLoading(false);
     }
   }, [session?.user]);
+
+  /** Crossfade + scale from cold-start skeleton → real dashboard once profile exists or first fetch finishes. */
+  useEffect(() => {
+    if (!homeGymId || !session?.user) return;
+    if (bootRevealStartedRef.current) return;
+
+    const ready = !!profile?.id || (!loading && hasLoadedOnce.current);
+    if (!ready) return;
+
+    bootRevealStartedRef.current = true;
+    coldStartReveal.value = withTiming(
+      1,
+      {
+        duration: profile?.id ? 620 : 400,
+        easing: Easing.bezier(0.33, 1, 0.32, 1),
+      },
+      (finished) => {
+        if (finished) runOnJS(setBootOverlayMounted)(false);
+      },
+    );
+  }, [homeGymId, session?.user, profile?.id, loading]);
 
   // Badge notifications with confetti
   const { newBadge, clearNewBadge } = useBadgeNotifications({
@@ -712,23 +797,6 @@ export default function HomeScreen() {
       ],
     });
   };
-
-  // ── Cold-start redacted skeleton (first load only) ──
-  if (!hasLoadedOnce.current && !profile && homeGymId) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <LinearGradient
-            colors={['#080808', '#0A0E1A', '#080808'] as any}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <ColdStartSkeleton branding={branding} />
-        </SafeAreaView>
-      </View>
-    );
-  }
 
   // ── Empty state for users with no home gym ──
   if (!homeGymId) {
@@ -1028,8 +1096,9 @@ export default function HomeScreen() {
   const sheetMinHeight = SCREEN_HEIGHT - insets.top - HEADER_H - TAB_BAR_H;
 
   return (
-    <Animated.View style={[{ flex: 1, backgroundColor: '#000000' }, fadeAnimatedStyle]}>
-      <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: '#000000' }}>
+      <Animated.View style={[{ flex: 1, backgroundColor: '#000000' }, dashboardShellStyle]}>
+        <SafeAreaView style={styles.container} edges={['top']}>
 
         {/* ── Background — always fills screen ── */}
         {activeGym?.background_url ? (
@@ -1321,12 +1390,34 @@ export default function HomeScreen() {
           />
         )}
       </SafeAreaView>
-    </Animated.View>
+      </Animated.View>
+
+      {bootOverlayMounted && homeGymId ? (
+        <Animated.View
+          style={[StyleSheet.absoluteFillObject, styles.bootSkeletonWrap, bootSkeletonLayerStyle]}
+          pointerEvents="auto"
+        >
+          <LinearGradient
+            colors={['#080808', '#0A0E1A', '#080808'] as any}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <SafeAreaView style={styles.container} edges={['top']}>
+            <ColdStartSkeleton />
+          </SafeAreaView>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   /* ─── Layout ────────────────────────────── */
+  bootSkeletonWrap: {
+    zIndex: 100,
+    elevation: 24,
+  },
   container: {
     flex: 1,
     backgroundColor: '#080808',

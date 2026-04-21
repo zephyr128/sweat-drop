@@ -47,6 +47,8 @@ import { useBranding } from '@/lib/hooks/useBranding';
 import { theme, fontStyles } from '@/lib/theme';
 import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
+import { useIsDemoUser } from '@/hooks/useIsDemoUser';
+import { useDemoMachine } from '@/hooks/useDemoMachine';
 import {
   encodeCustomSimulatorSensorId,
   type SimMachineType,
@@ -57,8 +59,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
 const CORNER_LENGTH = 30;
 const CORNER_WIDTH = 4;
-
-const DEV_QR_UUID = process.env.EXPO_PUBLIC_DEV_QR_UUID || '';
 
 type DevMachineType = SimMachineType;
 
@@ -139,6 +139,8 @@ export function ScannerScreen() {
   const { session } = useSession();
   const { updateHomeGym } = useGymData();
   const branding = useBranding();
+  const isDemoUser = useIsDemoUser();
+  const { qrUuid: demoQrUuid } = useDemoMachine();
   const { getActiveGymId } = useGymStore();
   const dropLimit = useDropLimitStatus(getActiveGymId());
   const device = useCameraDevice('back');
@@ -861,9 +863,14 @@ export function ScannerScreen() {
     });
   };
 
-  // 5x tap on scanner area opens simulator modal (available in all builds when DEV_QR_UUID is set)
+  // 5x tap opens simulator modal — ONLY when:
+  //   1. Current user has profiles.is_demo = true (server-side flag), AND
+  //   2. A demo machine UUID is resolvable (env in dev/preview, or RPC
+  //      get_my_demo_machine() in production).
+  // Production builds do NOT ship EXPO_PUBLIC_DEV_QR_UUID; demo machine
+  // is resolved server-side and requires machines.is_demo_machine = true.
   const handleScanAreaTap = () => {
-    if (!DEV_QR_UUID) return;
+    if (!isDemoUser || !demoQrUuid) return;
     tapCountRef.current += 1;
     if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
     tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 2000);
@@ -877,7 +884,7 @@ export function ScannerScreen() {
 
   // Simulator bypass: creates session directly without machine lock so multiple testers can run concurrently
   const startDevelopWorkout = async (sensorIdOverride: string) => {
-    if (!DEV_QR_UUID) return;
+    if (!isDemoUser || !demoQrUuid) return;
     const resetDevScan = () => { setIsScanning(true); setIsProcessing(false); };
     try {
       setShowDevSimulatorModal(false);
@@ -891,13 +898,13 @@ export function ScannerScreen() {
 
       // Check machine metadata (gym_id, type, etc.) but do NOT check sensor_id or busy state
       const { data: machineStatus, error: rpcError } = await supabase.rpc('get_machine_status', {
-        p_qr_uuid: DEV_QR_UUID,
+        p_qr_uuid: demoQrUuid,
       });
 
       if (rpcError) throw rpcError;
 
       if (!machineStatus || machineStatus.length === 0) {
-        showModal({ title: t('machineNotFound'), body: t('devModeNotFound', { uuid: DEV_QR_UUID }), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
+        showModal({ title: t('machineNotFound'), body: t('devModeNotFound', { uuid: demoQrUuid }), buttons: [{ label: t('common:ok'), onPress: resetDevScan }] });
         return;
       }
 
@@ -940,7 +947,7 @@ export function ScannerScreen() {
 
       // Bypass start_session_safely to avoid machine_busy conflicts between concurrent testers.
       // machine_id is set to null to avoid the uq_sessions_one_active_per_machine constraint
-      // so multiple testers can run concurrent simulator sessions on the same DEV_QR_UUID machine.
+      // so multiple testers can run concurrent simulator sessions on the same demo machine.
       // award_drops gracefully handles machine_id IS NULL; machineType comes from route params.
       const { data: newSession, error: insertError } = await supabase
         .from('sessions')
@@ -1155,7 +1162,7 @@ export function ScannerScreen() {
         <View style={styles.overlayMiddle}>
           <View style={[styles.overlaySection, { flex: 1 }]} />
           
-          {/* Scan Frame with Premium Animations — 5x tap opens simulator */}
+          {/* Scan Frame with Premium Animations — 5x tap opens simulator (DEMO USERS ONLY) */}
           <Pressable onPress={handleScanAreaTap}>
           <Animated.View style={[styles.scanFrameContainer, frameAnimatedStyle]}>
             <View style={styles.scanFrame}>

@@ -55,6 +55,7 @@ export interface ProfileData {
   date_of_birth: string | null;
   fitness_goal: string | null;
   onboarding_completed: boolean;
+  is_demo: boolean;
 }
 
 interface AuthState {
