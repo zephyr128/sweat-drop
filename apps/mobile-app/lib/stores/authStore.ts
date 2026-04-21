@@ -315,32 +315,17 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
 
         try {
-          // Try RPC first, fall back to direct query
           const { data: rpcData, error: rpcError } = await supabase.rpc(
             'get_my_profile',
           );
 
-          if (!rpcError && rpcData) {
-            const profile = rpcData as unknown as ProfileData;
-            const step = computeOnboardingStep(profile, get().onboardingStep);
-            set({ profile, onboardingStep: step, isLoading: false });
-            return;
-          }
-
-          // Fallback: direct profiles query
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-
-          if (error) {
-            log.error('[AuthStore] Error fetching profile:', error.message);
+          if (rpcError) {
+            log.error('[AuthStore] Error fetching profile:', rpcError.message);
             set({ isLoading: false });
             return;
           }
 
-          const profile = data as ProfileData;
+          const profile = rpcData as unknown as ProfileData;
           const step = computeOnboardingStep(profile, get().onboardingStep);
           set({ profile, onboardingStep: step, isLoading: false });
         } catch (err) {

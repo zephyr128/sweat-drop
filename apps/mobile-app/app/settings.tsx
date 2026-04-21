@@ -89,11 +89,7 @@ export default function SettingsScreen() {
   const loadProfile = useCallback(async () => {
     if (!session?.user) return;
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+      const { data, error } = await supabase.rpc('get_my_profile');
 
       if (error) {
         log.error('[Settings] Error loading profile:', error);

@@ -226,24 +226,18 @@ export default function RedemptionsScreen() {
 
   const fetchPage = useCallback(async (filter: StatusFilter, page: number, append: boolean) => {
     if (!session?.user) return;
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
 
-    let query = supabase
-      .from('redemptions')
-      .select(`*, fulfilled_at, rewards:reward_id (id, name, reward_type, price_drops, image_url), gyms:gym_id (id, name)`)
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: false })
-      .range(from, to);
+    const statuses: string[] | undefined =
+      filter === 'pending' ? ['pending', 'pending_verification'] :
+      filter !== 'all'     ? [filter] :
+      undefined;
 
-    if (filter === 'pending') {
-      // Show both pending and pending_verification under the "pending" filter tab.
-      query = query.in('status', ['pending', 'pending_verification']);
-    } else if (filter !== 'all') {
-      query = query.eq('status', filter);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = await supabase.rpc('get_my_redemptions', {
+      p_gym_id:   activeGymId ?? undefined,
+      p_statuses: statuses,
+      p_limit:    PAGE_SIZE,
+      p_offset:   page * PAGE_SIZE,
+    });
     if (error) { log.error('[Redemptions] fetch error:', error); return; }
 
     const rows = data || [];
@@ -255,19 +249,19 @@ export default function RedemptionsScreen() {
     } else {
       setTab(filter, { data: rows, hasMore: rows.length === PAGE_SIZE, page: 0 });
     }
-  }, [session?.user?.id]);
+  }, [activeGymId, session?.user, setTab]);
 
   const load = useCallback(async (filter: StatusFilter) => {
     setTab(filter, { loading: true });
     try { await fetchPage(filter, 0, false); }
     finally { setTab(filter, { loading: false }); }
-  }, [fetchPage]);
+  }, [fetchPage, setTab]);
 
   const onRefresh = useCallback(async () => {
     setTab(activeFilter, { refreshing: true });
     try { await fetchPage(activeFilter, 0, false); }
     finally { setTab(activeFilter, { refreshing: false }); }
-  }, [fetchPage, activeFilter]);
+  }, [activeFilter, fetchPage, setTab]);
 
   const onLoadMore = useCallback(async () => {
     const ts = tabStates[activeFilter];
@@ -275,7 +269,7 @@ export default function RedemptionsScreen() {
     setTab(activeFilter, { loadingMore: true });
     try { await fetchPage(activeFilter, ts.page + 1, true); }
     finally { setTab(activeFilter, { loadingMore: false }); }
-  }, [tabStates, fetchPage, activeFilter]);
+  }, [activeFilter, fetchPage, setTab, tabStates]);
 
   const handleFilterSelect = useCallback((filter: StatusFilter) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -285,7 +279,7 @@ export default function RedemptionsScreen() {
 
   useFocusEffect(useCallback(() => {
     void load(activeFilter);
-  }, [activeGymId, session?.user?.id]));
+  }, [activeFilter, load]));
 
   const ts = tabStates[activeFilter];
 
@@ -310,15 +304,15 @@ export default function RedemptionsScreen() {
   const activeColor = activeFilter === 'all' ? branding.primary : activeOpt.color;
 
   // ── Helpers ──
-  const getRedemptionName = (r: any) => {
+  const getRedemptionName = useCallback((r: any) => {
     if (r.source_type === 'leaderboard_prize' || r.source_type === 'arena_prize') {
       const desc: string = r.description || '';
       const dashIdx = desc.indexOf(' — ');
       if (dashIdx !== -1) return desc.slice(dashIdx + 3);
       return desc || (r.source_type === 'leaderboard_prize' ? t('leaderboardPrize') : t('arenaPrize'));
     }
-    return r.rewards?.name || t('unknownReward');
-  };
+    return r.reward_name || t('unknownReward');
+  }, [t]);
 
   const getRewardIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
@@ -336,10 +330,10 @@ export default function RedemptionsScreen() {
     return null;
   };
 
-  const copyCode = (code: string) => {
+  const copyCode = useCallback((code: string) => {
     Clipboard.setString(code);
     showModal({ title: t('copied'), body: t('codeCopied') });
-  };
+  }, [showModal, t]);
 
   // AGENT NOTE: [2026-04-20] - mobile-coder
   // Reference: docs/plans/bugfix_redemption_cancel_and_pending_spent_transactions.md Step 4
@@ -350,7 +344,7 @@ export default function RedemptionsScreen() {
   //   reconciled before the user can interact again.
   // Fix C — also reload 'cancelled' tab so cancelled item appears there.
   // Fix D — error branch also reloads to avoid stale state.
-  const doCancel = async (redemption: any) => {
+  const doCancel = useCallback(async (redemption: any) => {
     setCancellingId(redemption.id);
     try {
       const { data, error } = await supabase.rpc('cancel_own_redemption', { p_redemption_id: redemption.id });
@@ -390,9 +384,9 @@ export default function RedemptionsScreen() {
     } finally {
       setCancellingId(null);
     }
-  };
+  }, [activeFilter, load, showModal, t]);
 
-  const handleCancelRedemption = (redemption: any) => {
+  const handleCancelRedemption = useCallback((redemption: any) => {
     showModal({
       title: t('cancelTitle'),
       body: t('cancelConfirm', { drops: redemption.drops_spent }),
@@ -401,7 +395,7 @@ export default function RedemptionsScreen() {
         { label: t('cancelYes'), style: 'destructive', onPress: () => doCancel(redemption) },
       ],
     });
-  };
+  }, [doCancel, showModal, t]);
 
   const renderCard = useCallback(({ item: redemption, index }: { item: any; index: number }) => {
     const displayState: RedemptionDisplayState = getRedemptionDisplayState({
@@ -414,7 +408,7 @@ export default function RedemptionsScreen() {
     const stateIcon = DISPLAY_STATE_ICON[displayState] as keyof typeof Ionicons.glyphMap;
     const stateLabelKey = DISPLAY_STATE_LABEL_KEY[displayState];
 
-    const imageUrl = redemption.rewards?.image_url;
+    const imageUrl = redemption.reward_image;
     const sourceIcon = getSourceIcon(redemption.source_type);
     const isHighlighted = highlightId === redemption.id;
 
@@ -431,7 +425,7 @@ export default function RedemptionsScreen() {
     // Cancel button only available for actionable pending states
     const canCancel = displayState === 'pending_verification' || displayState === 'pending_not_fulfilled' || displayState === 'pending_ready';
 
-    const gymName = redemption.gyms?.name || t('unknownGym');
+    const gymName = redemption.gym_name || t('unknownGym');
 
     return (
       <Animated.View
@@ -466,7 +460,7 @@ export default function RedemptionsScreen() {
                   {sourceIcon ? (
                     <Text style={styles.sourceEmoji}>{sourceIcon}</Text>
                   ) : (
-                    <Ionicons name={getRewardIcon(redemption.rewards?.reward_type || '')} size={24} color={branding.primary} />
+                    <Ionicons name={getRewardIcon(redemption.reward_type || '')} size={24} color={branding.primary} />
                   )}
                 </View>
               )}
@@ -590,7 +584,7 @@ export default function RedemptionsScreen() {
         </View>
       </Animated.View>
     );
-  }, [branding.primary, cancellingId, highlightId, t]);
+  }, [branding.primary, cancellingId, copyCode, getRedemptionName, handleCancelRedemption, highlightId, t]);
 
   return (
     <View style={styles.container}>

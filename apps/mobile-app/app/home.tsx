@@ -480,11 +480,7 @@ export default function HomeScreen() {
     }
 
     try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+      const { data: profileData } = await supabase.rpc('get_my_profile');
 
       if (profileData) {
         setProfile(profileData);
