@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Professional marketing website builder
   - SEO-optimized, conversion-focused landing pages
   - Next.js 15 with App Router
+- External pilot demo-gate backend hardening:
+  - `profiles.is_demo` flag added with superadmin-only mutation guard
+  - `get_my_profile()` now includes `is_demo` for server-truth simulator gating (single-row RPC contract preserved)
+  - `machines.is_demo_machine` and `get_my_demo_machine()` added to bind demo sessions to explicitly marked machines
 
 ---
 

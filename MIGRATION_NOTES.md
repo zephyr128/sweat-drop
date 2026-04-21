@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-03-30 (pre-production dead feature cleanup)
+**Last Updated:** 2026-04-21 (external pilot demo gate)
 
 ---
 
@@ -16,6 +16,42 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-04-21] - External Pilot Demo Gate (`profiles.is_demo` + demo machines)
+
+**Migrations:**
+- `20260421192713_profiles_is_demo_flag.sql`
+- `20260421192714_get_my_profile_include_is_demo.sql`
+- `20260421192715_get_my_profile_single_row_contract.sql`
+- `20260421195628_machines_is_demo_machine_and_rpc.sql`
+
+**Agent:** supabase-dba
+
+#### Changes
+- Added `public.profiles.is_demo BOOLEAN NOT NULL DEFAULT false`
+- Added column comment describing reviewer/demo-only usage and anti-fraud intent
+- Added partial index `idx_profiles_is_demo` (`WHERE is_demo = true`)
+- Added update policy `profiles_is_demo_superadmin_only` using `public.is_superadmin(auth.uid())`
+- Added trigger guard `trg_profiles_guard_is_demo_update` to block non-superadmin `is_demo` mutations while preserving regular self-profile updates
+- Updated `public.get_my_profile()` to include `is_demo` while preserving single-row `RETURNS public.profiles` contract (non-array RPC response)
+- Added `public.machines.is_demo_machine BOOLEAN NOT NULL DEFAULT false`
+- Added partial index `idx_machines_is_demo_machine` (`WHERE is_demo_machine = true`)
+- Added RPC `public.get_my_demo_machine()` (returns one eligible demo machine for demo users)
+
+#### Impact
+- **Mobile App:** Can gate simulator entry behind server-side `profiles.is_demo` and resolve simulator target via `get_my_demo_machine()`.
+- **Admin Panel:** Superadmin can toggle demo users and mark demo-capable machines.
+
+#### Breaking Changes
+- None (additive schema + additive RPC output field)
+
+#### Next Steps
+1. [x] Pushed migrations to DEV, then to PROD.
+2. [x] Regenerated database types to include `profiles.is_demo`, `machines.is_demo_machine`, `get_my_profile.is_demo`, and `get_my_demo_machine`.
+3. [ ] mobile-coder: consume `is_demo` in auth profile type and simulator gate.
+4. [ ] admin-coder: add superadmin toggle UI for demo users.
+
+---
 
 ### [2026-03-30] - Pre-Production Dead Feature Cleanup
 
