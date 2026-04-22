@@ -27,6 +27,7 @@ import Animated, {
 import { useTranslation } from 'react-i18next';
 import { formatMonthYear } from '@/lib/utils/formatDate';
 import { log } from '@/lib/logger';
+import { useIsDemoUser } from '@/hooks/useIsDemoUser';
 
 function SectionLabel({ label }: { label: string }) {
   return <Text style={styles.sectionLabel}>{label}</Text>;
@@ -85,7 +86,9 @@ export default function ProfileScreen() {
       (b) => b.badge_type === 'global' || b.gym_id === homeGymId,
     );
   }, [allBadges, homeGymId]);
+  const isDemo = useIsDemoUser();
   const { t, i18n } = useTranslation('profile');
+  const { t: tCommon } = useTranslation('common');
   const { t: tSocial } = useTranslation('socialFriends');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0 });
@@ -302,6 +305,13 @@ export default function ProfileScreen() {
                   pointerEvents="none"
                 />
 
+                {isDemo && (
+                  <View style={styles.demoPill}>
+                    <Ionicons name="flask-outline" size={11} color="#FF9900" />
+                    <Text style={styles.demoPillText}>{tCommon('demoMode')}</Text>
+                  </View>
+                )}
+
                 {homeGymId && isVerified !== null && (
                   <TouchableOpacity
                     onPress={() => { if (!isVerified) setShowVerificationSheet(true); }}
@@ -326,7 +336,7 @@ export default function ProfileScreen() {
                     >
                       <Ionicons
                         name={isVerified ? 'shield-checkmark' : 'shield-outline'}
-                        size={14}
+                        size={11}
                         color={isVerified ? '#86efac' : '#fcd34d'}
                       />
                     </View>
@@ -716,8 +726,7 @@ const styles = StyleSheet.create({
     paddingTop: 22,
     paddingBottom: 18,
   },
-  /** Pushes identity row below absolute top-right verification pill. */
-  heroIdentityRowWithVerification: { paddingTop: 50 },
+  heroIdentityRowWithVerification: { paddingTop: 42 },
 
   // flip card
   flipCardContainer: { width: 76, height: 90, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
@@ -747,8 +756,7 @@ const styles = StyleSheet.create({
 
   // name block
   heroNameBlock: { flex: 1, minWidth: 0 },
-  /** Reserve space for the absolute verification pill (top-right of hero). */
-  heroNameBlockWithVerification: { paddingRight: 132 },
+  heroNameBlockWithVerification: { paddingRight: 0 },
   username: {
     ...fontStyles.heading,
     fontSize: 22,
@@ -767,6 +775,29 @@ const styles = StyleSheet.create({
   newcomerDot: { marginLeft: 2 },
   newcomerDotText: { fontSize: 11 },
 
+  demoPill: {
+    position: 'absolute',
+    top: 10,
+    left: 14,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 153, 0, 0.50)',
+    backgroundColor: 'rgba(40, 28, 10, 0.72)',
+  },
+  demoPillText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 9,
+    letterSpacing: 0.6,
+    color: '#FF9900',
+    textTransform: 'uppercase',
+  },
+
   verifiedBadgePill: {
     position: 'absolute',
     top: 10,
@@ -774,17 +805,17 @@ const styles = StyleSheet.create({
     zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    paddingLeft: 6,
-    paddingRight: 12,
-    borderRadius: 22,
+    gap: 5,
+    paddingVertical: 4,
+    paddingLeft: 4,
+    paddingRight: 9,
+    borderRadius: 16,
     borderWidth: 1,
-    maxWidth: '52%',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 6,
+    maxWidth: '42%',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   verifiedBadgePillOn: {
     backgroundColor: 'rgba(16, 40, 28, 0.72)',
@@ -793,16 +824,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(45, 36, 14, 0.72)',
   },
   verifiedBadgeIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
   },
   verifiedBadgePillText: {
     ...fontStyles.bodySemiBold,
-    fontSize: 11,
-    letterSpacing: 0.25,
+    fontSize: 9,
+    letterSpacing: 0.2,
     flexShrink: 1,
   },
 

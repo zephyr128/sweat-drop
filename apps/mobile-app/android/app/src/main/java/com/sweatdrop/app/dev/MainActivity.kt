@@ -1,4 +1,4 @@
-package com.sweatdrop.app
+package com.sweatdrop.app.dev
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

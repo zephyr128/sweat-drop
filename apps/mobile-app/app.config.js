@@ -10,9 +10,15 @@ const googleIosClientId =
 const googleIosUrlScheme =
   process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME || DEFAULT_GOOGLE_IOS_URL_SCHEME;
 
+const IS_DEV = process.env.EXPO_PUBLIC_APP_ENV !== 'production';
+
+const bundleId = IS_DEV ? 'com.sweatdrop.app.dev' : 'com.sweatdrop.app';
+const appName = IS_DEV ? 'SweatDrop Dev' : 'SweatDrop';
+const scheme = IS_DEV ? 'sweatdrop-dev' : 'sweatdrop';
+
 module.exports = {
   expo: {
-    name: 'SweatDrop',
+    name: appName,
     slug: 'sweatdrop',
     owner: 'zephyr23',
     version: '1.0.0',
@@ -29,7 +35,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       buildNumber: '17',
-      bundleIdentifier: 'com.sweatdrop.app',
+      bundleIdentifier: bundleId,
       associatedDomains: ['applinks:sweat-drop.com', 'applinks:www.sweat-drop.com'],
       entitlements: {
         'aps-environment': 'production',
@@ -53,8 +59,8 @@ module.exports = {
         foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
         backgroundColor: '#0A0E1A', // Dark navy background
       },
-      versionCode: 17,
-      package: 'com.sweatdrop.app',
+      versionCode: 18,
+      package: bundleId,
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       intentFilters: [
@@ -159,7 +165,7 @@ module.exports = {
           ]
         : []),
     ],
-    scheme: 'sweatdrop',
+    scheme: scheme,
     extra: {
       googleWebClientId,
       googleIosClientId,

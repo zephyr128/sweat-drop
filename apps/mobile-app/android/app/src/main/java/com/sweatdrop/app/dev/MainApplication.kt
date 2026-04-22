@@ -1,4 +1,4 @@
-package com.sweatdrop.app
+package com.sweatdrop.app.dev
 
 import android.app.Application
 import android.content.res.Configuration

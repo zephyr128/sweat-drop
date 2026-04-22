@@ -42,7 +42,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
 }
 expoAutolinking.useExpoModules()
 
-rootProject.name = 'SweatDrop'
+rootProject.name = 'SweatDrop Dev'
 
 expoAutolinking.useExpoVersionCatalog()
 

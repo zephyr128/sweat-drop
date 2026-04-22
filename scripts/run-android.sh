@@ -159,7 +159,10 @@ pnpm --filter sweatdrop-mobile-app android
 echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}  Done!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+PACKAGE_NAME="com.sweatdrop.app"
+[[ "$ENV_ARG" == "dev" ]] && PACKAGE_NAME="com.sweatdrop.app.dev"
+
 echo -e "${YELLOW}  Useful commands:${NC}"
 echo "    View logs:  adb logcat | grep ReactNative"
 echo "    Dev menu:   adb shell input keyevent 82"
-echo "    Clear data: adb shell pm clear com.sweatdrop.app"
+echo "    Clear data: adb shell pm clear $PACKAGE_NAME"
