@@ -18,6 +18,8 @@ web-build/
 android/keystore.properties
 android/keystore.prod.properties
 android/keystore.dev.properties
+.keystore.prod.properties
+.keystore.dev.properties
 
 # Firebase / FCM (push) — NEVER commit these
 google-services.json

@@ -78,13 +78,15 @@ case "$ENV_NAME" in
   prod|production)
     ENV_FILE="$APP_DIR/.env.prod.local"
     LABEL="PRODUCTION"
-    SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.prod.properties"
+    SOURCE_KEYSTORE_PROPS="$APP_DIR/.keystore.prod.properties"
+    LEGACY_SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.prod.properties"
     EXPECTED_SHA1="$EXPECTED_SHA1_PROD"
     ;;
   dev|development)
     ENV_FILE="$APP_DIR/.env.dev.local"
     LABEL="DEVELOPMENT"
-    SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.dev.properties"
+    SOURCE_KEYSTORE_PROPS="$APP_DIR/.keystore.dev.properties"
+    LEGACY_SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.dev.properties"
     EXPECTED_SHA1="$EXPECTED_SHA1_DEV"
     ;;
   *) error "Unknown env '$ENV_NAME'. Use: prod | dev" ;;
@@ -92,8 +94,15 @@ esac
 
 [[ -f "$ENV_FILE" ]] || error "Env file not found: $ENV_FILE"
 
+# Migrate once from legacy location under android/ (which is wiped by
+# expo prebuild --clean) to a stable app-root dotfile path.
+if [[ ! -f "$SOURCE_KEYSTORE_PROPS" && -f "$LEGACY_SOURCE_KEYSTORE_PROPS" ]]; then
+  cp "$LEGACY_SOURCE_KEYSTORE_PROPS" "$SOURCE_KEYSTORE_PROPS"
+  warn "Migrated keystore config from $LEGACY_SOURCE_KEYSTORE_PROPS -> $SOURCE_KEYSTORE_PROPS"
+fi
+
 if [[ ! -f "$SOURCE_KEYSTORE_PROPS" ]]; then
-  error "Missing $SOURCE_KEYSTORE_PROPS — copy keystore.properties.example and fill in upload key credentials (from: EXPO_PUBLIC_APP_ENV=$ENV_NAME npx eas credentials)."
+  error "Missing $SOURCE_KEYSTORE_PROPS — create it by copying .keystore.template.properties and fill upload credentials (from: EXPO_PUBLIC_APP_ENV=$ENV_NAME npx eas credentials)."
 fi
 
 if grep -qE "REPLACE_ME" "$SOURCE_KEYSTORE_PROPS"; then
@@ -157,8 +166,7 @@ fi
 KEYSTORE_PROPS_BACKUP="/tmp/sweatdrop_keystore.properties.bak"
 cp "$KEYSTORE_PROPS" "$KEYSTORE_PROPS_BACKUP"
 
-# Backup source per-env properties file too (it also lives under android/ and
-# gets deleted by prebuild --clean).
+# Backup source per-env properties file.
 SOURCE_KEYSTORE_PROPS_BACKUP="/tmp/sweatdrop_$(basename "$SOURCE_KEYSTORE_PROPS").bak"
 cp "$SOURCE_KEYSTORE_PROPS" "$SOURCE_KEYSTORE_PROPS_BACKUP"
 
@@ -178,7 +186,7 @@ npx expo prebuild --platform android --clean --no-install 2>&1 | tail -10
 cp "$KEYSTORE_PROPS_BACKUP" "$KEYSTORE_PROPS"
 info "Restored keystore.properties after prebuild"
 
-# Restore source per-env keystore properties file after prebuild wipe.
+# Restore source per-env keystore properties file (defensive restore).
 mkdir -p "$(dirname "$SOURCE_KEYSTORE_PROPS")"
 cp "$SOURCE_KEYSTORE_PROPS_BACKUP" "$SOURCE_KEYSTORE_PROPS"
 info "Restored $(basename "$SOURCE_KEYSTORE_PROPS") after prebuild"
