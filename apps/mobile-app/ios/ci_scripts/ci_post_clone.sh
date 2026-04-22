@@ -108,23 +108,110 @@ if [ "$APP_ENV_VALUE" != "production" ]; then
 fi
 EXPECTED_IOS_WORKSPACE="$IOS_DIR/${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
 
+echo "── iOS workspace resolution ──"
+echo "  APP_ENV_VALUE=$APP_ENV_VALUE"
+echo "  EXPECTED_IOS_PROJECT_NAME=$EXPECTED_IOS_PROJECT_NAME"
+echo "  EXPECTED_IOS_WORKSPACE=$EXPECTED_IOS_WORKSPACE"
+
 if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
   echo "Expected workspace missing ($EXPECTED_IOS_WORKSPACE). Regenerating iOS native project..."
-  cd "$CI_PRIMARY_REPOSITORY_PATH"
-  EXPO_NO_DOTENV=1 EXPO_PUBLIC_APP_ENV="$APP_ENV_VALUE" \
-    pnpm --filter sweatdrop-mobile-app exec expo prebuild --platform ios --clean --no-install
 
-  # prebuild --clean deletes ios/ci_scripts; restore so Xcode Cloud hooks remain.
+  # Preserve ci_scripts outside of ios/ before nuking the whole directory so we
+  # can restore them after prebuild (prebuild --clean would wipe them anyway).
+  CI_SCRIPTS_BACKUP="$(mktemp -d)/ci_scripts"
+  if [ -d "$IOS_DIR/ci_scripts" ]; then
+    cp -R "$IOS_DIR/ci_scripts" "$CI_SCRIPTS_BACKUP"
+  fi
+
+  # Fully remove the committed ios/ folder so Expo regenerates from scratch
+  # using the current env. Some Expo versions skip renaming in-place projects
+  # when a native folder already exists, which caused the old workspace name
+  # (SweatDrop) to persist for dev builds expecting SweatDropDev.
+  rm -rf "$IOS_DIR"
+
+  # Run prebuild directly inside the mobile app so env vars are guaranteed to
+  # reach app.config.js evaluation (pnpm --filter exec has, in practice, been
+  # flaky about propagating inline env vars on Xcode Cloud runners).
+  cd "$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app"
+  export EXPO_NO_DOTENV=1
+  export EXPO_PUBLIC_APP_ENV="$APP_ENV_VALUE"
+  echo "  Running: npx expo prebuild --platform ios --clean --no-install (EXPO_PUBLIC_APP_ENV=$EXPO_PUBLIC_APP_ENV)"
+  npx expo prebuild --platform ios --clean --no-install
+
+  # Restore ci_scripts wiped by prebuild --clean / rm -rf above.
   mkdir -p "$IOS_DIR/ci_scripts"
+  if [ -d "$CI_SCRIPTS_BACKUP" ]; then
+    cp -R "$CI_SCRIPTS_BACKUP"/. "$IOS_DIR/ci_scripts/"
+  fi
   for script in ci_post_clone.sh ci_pre_xcodebuild.sh; do
-    git -C "$CI_PRIMARY_REPOSITORY_PATH" checkout -- "apps/mobile-app/ios/ci_scripts/$script" 2>/dev/null || true
+    if [ ! -f "$IOS_DIR/ci_scripts/$script" ]; then
+      git -C "$CI_PRIMARY_REPOSITORY_PATH" checkout -- "apps/mobile-app/ios/ci_scripts/$script" 2>/dev/null || true
+    fi
   done
   chmod +x "$IOS_DIR/ci_scripts/"*.sh 2>/dev/null || true
 fi
 
+echo "── ios/ contents after prebuild ──"
+ls -la "$IOS_DIR" || true
+
+# If Expo generated the project under a different name (e.g. the env var did
+# not reach app.config.js), detect the actual workspace and rename the whole
+# project so Xcode Cloud's fixed workspace/scheme path resolves.
 if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
-  echo "ERROR: Expected workspace still missing after prebuild: $EXPECTED_IOS_WORKSPACE"
+  ACTUAL_PROJECT_NAME=""
+  for ws in "$IOS_DIR"/*.xcworkspace; do
+    [ -d "$ws" ] || continue
+    base="$(basename "$ws" .xcworkspace)"
+    if [ -n "$ACTUAL_PROJECT_NAME" ]; then
+      echo "ERROR: Multiple .xcworkspace directories found in $IOS_DIR; cannot auto-resolve."
+      ls -la "$IOS_DIR"
+      exit 1
+    fi
+    ACTUAL_PROJECT_NAME="$base"
+  done
+
+  if [ -z "$ACTUAL_PROJECT_NAME" ]; then
+    echo "ERROR: No .xcworkspace found in $IOS_DIR after prebuild."
+    ls -la "$IOS_DIR"
+    exit 1
+  fi
+
+  echo "WARNING: Expo generated '$ACTUAL_PROJECT_NAME' but Xcode Cloud expects '$EXPECTED_IOS_PROJECT_NAME'."
+  echo "  Renaming project in place..."
+
+  cd "$IOS_DIR"
+  mv "${ACTUAL_PROJECT_NAME}.xcworkspace" "${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
+  mv "${ACTUAL_PROJECT_NAME}.xcodeproj" "${EXPECTED_IOS_PROJECT_NAME}.xcodeproj"
+  if [ -d "$ACTUAL_PROJECT_NAME" ]; then
+    mv "$ACTUAL_PROJECT_NAME" "$EXPECTED_IOS_PROJECT_NAME"
+  fi
+
+  # Replace textual references inside workspace/project/scheme files.
+  # BSD sed (macOS) requires an empty '' after -i.
+  find "$IOS_DIR" \
+    -type f \
+    \( -name "*.pbxproj" -o -name "*.xcworkspacedata" -o -name "*.xcscheme" -o -name "Podfile" -o -name "Podfile.lock" -o -name "*.plist" -o -name "*.entitlements" -o -name "*.h" -o -name "*.m" -o -name "*.mm" -o -name "*.swift" \) \
+    -exec sed -i '' "s/${ACTUAL_PROJECT_NAME}/${EXPECTED_IOS_PROJECT_NAME}/g" {} +
+
+  echo "Rename done. ios/ now contains:"
+  ls -la "$IOS_DIR"
+fi
+
+if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
+  echo "ERROR: Expected workspace still missing after prebuild + rename: $EXPECTED_IOS_WORKSPACE"
+  ls -la "$IOS_DIR"
   exit 1
+fi
+
+# Patch CODE_SIGN_STYLE = Automatic into project.pbxproj. Expo prebuild omits
+# this; without it `xcodebuild -exportArchive` fails with exit code 70 on
+# Xcode Cloud for automatic-signing workflows.
+PBXPROJ="$IOS_DIR/${EXPECTED_IOS_PROJECT_NAME}.xcodeproj/project.pbxproj"
+if [ -f "$PBXPROJ" ] && ! grep -q "CODE_SIGN_STYLE" "$PBXPROJ"; then
+  echo "Patching CODE_SIGN_STYLE = Automatic into $PBXPROJ"
+  sed -i '' '/CODE_SIGN_ENTITLEMENTS = /a\
+\				CODE_SIGN_STYLE = Automatic;
+' "$PBXPROJ"
 fi
 
 # Re-apply icon assets after potential prebuild regeneration.
