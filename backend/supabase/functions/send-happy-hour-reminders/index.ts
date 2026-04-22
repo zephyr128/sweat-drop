@@ -28,6 +28,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { deliveryCountFromSendPushBody, isExpoPushToken } from '../_shared/expo-push.ts';
+import { getEdgeInternalJwt } from '../_shared/edge-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,6 +99,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const internalJwt = getEdgeInternalJwt();
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── 1. Load all active, visible boost rules ─────────────────────
@@ -198,7 +200,7 @@ serve(async (req) => {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  Authorization: `Bearer ${supabaseServiceKey}`,
+                  Authorization: `Bearer ${internalJwt}`,
                 },
                 body: JSON.stringify({
                   client_ref: 'happy_hour_reminder',

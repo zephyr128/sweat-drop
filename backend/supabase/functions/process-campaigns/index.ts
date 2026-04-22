@@ -13,6 +13,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { deliveryCountFromSendPushBody, isExpoPushToken, EXPO_PUSH_BATCH_SIZE } from '../_shared/expo-push.ts';
+import { getEdgeInternalJwt } from '../_shared/edge-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,6 +31,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const internalJwt = getEdgeInternalJwt();
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // Find campaigns to process
@@ -176,7 +178,7 @@ serve(async (req) => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${serviceKey}`,
+              Authorization: `Bearer ${internalJwt}`,
             },
             body: JSON.stringify({
               client_ref: `campaign_${campaign.id.slice(0, 8)}`,
@@ -188,7 +190,19 @@ serve(async (req) => {
             }),
           });
 
-          const pushJson = await pushRes.json().catch(() => null);
+          let pushText = '';
+          let pushJson: any = null;
+          try {
+            pushText = await pushRes.text();
+            pushJson = pushText ? JSON.parse(pushText) : null;
+          } catch {
+            pushJson = null;
+          }
+          if (!pushRes.ok) {
+            console.error(
+              `[process-campaigns] send-push HTTP ${pushRes.status} for campaign ${campaign.id}: ${pushText.slice(0, 200)}`
+            );
+          }
 
           // Consider the push call successful when the HTTP response is ok and
           // send-push accepted the payload (ok:true). We do NOT require

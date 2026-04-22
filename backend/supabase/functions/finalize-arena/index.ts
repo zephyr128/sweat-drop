@@ -27,6 +27,7 @@ import {
   deliveryCountFromSendPushBody,
   isExpoPushToken,
 } from '../_shared/expo-push.ts';
+import { getEdgeInternalJwt } from '../_shared/edge-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,6 +67,7 @@ serve(async (req) => {
     // Initialize Supabase client with service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const internalJwt = getEdgeInternalJwt();
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Find arenas to finalize
@@ -212,7 +214,7 @@ serve(async (req) => {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${supabaseServiceKey}`,
+                    Authorization: `Bearer ${internalJwt}`,
                   },
                   body: JSON.stringify({
                     client_ref: needsVerification
@@ -266,7 +268,7 @@ serve(async (req) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${supabaseServiceKey}`,
+                Authorization: `Bearer ${internalJwt}`,
               },
               body: JSON.stringify({
                 client_ref: 'finalize_arena_participants',

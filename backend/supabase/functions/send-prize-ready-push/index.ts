@@ -15,6 +15,7 @@ import {
   deliveryCountFromSendPushBody,
   isExpoPushToken,
 } from '../_shared/expo-push.ts';
+import { getEdgeInternalJwt } from '../_shared/edge-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,12 +36,16 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const internalJwt = getEdgeInternalJwt();
   const authHeader = req.headers.get('Authorization') ?? '';
   const bearer = authHeader.startsWith('Bearer ')
     ? authHeader.slice(7).trim()
     : '';
 
-  if (!serviceKey || bearer !== serviceKey) {
+  // Accept either the platform-injected service role key or the custom
+  // JWT-format internal key (used for cross-function calls).
+  const authorized = !!bearer && (bearer === serviceKey || bearer === internalJwt);
+  if (!authorized) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -141,7 +146,7 @@ serve(async (req) => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${serviceKey}`,
+      Authorization: `Bearer ${internalJwt}`,
     },
     body: JSON.stringify({
       client_ref: 'prize_ready',
