@@ -189,9 +189,15 @@ serve(async (req) => {
           });
 
           const pushJson = await pushRes.json().catch(() => null);
-          const delivered = deliveryCountFromSendPushBody(pushJson);
 
-          if (pushRes.ok && delivered > 0) {
+          // Consider the push call successful when the HTTP response is ok and
+          // send-push accepted the payload (ok:true). We do NOT require
+          // receipt_ok > 0 because some users may have revoked push permission
+          // (send-push returns receipt_error for those) but the call itself
+          // still succeeded and inbox rows were written for all user_ids.
+          const pushCallOk = pushRes.ok && pushJson?.ok === true;
+
+          if (pushCallOk) {
             await supabase
               .from('engagement_campaign_deliveries')
               .update({ status: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -202,7 +208,7 @@ serve(async (req) => {
               .from('engagement_campaign_deliveries')
               .update({
                 status: 'failed',
-                error_text: pushJson?.error || 'push_failed',
+                error_text: pushJson?.error || `http_${pushRes.status}`,
                 sent_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               })
