@@ -111,7 +111,8 @@ EXPECTED_IOS_WORKSPACE="$IOS_DIR/${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
 if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
   echo "Expected workspace missing ($EXPECTED_IOS_WORKSPACE). Regenerating iOS native project..."
   cd "$CI_PRIMARY_REPOSITORY_PATH"
-  pnpm --filter sweatdrop-mobile-app exec expo prebuild --platform ios --clean --no-install
+  EXPO_NO_DOTENV=1 EXPO_PUBLIC_APP_ENV="$APP_ENV_VALUE" \
+    pnpm --filter sweatdrop-mobile-app exec expo prebuild --platform ios --clean --no-install
 
   # prebuild --clean deletes ios/ci_scripts; restore so Xcode Cloud hooks remain.
   mkdir -p "$IOS_DIR/ci_scripts"
