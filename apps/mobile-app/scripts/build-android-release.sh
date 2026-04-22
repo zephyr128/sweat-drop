@@ -15,12 +15,17 @@ APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_CONFIG="$APP_DIR/app.config.js"
 BUILD_GRADLE="$APP_DIR/android/app/build.gradle"
 OUTPUT_DIR="$APP_DIR/android/app/build/outputs/bundle/release"
+
+# build.gradle reads from android/keystore.properties (fixed path). The build
+# script copies the right per-env source keystore.properties into place below.
 KEYSTORE_PROPS="$APP_DIR/android/keystore.properties"
 PATCH_SIGNING_PY="$SCRIPT_DIR/patch-android-signing.py"
 
-# SHA1 fingerprint that Google Play expects for the upload keystore.
-# Update this if the Play Console upload key is ever rotated.
-EXPECTED_UPLOAD_SHA1="32:0F:C2:DF:D8:63:A0:34:F4:3A:2E:F9:38:D6:D9:4C:49:E7:CA:AE"
+# Per-env SHA1 fingerprints the Play Console expects for each upload key.
+# Prod is locked. Dev will be locked after the first successful upload — fill
+# it in then so future builds fail fast on mismatch.
+EXPECTED_SHA1_PROD="32:0F:C2:DF:D8:63:A0:34:F4:3A:2E:F9:38:D6:D9:4C:49:E7:CA:AE"
+EXPECTED_SHA1_DEV=""
 
 detect_ios_iconset_dir() {
   shopt -s nullglob
@@ -68,32 +73,52 @@ if [[ -z "$ENV_NAME" ]]; then
   esac
 fi
 
-# ── Resolve env file ──────────────────────────────────────────────────────────
+# ── Resolve env file + per-env upload keystore ────────────────────────────────
 case "$ENV_NAME" in
-  prod|production) ENV_FILE="$APP_DIR/.env.prod.local" ; LABEL="PRODUCTION" ;;
-  dev|development) ENV_FILE="$APP_DIR/.env.dev.local"  ; LABEL="DEVELOPMENT" ;;
+  prod|production)
+    ENV_FILE="$APP_DIR/.env.prod.local"
+    LABEL="PRODUCTION"
+    SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.prod.properties"
+    EXPECTED_SHA1="$EXPECTED_SHA1_PROD"
+    ;;
+  dev|development)
+    ENV_FILE="$APP_DIR/.env.dev.local"
+    LABEL="DEVELOPMENT"
+    SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.dev.properties"
+    EXPECTED_SHA1="$EXPECTED_SHA1_DEV"
+    ;;
   *) error "Unknown env '$ENV_NAME'. Use: prod | dev" ;;
 esac
 
 [[ -f "$ENV_FILE" ]] || error "Env file not found: $ENV_FILE"
 
-if [[ ! -f "$KEYSTORE_PROPS" ]]; then
-  error "Missing $KEYSTORE_PROPS — copy keystore.properties.example and fill in upload key credentials (from: npx eas credentials)."
+if [[ ! -f "$SOURCE_KEYSTORE_PROPS" ]]; then
+  error "Missing $SOURCE_KEYSTORE_PROPS — copy keystore.properties.example and fill in upload key credentials (from: EXPO_PUBLIC_APP_ENV=$ENV_NAME npx eas credentials)."
 fi
 
-if grep -qE "REPLACE_ME" "$KEYSTORE_PROPS"; then
-  error "$KEYSTORE_PROPS still contains REPLACE_ME placeholders — fill in real values before building."
+if grep -qE "REPLACE_ME" "$SOURCE_KEYSTORE_PROPS"; then
+  error "$SOURCE_KEYSTORE_PROPS still contains REPLACE_ME placeholders — fill in real values before building."
 fi
 
-STORE_FILE_VALUE="$(grep -E '^storeFile=' "$KEYSTORE_PROPS" | cut -d'=' -f2-)"
+STORE_FILE_VALUE="$(grep -E '^storeFile=' "$SOURCE_KEYSTORE_PROPS" | cut -d'=' -f2-)"
 if [[ -n "$STORE_FILE_VALUE" && ! -f "$STORE_FILE_VALUE" ]]; then
   error "Upload keystore not found at storeFile=$STORE_FILE_VALUE"
 fi
 
+# build.gradle hardcodes rootProject.file('keystore.properties'); stage the
+# per-env source there so each build signs with the correct key.
+cp "$SOURCE_KEYSTORE_PROPS" "$KEYSTORE_PROPS"
+
 echo ""
 info "Environment : ${BOLD}$LABEL${NC}"
 info "Env file    : $ENV_FILE"
+info "Keystore src: $SOURCE_KEYSTORE_PROPS"
 info "Keystore    : $STORE_FILE_VALUE"
+if [[ -n "$EXPECTED_SHA1" ]]; then
+  info "Expected SHA1: $EXPECTED_SHA1"
+else
+  warn "No expected SHA1 recorded for $LABEL — post-build verification will be skipped (first upload?)"
+fi
 
 # ── Read current versionCode ──────────────────────────────────────────────────
 CURRENT_CODE=$(grep -E 'versionCode: [0-9]+' "$APP_CONFIG" | grep -oE '[0-9]+' | head -1)
@@ -176,27 +201,28 @@ AAB_FILE="$OUTPUT_DIR/app-release.aab"
 if [[ -f "$AAB_FILE" ]]; then
   AAB_SIZE=$(du -sh "$AAB_FILE" | cut -f1)
 
-  # ── Verify AAB is signed with the expected upload key ─────────────────────
-  # Google Play rejects uploads signed with the wrong certificate. Fail the
-  # build here (before the developer wastes time on Play Console) if the SHA1
-  # of the signing cert doesn't match what Play expects.
-  info "Verifying AAB signing certificate ..."
+  # ── Read AAB signing SHA1 ─────────────────────────────────────────────────
+  info "Reading AAB signing certificate ..."
   SIG_SHA1="$(keytool -printcert -jarfile "$AAB_FILE" 2>/dev/null \
               | awk -F': ' '/SHA1:/ {print $2; exit}' | tr -d '[:space:]')"
 
-  EXPECTED_CLEAN="$(echo "$EXPECTED_UPLOAD_SHA1" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
-  ACTUAL_CLEAN="$(echo "$SIG_SHA1" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
-
   if [[ -z "$SIG_SHA1" ]]; then
     warn "Could not read AAB signing SHA1 (keytool missing?) — skipping verification"
-  elif [[ "$ACTUAL_CLEAN" != "$EXPECTED_CLEAN" ]]; then
-    echo ""
-    error "AAB signed with WRONG key — Google Play will reject this upload.
-         Expected SHA1: $EXPECTED_UPLOAD_SHA1
-         Actual   SHA1: $SIG_SHA1
-         Check $KEYSTORE_PROPS (storeFile / keyAlias / passwords)."
+  elif [[ -z "$EXPECTED_SHA1" ]]; then
+    # First upload for this env — no Play-locked SHA1 yet. Print so the user
+    # can record it into EXPECTED_SHA1_DEV/PROD after Play accepts the AAB.
+    warn "No EXPECTED_SHA1 recorded for $LABEL — record '$SIG_SHA1' into build-android-release.sh after the first successful Play upload"
   else
-    success "Signature verified — SHA1 matches Play upload key"
+    EXPECTED_CLEAN="$(echo "$EXPECTED_SHA1" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+    ACTUAL_CLEAN="$(echo "$SIG_SHA1" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+    if [[ "$ACTUAL_CLEAN" != "$EXPECTED_CLEAN" ]]; then
+      echo ""
+      error "AAB signed with WRONG key for $LABEL — Google Play will reject this upload.
+         Expected SHA1: $EXPECTED_SHA1
+         Actual   SHA1: $SIG_SHA1
+         Check $SOURCE_KEYSTORE_PROPS (storeFile / keyAlias / passwords)."
+    fi
+    success "Signature verified — SHA1 matches $LABEL upload key"
   fi
 
   echo ""

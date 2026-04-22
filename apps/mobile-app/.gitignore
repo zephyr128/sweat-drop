@@ -11,8 +11,13 @@ web-build/
 *.key
 *.mobileprovision
 
-# Android signing secrets — never commit upload keystore credentials
+# Android signing secrets — never commit upload keystore credentials.
+# .example is intentionally tracked as a template; everything else is ignored
+# (per-env sources keystore.prod.properties / keystore.dev.properties plus the
+# build-time staged keystore.properties).
 android/keystore.properties
+android/keystore.prod.properties
+android/keystore.dev.properties
 
 # Firebase / FCM (push) — NEVER commit these
 google-services.json
