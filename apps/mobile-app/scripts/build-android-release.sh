@@ -79,6 +79,8 @@ case "$ENV_NAME" in
   prod|production)
     ENV_FILE="$APP_DIR/.env.prod.local"
     LABEL="PRODUCTION"
+    APP_ENV_VALUE="production"
+    EXPECTED_ANDROID_PACKAGE="com.sweatdrop.app"
     SOURCE_KEYSTORE_PROPS="$APP_DIR/.keystore.prod.properties"
     LEGACY_SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.prod.properties"
     EXPECTED_SHA1="$EXPECTED_SHA1_PROD"
@@ -86,6 +88,8 @@ case "$ENV_NAME" in
   dev|development)
     ENV_FILE="$APP_DIR/.env.dev.local"
     LABEL="DEVELOPMENT"
+    APP_ENV_VALUE="development"
+    EXPECTED_ANDROID_PACKAGE="com.sweatdrop.app.dev"
     SOURCE_KEYSTORE_PROPS="$APP_DIR/.keystore.dev.properties"
     LEGACY_SOURCE_KEYSTORE_PROPS="$APP_DIR/android/keystore.dev.properties"
     EXPECTED_SHA1="$EXPECTED_SHA1_DEV"
@@ -227,7 +231,10 @@ fi
 
 info "Running expo prebuild --platform android --clean ..."
 cd "$APP_DIR"
-npx expo prebuild --platform android --clean --no-install 2>&1 | tail -10
+# Force env deterministically from selected profile and ignore local .env file
+# drift (which can otherwise regenerate wrong package/source tree).
+EXPO_NO_DOTENV=1 EXPO_PUBLIC_APP_ENV="$APP_ENV_VALUE" \
+  npx expo prebuild --platform android --clean --no-install 2>&1 | tail -10
 
 # Restore keystore.properties after prebuild wiped android/
 cp "$KEYSTORE_PROPS_BACKUP" "$KEYSTORE_PROPS"
@@ -243,6 +250,15 @@ if [[ -n "$KEYSTORE_FILE_BACKUP" && -f "$KEYSTORE_FILE_BACKUP" ]]; then
   mkdir -p "$(dirname "$STORE_FILE_VALUE")"
   cp "$KEYSTORE_FILE_BACKUP" "$STORE_FILE_VALUE"
   info "Restored upload keystore file after prebuild"
+fi
+
+# Validate native package path was generated for requested env.
+GENERATED_APP_ID="$(awk -F"'" '/applicationId / {print $2; exit}' "$BUILD_GRADLE")"
+if [[ -z "$GENERATED_APP_ID" ]]; then
+  error "Could not read applicationId from $BUILD_GRADLE after prebuild"
+fi
+if [[ "$GENERATED_APP_ID" != "$EXPECTED_ANDROID_PACKAGE" ]]; then
+  error "Prebuild generated wrong Android package for $LABEL (expected $EXPECTED_ANDROID_PACKAGE, got $GENERATED_APP_ID). Check env config and rerun."
 fi
 
 # Restore iOS icon Contents.json if prebuild overwrote it
