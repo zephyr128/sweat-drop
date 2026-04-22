@@ -214,7 +214,7 @@ npx supabase db push
 # Provera da nova kolona is_demo dolazi u response.
 
 # Onda PROD
-npx supabase link --project-ref gyqgdfqnatuegwyidrii
+npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 npx supabase db push
 ```
 
@@ -249,7 +249,7 @@ UPDATE public.machines
 ```bash
 # Posle obe migracije:
 cd backend
-npx supabase gen types typescript --project-id gyqgdfqnatuegwyidrii \
+npx supabase gen types typescript --project-id qdtdfofodfdlutkmlzzf \
   > types/database.types.ts
 ```
 
@@ -805,7 +805,7 @@ Ako bilo koji od slojeva otkaže (npr. neko slučajno postavi `is_demo = true` n
 cd apps/mobile-app
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_URL \
-  --value "https://gyqgdfqnatuegwyidrii.supabase.co" --scope project --force
+  --value "https://qdtdfofodfdlutkmlzzf.supabase.co" --scope project --force
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
   --value "<prod-anon-key>" --scope project --force

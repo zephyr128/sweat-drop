@@ -21,8 +21,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 DEV_REF="jzyoyxabcdzvqcfnfzrz"
-PROD_REF="gyqgdfqnatuegwyidrii"
-PROD_NAME="sweat-drop-prod (PROD)"
+PROD_REF="qdtdfofodfdlutkmlzzf"
+PROD_NAME="sweat-drop-prod-v2 (PROD)"
 DEV_NAME="sweat-drop (DEV)"
 
 echo ""

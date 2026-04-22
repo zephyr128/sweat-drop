@@ -103,7 +103,7 @@ eas secret:delete --name EXPO_PUBLIC_DEV_QR_UUID
 cd apps/mobile-app
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_URL \
-  --value "https://gyqgdfqnatuegwyidrii.supabase.co" --scope project --force
+  --value "https://qdtdfofodfdlutkmlzzf.supabase.co" --scope project --force
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
   --value "<prod-anon-key-iz-supabase-dashboarda>" --scope project --force

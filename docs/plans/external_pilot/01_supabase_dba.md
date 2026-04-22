@@ -206,7 +206,7 @@ SELECT * FROM public.get_my_profile();   -- mora da sadrži is_demo kolonu
 SELECT * FROM public.get_my_demo_machine();  -- prazno (nema demo mašina ni demo usera još)
 
 # PROD posle što DEV smoke test prođe
-npx supabase link --project-ref gyqgdfqnatuegwyidrii
+npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 npx supabase db push
 ```
 
@@ -241,7 +241,7 @@ UPDATE public.machines
 
 ```bash
 cd backend
-npx supabase gen types typescript --project-id gyqgdfqnatuegwyidrii \
+npx supabase gen types typescript --project-id qdtdfofodfdlutkmlzzf \
   > types/database.types.ts
 ```
 

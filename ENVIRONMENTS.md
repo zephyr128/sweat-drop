@@ -5,7 +5,23 @@
 | Environment | Git Branch     | Supabase Project               | Mobile `.env` source  | Admin `.env.local` source |
 |-------------|----------------|--------------------------------|-----------------------|---------------------------|
 | Development | `features/dev` | `jzyoyxabcdzvqcfnfzrz`        | `.env.dev.local`      | `.env.dev.local`          |
-| Production  | `main`         | `gyqgdfqnatuegwyidrii`         | `.env.prod.local`     | `.env.prod.local`         |
+| Production  | `main`         | `qdtdfofodfdlutkmlzzf`         | `.env.prod.local`     | `.env.prod.local`         |
+
+### Mobile App — Bundle IDs / Package Names
+
+Dev and prod are **separate apps** that can be installed side-by-side on the same device.
+
+| Environment | Bundle ID (iOS) / Package (Android) | Display Name   | URL Scheme      |
+|-------------|--------------------------------------|----------------|-----------------|
+| Development | `com.sweatdrop.app.dev`              | `SweatDrop Dev` | `sweatdrop-dev` |
+| Production  | `com.sweatdrop.app`                  | `SweatDrop`     | `sweatdrop`     |
+
+These values are derived automatically from `EXPO_PUBLIC_APP_ENV` in `apps/mobile-app/app.config.js`. No manual changes are needed — running `pnpm run:ios:dev` or `pnpm run:android:dev` copies the dev env and triggers `expo prebuild` which picks up the correct bundle ID.
+
+**Manual setup required (one-time, per platform):**
+- Apple: Register `com.sweatdrop.app.dev` as a new App ID in the [Apple Developer Portal](https://developer.apple.com/account/resources/identifiers/list) with Push Notifications, Sign In with Apple, and Associated Domains enabled
+- Android: Register `com.sweatdrop.app.dev` in Firebase (for Google Sign-In / push) and update `google-services.json`
+- Supabase: Add `sweatdrop-dev://` to allowed redirect URLs in both dev and prod Supabase projects
 
 ---
 
@@ -124,8 +140,8 @@ Set these environment variables in the **Vercel dashboard** (Settings > Environm
 
 | Variable                             | Value                                           |
 |--------------------------------------|------------------------------------------------|
-| `NEXT_PUBLIC_SUPABASE_URL`           | `https://gyqgdfqnatuegwyidrii.supabase.co`     |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`      | `sb_publishable_dQ1RrnPkw6LfSN6vBBKfPg_KypuAfxG` |
+| `NEXT_PUBLIC_SUPABASE_URL`           | `https://qdtdfofodfdlutkmlzzf.supabase.co`     |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`      | `sb_publishable_XrNGC2ZE1EGHFzuM15dHIA_ltXoO49Q` |
 | `SUPABASE_SERVICE_ROLE_KEY`          | *(from Supabase dashboard > Settings > API)*    |
 | `NEXT_PUBLIC_APP_URL`                | `https://admin.sweat-drop.com` *(your domain)*  |
 
@@ -147,11 +163,11 @@ cd apps/mobile-app
 
 # Set production secrets in EAS
 eas secret:create --name EXPO_PUBLIC_SUPABASE_URL \
-  --value "https://gyqgdfqnatuegwyidrii.supabase.co" \
+  --value "https://qdtdfofodfdlutkmlzzf.supabase.co" \
   --scope project
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
-  --value "sb_publishable_dQ1RrnPkw6LfSN6vBBKfPg_KypuAfxG" \
+  --value "sb_publishable_XrNGC2ZE1EGHFzuM15dHIA_ltXoO49Q" \
   --scope project
 ```
 
@@ -230,7 +246,7 @@ eas submit --platform ios
 | Environment | Project ID            | Dashboard                                                 |
 |-------------|-----------------------|-----------------------------------------------------------|
 | Development | `jzyoyxabcdzvqcfnfzrz` | https://supabase.com/dashboard/project/jzyoyxabcdzvqcfnfzrz |
-| Production  | `gyqgdfqnatuegwyidrii` | https://supabase.com/dashboard/project/gyqgdfqnatuegwyidrii |
+| Production  | `qdtdfofodfdlutkmlzzf` | https://supabase.com/dashboard/project/qdtdfofodfdlutkmlzzf |
 
 ### Applying migrations to production
 
@@ -238,7 +254,7 @@ eas submit --platform ios
 cd backend
 
 # Link to production project (one-time setup)
-supabase link --project-ref gyqgdfqnatuegwyidrii
+supabase link --project-ref qdtdfofodfdlutkmlzzf
 
 # Push all migrations to production
 supabase db push

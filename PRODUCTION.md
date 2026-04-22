@@ -4,7 +4,7 @@
 >
 > **Pretpostavke trenutnog stanja:**
 > - Sve smo razvijali na `features/dev` branchu sa dev Supabase (`jzyoyxabcdzvqcfnfzrz`).
-> - Prod Supabase projekat postoji (`gyqgdfqnatuegwyidrii`), ali nije u potpunosti konfigurisan ni popunjen.
+> - Prod Supabase projekat postoji (`qdtdfofodfdlutkmlzzf`), ali nije u potpunosti konfigurisan ni popunjen.
 > - Apple Developer + Google Play nalozi postoje, App Store Connect i Play Console app record-i su napravljeni (bundle `com.sweatdrop.app` / package `com.sweatdrop.app`).
 > - Odluka: **5x-tap simulator se ISKLJUČUJE u prod buildu** (bezbedno za Apple review). Apple testeru ćemo dati zaseban demo nalog + printable QR + reviewer note.
 > - Domeni: `https://www.sweat-drop.com` (landing), `https://admin.sweat-drop.com` (admin), `sweatdrop://` (mobile deep link).
@@ -43,15 +43,15 @@
 
 ## 1. Supabase Production — baza, auth, mail, edge funkcije
 
-**Prod projekat ref:** `gyqgdfqnatuegwyidrii`
-**URL:** `https://gyqgdfqnatuegwyidrii.supabase.co`
-**Dashboard:** https://supabase.com/dashboard/project/gyqgdfqnatuegwyidrii
+**Prod projekat ref:** `qdtdfofodfdlutkmlzzf`
+**URL:** `https://qdtdfofodfdlutkmlzzf.supabase.co`
+**Dashboard:** https://supabase.com/dashboard/project/qdtdfofodfdlutkmlzzf
 
 ### 1.1 Link lokalni CLI na prod
 
 ```bash
 cd backend
-npx supabase link --project-ref gyqgdfqnatuegwyidrii
+npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 npx supabase migration list
 ```
 
@@ -69,7 +69,7 @@ cd /Users/np/Projects/sweatdrop
 Ako radiš ručno (isti efekat):
 ```bash
 cd backend
-npx supabase link --project-ref gyqgdfqnatuegwyidrii
+npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 npx supabase db push --dry-run --include-all
 npx supabase db push --include-all --yes
 npx supabase migration list    # sve mora biti "|  ✓  |"
@@ -107,11 +107,11 @@ U Dashboard → **Authentication → URL Configuration**:
   - Client ID: `620444177181-6o893vjr0d24r37u6ekviquoi8m6tq9e.apps.googleusercontent.com` (web)
   - Client Secret: iz Google Cloud Console (isti projekat, OAuth 2.0 Web credential).
 - U Google Cloud Console → OAuth consent screen: **Publishing status = In production** (ako je još u Testing, web login će pucati za ne-whitelistovane korisnike).
-- Redirect URI u Google Cloud: `https://gyqgdfqnatuegwyidrii.supabase.co/auth/v1/callback`.
+- Redirect URI u Google Cloud: `https://qdtdfofodfdlutkmlzzf.supabase.co/auth/v1/callback`.
 
 **Apple (Sign in with Apple):**
 - U Apple Developer portalu → Identifiers → App IDs → `com.sweatdrop.app` → Capabilities → **Sign in with Apple** enabled.
-- Services ID (odvojeni identifier): `com.sweatdrop.app.signin` (ili postojeći) → Domains and Subdomains: `gyqgdfqnatuegwyidrii.supabase.co` → Return URL: `https://gyqgdfqnatuegwyidrii.supabase.co/auth/v1/callback`.
+- Services ID (odvojeni identifier): `com.sweatdrop.app.signin` (ili postojeći) → Domains and Subdomains: `qdtdfofodfdlutkmlzzf.supabase.co` → Return URL: `https://qdtdfofodfdlutkmlzzf.supabase.co/auth/v1/callback`.
 - Generiši Apple Private Key (Keys → +), Key ID i Team ID.
 - Dashboard → Authentication → Providers → Apple → Enabled → popuni Services ID, Team ID, Key ID, Private Key (base64).
 
@@ -143,7 +143,7 @@ Edge funkcije koriste Supabase Vault za service role key i push credential-e. U 
 
 | Secret name | Value |
 |---|---|
-| `project_url` | `https://gyqgdfqnatuegwyidrii.supabase.co` |
+| `project_url` | `https://qdtdfofodfdlutkmlzzf.supabase.co` |
 | `service_role_key` | (iz Settings → API → `service_role` key) |
 | `expo_access_token` | (opciono; iz expo.dev account settings, ako planiraš prelazak na Expo push direktno) |
 
@@ -155,7 +155,7 @@ Napomene:
 
 ```bash
 cd backend
-npx supabase link --project-ref gyqgdfqnatuegwyidrii
+npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 
 # Deploy sve edge funkcije iz repo-a:
 for fn in send-push re-engagement streak-reminder drops-expiry-warning \
@@ -227,7 +227,7 @@ Scope: **Production** (za sve varijable osim onih koje su i za preview):
 
 | Name | Value | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://gyqgdfqnatuegwyidrii.supabase.co` | |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://qdtdfofodfdlutkmlzzf.supabase.co` | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (prod anon iz `apps/admin-panel/.env.prod.local`) | |
 | `SUPABASE_SERVICE_ROLE_KEY` | (prod service_role iz Supabase Settings → API) | **TAJNA** |
 | `NEXT_PUBLIC_APP_URL` | `https://admin.sweat-drop.com` | Koristi se u email pozivnicama |
@@ -283,7 +283,7 @@ pnpm env:mobile:prod
 Brza provera:
 ```bash
 grep EXPO_PUBLIC_SUPABASE_URL apps/mobile-app/.env
-# Mora biti: https://gyqgdfqnatuegwyidrii.supabase.co
+# Mora biti: https://qdtdfofodfdlutkmlzzf.supabase.co
 ```
 
 **Demo mode guardrail (odluka: OFF u prod):**
@@ -305,7 +305,7 @@ Postavi prod env vars u EAS (za CI build-ove koji ne čitaju lokalni `.env`):
 ```bash
 # Iz apps/mobile-app/
 eas secret:create --name EXPO_PUBLIC_SUPABASE_URL \
-  --value "https://gyqgdfqnatuegwyidrii.supabase.co" --scope project --force
+  --value "https://qdtdfofodfdlutkmlzzf.supabase.co" --scope project --force
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
   --value "$(grep EXPO_PUBLIC_SUPABASE_ANON_KEY .env.prod.local | cut -d= -f2-)" \
@@ -898,7 +898,7 @@ Uradi **na produkcijskom TestFlight / Internal Play build-u** (ne dev clientu) s
 - [ ] Invite staff → mail stiže → accept flow radi.
 
 ### 7.8 Wrong-env test (kritično)
-- [ ] Uloguj se u produkcijskom build-u → proveri u Network inspector-u da request-i idu na `gyqgdfqnatuegwyidrii.supabase.co` (NE na `jzyoyxabcdzvqcfnfzrz`).
+- [ ] Uloguj se u produkcijskom build-u → proveri u Network inspector-u da request-i idu na `qdtdfofodfdlutkmlzzf.supabase.co` (NE na `jzyoyxabcdzvqcfnfzrz`).
 - [ ] U Supabase Studio dev projekta, proveri da NEMA novih profila sa tvog TestFlight testiranja.
 
 Ako bilo šta padne — **Go/No-Go = NO-GO**, fix-uj pa nastavi.
@@ -965,7 +965,7 @@ pnpm test:release-preflight
 
 # 2) Edge funkcije
 cd backend
-npx supabase link --project-ref gyqgdfqnatuegwyidrii
+npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 for fn in send-push re-engagement streak-reminder drops-expiry-warning \
           send-happy-hour-reminders distribute-leaderboard-prizes \
           finalize-arena notify-arena-participants process-campaigns \
@@ -1063,7 +1063,7 @@ pnpm env:dev
 # Supabase
 ./scripts/db-push-dev.sh
 ./scripts/db-push-prod.sh
-cd backend && npx supabase link --project-ref gyqgdfqnatuegwyidrii
+cd backend && npx supabase link --project-ref qdtdfofodfdlutkmlzzf
 cd backend && npx supabase functions deploy <name>
 
 # Mobile

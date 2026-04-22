@@ -34,7 +34,7 @@ Eksterni testeri (članovi Vortex teretane) **idu na PROD Supabase, kroz prod bu
 ## 1. Pre nego što išta diraš (Day 0)
 
 - [ ] Branch: `git checkout features/dev` za dnevni rad. Pilot/store buildovi idu sa `main`.
-- [ ] Pristup proverimo: Supabase prod (`gyqgdfqnatuegwyidrii`), Vercel projekat admin panela, App Store Connect, Play Console, EAS (`zephyr23`), Resend, Sentry, DNS na `sweat-drop.com`.
+- [ ] Pristup proverimo: Supabase prod (`qdtdfofodfdlutkmlzzf`), Vercel projekat admin panela, App Store Connect, Play Console, EAS (`zephyr23`), Resend, Sentry, DNS na `sweat-drop.com`.
 - [ ] Na lokalu: `pnpm -v ≥ 10`, `node -v ≥ 18`, `eas --version ≥ 10`, `npx supabase --version`.
 - [ ] Postoji `apps/admin-panel/.env.prod.local` i `apps/mobile-app/.env.prod.local` sa prod kredencijalima (već postoji template — videti [`ENVIRONMENTS.md`](./ENVIRONMENTS.md)).
 
@@ -51,7 +51,7 @@ Migracije su već gurnute. Ostaje:
 - [ ] **Email templates** (Authentication › Email Templates) — koristi `https://www.sweat-drop.com/auth/confirm` i `/auth/reset` URL-ove.
 - [ ] **Custom SMTP** (Resend) — Settings › Auth › SMTP Settings, from `noreply@sweat-drop.com`. Bez ovoga emailovi nakon ~3-4/sat počinju da kasne ili padaju.
 - [ ] **Site URL** = `https://www.sweat-drop.com`. Redirect URLs: `https://www.sweat-drop.com/**`, `https://admin.sweat-drop.com/**`, `sweatdrop://**`.
-- [ ] **Edge functions** — ako postoje (`reset-challenges`, push), `npx supabase functions deploy <name> --project-ref gyqgdfqnatuegwyidrii`.
+- [ ] **Edge functions** — ako postoje (`reset-challenges`, push), `npx supabase functions deploy <name> --project-ref qdtdfofodfdlutkmlzzf`.
 - [ ] **Cron / scheduled functions** — proveri da daily/weekly reset radi u prod TZ.
 - [ ] **Backup** — Settings › Database › Backups, potvrdi da PITR/daily backup radi.
 - [ ] **RLS smoke test** — uloguj se kao test user kroz prod admin (lokalno: `pnpm env:admin:prod && pnpm dev:admin`) i klikni najmanje jedan flow (gym preview, redemption queue) da ti potvrdi da policies ne lome upit.
@@ -63,7 +63,7 @@ Migracije su već gurnute. Ostaje:
 - [ ] Vercel projekat povezan na `main` branch. Production deploy = `main`. Preview = svaki PR.
 - [ ] Custom domen: `admin.sweat-drop.com` (CNAME → Vercel).
 - [ ] Environment variables (Production scope, sve **trim**ovane bez razmaka):
-  - `NEXT_PUBLIC_SUPABASE_URL` = `https://gyqgdfqnatuegwyidrii.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_URL` = `https://qdtdfofodfdlutkmlzzf.supabase.co`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = *(prod publishable key)*
   - `SUPABASE_SERVICE_ROLE_KEY` = *(prod service role)*
   - `NEXT_PUBLIC_APP_URL` = `https://admin.sweat-drop.com`
@@ -96,7 +96,7 @@ Sve se radi kroz UI na `https://admin.sweat-drop.com`, **ne SQL skriptama** (osi
 cd apps/mobile-app
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_URL \
-  --value "https://gyqgdfqnatuegwyidrii.supabase.co" --scope project --force
+  --value "https://qdtdfofodfdlutkmlzzf.supabase.co" --scope project --force
 
 eas secret:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
   --value "<prod-anon-key>" --scope project --force

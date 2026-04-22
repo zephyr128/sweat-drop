@@ -173,7 +173,7 @@ WHERE user_id = '$USER_ID'
 | 0.3 Vault secrets | `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, `SUPABASE_DB_URL` present | ✅ OK |
 | 0.8 happy_hour_reminder_logs | 0 rows on prod | 🔴 Never ran on prod |
 | user_notifications | 0 rows on prod | 🔴 Inbox code never deployed to prod |
-| Linked CLI project | `sweat-drop` (dev, not prod) | ⚠️ Deploy with `--project-ref gyqgdfqnatuegwyidrii` |
+| Linked CLI project | `sweat-drop` (dev, not prod) | ⚠️ Deploy with `--project-ref qdtdfofodfdlutkmlzzf` |
 
 Root cause: pure deployment gap — all code fixes were in dev but never pushed to production. No operational intervention needed (secrets OK, cron migrations applied).
 
