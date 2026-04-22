@@ -25,7 +25,7 @@ PATCH_SIGNING_PY="$SCRIPT_DIR/patch-android-signing.py"
 # Prod is locked. Dev will be locked after the first successful upload — fill
 # it in then so future builds fail fast on mismatch.
 EXPECTED_SHA1_PROD="32:0F:C2:DF:D8:63:A0:34:F4:3A:2E:F9:38:D6:D9:4C:49:E7:CA:AE"
-EXPECTED_SHA1_DEV=""
+EXPECTED_SHA1_DEV="5A:F9:27:E1:1C:62:D9:9E:C7:20:93:64:D0:65:83:C1:74:DF:74:A4"
 
 detect_ios_iconset_dir() {
   shopt -s nullglob
@@ -157,6 +157,19 @@ fi
 KEYSTORE_PROPS_BACKUP="/tmp/sweatdrop_keystore.properties.bak"
 cp "$KEYSTORE_PROPS" "$KEYSTORE_PROPS_BACKUP"
 
+# Backup source per-env properties file too (it also lives under android/ and
+# gets deleted by prebuild --clean).
+SOURCE_KEYSTORE_PROPS_BACKUP="/tmp/sweatdrop_$(basename "$SOURCE_KEYSTORE_PROPS").bak"
+cp "$SOURCE_KEYSTORE_PROPS" "$SOURCE_KEYSTORE_PROPS_BACKUP"
+
+# Backup upload keystore file too when it's stored under android/ (prebuild --clean
+# deletes android/, so without this validateSigningRelease fails with missing file).
+KEYSTORE_FILE_BACKUP=""
+if [[ -n "$STORE_FILE_VALUE" && -f "$STORE_FILE_VALUE" ]]; then
+  KEYSTORE_FILE_BACKUP="/tmp/sweatdrop_upload_keystore_$(basename "$STORE_FILE_VALUE").bak"
+  cp "$STORE_FILE_VALUE" "$KEYSTORE_FILE_BACKUP"
+fi
+
 info "Running expo prebuild --platform android --clean ..."
 cd "$APP_DIR"
 npx expo prebuild --platform android --clean --no-install 2>&1 | tail -10
@@ -164,6 +177,18 @@ npx expo prebuild --platform android --clean --no-install 2>&1 | tail -10
 # Restore keystore.properties after prebuild wiped android/
 cp "$KEYSTORE_PROPS_BACKUP" "$KEYSTORE_PROPS"
 info "Restored keystore.properties after prebuild"
+
+# Restore source per-env keystore properties file after prebuild wipe.
+mkdir -p "$(dirname "$SOURCE_KEYSTORE_PROPS")"
+cp "$SOURCE_KEYSTORE_PROPS_BACKUP" "$SOURCE_KEYSTORE_PROPS"
+info "Restored $(basename "$SOURCE_KEYSTORE_PROPS") after prebuild"
+
+# Restore upload keystore file when needed (path may be under android/app).
+if [[ -n "$KEYSTORE_FILE_BACKUP" && -f "$KEYSTORE_FILE_BACKUP" ]]; then
+  mkdir -p "$(dirname "$STORE_FILE_VALUE")"
+  cp "$KEYSTORE_FILE_BACKUP" "$STORE_FILE_VALUE"
+  info "Restored upload keystore file after prebuild"
+fi
 
 # Restore iOS icon Contents.json if prebuild overwrote it
 if [[ -n "$ICONSET" && -f "$CONTENTS_BACKUP" ]]; then
@@ -194,7 +219,17 @@ rm -rf "$APP_DIR/android/app/build/generated/autolinking" \
 
 # ── Gradle build ──────────────────────────────────────────────────────────────
 info "Building release AAB ..."
-./gradlew bundleRelease --no-daemon 2>&1 | grep -E "BUILD|FAILED|error:|Task :|> Task" | tail -20
+GRADLE_LOG="/tmp/sweatdrop_gradle_bundleRelease.log"
+set +e
+./gradlew bundleRelease --no-daemon 2>&1 | tee "$GRADLE_LOG"
+GRADLE_EXIT=${PIPESTATUS[0]}
+set -e
+
+if [[ $GRADLE_EXIT -ne 0 ]]; then
+  warn "bundleRelease failed — showing last 120 log lines"
+  tail -120 "$GRADLE_LOG"
+  error "Gradle bundleRelease failed"
+fi
 
 # ── Result ────────────────────────────────────────────────────────────────────
 AAB_FILE="$OUTPUT_DIR/app-release.aab"
