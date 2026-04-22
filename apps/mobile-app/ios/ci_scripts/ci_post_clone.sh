@@ -99,6 +99,49 @@ fi
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 pnpm install --frozen-lockfile
 
+# ── 4b. Ensure expected iOS workspace exists for this env ──
+# Xcode Cloud workflow points to a fixed workspace/scheme path. On ci_dev this
+# must be SweatDropDev.*, while production uses SweatDrop.*.
+EXPECTED_IOS_PROJECT_NAME="SweatDrop"
+if [ "$APP_ENV_VALUE" != "production" ]; then
+  EXPECTED_IOS_PROJECT_NAME="SweatDropDev"
+fi
+EXPECTED_IOS_WORKSPACE="$IOS_DIR/${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
+
+if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
+  echo "Expected workspace missing ($EXPECTED_IOS_WORKSPACE). Regenerating iOS native project..."
+  cd "$CI_PRIMARY_REPOSITORY_PATH"
+  pnpm --filter sweatdrop-mobile-app exec expo prebuild --platform ios --clean --no-install
+
+  # prebuild --clean deletes ios/ci_scripts; restore so Xcode Cloud hooks remain.
+  mkdir -p "$IOS_DIR/ci_scripts"
+  for script in ci_post_clone.sh ci_pre_xcodebuild.sh; do
+    git -C "$CI_PRIMARY_REPOSITORY_PATH" checkout -- "apps/mobile-app/ios/ci_scripts/$script" 2>/dev/null || true
+  done
+  chmod +x "$IOS_DIR/ci_scripts/"*.sh 2>/dev/null || true
+fi
+
+if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
+  echo "ERROR: Expected workspace still missing after prebuild: $EXPECTED_IOS_WORKSPACE"
+  exit 1
+fi
+
+# Re-apply icon assets after potential prebuild regeneration.
+IOS_APPICON_DIR=""
+for candidate in "$IOS_DIR"/SweatDrop*/Images.xcassets/AppIcon.appiconset; do
+  if [ -d "$candidate" ]; then
+    IOS_APPICON_DIR="$candidate"
+    break
+  fi
+done
+if [ -d "$IOS_APPICON_DIR" ] && [ -d "$APPICON_SOURCE_DIR" ]; then
+  echo "Re-applying $ICON_LABEL iOS app icon assets after prebuild..."
+  rsync -av --exclude "Contents.json" "$APPICON_SOURCE_DIR/" "$IOS_APPICON_DIR/"
+  if [ -f "$IOS_APPICON_DIR/1024.png" ]; then
+    cp "$IOS_APPICON_DIR/1024.png" "$IOS_APPICON_DIR/App-Icon-1024x1024@1x.png"
+  fi
+fi
+
 # ── 5. Install exact CocoaPods version and reinstall pods ──
 # Use Homebrew Ruby to avoid system Ruby permission issues on Xcode Cloud
 if command -v brew >/dev/null 2>&1; then
