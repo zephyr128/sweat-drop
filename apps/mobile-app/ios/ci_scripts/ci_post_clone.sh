@@ -56,31 +56,43 @@ ENV
 echo ".env generated for Xcode Cloud build"
 
 # ── 3b. Apply environment-specific iOS app icon assets ──
-# We keep ios/SweatDrop/Images.xcassets/AppIcon.appiconset/Contents.json intact
-# (it includes iPad entries), and only replace PNG assets for production builds.
+# We keep target Contents.json intact (it includes iPad entries), and only
+# replace PNG assets. Source icon set comes from canonical env folders
+# (AppIcons / AppIconsDev), never from mutable assets/.
 APP_ENV_VALUE="${EXPO_PUBLIC_APP_ENV:-production}"
-IOS_APPICON_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/ios/SweatDrop/Images.xcassets/AppIcon.appiconset"
-PROD_APPICON_SOURCE_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/assets/Assets.xcassets/AppIcon.appiconset"
+IOS_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/ios"
+IOS_APPICON_DIR=""
+for candidate in "$IOS_DIR"/SweatDrop*/Images.xcassets/AppIcon.appiconset; do
+  if [ -d "$candidate" ]; then
+    IOS_APPICON_DIR="$candidate"
+    break
+  fi
+done
 
 if [ "$APP_ENV_VALUE" = "production" ]; then
-  if [ -d "$IOS_APPICON_DIR" ] && [ -d "$PROD_APPICON_SOURCE_DIR" ]; then
-    echo "Applying PRODUCTION iOS app icon assets..."
-    rsync -av \
-      --exclude "Contents.json" \
-      "$PROD_APPICON_SOURCE_DIR/" \
-      "$IOS_APPICON_DIR/"
+  APPICON_SOURCE_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/AppIcons/Assets.xcassets/AppIcon.appiconset"
+  ICON_LABEL="PRODUCTION"
+else
+  APPICON_SOURCE_DIR="$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/AppIconsDev/Assets.xcassets/AppIcon.appiconset"
+  ICON_LABEL="DEVELOPMENT"
+fi
 
-    # Keep the legacy 1024 naming used by some iOS project templates in sync.
-    if [ -f "$IOS_APPICON_DIR/1024.png" ]; then
-      cp "$IOS_APPICON_DIR/1024.png" "$IOS_APPICON_DIR/App-Icon-1024x1024@1x.png"
-    fi
-  else
-    echo "WARNING: App icon directories missing, skipping production icon sync."
-    echo "  source=$PROD_APPICON_SOURCE_DIR"
-    echo "  target=$IOS_APPICON_DIR"
+if [ -d "$IOS_APPICON_DIR" ] && [ -d "$APPICON_SOURCE_DIR" ]; then
+  echo "Applying $ICON_LABEL iOS app icon assets..."
+  rsync -av \
+    --exclude "Contents.json" \
+    "$APPICON_SOURCE_DIR/" \
+    "$IOS_APPICON_DIR/"
+
+  # Keep the legacy 1024 naming used by some iOS project templates in sync.
+  if [ -f "$IOS_APPICON_DIR/1024.png" ]; then
+    cp "$IOS_APPICON_DIR/1024.png" "$IOS_APPICON_DIR/App-Icon-1024x1024@1x.png"
   fi
 else
-  echo "Skipping production iOS icon sync (EXPO_PUBLIC_APP_ENV=$APP_ENV_VALUE)."
+  echo "WARNING: App icon directories missing, skipping iOS icon sync."
+  echo "  env=$APP_ENV_VALUE"
+  echo "  source=$APPICON_SOURCE_DIR"
+  echo "  target=$IOS_APPICON_DIR"
 fi
 
 # ── 4. Install monorepo dependencies ──
