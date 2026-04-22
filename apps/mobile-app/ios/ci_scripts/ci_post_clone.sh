@@ -99,22 +99,25 @@ fi
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 pnpm install --frozen-lockfile
 
-# ── 4b. Ensure expected iOS workspace exists for this env ──
+# ── 4b. Ensure expected iOS project name matches Xcode Cloud scheme ──
 # Xcode Cloud workflow points to a fixed workspace/scheme path. On ci_dev this
 # must be SweatDropDev.*, while production uses SweatDrop.*.
+# Note: .xcworkspace is created later by `pod install`. We only check/rename
+# based on the .xcodeproj that `expo prebuild` writes out.
 EXPECTED_IOS_PROJECT_NAME="SweatDrop"
 if [ "$APP_ENV_VALUE" != "production" ]; then
   EXPECTED_IOS_PROJECT_NAME="SweatDropDev"
 fi
+EXPECTED_IOS_PROJECT_DIR="$IOS_DIR/${EXPECTED_IOS_PROJECT_NAME}.xcodeproj"
 EXPECTED_IOS_WORKSPACE="$IOS_DIR/${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
 
-echo "── iOS workspace resolution ──"
+echo "── iOS project resolution ──"
 echo "  APP_ENV_VALUE=$APP_ENV_VALUE"
 echo "  EXPECTED_IOS_PROJECT_NAME=$EXPECTED_IOS_PROJECT_NAME"
-echo "  EXPECTED_IOS_WORKSPACE=$EXPECTED_IOS_WORKSPACE"
+echo "  EXPECTED_IOS_PROJECT_DIR=$EXPECTED_IOS_PROJECT_DIR"
 
-if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
-  echo "Expected workspace missing ($EXPECTED_IOS_WORKSPACE). Regenerating iOS native project..."
+if [ ! -d "$EXPECTED_IOS_PROJECT_DIR" ]; then
+  echo "Expected project missing ($EXPECTED_IOS_PROJECT_DIR). Regenerating iOS native project..."
 
   # Preserve ci_scripts outside of ios/ before nuking the whole directory so we
   # can restore them after prebuild (prebuild --clean would wipe them anyway).
@@ -155,15 +158,15 @@ echo "── ios/ contents after prebuild ──"
 ls -la "$IOS_DIR" || true
 
 # If Expo generated the project under a different name (e.g. the env var did
-# not reach app.config.js), detect the actual workspace and rename the whole
-# project so Xcode Cloud's fixed workspace/scheme path resolves.
-if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
+# not reach app.config.js), detect the actual project and rename in place so
+# the subsequent `pod install` produces the .xcworkspace Xcode Cloud expects.
+if [ ! -d "$EXPECTED_IOS_PROJECT_DIR" ]; then
   ACTUAL_PROJECT_NAME=""
-  for ws in "$IOS_DIR"/*.xcworkspace; do
-    [ -d "$ws" ] || continue
-    base="$(basename "$ws" .xcworkspace)"
+  for proj in "$IOS_DIR"/*.xcodeproj; do
+    [ -d "$proj" ] || continue
+    base="$(basename "$proj" .xcodeproj)"
     if [ -n "$ACTUAL_PROJECT_NAME" ]; then
-      echo "ERROR: Multiple .xcworkspace directories found in $IOS_DIR; cannot auto-resolve."
+      echo "ERROR: Multiple .xcodeproj directories found in $IOS_DIR; cannot auto-resolve."
       ls -la "$IOS_DIR"
       exit 1
     fi
@@ -171,7 +174,7 @@ if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
   done
 
   if [ -z "$ACTUAL_PROJECT_NAME" ]; then
-    echo "ERROR: No .xcworkspace found in $IOS_DIR after prebuild."
+    echo "ERROR: No .xcodeproj found in $IOS_DIR after prebuild."
     ls -la "$IOS_DIR"
     exit 1
   fi
@@ -180,7 +183,10 @@ if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
   echo "  Renaming project in place..."
 
   cd "$IOS_DIR"
-  mv "${ACTUAL_PROJECT_NAME}.xcworkspace" "${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
+  # .xcworkspace is not present yet (created by pod install); rename if it exists.
+  if [ -d "${ACTUAL_PROJECT_NAME}.xcworkspace" ]; then
+    mv "${ACTUAL_PROJECT_NAME}.xcworkspace" "${EXPECTED_IOS_PROJECT_NAME}.xcworkspace"
+  fi
   mv "${ACTUAL_PROJECT_NAME}.xcodeproj" "${EXPECTED_IOS_PROJECT_NAME}.xcodeproj"
   if [ -d "$ACTUAL_PROJECT_NAME" ]; then
     mv "$ACTUAL_PROJECT_NAME" "$EXPECTED_IOS_PROJECT_NAME"
@@ -197,8 +203,8 @@ if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
   ls -la "$IOS_DIR"
 fi
 
-if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
-  echo "ERROR: Expected workspace still missing after prebuild + rename: $EXPECTED_IOS_WORKSPACE"
+if [ ! -d "$EXPECTED_IOS_PROJECT_DIR" ]; then
+  echo "ERROR: Expected project still missing after prebuild + rename: $EXPECTED_IOS_PROJECT_DIR"
   ls -la "$IOS_DIR"
   exit 1
 fi
@@ -257,6 +263,14 @@ cd "$CI_PRIMARY_REPOSITORY_PATH/apps/mobile-app/ios"
 rm -rf Pods
 pod cache clean --all 2>/dev/null || true
 pod _${COCOAPODS_VERSION}_ install --verbose
+
+# Verify pod install actually produced the workspace Xcode Cloud expects.
+if [ ! -d "$EXPECTED_IOS_WORKSPACE" ]; then
+  echo "ERROR: Expected workspace missing after pod install: $EXPECTED_IOS_WORKSPACE"
+  ls -la "$IOS_DIR"
+  exit 1
+fi
+echo "Workspace ready: $EXPECTED_IOS_WORKSPACE"
 
 # ── 6. Generate .xcode.env.local for Xcode build phases ──
 NODE_PATH="$(command -v node)"
