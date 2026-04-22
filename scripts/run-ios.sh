@@ -25,6 +25,19 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOBILE_APP_DIR="$ROOT_DIR/apps/mobile-app"
 IOS_DIR="$MOBILE_APP_DIR/ios"
 
+detect_ios_project_name() {
+  local xcodeproj_path=""
+  shopt -s nullglob
+  local matches=("$IOS_DIR"/*.xcodeproj)
+  shopt -u nullglob
+  if [[ ${#matches[@]} -eq 0 ]]; then
+    echo ""
+    return
+  fi
+  xcodeproj_path="${matches[0]}"
+  basename "$xcodeproj_path" .xcodeproj
+}
+
 ENV_ARG="${1:-dev}"
 
 if [[ "$ENV_ARG" != "dev" && "$ENV_ARG" != "prod" ]]; then
@@ -78,7 +91,19 @@ echo -e "\n${BLUE}[3/4] Running expo prebuild...${NC}"
 cd "$ROOT_DIR"
 pnpm --filter sweatdrop-mobile-app exec expo prebuild --platform ios --clean
 
-# Step 3.5 — Restore ci_scripts and signing config (expo prebuild --clean wipes ios/)
+# Step 3.5 — Resolve generated iOS project/workspace names after prebuild
+IOS_PROJECT_NAME="$(detect_ios_project_name)"
+if [[ -z "$IOS_PROJECT_NAME" ]]; then
+  echo -e "${RED}❌ Could not find generated .xcodeproj in $IOS_DIR${NC}"
+  exit 1
+fi
+IOS_WORKSPACE_PATH="$IOS_DIR/${IOS_PROJECT_NAME}.xcworkspace"
+PBXPROJ="$IOS_DIR/${IOS_PROJECT_NAME}.xcodeproj/project.pbxproj"
+ENTITLEMENTS="$IOS_DIR/${IOS_PROJECT_NAME}/${IOS_PROJECT_NAME}.entitlements"
+
+echo -e "${GREEN}✅ Detected iOS project: ${IOS_PROJECT_NAME}${NC}"
+
+# Step 3.6 — Restore ci_scripts and signing config (expo prebuild --clean wipes ios/)
 echo -e "\n${BLUE}[3/4] Restoring ci_scripts and signing config after prebuild...${NC}"
 
 # Restore ci_scripts
@@ -94,9 +119,11 @@ echo -e "${GREEN}✅ ci_scripts restored${NC}"
 
 # Patch CODE_SIGN_STYLE = Automatic into project.pbxproj (expo prebuild omits this,
 # causing xcodebuild -exportArchive to fail with exit code 70 on Xcode Cloud)
-PBXPROJ="$IOS_DIR/SweatDrop.xcodeproj/project.pbxproj"
 if ! grep -q "CODE_SIGN_STYLE" "$PBXPROJ"; then
-  sed -i '' 's/CODE_SIGN_ENTITLEMENTS = SweatDrop\/SweatDrop.entitlements;/CODE_SIGN_ENTITLEMENTS = SweatDrop\/SweatDrop.entitlements;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;/g' "$PBXPROJ"
+  # Inject after whichever entitlements path expo generated (SweatDrop or SweatDropDev).
+  sed -i '' '/CODE_SIGN_ENTITLEMENTS = /a\
+\				CODE_SIGN_STYLE = Automatic;
+' "$PBXPROJ"
   echo -e "${GREEN}✅ CODE_SIGN_STYLE = Automatic patched into project.pbxproj${NC}"
 else
   echo -e "${GREEN}✅ CODE_SIGN_STYLE already present in project.pbxproj${NC}"
@@ -104,7 +131,6 @@ fi
 
 # Patch aps-environment = development for local dev builds
 # (app.config.js sets production for CI; locally we need development to install on device)
-ENTITLEMENTS="$IOS_DIR/SweatDrop/SweatDrop.entitlements"
 if [ -f "$ENTITLEMENTS" ]; then
   sed -i '' 's|<string>production</string>|<string>development</string>|g' "$ENTITLEMENTS"
   echo -e "${GREEN}✅ aps-environment set to development for local build${NC}"
@@ -124,4 +150,4 @@ echo "    1. Select your iPhone or Simulator in Xcode"
 echo "    2. Press Cmd+R to build and run"
 echo ""
 
-open "$IOS_DIR/SweatDrop.xcworkspace"
+open "$IOS_WORKSPACE_PATH"
