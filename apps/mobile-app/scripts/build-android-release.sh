@@ -7,6 +7,7 @@
 #   ./scripts/build-android-release.sh --env prod        # production
 #   ./scripts/build-android-release.sh --env dev         # development
 #   ./scripts/build-android-release.sh --env prod --no-bump
+#   ./scripts/build-android-release.sh --env dev --no-cleanup   # keep dirty tree for inspection
 
 set -euo pipefail
 
@@ -39,6 +40,41 @@ detect_ios_iconset_dir() {
   echo "${matches[0]}"
 }
 
+# Reverts prebuild regeneration artifacts so git status stays clean after a
+# build, preserving only the legitimate app.config.js versionCode bump. Safe
+# to run repeatedly: it only touches files owned by `expo prebuild` (which
+# regenerates them next build anyway) and known local build output / secrets.
+cleanup_prebuild_artifacts() {
+  local repo_root
+  repo_root="$(git -C "$APP_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$repo_root" ]]; then
+    warn "Not inside a git repo; skipping cleanup."
+    return
+  fi
+
+  info "Cleaning prebuild artifacts (preserving app.config.js versionCode bump) ..."
+
+  # Revert regenerated Android native files back to committed prod-hardened state.
+  git -C "$repo_root" restore -- apps/mobile-app/android 2>/dev/null || true
+
+  # Revert iOS iconset Contents.json in case prebuild minified it (iPad entries).
+  for iconset_contents in \
+    "$repo_root/apps/mobile-app/ios/SweatDrop/Images.xcassets/AppIcon.appiconset/Contents.json" \
+    "$repo_root/apps/mobile-app/ios/SweatDropDev/Images.xcassets/AppIcon.appiconset/Contents.json"; do
+    if [[ -f "$iconset_contents" ]]; then
+      git -C "$repo_root" restore -- "$iconset_contents" 2>/dev/null || true
+    fi
+  done
+
+  # Untracked build output / local secrets: nuke.
+  rm -rf \
+    "$APP_DIR/android/.kotlin" \
+    "$APP_DIR/android/app/src/main/assets" \
+    "$APP_DIR/android/sentry.properties" 2>/dev/null || true
+
+  success "Working tree cleaned — only app.config.js versionCode bump remains staged."
+}
+
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'
 BOLD='\033[1m'; NC='\033[0m'
@@ -50,11 +86,13 @@ error()   { echo -e "${RED}[build]${NC} $*"; exit 1; }
 # ── Parse args ────────────────────────────────────────────────────────────────
 ENV_NAME=""
 NO_BUMP=false
+NO_CLEANUP=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)   ENV_NAME="$2"; shift 2 ;;
     --no-bump) NO_BUMP=true; shift ;;
+    --no-cleanup) NO_CLEANUP=true; shift ;;
     *) shift ;;
   esac
 done
@@ -343,6 +381,13 @@ if [[ -f "$AAB_FILE" ]]; then
   echo ""
   info "Upload to Play Console → Internal Testing:"
   info "  https://play.google.com/console"
+
+  # ── Post-build cleanup ──────────────────────────────────────────────────────
+  if $NO_CLEANUP; then
+    warn "Skipping post-build cleanup (--no-cleanup). Inspect 'git status' manually."
+  else
+    cleanup_prebuild_artifacts
+  fi
 else
   error "Build finished but AAB not found at $AAB_FILE"
 fi
