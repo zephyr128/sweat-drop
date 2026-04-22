@@ -11,6 +11,9 @@ web-build/
 *.key
 *.mobileprovision
 
+# Android signing secrets — never commit upload keystore credentials
+android/keystore.properties
+
 # Firebase / FCM (push) — NEVER commit these
 google-services.json
 GoogleService-Info.plist

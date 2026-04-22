@@ -15,6 +15,23 @@ APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_CONFIG="$APP_DIR/app.config.js"
 BUILD_GRADLE="$APP_DIR/android/app/build.gradle"
 OUTPUT_DIR="$APP_DIR/android/app/build/outputs/bundle/release"
+KEYSTORE_PROPS="$APP_DIR/android/keystore.properties"
+PATCH_SIGNING_PY="$SCRIPT_DIR/patch-android-signing.py"
+
+# SHA1 fingerprint that Google Play expects for the upload keystore.
+# Update this if the Play Console upload key is ever rotated.
+EXPECTED_UPLOAD_SHA1="32:0F:C2:DF:D8:63:A0:34:F4:3A:2E:F9:38:D6:D9:4C:49:E7:CA:AE"
+
+detect_ios_iconset_dir() {
+  shopt -s nullglob
+  local matches=("$APP_DIR"/ios/*/Images.xcassets/AppIcon.appiconset)
+  shopt -u nullglob
+  if [[ ${#matches[@]} -eq 0 ]]; then
+    echo ""
+    return
+  fi
+  echo "${matches[0]}"
+}
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'
@@ -60,9 +77,23 @@ esac
 
 [[ -f "$ENV_FILE" ]] || error "Env file not found: $ENV_FILE"
 
+if [[ ! -f "$KEYSTORE_PROPS" ]]; then
+  error "Missing $KEYSTORE_PROPS — copy keystore.properties.example and fill in upload key credentials (from: npx eas credentials)."
+fi
+
+if grep -qE "REPLACE_ME" "$KEYSTORE_PROPS"; then
+  error "$KEYSTORE_PROPS still contains REPLACE_ME placeholders — fill in real values before building."
+fi
+
+STORE_FILE_VALUE="$(grep -E '^storeFile=' "$KEYSTORE_PROPS" | cut -d'=' -f2-)"
+if [[ -n "$STORE_FILE_VALUE" && ! -f "$STORE_FILE_VALUE" ]]; then
+  error "Upload keystore not found at storeFile=$STORE_FILE_VALUE"
+fi
+
 echo ""
 info "Environment : ${BOLD}$LABEL${NC}"
 info "Env file    : $ENV_FILE"
+info "Keystore    : $STORE_FILE_VALUE"
 
 # ── Read current versionCode ──────────────────────────────────────────────────
 CURRENT_CODE=$(grep -E 'versionCode: [0-9]+' "$APP_CONFIG" | grep -oE '[0-9]+' | head -1)
@@ -90,19 +121,27 @@ set +a
 # ── Prebuild ──────────────────────────────────────────────────────────────────
 # Backup iOS icon Contents.json before prebuild — expo prebuild --platform android
 # can still overwrite shared assets and remove manually-added iPad icon entries.
-ICONSET="$APP_DIR/ios/SweatDrop/Images.xcassets/AppIcon.appiconset"
+ICONSET="$(detect_ios_iconset_dir)"
 CONTENTS_BACKUP="/tmp/AppIcon_Contents_backup.json"
-if [[ -f "$ICONSET/Contents.json" ]]; then
+if [[ -n "$ICONSET" && -f "$ICONSET/Contents.json" ]]; then
   cp "$ICONSET/Contents.json" "$CONTENTS_BACKUP"
   info "Backed up iOS AppIcon Contents.json"
 fi
 
-info "Running expo prebuild --platform android ..."
+# Backup keystore.properties — expo prebuild --clean wipes the entire android/ dir
+KEYSTORE_PROPS_BACKUP="/tmp/sweatdrop_keystore.properties.bak"
+cp "$KEYSTORE_PROPS" "$KEYSTORE_PROPS_BACKUP"
+
+info "Running expo prebuild --platform android --clean ..."
 cd "$APP_DIR"
-npx expo prebuild --platform android --no-install 2>&1 | tail -10
+npx expo prebuild --platform android --clean --no-install 2>&1 | tail -10
+
+# Restore keystore.properties after prebuild wiped android/
+cp "$KEYSTORE_PROPS_BACKUP" "$KEYSTORE_PROPS"
+info "Restored keystore.properties after prebuild"
 
 # Restore iOS icon Contents.json if prebuild overwrote it
-if [[ -f "$CONTENTS_BACKUP" ]]; then
+if [[ -n "$ICONSET" && -f "$CONTENTS_BACKUP" ]]; then
   cp "$CONTENTS_BACKUP" "$ICONSET/Contents.json"
   info "Restored iOS AppIcon Contents.json (iPad icons preserved)"
 fi
@@ -111,15 +150,55 @@ fi
 info "Removing duplicate PNG launcher icons ..."
 find "$APP_DIR/android/app/src/main/res" -name "ic_launcher.png" -o -name "ic_launcher_round.png" | xargs rm -f 2>/dev/null || true
 
+# ── Patch build.gradle to sign release with real upload keystore ──────────────
+# expo prebuild regenerates build.gradle every run with debug-signed release
+# (Google Play rejects debug-signed AABs with "wrong signing key"). Re-apply
+# the release signingConfig now — idempotent so safe to re-run.
+info "Patching android/app/build.gradle for release signing ..."
+python3 "$PATCH_SIGNING_PY" "$BUILD_GRADLE"
+
+# ── Reset generated android build state (prevents stale package/buildConfig mismatch) ──
+info "Cleaning stale Android generated artifacts ..."
+cd "$APP_DIR/android"
+./gradlew --stop >/dev/null 2>&1 || true
+rm -rf "$APP_DIR/android/app/build/generated/autolinking" \
+       "$APP_DIR/android/app/build/generated/source/buildConfig" \
+       "$APP_DIR/android/app/build/intermediates" \
+       "$APP_DIR/android/app/build/tmp"
+./gradlew clean --no-daemon >/dev/null
+
 # ── Gradle build ──────────────────────────────────────────────────────────────
 info "Building release AAB ..."
-cd "$APP_DIR/android"
 ./gradlew bundleRelease --no-daemon 2>&1 | grep -E "BUILD|FAILED|error:|Task :|> Task" | tail -20
 
 # ── Result ────────────────────────────────────────────────────────────────────
 AAB_FILE="$OUTPUT_DIR/app-release.aab"
 if [[ -f "$AAB_FILE" ]]; then
   AAB_SIZE=$(du -sh "$AAB_FILE" | cut -f1)
+
+  # ── Verify AAB is signed with the expected upload key ─────────────────────
+  # Google Play rejects uploads signed with the wrong certificate. Fail the
+  # build here (before the developer wastes time on Play Console) if the SHA1
+  # of the signing cert doesn't match what Play expects.
+  info "Verifying AAB signing certificate ..."
+  SIG_SHA1="$(keytool -printcert -jarfile "$AAB_FILE" 2>/dev/null \
+              | awk -F': ' '/SHA1:/ {print $2; exit}' | tr -d '[:space:]')"
+
+  EXPECTED_CLEAN="$(echo "$EXPECTED_UPLOAD_SHA1" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+  ACTUAL_CLEAN="$(echo "$SIG_SHA1" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+
+  if [[ -z "$SIG_SHA1" ]]; then
+    warn "Could not read AAB signing SHA1 (keytool missing?) — skipping verification"
+  elif [[ "$ACTUAL_CLEAN" != "$EXPECTED_CLEAN" ]]; then
+    echo ""
+    error "AAB signed with WRONG key — Google Play will reject this upload.
+         Expected SHA1: $EXPECTED_UPLOAD_SHA1
+         Actual   SHA1: $SIG_SHA1
+         Check $KEYSTORE_PROPS (storeFile / keyAlias / passwords)."
+  else
+    success "Signature verified — SHA1 matches Play upload key"
+  fi
+
   echo ""
   success "══════════════════════════════════════════"
   success "  AAB built successfully!"
@@ -127,6 +206,7 @@ if [[ -f "$AAB_FILE" ]]; then
   success "  versionCode : $NEW_CODE"
   success "  File        : $AAB_FILE"
   success "  Size        : $AAB_SIZE"
+  success "  SHA1        : $SIG_SHA1"
   success "══════════════════════════════════════════"
   echo ""
   info "Upload to Play Console → Internal Testing:"
