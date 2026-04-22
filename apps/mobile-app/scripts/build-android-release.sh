@@ -8,6 +8,13 @@
 #   ./scripts/build-android-release.sh --env dev         # development
 #   ./scripts/build-android-release.sh --env prod --no-bump
 #   ./scripts/build-android-release.sh --env dev --no-cleanup   # keep dirty tree for inspection
+#
+# NOTE: The entire script body is wrapped in `{ … } ; exit` so bash parses the
+# whole thing before running anything. This keeps a long-running build safe
+# from in-editor file edits (which otherwise corrupt bash's read offset and
+# cause mid-run "syntax error near unexpected token" failures).
+
+{
 
 set -euo pipefail
 
@@ -391,3 +398,6 @@ if [[ -f "$AAB_FILE" ]]; then
 else
   error "Build finished but AAB not found at $AAB_FILE"
 fi
+
+exit 0
+}
