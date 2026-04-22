@@ -11,7 +11,7 @@ export interface AtRiskMember {
   avatar_url: string | null;
   email: string | null;
   last_checkin: string | null;
-  days_inactive: number;
+  days_inactive: number | null;
   total_checkins: number;
   has_push_token: boolean;
 }
@@ -20,6 +20,15 @@ export interface AtRiskResult {
   members: AtRiskMember[];
   count: number;
   daysInactiveThreshold: number;
+}
+
+export type SegmentType = 'all' | 'active' | 'inactive';
+
+export interface SegmentResult {
+  members: AtRiskMember[];
+  count: number;
+  segmentType: SegmentType;
+  days: number | null;
 }
 
 export interface Campaign {
@@ -124,6 +133,56 @@ export async function getAtRiskMembers(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to fetch at-risk members',
+    };
+  }
+}
+
+/**
+ * Fetch members for any engagement segment using the new get_members_by_segment RPC.
+ * Supports 'all', 'active', and 'inactive' segment types.
+ */
+export async function getMembersBySegment(
+  gymId: string,
+  segmentType: SegmentType,
+  days?: number,
+): Promise<{ success: boolean; data?: SegmentResult; error?: string }> {
+  try {
+    const supabase = await createClient();
+
+    const { data, error } = await supabase.rpc('get_members_by_segment', {
+      p_gym_id: gymId,
+      p_segment_type: segmentType,
+      p_days: days ?? null,
+    });
+
+    if (error) throw error;
+
+    const result = data as Record<string, unknown> | null;
+    const errMsg = rpcJsonError(result);
+    if (errMsg) {
+      return { success: false, error: errMsg };
+    }
+
+    const rawMembers = result?.members;
+    const members: AtRiskMember[] = Array.isArray(rawMembers)
+      ? (rawMembers as AtRiskMember[])
+      : [];
+    const count = typeof result?.count === 'number' ? result.count : members.length;
+
+    return {
+      success: true,
+      data: {
+        members,
+        count,
+        segmentType,
+        days: typeof result?.days === 'number' ? result.days : days ?? null,
+      },
+    };
+  } catch (error: unknown) {
+    logger.error('Error fetching members by segment', { error, gymId, segmentType, days });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch members',
     };
   }
 }

@@ -7,13 +7,14 @@ import {
   Users, Loader2, Megaphone, Gift, Link2,
 } from 'lucide-react';
 import {
-  getAtRiskMembers,
+  getMembersBySegment,
   createCampaign,
   queueCampaign,
   retryCampaignProcessing,
   getGymCampaigns,
   type AtRiskMember,
   type Campaign,
+  type SegmentType,
 } from '@/lib/actions/engagement-actions';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
@@ -22,10 +23,22 @@ interface EngagementCampaignManagerProps {
   gymId: string;
 }
 
-const SEGMENT_OPTIONS = [
-  { value: 7, label: 'Inactive 7+ days' },
-  { value: 14, label: 'Inactive 14+ days' },
-  { value: 30, label: 'Inactive 30+ days' },
+interface SegmentOption {
+  value: string;
+  label: string;
+  segmentType: SegmentType;
+  days?: number;
+  audienceType: string;
+  audienceParams: Record<string, unknown>;
+}
+
+const SEGMENT_OPTIONS: SegmentOption[] = [
+  { value: 'all',        label: 'All members',          segmentType: 'all',      audienceType: 'all',      audienceParams: {} },
+  { value: 'active_7',  label: 'Active (last 7 days)',  segmentType: 'active',   days: 7,  audienceType: 'active',   audienceParams: { days_active: 7 } },
+  { value: 'active_30', label: 'Active (last 30 days)', segmentType: 'active',   days: 30, audienceType: 'active',   audienceParams: { days_active: 30 } },
+  { value: 'inactive_7',  label: 'Inactive 7+ days',   segmentType: 'inactive', days: 7,  audienceType: 'inactive', audienceParams: { days_inactive: 7 } },
+  { value: 'inactive_14', label: 'Inactive 14+ days',  segmentType: 'inactive', days: 14, audienceType: 'inactive', audienceParams: { days_inactive: 14 } },
+  { value: 'inactive_30', label: 'Inactive 30+ days',  segmentType: 'inactive', days: 30, audienceType: 'inactive', audienceParams: { days_inactive: 30 } },
 ];
 
 const TEMPLATE_OPTIONS = [
@@ -55,10 +68,10 @@ function formatDate(d: string) {
 
 export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerProps) {
   const [tab, setTab] = useState<'create' | 'history'>('create');
-  const [segment, setSegment] = useState(14);
-  const [atRisk, setAtRisk] = useState<AtRiskMember[]>([]);
-  const [atRiskLoading, setAtRiskLoading] = useState(false);
-  const [atRiskCount, setAtRiskCount] = useState(0);
+  const [selectedSegment, setSelectedSegment] = useState<string>('inactive_14');
+  const [members, setMembers] = useState<AtRiskMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersCount, setMembersCount] = useState(0);
 
   const [template, setTemplate] = useState('reminder');
   const [title, setTitle] = useState(TEMPLATE_OPTIONS[0].defaultTitle);
@@ -70,17 +83,20 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [queuingId, setQueuingId] = useState<string | null>(null);
 
-  const fetchAtRisk = useCallback(async () => {
-    setAtRiskLoading(true);
-    const res = await getAtRiskMembers(gymId, segment);
+  const currentSegmentOpt = SEGMENT_OPTIONS.find((o) => o.value === selectedSegment) ?? SEGMENT_OPTIONS[4];
+
+  const fetchMembers = useCallback(async () => {
+    setMembersLoading(true);
+    const opt = SEGMENT_OPTIONS.find((o) => o.value === selectedSegment) ?? SEGMENT_OPTIONS[4];
+    const res = await getMembersBySegment(gymId, opt.segmentType, opt.days);
     if (res.success && res.data) {
-      setAtRisk(res.data.members);
-      setAtRiskCount(res.data.count);
+      setMembers(res.data.members);
+      setMembersCount(res.data.count);
     } else {
-      toast.error(res.error || 'Failed to load at-risk members');
+      toast.error(res.error || 'Failed to load members');
     }
-    setAtRiskLoading(false);
-  }, [gymId, segment]);
+    setMembersLoading(false);
+  }, [gymId, selectedSegment]);
 
   const fetchCampaigns = useCallback(async () => {
     setCampaignsLoading(true);
@@ -89,7 +105,7 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
     setCampaignsLoading(false);
   }, [gymId]);
 
-  useEffect(() => { fetchAtRisk(); }, [fetchAtRisk]);
+  useEffect(() => { fetchMembers(); }, [fetchMembers]);
   useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
 
   const handleTemplateChange = (val: string) => {
@@ -113,8 +129,8 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
       title: title.trim(),
       body: body.trim(),
       deepLink: deepLink || null,
-      audienceType: 'inactive',
-      audienceParams: { days_inactive: segment },
+      audienceType: currentSegmentOpt.audienceType,
+      audienceParams: currentSegmentOpt.audienceParams,
     });
     if (res.success && res.data) {
       toast.success(`Campaign created — ${res.data.target_count} members targeted`);
@@ -164,7 +180,7 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
     setQueuingId(null);
   };
 
-  const pushReady = atRisk.filter((m) => m.has_push_token).length;
+  const pushReady = members.filter((m) => m.has_push_token).length;
 
   return (
     <div className="space-y-5">
@@ -193,13 +209,13 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
           <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-5 space-y-4">
             <div>
               <h3 className="text-sm font-semibold text-white mb-3">Target Segment</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {SEGMENT_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setSegment(opt.value)}
+                    onClick={() => setSelectedSegment(opt.value)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      segment === opt.value
+                      selectedSegment === opt.value
                         ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/20'
                         : 'bg-[#111] text-zinc-500 border-[#1A1A1A] hover:text-white'
                     }`}
@@ -209,7 +225,7 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
                 ))}
               </div>
               <p className="text-[10px] text-zinc-600 mt-2">
-                {atRiskLoading ? 'Loading…' : `${atRiskCount} members match · ${pushReady} with push enabled`}
+                {membersLoading ? 'Loading…' : `${membersCount} members match · ${pushReady} with push enabled`}
               </p>
             </div>
 
@@ -273,7 +289,7 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
 
             <button
               onClick={handleCreate}
-              disabled={creating || atRiskCount === 0}
+              disabled={creating || membersCount === 0}
               className="w-full px-4 py-2.5 bg-[#00E5FF] text-black rounded-lg text-sm font-bold hover:bg-[#00B8CC] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
@@ -283,25 +299,29 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
 
           {/* Right: Preview */}
           <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-white mb-3">At-risk Members Preview</h3>
-            {atRiskLoading ? (
+            <h3 className="text-sm font-semibold text-white mb-3">Members Preview</h3>
+            {membersLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
               </div>
-            ) : atRisk.length === 0 ? (
+            ) : members.length === 0 ? (
               <div className="text-center py-10">
                 <Users className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
-                <p className="text-sm text-zinc-500">No at-risk members found</p>
-                <p className="text-[10px] text-zinc-600 mt-1">All members have been active recently</p>
+                <p className="text-sm text-zinc-500">No members match this segment</p>
               </div>
             ) : (
               <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                {atRisk.slice(0, 20).map((m) => (
+                {members.slice(0, 20).map((m) => (
                   <div key={m.user_id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#111]/50">
                     <MemberAvatar avatarUrl={m.avatar_url} username={m.username} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-white font-medium truncate">{m.username || m.full_name || 'Member'}</p>
-                      <p className="text-[10px] text-zinc-600">{m.days_inactive}d inactive · {m.total_checkins} check-ins</p>
+                      <p className="text-[10px] text-zinc-600">
+                        {m.days_inactive != null
+                          ? `${m.days_inactive}d inactive · `
+                          : ''}
+                        {m.total_checkins} check-ins
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {m.has_push_token ? (
@@ -312,8 +332,8 @@ export function EngagementCampaignManager({ gymId }: EngagementCampaignManagerPr
                     </div>
                   </div>
                 ))}
-                {atRisk.length > 20 && (
-                  <p className="text-[10px] text-zinc-600 text-center pt-2">+{atRisk.length - 20} more members</p>
+                {members.length > 20 && (
+                  <p className="text-[10px] text-zinc-600 text-center pt-2">+{members.length - 20} more members</p>
                 )}
               </div>
             )}
