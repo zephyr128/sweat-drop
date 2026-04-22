@@ -15,6 +15,7 @@ APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_CONFIG="$APP_DIR/app.config.js"
 BUILD_GRADLE="$APP_DIR/android/app/build.gradle"
 OUTPUT_DIR="$APP_DIR/android/app/build/outputs/bundle/release"
+SWITCH_ICONS_SH="$APP_DIR/../../scripts/switch-icons.sh"
 
 # build.gradle reads from android/keystore.properties (fixed path). The build
 # script copies the right per-env source keystore.properties into place below.
@@ -94,6 +95,10 @@ esac
 
 [[ -f "$ENV_FILE" ]] || error "Env file not found: $ENV_FILE"
 
+if [[ ! -x "$SWITCH_ICONS_SH" ]]; then
+  error "Missing executable icon switch script: $SWITCH_ICONS_SH"
+fi
+
 # Migrate once from legacy location under android/ (which is wiped by
 # expo prebuild --clean) to a stable app-root dotfile path.
 if [[ ! -f "$SOURCE_KEYSTORE_PROPS" && -f "$LEGACY_SOURCE_KEYSTORE_PROPS" ]]; then
@@ -110,8 +115,42 @@ if grep -qE "REPLACE_ME" "$SOURCE_KEYSTORE_PROPS"; then
 fi
 
 STORE_FILE_VALUE="$(grep -E '^storeFile=' "$SOURCE_KEYSTORE_PROPS" | cut -d'=' -f2-)"
+STORE_PASSWORD_VALUE="$(grep -E '^storePassword=' "$SOURCE_KEYSTORE_PROPS" | cut -d'=' -f2-)"
+KEY_ALIAS_VALUE="$(grep -E '^keyAlias=' "$SOURCE_KEYSTORE_PROPS" | cut -d'=' -f2-)"
+
 if [[ -n "$STORE_FILE_VALUE" && ! -f "$STORE_FILE_VALUE" ]]; then
-  error "Upload keystore not found at storeFile=$STORE_FILE_VALUE"
+  warn "Keystore file missing at $STORE_FILE_VALUE — attempting auto-restore from local candidates"
+  STORE_BASENAME="$(basename "$STORE_FILE_VALUE")"
+  TMP_CANDIDATE="/tmp/sweatdrop_upload_keystore_${STORE_BASENAME}.bak"
+  RESTORED=false
+
+  # 1) Best-case: restore directly from our last prebuild backup.
+  if [[ -f "$TMP_CANDIDATE" ]]; then
+    mkdir -p "$(dirname "$STORE_FILE_VALUE")"
+    cp "$TMP_CANDIDATE" "$STORE_FILE_VALUE"
+    RESTORED=true
+    info "Restored missing keystore from $TMP_CANDIDATE"
+  fi
+
+  # 2) Fallback: scan local *.jks and pick one that matches keyAlias+storePassword.
+  if [[ "$RESTORED" != "true" ]]; then
+    shopt -s nullglob
+    for candidate in "$APP_DIR"/*.jks; do
+      CANDIDATE_ALIAS="$(keytool -list -v -keystore "$candidate" -storepass "$STORE_PASSWORD_VALUE" 2>/dev/null | awk -F': ' '/Alias name:/ {print $2; exit}')"
+      if [[ -n "$CANDIDATE_ALIAS" && "$CANDIDATE_ALIAS" == "$KEY_ALIAS_VALUE" ]]; then
+        mkdir -p "$(dirname "$STORE_FILE_VALUE")"
+        cp "$candidate" "$STORE_FILE_VALUE"
+        RESTORED=true
+        info "Restored missing keystore from matching local file: $candidate"
+        break
+      fi
+    done
+    shopt -u nullglob
+  fi
+
+  if [[ "$RESTORED" != "true" ]]; then
+    error "Upload keystore not found at storeFile=$STORE_FILE_VALUE and auto-restore failed. Ensure storeFile path is valid or re-download from EAS credentials."
+  fi
 fi
 
 # build.gradle hardcodes rootProject.file('keystore.properties'); stage the
@@ -128,6 +167,14 @@ if [[ -n "$EXPECTED_SHA1" ]]; then
 else
   warn "No expected SHA1 recorded for $LABEL — post-build verification will be skipped (first upload?)"
 fi
+
+# Keep launcher/icon assets deterministic per environment.
+ICON_ENV_ARG="dev"
+if [[ "$LABEL" == "PRODUCTION" ]]; then
+  ICON_ENV_ARG="prod"
+fi
+info "Switching app icons for $LABEL ..."
+"$SWITCH_ICONS_SH" "$ICON_ENV_ARG"
 
 # ── Read current versionCode ──────────────────────────────────────────────────
 CURRENT_CODE=$(grep -E 'versionCode: [0-9]+' "$APP_CONFIG" | grep -oE '[0-9]+' | head -1)
