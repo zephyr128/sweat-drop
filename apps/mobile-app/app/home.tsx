@@ -30,7 +30,7 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba} from '@/lib/theme';
+import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba, hexToDarkBg } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { ActivityRings, type ActivityRingsHandle } from '@/components/ActivityRings';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
@@ -90,8 +90,10 @@ function ShimmerBlock({ style, delayMs = 0 }: { style: object; delayMs?: number 
   return <SkeletonShimmer style={style} delayMs={delayMs} />;
 }
 
-function ColdStartSkeleton() {
+function ColdStartSkeleton({ brandPrimary = '#00E5FF' }: { brandPrimary?: string }) {
   const ringR = SK_RING_D / 2;
+  const skSheetBg = hexToDarkBg(brandPrimary, Platform.OS === 'android' ? 1 : 0.98);
+  const skStickyBg = hexToDarkBg(brandPrimary, Platform.OS === 'android' ? 0.85 : 0.75);
   return (
     <ScrollView
       style={sk.skeletonScroll}
@@ -120,7 +122,7 @@ function ColdStartSkeleton() {
       </View>
 
       {/* ── `stickySection` + `SliderTabsBar` (4 tabs) ── */}
-      <View style={sk.skStickyChrome}>
+      <View style={[sk.skStickyChrome, { backgroundColor: skStickyBg }]}>
         <View style={sk.skTabBar}>
           {[0, 1, 2, 3].map((i) => (
             <ShimmerBlock key={i} delayMs={i * 35} style={sk.skTabSlot} />
@@ -129,7 +131,7 @@ function ColdStartSkeleton() {
       </View>
 
       {/* ── `SheetActivityContent` / `StatsCards` bento ── */}
-      <View style={sk.skSheetBody}>
+      <View style={[sk.skSheetBody, { backgroundColor: skSheetBg }]}>
         <View style={sk.skStatsTopRow}>
           <ShimmerBlock style={[sk.skHeroStat, { width: SK_HERO_W, height: SK_HERO_H }]} />
           <View style={[sk.skSideCol, { width: SK_SIDE_W }]}>
@@ -213,7 +215,6 @@ const sk = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
-    backgroundColor: Platform.OS === 'android' ? 'rgba(24,20,38,0.85)' : 'rgba(24, 20, 38, 0.75)',
     paddingVertical: 10,
     paddingHorizontal: 4,
     overflow: 'hidden',
@@ -232,7 +233,6 @@ const sk = StyleSheet.create({
     paddingHorizontal: SK_CARD_PAD,
     paddingTop: 8,
     paddingBottom: 100,
-    backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(24, 20, 38, 0.98)',
   },
   skStatsTopRow: {
     flexDirection: 'row',
@@ -1079,12 +1079,18 @@ export default function HomeScreen() {
   }
 
   const tabAccent = TAB_ACCENTS[activeTabKey] ?? branding.primary;
+
+  // Sheet panel backgrounds — dark variant of branding primary (≈6% mix into black).
+  // Keeps the same near-black darkness as before but traces the gym's hue.
+  const sheetBgSolid  = hexToDarkBg(branding.primary, Platform.OS === 'android' ? 1   : 0.98);
+  const sheetBgBlur   = hexToDarkBg(branding.primary, Platform.OS === 'android' ? 1   : 0.28);
+
   const sheetBackdropColors = Platform.OS === 'android'
-    ? (['rgba(36,29,53,0.00)', 'rgba(36,29,53,0.10)', 'rgba(36,29,53,0.18)', 'rgba(36,29,53,0.24)'] as const)
-    : (['rgba(36,29,53,0.00)', 'rgba(36,29,53,0.62)', 'rgba(36,29,53,0.93)', 'rgba(36,29,53,0.97)'] as const);
+    ? ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.10), hexToDarkBg(branding.primary, 0.18), hexToDarkBg(branding.primary, 0.24)] as const)
+    : ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.62), hexToDarkBg(branding.primary, 0.93), hexToDarkBg(branding.primary, 0.97)] as const);
   const fabBottomMaskColors = Platform.OS === 'android'
-    ? (['rgba(24,20,38,0.00)', 'rgba(24,20,38,0.74)', 'rgba(24,20,38,0.96)'] as const)
-    : (['rgba(24,20,38,0.00)', 'rgba(24,20,38,0.58)', 'rgba(24,20,38,0.90)'] as const);
+    ? ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.74), hexToDarkBg(branding.primary, 0.96)] as const)
+    : ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.58), hexToDarkBg(branding.primary, 0.90)] as const);
   const HEADER_H = 56;
   const TAB_BAR_H = 48;
   const SCROLL_TOP_INSET = 0;
@@ -1254,12 +1260,12 @@ export default function HomeScreen() {
           </Animated.View>
 
           {/* ── [1] Sticky section — tab bar ── */}
-          <View style={[styles.stickySection, styles.dashboardSheetBackground]}>
-            <PlatformBlur
+          <View style={[styles.stickySection, styles.dashboardSheetBackground, { backgroundColor: sheetBgSolid }]}>
+              <PlatformBlur
               intensity={34}
               tint="dark"
-              style={styles.stickySectionBlur}
-              androidColor="#181426"
+              style={[styles.stickySectionBlur, { backgroundColor: sheetBgBlur }]}
+              androidColor={sheetBgSolid}
             >
               <LinearGradient
                 colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.06), 'rgba(12,12,22,0.0)']}
@@ -1279,7 +1285,7 @@ export default function HomeScreen() {
           </View>
 
           {/* ── [2] Sheet content — tab pager with horizontal swipe ── */}
-          <View style={[styles.sheetContent, { backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(24, 20, 38, 0.98)' }]}>
+          <View style={[styles.sheetContent, { backgroundColor: sheetBgSolid }]}>
             <SliderTabs
               tabs={sheetTabs}
               activeKey={activeTabKey}
@@ -1400,7 +1406,7 @@ export default function HomeScreen() {
             style={StyleSheet.absoluteFillObject}
           />
           <SafeAreaView style={styles.container} edges={['top']}>
-            <ColdStartSkeleton />
+            <ColdStartSkeleton brandPrimary={branding.primary} />
           </SafeAreaView>
         </Animated.View>
       ) : null}
@@ -1463,7 +1469,6 @@ const styles = StyleSheet.create({
   },
   stickySectionBlur: {
     overflow: 'hidden',
-    backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(12,15,24,0.28)',
   },
   sheetContent: {
     overflow: 'hidden',
@@ -1519,7 +1524,6 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH + PARALLAX_EXTRA,
   },
   dashboardSheetBackground: {
-    backgroundColor: Platform.OS === 'android' ? '#181426' : 'rgba(24, 20, 38, 0.98)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,

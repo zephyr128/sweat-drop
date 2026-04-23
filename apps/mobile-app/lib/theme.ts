@@ -277,6 +277,23 @@ export function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/**
+ * Creates a near-black color subtly tinted by the brand hex color.
+ * Use for sheet/panel backgrounds that should reflect branding without being vibrant.
+ *
+ * factor (default 0.06): how much of the brand channel is mixed in.
+ *   0.06 → #00E5FF becomes rgb(0,14,15) — essentially black with a trace of cyan hue.
+ *   0.06 → #FF9F4A becomes rgb(15,9,3)  — essentially black with a trace of warm hue.
+ */
+export function hexToDarkBg(hex: string, alpha: number, factor = 0.06): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return `rgba(8, 8, 14, ${alpha})`;
+  const r = Math.round(parseInt(result[1], 16) * factor);
+  const g = Math.round(parseInt(result[2], 16) * factor);
+  const b = Math.round(parseInt(result[3], 16) * factor);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // Glass card presets for consistent styling
 export const glassCard = {
   bg: 'rgba(18, 18, 28, 0.78)' as const,
