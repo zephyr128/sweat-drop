@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
+import { localAvatarSource } from '@/lib/avatars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
@@ -10,7 +11,6 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { formatMonthYear } from '@/lib/utils/formatDate';
 import { supabase } from '@/lib/supabase';
-import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
@@ -33,13 +33,11 @@ function formatDate(iso: string): string {
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation('memberProfile');
-  const { session } = useSession();
   const branding = useBranding();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { badges, loading: badgesLoading } = useUserBadges(id);
-  const isOwnProfile = session?.user?.id === id;
 
   const loadProfile = useCallback(async () => {
     if (!id) return;
@@ -95,7 +93,7 @@ export default function UserProfileScreen() {
 
   const renderAvatar = () => {
     if (profile.avatar_url && profile.avatar_url.startsWith('http')) {
-      return <Image source={profile.avatar_url} style={styles.avatarImage} transition={200} />;
+      return <Image source={localAvatarSource(profile.avatar_url)} style={styles.avatarImage} transition={200} />;
     }
     if (profile.avatar_url) {
       return <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>;

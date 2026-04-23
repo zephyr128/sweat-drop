@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { localAvatarSource } from '@/lib/avatars';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
@@ -87,7 +88,7 @@ export default function ProfileScreen() {
     );
   }, [allBadges, homeGymId]);
   const isDemo = useIsDemoUser();
-  const { t, i18n } = useTranslation('profile');
+  const { t } = useTranslation('profile');
   const { t: tCommon } = useTranslation('common');
   const { t: tSocial } = useTranslation('socialFriends');
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -366,7 +367,7 @@ export default function ProfileScreen() {
                     <View style={[styles.avatarGlowRing, { shadowColor: branding.primary, borderColor: hexToRgba(branding.primary, 0.55) }]}>
                       <View style={styles.avatarContainer}>
                         {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                          <Image source={profile.avatar_url} style={styles.avatar} transition={200} />
+                          <Image source={localAvatarSource(profile.avatar_url)} style={styles.avatar} transition={200} />
                         ) : profile?.avatar_url ? (
                           <LinearGradient colors={[branding.primary, branding.primaryDark]} style={styles.avatarPlaceholder}>
                             <Text style={styles.avatarEmoji}>{profile.avatar_url}</Text>

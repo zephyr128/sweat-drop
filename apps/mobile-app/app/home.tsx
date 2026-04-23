@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, RefreshControl, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, RefreshControl, Platform } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { Image } from 'expo-image';
+import { localAvatarSource } from '@/lib/avatars';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
@@ -30,9 +31,9 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba } from '@/lib/theme';
+import { theme as appTheme, fontStyles, hexToRgba } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
-import { ActivityRings, type ActivityRingsHandle } from '@/components/ActivityRings';
+import type { ActivityRingsHandle } from '@/components/ActivityRings';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import { useCompeteStats } from '@/hooks/useCompeteStats';
 import { useUserBadges } from '@/hooks/useUserBadges';
@@ -66,11 +67,6 @@ const BOTTOM_CARD_WIDTH = (SCREEN_WIDTH - (CARD_PADDING * 2) - BOTTOM_CARDS_GAP)
 const SMARTCOACH_CARD_WIDTH = (BOTTOM_CARD_WIDTH * 2) + BOTTOM_CARDS_GAP;
 const CHALLENGE_CARD_WIDTH = SMARTCOACH_CARD_WIDTH;
 const CHALLENGE_CARD_HEIGHT = 200;
-const SNAP_INTERVAL = CHALLENGE_CARD_WIDTH + CARD_MARGIN;
-const CHALLENGE_ACCENT = '#FF9F4A';
-const LEADERBOARD_ACCENT = '#A855F7';
-const ARENAS_ACCENT = '#22D3EE';
-
 /** Same geometry as `StatsCards` hero / side / action cards */
 const SK_CARD_GAP = 10;
 const SK_CARD_PAD = 16;
@@ -272,7 +268,7 @@ export default function HomeScreen() {
   const { t } = useTranslation('home');
   const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();
-  const { theme, activeGym, isUnlocked } = useTheme();
+  const { activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
   const { getActiveGymId, homeGymId, previewGymId } = useGymStore();
   const { updateHomeGym, loadActiveGym } = useGymData();
@@ -516,7 +512,7 @@ export default function HomeScreen() {
   }, [homeGymId, session?.user, profile?.id, loading]);
 
   // Badge notifications with confetti
-  const { newBadge, clearNewBadge } = useBadgeNotifications({
+  const { clearNewBadge } = useBadgeNotifications({
     onBadgeEarned: (badge) => {
       log.debug('Badge earned!', badge);
       // Keep home challenge gauge/cards in sync with newly awarded badges.
@@ -786,7 +782,7 @@ export default function HomeScreen() {
           onPress: async () => {
             try {
               await updateHomeGym(activeGym.id);
-            } catch (error) {
+            } catch {
               showModal({ title: t('common:error'), body: t('failedToUpdateGym') });
             }
           },
@@ -816,7 +812,7 @@ export default function HomeScreen() {
             >
               <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
                 {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                  <Image source={profile.avatar_url} style={es.avatarImage} transition={200} />
+                  <Image source={localAvatarSource(profile.avatar_url)} style={es.avatarImage} transition={200} />
                 ) : (
                   <Text style={es.avatarText}>
                     {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}
@@ -1097,7 +1093,6 @@ export default function HomeScreen() {
     : (['rgba(10,10,20,0.00)', 'rgba(10,10,20,0.58)', 'rgba(10,10,20,0.90)'] as const);
   const HEADER_H = 56;
   const TAB_BAR_H = 48;
-  const SCROLL_TOP_INSET = 0;
   // Reserve space for sticky section (tab bar only)
   const sheetMinHeight = SCREEN_HEIGHT - insets.top - HEADER_H - TAB_BAR_H;
 
@@ -1140,7 +1135,7 @@ export default function HomeScreen() {
           >
             <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
               {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
-                <Image source={profile.avatar_url} style={styles.avatarImage} transition={200} />
+                <Image source={localAvatarSource(profile.avatar_url)} style={styles.avatarImage} transition={200} />
               ) : (
                 <Text style={styles.avatarText}>
                   {profile?.avatar_url || profile?.username?.charAt(0).toUpperCase() || 'U'}

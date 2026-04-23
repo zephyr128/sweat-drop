@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { Image } from 'expo-image';
+import { localAvatarSource } from '@/lib/avatars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo, useRef, type ComponentProps } from 'react';
 import { useLocalSearchParams } from 'expo-router';
@@ -29,7 +30,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
-import i18n from '@/lib/i18n';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 // ── Types (mirrored from backend/types/sweatdrop.ts) ──
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'all_time';
@@ -71,7 +71,7 @@ interface AvailableArena {
   user_opted_in: boolean;
   user_rank: number | null;
   user_score: number | null;
-  prizes: Array<{ rank: number; prize: string; value?: string }>;
+  prizes: { rank: number; prize: string; value?: string }[];
   card_color: string | null;
   card_text_color: string | null;
   card_gradient_end: string | null;
@@ -488,7 +488,7 @@ export default function LeaderboardScreen() {
 
     (async () => {
       for (const snapshot of allSnapshots) {
-        const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
+        const rankings = (snapshot.rankings || []) as { rank: number; user_id: string; username: string; drops: number }[];
         const userEntry = rankings.find(r => r.user_id === session.user.id && r.rank <= 3);
         if (userEntry) {
           const dismissed = await AsyncStorage.getItem(`dismissedWinBanner_${snapshot.id}`);
@@ -585,7 +585,7 @@ export default function LeaderboardScreen() {
           {/* Avatar */}
           <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary }]}>
             {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-              <Image source={entry.avatar_url} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
+              <Image source={localAvatarSource(entry.avatar_url)} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
             ) : entry.avatar_url ? (
               <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                 <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
@@ -1069,7 +1069,7 @@ export default function LeaderboardScreen() {
                               <PulsingRing size={avatarSize} color={medalColor} isChampion={isChampion}>
                                 <View style={[styles.podiumAvatarInner, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}>
                                   {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                                    <Image source={entry.avatar_url} style={[styles.podiumAvatarImg, { borderRadius: avatarSize / 2 }]} transition={200} />
+                                    <Image source={localAvatarSource(entry.avatar_url)} style={[styles.podiumAvatarImg, { borderRadius: avatarSize / 2 }]} transition={200} />
                                   ) : entry.avatar_url ? (
                                     <Text style={[styles.podiumAvatarEmoji, isChampion && { fontSize: 34 }]}>{entry.avatar_url}</Text>
                                   ) : (
@@ -1095,7 +1095,7 @@ export default function LeaderboardScreen() {
                               ]}>
                                 <View style={[styles.podiumAvatarInner, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}>
                                   {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                                    <Image source={entry.avatar_url} style={[styles.podiumAvatarImg, { borderRadius: avatarSize / 2 }]} transition={200} />
+                                    <Image source={localAvatarSource(entry.avatar_url)} style={[styles.podiumAvatarImg, { borderRadius: avatarSize / 2 }]} transition={200} />
                                   ) : entry.avatar_url ? (
                                     <Text style={[styles.podiumAvatarEmoji, isChampion && { fontSize: 34 }]}>{entry.avatar_url}</Text>
                                   ) : (
@@ -1202,7 +1202,7 @@ export default function LeaderboardScreen() {
                             </View>
                             <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary }]}>
                               {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                                <Image source={entry.avatar_url} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
+                                <Image source={localAvatarSource(entry.avatar_url)} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
                               ) : entry.avatar_url ? (
                                 <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                                   <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
@@ -1278,7 +1278,7 @@ export default function LeaderboardScreen() {
                         </View>
                         <View style={[styles.listAvatarWrap, { borderColor: branding.primary }]}>
                           {currentUserEntry.avatar_url && currentUserEntry.avatar_url.startsWith('http') ? (
-                            <Image source={currentUserEntry.avatar_url} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
+                            <Image source={localAvatarSource(currentUserEntry.avatar_url)} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
                           ) : currentUserEntry.avatar_url ? (
                             <View style={[styles.listAvatarPlaceholder, styles.listAvatarInset]}>
                               <Text style={styles.listAvatarEmoji}>{currentUserEntry.avatar_url}</Text>
@@ -1329,7 +1329,7 @@ export default function LeaderboardScreen() {
                       {t('pastWinnersTitle')}
                     </Text>
                     {ps.snapshots.slice(0, 3).map((snapshot, idx) => {
-                      const rankings = (snapshot.rankings || []) as Array<{ rank: number; user_id: string; username: string; drops: number }>;
+                      const rankings = (snapshot.rankings || []) as { rank: number; user_id: string; username: string; drops: number }[];
                       const top3 = rankings.filter(r => r.rank <= 3).sort((a, b) => a.rank - b.rank);
                       if (top3.length === 0) return null;
                       const myRank: number | null = snapshot.my_rank ?? null;

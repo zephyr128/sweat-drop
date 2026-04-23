@@ -10,7 +10,7 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,7 +30,7 @@ import {
   AVATAR_COLORS,
   AvatarActivity,
   avatarUrl,
-  allAvatarUrls,
+  localAvatarSource,
 } from '@/lib/avatars';
 
 const TILE_GAP = 8;
@@ -80,10 +80,10 @@ export default function AvatarScreen() {
     return Math.floor((width - horizontalPadding - totalGap) / NUM_COLUMNS);
   }, [width]);
 
-  // Preheat disk cache on mount
-  useEffect(() => {
-    Image.prefetch(allAvatarUrls()).catch(() => {});
-  }, []);
+  // Avatars ship with the binary (see lib/avatars.ts AVATAR_LOCAL_ASSETS) —
+  // no prefetch needed. Supabase Storage is only touched when rendering
+  // someone else's avatar on a device that didn't bundle the catalog
+  // (e.g. future WebApp or older app versions).
 
   const filteredTiles = useMemo<AvatarTile[]>(() => {
     if (activeFilter === 'all') return ALL_TILES;
@@ -122,8 +122,12 @@ export default function AvatarScreen() {
 
   const renderTile = useCallback(({ item, index }: ListRenderItemInfo<AvatarTile>) => {
     const isSelected = selected === item.url;
+    // Cap the cascade so the last tile fades in ~400ms after the first,
+    // not 1s+ as before. (Local assets render instantly; the slow-network
+    // illusion that hid the long cascade is gone.)
+    const cascadeDelay = Math.min(index, 12) * 25;
     return (
-      <Animated.View entering={FadeInDown.delay(100 + index * 20).duration(300)}>
+      <Animated.View entering={FadeInDown.delay(cascadeDelay).duration(220)}>
         <TouchableOpacity
           style={[
             styles.tile,
@@ -143,9 +147,8 @@ export default function AvatarScreen() {
           accessibilityLabel={`${item.activity} avatar`}
         >
           <Image
-            source={{ uri: item.url }}
+            source={localAvatarSource(item.url)}
             style={{ width: tileSize - 4, height: tileSize - 4, borderRadius: 10 }}
-            transition={200}
             cachePolicy="memory-disk"
             contentFit="contain"
           />
@@ -190,9 +193,8 @@ export default function AvatarScreen() {
               <>
                 <View style={[styles.previewGlow, { backgroundColor: primary }]} />
                 <Image
-                  source={{ uri: selected }}
+                  source={localAvatarSource(selected)}
                   style={styles.previewImage}
-                  transition={200}
                   cachePolicy="memory-disk"
                   contentFit="contain"
                 />
@@ -294,6 +296,10 @@ export default function AvatarScreen() {
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.gridContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={16}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        removeClippedSubviews
         key={activeFilter}
       />
 

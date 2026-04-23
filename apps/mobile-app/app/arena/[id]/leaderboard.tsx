@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
+import { localAvatarSource } from '@/lib/avatars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalSearchParams} from 'expo-router';
@@ -59,7 +60,7 @@ interface ArenaInfo {
   card_text_color: string | null;
   card_gradient_end: string | null;
   is_finalized: boolean;
-  prizes: Array<{ rank: number; prize: string; value?: string }>;
+  prizes: { rank: number; prize: string; value?: string }[];
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -226,7 +227,7 @@ export default function ArenaLeaderboardScreen() {
                           isCurrent && { backgroundColor: hexToRgba(mColor, 0.12) },
                         ]}>
                           {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                            <Image source={entry.avatar_url} style={styles.podiumAvatarImg} transition={200} />
+                            <Image source={localAvatarSource(entry.avatar_url)} style={styles.podiumAvatarImg} transition={200} />
                           ) : entry.avatar_url ? (
                             <Text style={[styles.podiumEmoji, isFirst && styles.podiumEmojiFirst]}>
                               {entry.avatar_url}
@@ -316,7 +317,7 @@ export default function ArenaLeaderboardScreen() {
 
                         {/* Avatar */}
                         {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
-                          <Image source={entry.avatar_url} style={styles.listAvatar} transition={200} />
+                          <Image source={localAvatarSource(entry.avatar_url)} style={styles.listAvatar} transition={200} />
                         ) : entry.avatar_url ? (
                           <View style={styles.listAvatarPlaceholder}>
                             <Text style={styles.listAvatarEmoji}>{entry.avatar_url}</Text>
