@@ -1,9 +1,22 @@
+/**
+ * useHomeStats — home-screen dashboard data layer.
+ *
+ * AGENT NOTE: [2026-04-23] - mobile-coder
+ *
+ * Previously fired 6 concurrent queries (get_my_drops + get_my_sessions +
+ * profiles select + rewards select + get_my_redemptions + gym_memberships
+ * select). Now calls a single RPC `get_home_dashboard(p_gym_id)` which
+ * returns the combined payload as JSON. See migration
+ * 20260423220000_get_home_dashboard_rpc.sql.
+ *
+ * The hook also exposes checkin_status so home.tsx no longer needs its own
+ * rpc('get_checkin_status') call.
+ */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
-/* ── Types ────────────────────────────────────────── */
 export interface HomeStats {
   /** Consecutive days with at least one completed session */
   streak: number;
@@ -17,7 +30,7 @@ export interface HomeStats {
   lastWorkout: {
     durationSeconds: number;
     dropsEarned: number;
-    endedAt: string; // ISO date string
+    endedAt: string;
   } | null;
   /** The cheapest reward the user cannot yet afford, or the cheapest they CAN afford */
   closestReward: {
@@ -34,6 +47,31 @@ export interface HomeStats {
   weeklyActivity: { day: string; drops: number; isToday: boolean }[];
   /** Number of days active this week */
   activeDaysThisWeek: number;
+}
+
+export interface CheckinStatus {
+  already_checked_in: boolean;
+  checkin_drops: number;
+  gym_name: string;
+  total_checkins: number;
+}
+
+interface DashboardPayload {
+  profile: { streak_days: number | null; last_visit_date: string | null } | null;
+  week_drops: { amount: number; transaction_type: string; created_at: string }[];
+  last_session: { ended_at: string; duration_seconds: number | null; drops_earned: number | null } | null;
+  local_drops_balance: number | null;
+  rewards: {
+    id: string;
+    name: string;
+    price_drops: number;
+    image_url: string | null;
+    reward_type: string;
+    redemption_limit: string | null;
+    stock: number | null;
+  }[];
+  active_redemptions: { reward_id: string; created_at: string }[];
+  checkin_status: CheckinStatus | null;
 }
 
 const EMPTY_STATS: HomeStats = {
@@ -68,80 +106,34 @@ function getPeriodStart(limit: string, now: Date): Date {
   return new Date(0);
 }
 
-/* ── Hook ────────────────────────────────────────── */
 export function useHomeStats(gymId: string | null) {
   const { session } = useSession();
   const [stats, setStats] = useState<HomeStats>(EMPTY_STATS);
+  const [checkinStatus, setCheckinStatus] = useState<CheckinStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!session?.user) return;
-    const userId = session.user.id;
 
     try {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const EARNED_TYPES = ['session', 'checkin', 'challenge', 'bonus', 'arena', 'referral_reward'];
       const dayOfWeek = now.getDay();
-      const monday = new Date(now);
-      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      monday.setDate(now.getDate() + diffToMonday);
-      monday.setHours(0, 0, 0, 0);
 
-      // Fire ALL queries in parallel — no waterfalls
-      // Merged today + week drops into one RPC (week ⊇ today)
-      const [weekDropsRes, lastSessionRes, profileRes, rewardsRes, redemptionsRes, membershipRes] = await Promise.all([
-        // 1+4. Week drops (superset of today's) — single RPC replaces two .from() calls
-        supabase.rpc('get_my_drops', {
-          p_gym_id: gymId ?? null,
-          p_types: EARNED_TYPES,
-          p_since: monday.toISOString(),
-          p_limit: 5000,
-        }),
-        // 2. Last workout
-        supabase.rpc('get_my_sessions', {
-          p_gym_id: null,
-          p_active_only: false,
-          p_since: null,
-          p_limit: 5,
-        }),
-        // 3. Streak from profile
-        supabase
-          .from('profiles')
-          .select('streak_days, last_visit_date')
-          .eq('id', userId)
-          .single(),
-        // 5. Rewards (gym-dependent, skipped if no gymId)
-        gymId
-          ? supabase
-              .from('rewards')
-              .select('id, name, price_drops, image_url, reward_type, redemption_limit, stock')
-              .eq('gym_id', gymId)
-              .eq('is_active', true)
-              .order('price_drops', { ascending: true })
-              .limit(20)
-          : Promise.resolve({ data: null }),
-        // 6. Redemptions via RPC
-        gymId
-          ? supabase.rpc('get_my_redemptions', {
-              p_gym_id: gymId,
-              p_statuses: ['pending', 'confirmed'],
-              p_limit: null,
-            })
-          : Promise.resolve({ data: null }),
-        gymId
-          ? supabase
-              .from('gym_memberships')
-              .select('local_drops_balance')
-              .eq('user_id', userId)
-              .eq('gym_id', gymId)
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
-      ]);
+      const { data, error } = await supabase.rpc('get_home_dashboard', {
+        p_gym_id: gymId ?? null,
+      });
 
-      // Process today's + weekly drops from the combined week RPC result
-      const allWeekDrops = (weekDropsRes.data ?? []).filter((d: any) => (d.amount ?? 0) > 0);
-      const todayTx = allWeekDrops.filter((d: any) => new Date(d.created_at) >= todayStart);
+      if (error) {
+        log.error('[useHomeStats] get_home_dashboard error:', error);
+        return;
+      }
+
+      const payload = (data ?? {}) as DashboardPayload;
+
+      // ── today's drops (capped + bonus split) ──
+      const allWeekDrops = payload.week_drops ?? [];
+      const todayTx = allWeekDrops.filter((d) => new Date(d.created_at) >= todayStart);
       const CAPPED_TYPES = new Set(['session', 'checkin']);
       let todayCappedDrops = 0;
       let todayBonusDrops = 0;
@@ -155,26 +147,21 @@ export function useHomeStats(gymId: string | null) {
       }
       const todayDrops = todayCappedDrops + todayBonusDrops;
 
-      // Process last workout (RPC returns array; pick latest completed)
-      const allRecentSessions = lastSessionRes.data ?? [];
-      const latestCompleted = allRecentSessions
-        .filter((s: any) => !s.is_active)
-        .sort((a: any, b: any) => new Date(b.ended_at).getTime() - new Date(a.ended_at).getTime())[0] ?? null;
-      const lastWorkout: HomeStats['lastWorkout'] = latestCompleted
+      // ── last workout ──
+      const ls = payload.last_session;
+      const lastWorkout: HomeStats['lastWorkout'] = ls
         ? {
-            durationSeconds: latestCompleted.duration_seconds || 0,
-            dropsEarned: latestCompleted.drops_earned || 0,
-            endedAt: latestCompleted.ended_at,
+            durationSeconds: ls.duration_seconds || 0,
+            dropsEarned: ls.drops_earned || 0,
+            endedAt: ls.ended_at,
           }
         : null;
 
-      // Process streak — validate against last_visit_date to avoid stale values
-      // when the user hasn't worked out for >1 day (backend only updates on workout)
-      const rawStreak = profileRes.data?.streak_days ?? 0;
-      const lastVisitStr = profileRes.data?.last_visit_date;
+      // ── streak (validated against last_visit_date) ──
+      const rawStreak = payload.profile?.streak_days ?? 0;
+      const lastVisitStr = payload.profile?.last_visit_date;
       let streak = rawStreak;
       if (lastVisitStr && rawStreak > 0) {
-        // Use Belgrade timezone to match backend logic (UTC+1/UTC+2)
         const belgradeTodayStr = new Date().toLocaleDateString('sv-SE', {
           timeZone: 'Europe/Belgrade',
         });
@@ -186,24 +173,22 @@ export function useHomeStats(gymId: string | null) {
         }
       }
 
-      // Process closest reward
-      const freshDrops = (membershipRes.data as any)?.local_drops_balance ?? 0;
+      // ── closest reward ──
+      const freshDrops = payload.local_drops_balance ?? 0;
       let closestReward: HomeStats['closestReward'] = null;
       if (gymId) {
-        const rewards = rewardsRes.data;
-        const redemptions = redemptionsRes.data;
-
-        if (rewards && rewards.length > 0) {
-          const redeemed = redemptions || [];
+        const rewards = payload.rewards ?? [];
+        const redeemed = payload.active_redemptions ?? [];
+        if (rewards.length > 0) {
           const available = rewards.filter((r) => {
             if (r.stock !== null && r.stock <= 0) return false;
             const limit: string = r.redemption_limit || 'unlimited';
             if (limit === 'unlimited') return true;
-            const matching = redeemed.filter((rd: any) => rd.reward_id === r.id);
+            const matching = redeemed.filter((rd) => rd.reward_id === r.id);
             if (matching.length === 0) return true;
             if (limit === 'once') return false;
             const periodStart = getPeriodStart(limit, now);
-            return !matching.some((rd: any) => new Date(rd.created_at) >= periodStart);
+            return !matching.some((rd) => new Date(rd.created_at) >= periodStart);
           });
 
           if (available.length > 0) {
@@ -225,7 +210,7 @@ export function useHomeStats(gymId: string | null) {
         }
       }
 
-      // Process weekly activity (reuses allWeekDrops from combined RPC)
+      // ── weekly activity (Mon→Sun) ──
       const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       const dailyDrops: number[] = [0, 0, 0, 0, 0, 0, 0];
       for (const tx of allWeekDrops) {
@@ -236,14 +221,12 @@ export function useHomeStats(gymId: string | null) {
           dailyDrops[idx] += tx.amount || 0;
         }
       }
-
       const todayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       const weeklyActivity = DAYS.map((day, i) => ({
         day,
         drops: dailyDrops[i],
         isToday: i === todayIndex,
       }));
-
       const activeDaysThisWeek = dailyDrops.filter((d) => d > 0).length;
 
       setStats({
@@ -256,8 +239,9 @@ export function useHomeStats(gymId: string | null) {
         weeklyActivity,
         activeDaysThisWeek,
       });
+      setCheckinStatus(payload.checkin_status ?? null);
     } catch (error) {
-      log.error('[useHomeStats] Error loading stats:', error);
+      log.error('[useHomeStats] Error loading dashboard:', error);
     } finally {
       setLoading(false);
     }
@@ -267,5 +251,8 @@ export function useHomeStats(gymId: string | null) {
     refresh();
   }, [refresh]);
 
-  return useMemo(() => ({ stats, loading, refresh }), [stats, loading, refresh]);
+  return useMemo(
+    () => ({ stats, checkinStatus, loading, refresh }),
+    [stats, checkinStatus, loading, refresh],
+  );
 }

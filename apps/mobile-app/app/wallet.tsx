@@ -32,7 +32,7 @@ import { log } from '@/lib/logger';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import { useForegroundRefresh } from '@/hooks/useForegroundRefresh';
 import * as Haptics from 'expo-haptics';
 
 // ────────────────────────────────────────────────────
@@ -212,12 +212,15 @@ export default function WalletScreen() {
     if (session?.user) refreshAll();
   }, [session?.user, activeGymId]));
 
-  useRealtimeRefresh({
-    table: 'drops_transactions',
-    filterColumn: 'user_id',
-    filterValue: session?.user?.id ?? null,
-    onEvent: refreshAll,
+  // AGENT NOTE: [2026-04-23] - mobile-coder
+  // Replaced useRealtimeRefresh({ table: 'drops_transactions', ... }) with
+  // useForegroundRefresh. drops_transactions is no longer in supabase_realtime
+  // (migration 20260423210000_trim_realtime_hot_tables.sql) — the WAL broadcast
+  // was stalling the Realtime decoder by up to 10 s on prod. useFocusEffect
+  // above covers in-app navigation; this hook covers background→foreground.
+  useForegroundRefresh({
     enabled: !!session?.user,
+    onForeground: refreshAll,
   });
 
   const onRefresh = useCallback(async () => {

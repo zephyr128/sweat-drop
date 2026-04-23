@@ -68,6 +68,99 @@ cd backend && supabase db push
 
 ---
 
+### [2026-04-23] - Prod Performance: Fold Home-Screen Queries into One RPC
+
+**Migration:** `20260423220000_get_home_dashboard_rpc.sql`
+
+**Agent:** supabase-dba
+
+#### Changes
+- New RPC: `public.get_home_dashboard(p_gym_id UUID DEFAULT NULL) RETURNS JSONB`
+  (SECURITY DEFINER, STABLE).
+- Returns a single JSON payload covering what previously required 7 round-trips:
+  `profile` (streak/last_visit), `week_drops`, `last_session`,
+  `local_drops_balance`, `rewards`, `active_redemptions`, `checkin_status`.
+- Existing RPCs (`get_my_drops`, `get_my_sessions`, `get_my_redemptions`,
+  `get_checkin_status`) are **unchanged** — they remain in use on other
+  screens (`/transactions`, session history, leaderboard, etc.).
+
+#### Impact on Frontend
+- **Mobile App:** `useHomeStats.ts` rewritten to call `get_home_dashboard` once
+  and derive all derived fields from the single payload. It additionally
+  exposes `checkinStatus`, which `home.tsx` now reads instead of firing its
+  own `get_checkin_status` call. Net effect on the home-screen mount:
+  **7 supabase calls → 1**.
+- **Admin Panel:** No change.
+
+#### Breaking Changes
+- None. Additive RPC; older mobile clients continue to work via the legacy
+  multi-call path.
+
+#### Verification
+```sql
+-- As an authenticated user (or via supabase.rpc in a dev client):
+SELECT public.get_home_dashboard('<gym_uuid>');
+-- Expect JSONB with keys: profile, week_drops, last_session,
+--   local_drops_balance, rewards, active_redemptions, checkin_status
+```
+
+---
+
+### [2026-04-23] - Prod Hotfix: Trim `supabase_realtime` Publication
+
+**Migration:** `20260423210000_trim_realtime_hot_tables.sql`
+
+**Agent:** supabase-dba
+
+#### Observed Problem (pg_stat_statements on prod)
+| query                    | calls  | mean_ms | max_ms  | %_total_time |
+|--------------------------|--------|---------|---------|--------------|
+| `realtime.list_changes`  | 31 996 | 7.3     | 10 228  | **35.57 %**  |
+
+Realtime's WAL decoder was stalling for up to 10 seconds, and during each stall
+every authenticated request queued behind it. Mobile clients saw this as
+"timeouts to *.supabase.co" across the board. App RPCs themselves were healthy.
+
+#### Changes
+- `ALTER PUBLICATION supabase_realtime DROP TABLE public.drops_transactions`
+- `ALTER PUBLICATION supabase_realtime DROP TABLE public.user_notifications`
+- `public.user_badges` and `public.redemptions` **kept** in the publication
+  (rare events, drive UX-critical toasts).
+- Idempotent: guards with `pg_publication_tables` lookup, so safe to re-apply.
+
+#### Impact on Frontend
+- **Mobile App (coordinated commit):**
+  - `home.tsx` / `wallet.tsx`: removed `useRealtimeRefresh({ table: 'drops_transactions', ... })`.
+    Replaced with new `useForegroundRefresh` hook (AppState-based).
+  - `useNotifications.ts`: removed both `user-notifications-inbox` and
+    `unread-notif-badge` channels. Inbox refreshes on focus + foreground.
+    Push notifications (APNS/FCM) already deliver real-time banners.
+  - `useUserBadges.ts`: removed duplicate realtime channel;
+    `useBadgeNotifications` is now the **single** subscriber on `user_badges`
+    and fanout-updates `useUserBadges` via its `onBadgeEarned` callback.
+- **Admin Panel:** No change.
+- **Behavioural change:** drops balance / unread count updates now happen on
+  screen focus or foreground resume (100–300 ms latency) instead of instantly.
+  Previously, the realtime push had a worst-case latency of 500 ms – 10 s due
+  to decoder stalls.
+
+#### Breaking Changes
+- None. Old mobile builds still open channels on these tables; the channels
+  just receive no events. Those builds already include AppState / focus-based
+  refresh paths.
+
+#### Rollback
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE public.drops_transactions;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.user_notifications;
+```
+
+#### Monitoring
+Expect `realtime.list_changes` `prop_total_time` to drop from ~35 % to ~10 %
+within 5 minutes of deploy.
+
+---
+
 ### [2026-04-23] - Exclude Demo/Test Accounts from Global & Arena Leaderboards
 
 **Migration:** `20260423200000_exclude_demo_users_from_global_and_arena_leaderboards.sql`

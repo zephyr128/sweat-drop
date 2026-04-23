@@ -1,4 +1,22 @@
+/**
+ * useUserBadges — loads the authenticated user's earned badges.
+ *
+ * AGENT NOTE: [2026-04-23] - mobile-coder
+ *
+ * This hook no longer holds its own Realtime subscription on user_badges.
+ * Reason: it duplicated the channel already held by useBadgeNotifications,
+ * doubling realtime load per active user. Trim migration:
+ * 20260423210000_trim_realtime_hot_tables.sql (kept user_badges in the
+ * publication because badge awards are rare and drive a UX-important toast).
+ *
+ * Refresh strategy:
+ *  - Initial load on mount / userId change.
+ *  - useFocusEffect reloads when the screen regains focus.
+ *  - When a badge is awarded, useBadgeNotifications (the single subscriber)
+ *    fires its onBadgeEarned callback which screens wire to call refresh().
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
@@ -20,7 +38,6 @@ export function useUserBadges(userId?: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
-  const channelRef = useRef<any>(null);
 
   const targetUserId = userId || session?.user?.id;
 
@@ -56,45 +73,22 @@ export function useUserBadges(userId?: string) {
     }
   }, [targetUserId]);
 
-  // Setup real-time subscription for new badges
+  // Initial load + reload when user changes
   useEffect(() => {
     if (!targetUserId) return;
-
-    // Load initial badges
     loadBadges();
-
-    // Setup real-time subscription
-    const channel = supabase
-      .channel(`user_badges_${targetUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'user_badges',
-          filter: `user_id=eq.${targetUserId}`,
-        },
-        async (payload) => {
-          log.debug('New badge earned:', payload.new);
-          
-          // Reload badges to get full badge data (name, image, etc.)
-          await loadBadges();
-          
-          // Trigger callback for notification (if provided)
-          // This will be handled by the notification system
-        }
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
   }, [targetUserId, loadBadges]);
+
+  // Reload when the hosting screen regains focus — covers the case where a
+  // new badge is earned while away from this screen (useBadgeNotifications
+  // handles the toast; focus-reload picks up the data here).
+  useFocusEffect(
+    useCallback(() => {
+      if (targetUserId) {
+        void loadBadges();
+      }
+    }, [targetUserId, loadBadges]),
+  );
 
   useEffect(() => {
     isMountedRef.current = true;

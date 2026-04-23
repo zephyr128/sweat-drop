@@ -1,17 +1,19 @@
 /**
  * useNotifications — in-app notification inbox data layer.
  *
- * Fetches the authenticated user's notifications with pagination,
- * subscribes to Realtime INSERT events for live updates,
- * and exposes mark-read / mark-all-read helpers.
+ * Fetches the authenticated user's notifications with pagination and exposes
+ * mark-read / mark-all-read helpers. Refreshes on screen focus and on
+ * background→foreground transition. Push notifications (APNS/FCM) deliver
+ * real-time banners; this hook no longer holds a Realtime subscription
+ * because user_notifications was removed from supabase_realtime in
+ * 20260423210000_trim_realtime_hot_tables.sql.
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { useForegroundRefresh } from '@/hooks/useForegroundRefresh';
 import { log } from '@/lib/logger';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface AppNotification {
   id: string;
@@ -35,8 +37,6 @@ export function useNotifications() {
   const [error, setError] = useState(false);
 
   const userId = useAuthStore((s) => s.session?.user?.id);
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const appStateRef = useRef(AppState.currentState);
 
   const fetchNotifications = useCallback(async (offset = 0, append = false) => {
     if (!userId) return;
@@ -138,44 +138,15 @@ export function useNotifications() {
     }, [loadInitial]),
   );
 
-  // Realtime subscription for new inserts
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('user-notifications-inbox')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'user_notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const row = payload.new as AppNotification;
-          setItems((prev) => [row, ...prev]);
-          setUnreadCount((c) => c + 1);
-        },
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-
-    const appListener = AppState.addEventListener('change', (next: AppStateStatus) => {
-      const wasBackground = appStateRef.current !== 'active';
-      appStateRef.current = next;
-      if (next === 'active' && wasBackground) {
-        void onRefresh();
-      }
-    });
-
-    return () => {
-      supabase.removeChannel(channel);
-      channelRef.current = null;
-      appListener.remove();
-    };
-  }, [userId, onRefresh]);
+  // AGENT NOTE: [2026-04-23] - mobile-coder
+  // Removed Realtime subscription on user_notifications (see migration
+  // 20260423210000_trim_realtime_hot_tables.sql). Push notifications already
+  // deliver the banner/badge for new rows; the inbox refreshes on screen focus
+  // and on background→foreground transition via useForegroundRefresh below.
+  useForegroundRefresh({
+    enabled: !!userId,
+    onForeground: onRefresh,
+  });
 
   return useMemo(
     () => ({
@@ -222,27 +193,14 @@ export function useUnreadNotificationCount() {
     }, [fetch]),
   );
 
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('unread-notif-badge')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => { void fetch(); },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetch]);
+  // AGENT NOTE: [2026-04-23] - mobile-coder
+  // Removed Realtime subscription on user_notifications (see migration
+  // 20260423210000_trim_realtime_hot_tables.sql). The badge count refreshes
+  // on screen focus (useFocusEffect above) and on foreground resume.
+  useForegroundRefresh({
+    enabled: !!userId,
+    onForeground: fetch,
+  });
 
   return count;
 }

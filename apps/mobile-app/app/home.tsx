@@ -50,7 +50,7 @@ import type { LeaderboardPeriod } from '@/components/LeaderboardPreview';
 import { useHomeStats } from '@/hooks/useHomeStats';
 import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
-import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import { useForegroundRefresh } from '@/hooks/useForegroundRefresh';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { SuggestGymCardWithSheet } from '@/components/SuggestGymCardWithSheet';
@@ -364,7 +364,7 @@ export default function HomeScreen() {
   }, [allEarnedBadges, activeGymId]);
 
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
-  const { stats: homeStats, refresh: refreshStats } = useHomeStats(activeGymId);
+  const { stats: homeStats, checkinStatus: homeCheckinStatus, refresh: refreshStats } = useHomeStats(activeGymId);
 
   // Available arenas
   const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
@@ -431,19 +431,23 @@ export default function HomeScreen() {
     return t('prizes.gaugeReward', { reward: rewardLabel, rank: rankForGauge.rank });
   }, [rankForGauge, weeklyRankRewards, monthlyRankRewards, t]);
 
-  // Realtime: refresh stats when drops_transactions change
-  useRealtimeRefresh({
-    table: 'drops_transactions',
-    filterColumn: 'user_id',
-    filterValue: session?.user?.id ?? null,
-    onEvent: useCallback(() => {
+  // AGENT NOTE: [2026-04-23] - mobile-coder
+  // Replaced useRealtimeRefresh({ table: 'drops_transactions', ... }) with
+  // useForegroundRefresh. Rationale: drops_transactions was dropped from the
+  // supabase_realtime publication (migration 20260423210000_trim_realtime_hot_tables.sql)
+  // because its per-row WAL broadcast was stalling the Realtime decoder by up
+  // to 10 s on prod, causing all authenticated requests to time out. The
+  // focus-based refresh in the useFocusEffect below handles in-app navigation;
+  // the hook below handles background→foreground transitions.
+  useForegroundRefresh({
+    enabled: !!session?.user,
+    onForeground: useCallback(() => {
       refreshStats?.();
       refreshLocalDrops();
       dropLimits.refresh();
       competeStats.refresh();
       refreshBadges();
     }, [refreshStats, refreshLocalDrops, dropLimits.refresh, competeStats.refresh, refreshBadges]),
-    enabled: !!session?.user,
   });
 
   // Navigate to invite-friend when a deep-link referral code is pending.
@@ -451,23 +455,12 @@ export default function HomeScreen() {
   // returning here won't re-trigger.
   const pendingReferralCode = usePendingReferralStore((s) => s.pendingCode);
 
-  // Check-in status
-  const [checkinStatus, setCheckinStatus] = useState<{
-    already_checked_in: boolean;
-    checkin_drops: number;
-    gym_name: string;
-    total_checkins: number;
-  } | null>(null);
-
-  const loadCheckinStatus = useCallback(async () => {
-    if (!session?.user || !homeGymId) return;
-    try {
-      const { data, error } = await supabase.rpc('get_checkin_status', { p_gym_id: homeGymId });
-      if (!error && data) setCheckinStatus(data as any);
-    } catch {
-      // Non-critical
-    }
-  }, [session?.user, homeGymId]);
+  // AGENT NOTE: [2026-04-23] - mobile-coder
+  // checkinStatus now comes from useHomeStats (get_home_dashboard RPC) instead
+  // of a separate rpc('get_checkin_status') call. Migration
+  // 20260423220000_get_home_dashboard_rpc.sql folded it into the combined
+  // dashboard payload, eliminating one round-trip per home-screen mount/focus.
+  const checkinStatus = homeCheckinStatus;
 
   const loadData = useCallback(async (silent = false) => {
     if (!session?.user) return;
@@ -609,7 +602,7 @@ export default function HomeScreen() {
       refreshLocalDrops();
       void Promise.all([
         loadData(true),
-        loadCheckinStatus(),
+        // refreshStats now also refreshes checkin_status (see useHomeStats).
         ...(activeGymId
           ? [
               refreshChallenges?.() ?? Promise.resolve(),
@@ -634,7 +627,6 @@ export default function HomeScreen() {
       router,
       loadData,
       refreshLocalDrops,
-      loadCheckinStatus,
       refreshChallenges,
       refreshStats,
       refreshArenas,
@@ -726,7 +718,7 @@ export default function HomeScreen() {
         loadData(true),
         activeGymId ? loadActiveGym(activeGymId) : Promise.resolve(),
         refreshLocalDrops(),
-        loadCheckinStatus(),
+        // refreshStats now also refreshes checkin_status (see useHomeStats).
         ...(activeGymId
           ? [
               refreshChallenges?.() ?? Promise.resolve(),
@@ -743,7 +735,7 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, loadCheckinStatus, refreshChallenges, refreshStats, refreshArenas, dropLimits.refresh, competeStats.refresh, refreshBadges]);
+  }, [activeGymId, loadData, loadActiveGym, refreshLocalDrops, refreshChallenges, refreshStats, refreshArenas, dropLimits.refresh, competeStats.refresh, refreshBadges]);
 
 
   const handleQRPress = useCallback(() => {
@@ -810,7 +802,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/profile')}
               activeOpacity={0.7}
             >
-              <View style={[es.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.3), backgroundColor: 'rgba(0,229,255,0.08)' }]}>
+              <View style={es.avatarCircle}>
                 {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
                   <Image source={localAvatarSource(profile.avatar_url)} style={es.avatarImage} transition={200} />
                 ) : (
@@ -1133,7 +1125,7 @@ export default function HomeScreen() {
             onPress={() => router.push('/profile')}
             activeOpacity={0.7}
           >
-            <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.3) }]}>
+            <View style={styles.avatarContainer}>
               {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
                 <Image source={localAvatarSource(profile.avatar_url)} style={styles.avatarImage} transition={200} />
               ) : (
@@ -1594,20 +1586,21 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     flexShrink: 0,
     overflow: 'hidden',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 20,
+    borderRadius: 22,
   },
   avatarText: {
     fontSize: 16,
@@ -2198,10 +2191,12 @@ const es = StyleSheet.create({
     gap: 10,
   },
   avatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -2209,7 +2204,7 @@ const es = StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 20,
+    borderRadius: 22,
   },
   avatarText: {
     fontSize: 20,
