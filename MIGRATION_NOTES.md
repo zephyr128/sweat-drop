@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-23 (exclude demo users from global/arena leaderboards)
+**Last Updated:** 2026-04-23 (prod hotfix: align get_machine_status() with COALESCE(is_active, true))
 
 ---
 
@@ -16,6 +16,57 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-04-23] - Prod Hotfix: Demo Simulator "machine not found" on Android
+
+**Migration:** `20260423230000_fix_get_machine_status_is_active_coalesce.sql`
+
+**Agent:** supabase-dba
+
+#### Observed Problem (QA)
+Demo user on a production Android build taps the scan frame 5x, opens the
+simulator modal, presses **Start** → mobile app shows "machine not found"
+(localised `devModeNotFound`). The same demo account on iOS worked fine —
+that device had previously activated the machine through the admin panel
+(which set `is_active = true` explicitly), while the Android QA account's
+demo machine row still had `is_active` at its column default (NULL).
+
+#### Root Cause
+Two RPCs were inconsistent about how they treat `machines.is_active`:
+
+| RPC                      | Predicate                         | NULL result  |
+|--------------------------|-----------------------------------|--------------|
+| `get_my_demo_machine()`  | `COALESCE(m.is_active, true)=true`| **active**   |
+| `get_machine_status()`   | `m.is_active = true`              | **inactive** |
+
+`useDemoMachine` calls `get_my_demo_machine()` → gets the qr_uuid →
+`startDevelopWorkout` calls `get_machine_status(qr_uuid)` → 0 rows →
+ScannerScreen shows `machineNotFound` with `devModeNotFound` body. This is
+entirely platform-agnostic; the "iOS works / Android broken" symptom was
+just a coincidence of which account had which machine row.
+
+#### Changes
+- `get_machine_status()` rewritten to use `COALESCE(m.is_active, true) = true`,
+  matching `get_my_demo_machine()` and the existing app-level semantics
+  (machines default to "active" when the flag has not been explicitly set).
+- Machines with `is_active = false` remain inaccessible (no regression).
+
+#### Impact on Frontend
+- **Mobile App:** Demo simulator flow now resolves the same machine in both
+  RPCs. No client code change required (existing `ScannerScreen` + `useDemoMachine`
+  paths work once the DB is fixed). Any future user-facing QR scan whose
+  machine row had `is_active = NULL` will also start working.
+- **Admin Panel:** No change.
+
+#### Breaking Changes
+None.
+
+#### Deploy
+```bash
+cd backend && supabase db push
+```
+
+---
 
 ### [2026-04-23] - Exclude Demo/Test Accounts from Global & Arena Leaderboards
 
