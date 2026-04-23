@@ -21,6 +21,7 @@ import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { log } from '@/lib/logger';
+import { captureException } from '@/lib/sentry';
 import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAccount';
 
 /**
@@ -115,9 +116,13 @@ export default function ResetPasswordScreen() {
         });
         if (verifyError) {
           log.warn('[ResetPassword] verifyOtp error:', verifyError.message);
+          captureException(new Error(`ResetPassword verifyOtp failed: ${verifyError.message}`), {
+            source: 'reset_password_verify_otp',
+            supabase_error: verifyError.message,
+          });
           showModal({
             title: t('common:error'),
-            body: t('auth.verifySessionHint'),
+            body: verifyError.message || t('auth.verifySessionHint'),
           });
           router.replace('/(onboarding)/auth');
           return;
@@ -161,6 +166,10 @@ export default function ResetPasswordScreen() {
     } catch (err: unknown) {
       log.error('[ResetPassword] updateUser error:', err);
       const msg = err instanceof Error ? err.message : t('auth.somethingWentWrong');
+      captureException(err instanceof Error ? err : new Error(String(err)), {
+        source: 'reset_password_update_user',
+        supabase_error: msg,
+      });
       if (typeof msg === 'string' && msg.toLowerCase().includes('auth session missing')) {
         showModal({
           title: t('common:error'),
