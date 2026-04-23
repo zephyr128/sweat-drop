@@ -2237,6 +2237,40 @@ global-achievement-badges/
 
 ---
 
+### [2026-04-24] - Create user-avatars Storage Bucket RLS Policies
+
+**Migration File:** `backend/supabase/migrations/20260424000000_create_user_avatars_storage_bucket.sql`
+
+**Agent:** supabase-dba
+
+**Changes:**
+- Added RLS policies on `storage.objects` scoped to `bucket_id = 'user-avatars'`:
+  - `"Anyone can view user avatars"` — SELECT open to anon + authenticated
+  - `"Superadmin can upload user avatars"` — INSERT restricted to `role = 'superadmin'`
+  - `"Superadmin can update user avatars"` — UPDATE restricted to `role = 'superadmin'`
+  - `"Superadmin can delete user avatars"` — DELETE restricted to `role = 'superadmin'`
+
+**Important — Manual bucket creation required:**
+The `user-avatars` bucket must be created manually via Supabase Dashboard before the policies take effect (same caveat as `global-achievement-badges`):
+1. Dashboard → Storage → New bucket
+2. Name: `user-avatars` | Public: ✅ | File size limit: 512 KB | MIME types: `image/png, image/webp, image/svg+xml`
+
+**Impact:**
+- **Mobile App:** Phase 3 onboarding avatar picker will read 48 sport avatar PNGs from this bucket
+- **Admin Panel:** No direct changes; superadmin uploads via Phase 2 generation script
+
+**Breaking Changes:**
+- None
+
+**Next Steps:**
+1. [ ] Create `user-avatars` bucket manually in Supabase Dashboard (see above)
+2. [ ] Verify bucket visible: Dashboard → Storage → `user-avatars`
+3. [ ] Phase 2: `pnpm avatars:generate` → visual review → `pnpm avatars:upload`
+4. [ ] Phase 3: mobile-coder refactors `apps/mobile-app/app/(onboarding)/avatar.tsx`
+5. [ ] Phase 4: backfill migration (after Phase 2 upload confirmed live)
+
+---
+
 ## Migration Template
 
 Use this template when adding new migration notes:
