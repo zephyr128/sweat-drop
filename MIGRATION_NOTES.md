@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-23 (production global achievements — tiered category system)
+**Last Updated:** 2026-04-23 (exclude demo users from global/arena leaderboards)
 
 ---
 
@@ -16,6 +16,30 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-04-23] - Exclude Demo/Test Accounts from Global & Arena Leaderboards
+
+**Migration:** `20260423200000_exclude_demo_users_from_global_and_arena_leaderboards.sql`
+
+**Agent:** supabase-dba
+
+#### Changes
+- Patched `get_leaderboard()`: `'global'` and `'arena'` branches now filter `COALESCE(p.is_demo, false) = false`
+- Seeded `is_demo = true` on all profiles who are members of SweatDrop test gym (`e247acc4-1c4b-4610-99c6-48f9964facad`)
+- `'gym'` and `'challenge'` branches intentionally unchanged (already scope-isolated)
+- Added `COMMENT ON FUNCTION` documenting demo-exclusion policy
+
+#### Impact on Frontend
+- **Mobile App:** Demo/test usernames no longer appear on Global or Arena leaderboard tabs. No code change needed.
+- **Admin Panel:** No change.
+
+#### Breaking Changes
+- None
+
+#### Operational Note
+When provisioning new QA / Apple-review accounts, set `is_demo = true` immediately after signup.
+
+---
 
 ### [2026-04-23] - Production Global Achievements — Tiered Category System (Phase 1)
 
