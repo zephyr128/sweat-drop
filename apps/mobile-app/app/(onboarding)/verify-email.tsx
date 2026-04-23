@@ -124,15 +124,24 @@ export default function VerifyEmailScreen() {
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const pendingEmail = useAuthStore((s) => s.pendingVerificationEmail);
+  const hasStoredPassword = useAuthStore((s) => !!s.pendingVerificationPassword);
+  const session = useAuthStore((s) => s.session);
 
   const [resendLoading, setResendLoading] = useState(false);
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [lastResendAt, setLastResendAt] = useState<number | null>(null);
   const [verified, setVerified] = useState(false);
+  const [recheckLoading, setRecheckLoading] = useState(false);
   const nextStepRef = useRef<string>('stepper');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const checkConfirmationRef = useRef<() => Promise<void>>(async () => {});
 
   const email = user?.email ?? pendingEmail ?? '';
+
+  // Recovery mode: we can no longer poll automatically because Strategy B
+  // needs the in-memory password (which is lost if the OS evicted the app
+  // between signUp and confirmation). Offer the user an explicit re-sign-in.
+  const needsPasswordRecovery = !session && !!pendingEmail && !hasStoredPassword;
 
   const navigateByStep = useCallback((step: string) => {
     switch (step) {
@@ -184,13 +193,26 @@ export default function VerifyEmailScreen() {
     };
   }, [user, verified]);
 
-  // Auto-poll: check every 5s to detect email confirmation.
+  // Auto-poll: check every 4s to detect email confirmation.
   //
-  // Two strategies depending on whether Supabase returned a session after signUp:
-  //  A) Session exists → refreshSession / getUser (original approach)
-  //  B) No session (email-confirm-required config) → signInWithPassword using
-  //     the credentials stored in authStore.pendingVerification*.  When the
-  //     email IS confirmed, signIn succeeds and we get a fresh session.
+  // Strategy depends on whether Supabase returned a session after signUp:
+  //   A) Session exists  → `getUser()` (hits /user, authoritative DB read).
+  //                         refreshSession is only used if the access token
+  //                         has expired. This ordering matters: a prior
+  //                         implementation that called refreshSession FIRST
+  //                         could silently loop forever if gotrue returned
+  //                         a session whose user.email_confirmed_at claim
+  //                         was stale relative to the DB.
+  //   B) No session      → `signInWithPassword` with the credentials stored
+  //                         in authStore.pendingVerification*. When the email
+  //                         is confirmed, signIn succeeds and we get a fresh
+  //                         session.
+  //
+  // If we are in a state where neither strategy is viable (no session AND
+  // no stored password — typical when the OS evicts the app between signUp
+  // and confirmation), the UI switches to a recovery CTA that routes the
+  // user back to /auth with the email prefilled. signInWithPassword from
+  // there will succeed because the email is already confirmed.
   //
   // Empty deps: the effect owns the interval for the full lifetime of the
   // screen. `useThrottledRouter` returns a new object on every render, so
@@ -218,62 +240,80 @@ export default function VerifyEmailScreen() {
         const currentSession = useAuthStore.getState().session;
 
         if (currentSession) {
-          // ── Strategy A: we have a session — refresh it and check email_confirmed_at
+          // ── Strategy A: session exists → getUser() is authoritative.
+          // /user endpoint always reads fresh from DB. If the token is
+          // expired we refresh once and retry.
           let confirmedUser = null;
 
-          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-          if (!refreshError && refreshData.session?.user) {
-            confirmedUser = refreshData.session.user;
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+          if (!userError && userData?.user) {
+            confirmedUser = userData.user;
           } else {
-            const { data: userData } = await supabase.auth.getUser();
-            if (userData?.user && !shouldRequireEmailVerification(userData.user)) {
-              const { data: retryData } = await supabase.auth.refreshSession();
-              confirmedUser = retryData?.session?.user ?? userData.user;
+            if (__DEV__) log.debug('[VerifyEmail] getUser err, refreshing:', userError?.message);
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            if (!refreshError && refreshData.session) {
+              const { data: retry } = await supabase.auth.getUser();
+              confirmedUser = retry?.user ?? refreshData.session.user;
             }
           }
 
           if (stopped) return;
           if (confirmedUser && !shouldRequireEmailVerification(confirmedUser)) {
+            if (__DEV__) log.debug('[VerifyEmail] Strategy A: confirmed');
             stopped = true;
             if (pollRef.current) clearInterval(pollRef.current);
+            // Rotate the session token once so the new JWT encodes the
+            // confirmed email in its claims (important for RLS policies).
+            try { await supabase.auth.refreshSession(); } catch { /* non-fatal */ }
             await advanceAfterConfirmation();
           }
-        } else {
-          // ── Strategy B: no session — try signInWithPassword with stored credentials
-          const pe = useAuthStore.getState().pendingVerificationEmail;
-          const pp = useAuthStore.getState().pendingVerificationPassword;
-          if (!pe || !pp) return;
-
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: pe,
-            password: pp,
-          });
-
-          // NOTE: do NOT early-return on `stopped` here. signInWithPassword
-          // success fires SIGNED_IN synchronously, which causes a re-render
-          // that can trigger effect cleanup (setting `stopped = true`) before
-          // this promise resolves. If we bailed out, the success UI would
-          // never flip. The sibling user-watcher effect above handles that
-          // case idempotently; this branch is the belt to that suspenders.
-          if (!error && data.session?.user && !shouldRequireEmailVerification(data.session.user)) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            stopped = true;
-            await advanceAfterConfirmation();
-          }
-          // "Email not confirmed" or other error → keep polling
+          return;
         }
-      } catch {
-        // Network error — keep polling
+
+        // ── Strategy B: no session — try signInWithPassword with stored credentials
+        const pe = useAuthStore.getState().pendingVerificationEmail;
+        const pp = useAuthStore.getState().pendingVerificationPassword;
+        if (!pe || !pp) {
+          // No credentials — we're in recovery mode. UI handles this.
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: pe,
+          password: pp,
+        });
+
+        // NOTE: do NOT early-return on `stopped` here. signInWithPassword
+        // success fires SIGNED_IN synchronously, which causes a re-render
+        // that can trigger effect cleanup (setting `stopped = true`) before
+        // this promise resolves. If we bailed out, the success UI would
+        // never flip. The sibling user-watcher effect above handles that
+        // case idempotently; this branch is the belt to that suspenders.
+        if (!error && data.session?.user && !shouldRequireEmailVerification(data.session.user)) {
+          if (__DEV__) log.debug('[VerifyEmail] Strategy B: confirmed');
+          if (pollRef.current) clearInterval(pollRef.current);
+          stopped = true;
+          await advanceAfterConfirmation();
+        } else if (__DEV__ && error) {
+          log.debug('[VerifyEmail] Strategy B error:', error.message);
+        }
+      } catch (e) {
+        if (__DEV__) log.debug('[VerifyEmail] poll exception:', (e as Error)?.message);
       }
     };
 
-    pollRef.current = setInterval(checkConfirmation, 5000);
+    checkConfirmationRef.current = checkConfirmation;
+
+    pollRef.current = setInterval(checkConfirmation, 4000);
 
     // Also check immediately on mount and on app foreground
     checkConfirmation();
 
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && !stopped) checkConfirmation();
+      if (state === 'active' && !stopped) {
+        // Small delay lets any in-flight auth events settle first.
+        setTimeout(() => { if (!stopped) checkConfirmation(); }, 250);
+      }
     });
 
     return () => {
@@ -282,6 +322,27 @@ export default function VerifyEmailScreen() {
       sub.remove();
     };
   }, []);
+
+  const handleRecheck = useCallback(async () => {
+    if (recheckLoading) return;
+    setRecheckLoading(true);
+    try {
+      await checkConfirmationRef.current();
+    } finally {
+      setRecheckLoading(false);
+    }
+  }, [recheckLoading]);
+
+  const handleReSignIn = useCallback(async () => {
+    // Missing stored password recovery path — send user to auth with
+    // email prefilled so they can re-enter password. The email is already
+    // confirmed at this point (QA tested this exact scenario), so signIn
+    // will succeed and auth.tsx's navigateToNextStep will route them.
+    router.replace({
+      pathname: '/(onboarding)/auth',
+      params: pendingEmail ? { prefillEmail: pendingEmail } : undefined,
+    } as never);
+  }, [router, pendingEmail]);
 
   const handleResend = useCallback(async () => {
     if (!email.trim()) return;
@@ -378,8 +439,12 @@ export default function VerifyEmailScreen() {
               </Animated.View>
 
               <Animated.View entering={FadeInDown.delay(140).duration(450)}>
-                <Text style={styles.title}>{t('auth.verifyTitle')}</Text>
-                <Text style={styles.subtitle}>{t('auth.verifySubtitle')}</Text>
+                <Text style={styles.title}>
+                  {needsPasswordRecovery ? t('auth.verifyReSignInTitle') : t('auth.verifyTitle')}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {needsPasswordRecovery ? t('auth.verifyReSignInBody') : t('auth.verifySubtitle')}
+                </Text>
                 {email ? (
                   <Text style={styles.email}>{email}</Text>
                 ) : null}
@@ -387,14 +452,44 @@ export default function VerifyEmailScreen() {
             </View>
 
             <Animated.View entering={FadeInDown.delay(220).duration(450)} style={styles.actions}>
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={handleOpenEmail}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="mail-open-outline" size={18} color="#000" style={{ marginRight: 6 }} />
-                <Text style={styles.primaryBtnText}>{t('auth.openEmailApp')}</Text>
-              </TouchableOpacity>
+              {needsPasswordRecovery ? (
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={handleReSignIn}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="log-in-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+                  <Text style={styles.primaryBtnText}>{t('auth.verifyReSignInCta')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.primaryBtn}
+                    onPress={handleOpenEmail}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="mail-open-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+                    <Text style={styles.primaryBtnText}>{t('auth.openEmailApp')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryBtn,
+                      { borderColor: theme.glass.border },
+                      (busy || recheckLoading) && styles.btnDisabled,
+                    ]}
+                    onPress={handleRecheck}
+                    disabled={busy || recheckLoading}
+                    activeOpacity={0.85}
+                  >
+                    {recheckLoading ? (
+                      <ActivityIndicator color={theme.colors.text} />
+                    ) : (
+                      <Text style={styles.secondaryBtnText}>{t('auth.verifyRecheck')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
 
               <TouchableOpacity
                 style={[styles.secondaryBtn, { borderColor: theme.glass.border }, busy && styles.btnDisabled]}

@@ -79,9 +79,18 @@ interface AuthState {
    */
   pendingRecoveryTokenHash: string | null;
   /**
-   * Temporary in-memory credentials stored after signUp when Supabase returns
-   * session: null (email confirmation required).  verify-email uses these to
-   * poll via signInWithPassword.  NEVER persisted to disk.
+   * Credentials stored after signUp when Supabase returns session: null
+   * (email confirmation required). verify-email uses these to poll via
+   * signInWithPassword.
+   *
+   * - pendingVerificationEmail IS persisted to AsyncStorage so that if the
+   *   OS evicts the app between signup and confirmation, verify-email can
+   *   still recover: if there is no session AND no in-memory password,
+   *   the user is routed back to /auth with email prefilled so they can
+   *   re-enter their password (which, at that point, will succeed because
+   *   the email is confirmed).
+   * - pendingVerificationPassword is NEVER persisted (plaintext password
+   *   on disk is unacceptable even in encrypted storage).
    */
   pendingVerificationEmail: string | null;
   pendingVerificationPassword: string | null;
@@ -228,13 +237,26 @@ export const useAuthStore = create<AuthState>()(
                 // before any session exists. Clearing them would race with the
                 // recovery flow and drop the user on the auth screen instead of
                 // the reset-password screen.
-                pendingVerificationEmail: null,
-                pendingVerificationPassword: null,
+                //
+                // NOTE: do NOT clear pendingVerificationEmail either. The user
+                // may be mid-signup (signUp returned no session because email
+                // confirmation is required). verify-email relies on this value
+                // to recover the flow after OS-evicted cold start.
+                // pendingVerificationPassword is in-memory only and is already
+                // null on cold start; we leave it untouched.
               });
             }
 
             // If logged in, fetch profile + compute step
             if (session?.user) {
+              // Rehydrated session with confirmed email supersedes any leftover
+              // pending-verification email from a previous aborted sign-up.
+              if (session.user.email_confirmed_at) {
+                const { pendingVerificationEmail, pendingVerificationPassword } = get();
+                if (pendingVerificationEmail || pendingVerificationPassword) {
+                  set({ pendingVerificationEmail: null, pendingVerificationPassword: null });
+                }
+              }
               try {
                 await get().fetchProfile();
                 // Defense-in-depth: reject admin/staff sessions on cold start.
@@ -274,6 +296,17 @@ export const useAuthStore = create<AuthState>()(
 
             if (event === 'SIGNED_IN' && session?.user) {
               setSentryUser(session.user.id, session.user.email);
+              // Drop any lingering pending-verification credentials once we
+              // observe a SIGNED_IN for a user whose email is confirmed. This
+              // covers all successful completion paths: email polling,
+              // deep-link confirm, Google/Apple OAuth, and the manual
+              // re-sign-in recovery flow from verify-email.
+              if (session.user.email_confirmed_at) {
+                const { pendingVerificationEmail, pendingVerificationPassword } = get();
+                if (pendingVerificationEmail || pendingVerificationPassword) {
+                  set({ pendingVerificationEmail: null, pendingVerificationPassword: null });
+                }
+              }
               get()
                 .fetchProfile()
                 .then(() => {
@@ -484,9 +517,12 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'sweatdrop-auth',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist onboardingStep — Supabase handles session persistence
+      // Persist onboardingStep (Supabase handles session persistence) plus
+      // pendingVerificationEmail so cold-start after OS eviction can still
+      // recover the verify-email flow (see type declaration above).
       partialize: (state) => ({
         onboardingStep: state.onboardingStep,
+        pendingVerificationEmail: state.pendingVerificationEmail,
       }),
     },
   ),

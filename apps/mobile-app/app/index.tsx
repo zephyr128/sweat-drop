@@ -16,6 +16,7 @@ export default function Index() {
   const session = useAuthStore((s) => s.session);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
   const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
+  const pendingVerificationEmail = useAuthStore((s) => s.pendingVerificationEmail);
   const consumePendingQR = usePendingQRStore((s) => s.consumePendingQR);
 
   const [hasNavigated, setHasNavigated] = useState(false);
@@ -42,7 +43,14 @@ export default function Index() {
           // If a QR deep link arrived while unauthenticated, we discard it here.
           // The user must log in first; they can re-scan after.
           consumePendingQR();
-          router.replace('/(onboarding)/welcome');
+          // Cold-start recovery: user signed up (email confirmation required)
+          // but the OS evicted the app before confirmation. Route them back
+          // to verify-email so the recovery CTA is shown.
+          if (pendingVerificationEmail) {
+            router.replace('/(onboarding)/verify-email');
+          } else {
+            router.replace('/(onboarding)/welcome');
+          }
         } else if (shouldRequireEmailVerification(session?.user)) {
           consumePendingQR();
           router.replace('/(onboarding)/verify-email');
@@ -97,7 +105,16 @@ export default function Index() {
     };
 
     navigate();
-  }, [isInitialized, session, onboardingStep, pendingPasswordRecovery, hasNavigated, router]);
+  }, [
+    isInitialized,
+    session,
+    onboardingStep,
+    pendingPasswordRecovery,
+    pendingVerificationEmail,
+    hasNavigated,
+    router,
+    consumePendingQR,
+  ]);
 
   return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
 }

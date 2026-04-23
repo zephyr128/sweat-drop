@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,8 +109,13 @@ export default function AuthScreen() {
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
   const fetchProfile = useAuthStore((s) => s.fetchProfile);
+  // Optional email prefill — used by verify-email recovery flow when the OS
+  // evicted the app between signUp and confirmation and wiped the in-memory
+  // password. verify-email routes back here with ?prefillEmail=... so the
+  // user only needs to re-enter their password to finish verification.
+  const { prefillEmail } = useLocalSearchParams<{ prefillEmail?: string }>();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(typeof prefillEmail === 'string' ? prefillEmail : '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
