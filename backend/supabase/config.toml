@@ -49,3 +49,17 @@ file_size_limit = "50MiB"
 [realtime]
 enabled = true
 ip_version = "IPv4"
+
+# Edge Functions
+#
+# `delete-account` is invoked from the mobile app with the end-user's Bearer
+# JWT. The production project uses asymmetric (ES256) signing keys for user
+# tokens, which the Edge Functions gateway currently rejects with
+# `UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM`. We disable gateway-level JWT
+# verification here and rely on the function body itself to validate the
+# caller via `userClient.auth.getUser()` (GoTrue knows how to verify its own
+# signing keys regardless of algorithm). Security posture is preserved — the
+# function still rejects missing/invalid tokens with 401 and only ever deletes
+# the authenticated user's own data.
+[functions.delete-account]
+verify_jwt = false

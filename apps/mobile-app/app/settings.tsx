@@ -67,7 +67,6 @@ interface ProfileData {
 
 export default function SettingsScreen() {
   const { t } = useTranslation('settings');
-  const { t: tOnboarding } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
   const { session } = useSession();
   const branding = useBranding();
@@ -307,11 +306,16 @@ export default function SettingsScreen() {
       }
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
       const response = await fetch(
         `${supabaseUrl}/functions/v1/delete-account`,
         {
           method: 'POST',
           headers: {
+            // Supabase Functions gateway requires the apikey header in
+            // addition to the user JWT — sending both matches what the
+            // supabase-js client does internally via .functions.invoke().
+            ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),
             'Authorization': `Bearer ${authSession.access_token}`,
             'Content-Type': 'application/json',
           },
@@ -319,8 +323,27 @@ export default function SettingsScreen() {
       );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        showModal({ title: t('error') || 'Error', body: errorData.error || t('failedDelete') || 'Failed to delete account. Please try again.' });
+        // Read as text first so non-JSON responses (e.g. gateway 404 HTML
+        // when the function is not deployed) still surface a useful message
+        // instead of the fallback translation key.
+        const rawText = await response.text().catch(() => '');
+        let parsed: { error?: string; message?: string; code?: string } = {};
+        try { parsed = rawText ? JSON.parse(rawText) : {}; } catch { /* non-JSON */ }
+        log.error(
+          '[delete-account] HTTP',
+          response.status,
+          'body=',
+          rawText.slice(0, 500),
+        );
+        const serverMsg =
+          parsed.error ||
+          parsed.message ||
+          (rawText ? rawText.slice(0, 200) : '');
+        const body =
+          serverMsg
+            ? `${serverMsg} (HTTP ${response.status})`
+            : `${t('failedDelete') || 'Failed to delete account. Please try again.'} (HTTP ${response.status})`;
+        showModal({ title: t('error') || 'Error', body });
         setIsDeleting(false);
         return;
       }

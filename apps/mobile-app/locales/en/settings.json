@@ -47,5 +47,8 @@
   "deleteAccount": "Delete",
   "deleteConfirm2Title": "Confirm Deletion",
   "deleteConfirm2": "Are you really sure? This cannot be undone.",
-  "yesDelete": "I understand, delete"
+  "yesDelete": "I understand, delete",
+  "deleting": "Deleting…",
+  "failedDelete": "Failed to delete account. Please try again.",
+  "sessionExpired": "Session expired. Please sign in again."
 }

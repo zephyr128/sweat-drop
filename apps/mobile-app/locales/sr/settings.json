@@ -47,5 +47,8 @@
   "deleteAccount": "Obriši",
   "deleteConfirm2Title": "Potvrdi brisanje",
   "deleteConfirm2": "Da li ste zaista sigurni? Ovo se ne može poništiti.",
-  "yesDelete": "Razumem, obriši"
+  "yesDelete": "Razumem, obriši",
+  "deleting": "Brisanje…",
+  "failedDelete": "Brisanje naloga nije uspelo. Pokušaj ponovo.",
+  "sessionExpired": "Sesija je istekla. Prijavi se ponovo."
 }
