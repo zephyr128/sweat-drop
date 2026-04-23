@@ -30,7 +30,7 @@ import { useGymData } from '@/hooks/useGymData';
 import { useLocalDrops } from '@/hooks/useLocalDrops';
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
 import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
-import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba, hexToDarkBg } from '@/lib/theme';
+import { getNumberStyle, theme as appTheme, fontStyles, hexToRgba } from '@/lib/theme';
 import { ConfettiEffect } from '@/components/ConfettiEffect';
 import { ActivityRings, type ActivityRingsHandle } from '@/components/ActivityRings';
 import { useDropLimitStatus } from '@/hooks/useDropLimitStatus';
@@ -92,8 +92,9 @@ function ShimmerBlock({ style, delayMs = 0 }: { style: object; delayMs?: number 
 
 function ColdStartSkeleton({ brandPrimary = '#00E5FF' }: { brandPrimary?: string }) {
   const ringR = SK_RING_D / 2;
-  const skSheetBg = hexToDarkBg(brandPrimary, Platform.OS === 'android' ? 1 : 0.98);
-  const skStickyBg = hexToDarkBg(brandPrimary, Platform.OS === 'android' ? 0.85 : 0.75);
+  // Match VerificationSheet: semi-transparent on iOS (blur handles look), opaque on Android
+  const skSheetBg  = Platform.OS === 'android' ? 'rgba(12,15,24,0.98)' : 'rgba(10,10,20,0.55)';
+  const skStickyBg = Platform.OS === 'android' ? 'rgba(12,15,24,0.98)' : 'rgba(10,10,20,0.55)';
   return (
     <ScrollView
       style={sk.skeletonScroll}
@@ -1080,17 +1081,20 @@ export default function HomeScreen() {
 
   const tabAccent = TAB_ACCENTS[activeTabKey] ?? branding.primary;
 
-  // Sheet panel backgrounds — dark variant of branding primary (≈6% mix into black).
-  // Keeps the same near-black darkness as before but traces the gym's hue.
-  const sheetBgSolid  = hexToDarkBg(branding.primary, Platform.OS === 'android' ? 1   : 0.98);
-  const sheetBgBlur   = hexToDarkBg(branding.primary, Platform.OS === 'android' ? 1   : 0.28);
+  // Sheet backgrounds — same recipe as VerificationSheet:
+  //   iOS: semi-transparent base so PlatformBlur provides the frosted-glass look
+  //   Android: fully opaque dark base (no system blur)
+  //   Branding is injected via the LinearGradient overlay inside the blur layer
+  const SHEET_BG_SOLID   = 'rgba(12,15,24,0.98)' as const;  // androidColor + content area
+  const SHEET_BG_BLUR_iOS = 'rgba(10,10,20,0.55)' as const; // iOS blur base (same as VerificationSheet)
+  const sheetBgSolid = Platform.OS === 'android' ? SHEET_BG_SOLID : SHEET_BG_BLUR_iOS;
 
   const sheetBackdropColors = Platform.OS === 'android'
-    ? ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.10), hexToDarkBg(branding.primary, 0.18), hexToDarkBg(branding.primary, 0.24)] as const)
-    : ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.62), hexToDarkBg(branding.primary, 0.93), hexToDarkBg(branding.primary, 0.97)] as const);
+    ? (['rgba(12,15,24,0.00)', 'rgba(12,15,24,0.10)', 'rgba(12,15,24,0.18)', 'rgba(12,15,24,0.24)'] as const)
+    : (['rgba(10,10,20,0.00)', 'rgba(10,10,20,0.62)', 'rgba(10,10,20,0.93)', 'rgba(10,10,20,0.97)'] as const);
   const fabBottomMaskColors = Platform.OS === 'android'
-    ? ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.74), hexToDarkBg(branding.primary, 0.96)] as const)
-    : ([hexToDarkBg(branding.primary, 0.00), hexToDarkBg(branding.primary, 0.58), hexToDarkBg(branding.primary, 0.90)] as const);
+    ? (['rgba(12,15,24,0.00)', 'rgba(12,15,24,0.74)', 'rgba(12,15,24,0.96)'] as const)
+    : (['rgba(10,10,20,0.00)', 'rgba(10,10,20,0.58)', 'rgba(10,10,20,0.90)'] as const);
   const HEADER_H = 56;
   const TAB_BAR_H = 48;
   const SCROLL_TOP_INSET = 0;
@@ -1261,11 +1265,11 @@ export default function HomeScreen() {
 
           {/* ── [1] Sticky section — tab bar ── */}
           <View style={[styles.stickySection, styles.dashboardSheetBackground, { backgroundColor: sheetBgSolid }]}>
-              <PlatformBlur
-              intensity={34}
+            <PlatformBlur
+              intensity={55}
               tint="dark"
-              style={[styles.stickySectionBlur, { backgroundColor: sheetBgBlur }]}
-              androidColor={sheetBgSolid}
+              style={[styles.stickySectionBlur, { backgroundColor: sheetBgSolid }]}
+              androidColor={SHEET_BG_SOLID}
             >
               <LinearGradient
                 colors={['rgba(255,255,255,0.10)', hexToRgba(branding.primary, 0.06), 'rgba(12,12,22,0.0)']}
@@ -1285,7 +1289,7 @@ export default function HomeScreen() {
           </View>
 
           {/* ── [2] Sheet content — tab pager with horizontal swipe ── */}
-          <View style={[styles.sheetContent, { backgroundColor: sheetBgSolid }]}>
+          <View style={[styles.sheetContent, { backgroundColor: SHEET_BG_SOLID }]}>
             <SliderTabs
               tabs={sheetTabs}
               activeKey={activeTabKey}
