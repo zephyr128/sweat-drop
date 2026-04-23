@@ -107,8 +107,21 @@
     "alreadyTaken": "This name is already taken. Try another."
   },
   "avatar": {
-    "title": "Choose your avatar",
-    "subtitle": "This appears next to your name"
+    "title": "Choose your sport",
+    "subtitle": "Pick an avatar that represents how you sweat.",
+    "filterAll": "All",
+    "activityWeightlifting": "Weights",
+    "activityRunning": "Running",
+    "activityYoga": "Yoga",
+    "activityCycling": "Cycling",
+    "activityRowing": "Rowing",
+    "activityBoxing": "Boxing",
+    "activitySwimming": "Swimming",
+    "activityHiit": "HIIT",
+    "activityClimbing": "Climbing",
+    "activityStretching": "Stretching",
+    "activityPilates": "Pilates",
+    "activityCrossfit": "CrossFit"
   },
   "notifications": {
     "title": "Stay in the loop",

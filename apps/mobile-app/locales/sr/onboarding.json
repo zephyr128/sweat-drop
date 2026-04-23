@@ -107,8 +107,21 @@
     "alreadyTaken": "Ovo ime je već zauzeto. Probaj drugo."
   },
   "avatar": {
-    "title": "Izaberi svoj avatar",
-    "subtitle": "Ovo se prikazuje pored tvog imena"
+    "title": "Izaberi svoj sport",
+    "subtitle": "Odaberi avatar koji predstavlja tvoj trening.",
+    "filterAll": "Sve",
+    "activityWeightlifting": "Tegovi",
+    "activityRunning": "Trčanje",
+    "activityYoga": "Joga",
+    "activityCycling": "Biciklizam",
+    "activityRowing": "Veslanje",
+    "activityBoxing": "Boks",
+    "activitySwimming": "Plivanje",
+    "activityHiit": "HIIT",
+    "activityClimbing": "Penjanje",
+    "activityStretching": "Istezanje",
+    "activityPilates": "Pilates",
+    "activityCrossfit": "CrossFit"
   },
   "notifications": {
     "title": "Ostani u toku",

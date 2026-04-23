@@ -53,7 +53,9 @@
     "icons:dev": "./scripts/switch-icons.sh dev",
     "icons:prod": "./scripts/switch-icons.sh prod",
     "badges:generate": "node scripts/generate-achievement-badges.mjs",
-    "badges:upload": "node scripts/generate-achievement-badges.mjs --upload"
+    "badges:upload": "node scripts/generate-achievement-badges.mjs --upload",
+    "avatars:generate": "node scripts/generate-user-avatars.mjs",
+    "avatars:upload": "node scripts/generate-user-avatars.mjs --upload"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
