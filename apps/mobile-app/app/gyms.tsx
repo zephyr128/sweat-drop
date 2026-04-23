@@ -38,82 +38,102 @@ function GymCard({
   onPress: () => void;
   branding: { primary: string };
 }) {
+  const gymAccent = gym.primary_color || branding.primary;
+
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(400)}>
       <TouchableOpacity
         style={[
           styles.gymCard,
-          isActive && { borderColor: hexToRgba(branding.primary, 0.35) },
+          {
+            borderColor: hexToRgba(gymAccent, isActive ? 0.42 : 0.2),
+            shadowColor: hexToRgba(gymAccent, 0.65),
+          },
         ]}
         onPress={onPress}
         activeOpacity={0.75}
       >
-        <View style={styles.gymCardInner}>
-          {/* Left — logo or icon */}
-          <View
-            style={[
-              styles.gymIconContainer,
-              {
-                backgroundColor: isActive
-                  ? hexToRgba(branding.primary, 0.12)
-                  : 'rgba(255,255,255,0.05)',
-                borderColor: isActive
-                  ? hexToRgba(branding.primary, 0.25)
-                  : 'rgba(255,255,255,0.08)',
-              },
-            ]}
-          >
-            {gym.logo_url ? (
-              <Image
-                source={{ uri: gym.logo_url }}
-                style={styles.gymLogo}
-                resizeMode="contain"
-              />
-            ) : (
-              <Ionicons
-                name="fitness-outline"
-                size={24}
-                color={isActive ? branding.primary : baseTheme.colors.textSecondary}
-              />
-            )}
-          </View>
+        <View style={styles.gymMediaWrap}>
+          {gym.background_url ? (
+            <Image source={{ uri: gym.background_url }} style={styles.gymMediaImage} resizeMode="cover" />
+          ) : (
+            <LinearGradient
+              colors={[hexToRgba(gymAccent, 0.45), 'rgba(24,24,40,0.92)', 'rgba(12,12,20,0.98)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gymMediaFallback}
+            >
+              <Ionicons name="barbell-outline" size={30} color={hexToRgba(gymAccent, 0.9)} />
+            </LinearGradient>
+          )}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.03)', 'rgba(0,0,0,0.24)', 'rgba(0,0,0,0.66)']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.gymMediaOverlay}
+          />
+          {isHomeGym && (
+            <View style={[styles.homeGymPill, { backgroundColor: hexToRgba(gymAccent, 0.16), borderColor: hexToRgba(gymAccent, 0.34) }]}>
+              <Ionicons name="home-outline" size={11} color={gymAccent} />
+              <Text style={[styles.homeGymPillText, { color: gymAccent }]}>HOME</Text>
+            </View>
+          )}
+        </View>
 
-          {/* Center — name + city */}
-          <View style={styles.gymInfo}>
-            <View style={styles.gymNameRow}>
-              <Text style={styles.gymName} numberOfLines={1}>
-                {gym.name}
-              </Text>
-              {isHomeGym && (
-                <View
-                  style={[
-                    styles.homeGymBadge,
-                    { backgroundColor: hexToRgba(branding.primary, 0.12) },
-                  ]}
-                >
-                  <Ionicons name="home-outline" size={10} color={branding.primary} />
-                  <Text style={[styles.homeGymBadgeText, { color: branding.primary }]}>
-                    HOME
-                  </Text>
+        <View
+          style={[
+            styles.gymInfoCard,
+            {
+              borderTopColor: isActive ? hexToRgba(gymAccent, 0.28) : 'rgba(255,255,255,0.10)',
+              borderLeftColor: isActive ? hexToRgba(gymAccent, 0.14) : 'rgba(255,255,255,0.08)',
+              borderRightColor: 'rgba(255,255,255,0.04)',
+              borderBottomColor: 'rgba(255,255,255,0.03)',
+            },
+          ]}
+        >
+          <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.gymInfoCardBlur}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.05)', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <View style={styles.gymCardContent}>
+              <View
+                style={[
+                  styles.gymIconContainer,
+                  {
+                    backgroundColor: isActive
+                      ? hexToRgba(gymAccent, 0.16)
+                      : 'rgba(255,255,255,0.06)',
+                    borderColor: isActive
+                      ? hexToRgba(gymAccent, 0.36)
+                      : 'rgba(255,255,255,0.12)',
+                  },
+                ]}
+              >
+                {gym.logo_url ? (
+                  <Image source={{ uri: gym.logo_url }} style={styles.gymLogo} resizeMode="cover" />
+                ) : (
+                  <Ionicons name="fitness-outline" size={24} color={isActive ? gymAccent : baseTheme.colors.textSecondary} />
+                )}
+              </View>
+
+              <View style={styles.gymInfo}>
+                <Text style={styles.gymName} numberOfLines={2}>{gym.name}</Text>
+                {!!gym.city && <Text style={styles.gymCity}>{gym.city}</Text>}
+              </View>
+
+              {isActive ? (
+                <View style={[styles.activeCheck, { backgroundColor: hexToRgba(gymAccent, 0.16), borderColor: hexToRgba(gymAccent, 0.35) }]}>
+                  <Ionicons name="checkmark" size={18} color={gymAccent} />
                 </View>
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={baseTheme.colors.textTertiary} />
               )}
             </View>
-            {gym.city && <Text style={styles.gymCity}>{gym.city}</Text>}
-          </View>
-
-          {/* Right — active checkmark or chevron */}
-          {isActive ? (
-            <View
-              style={[
-                styles.activeCheck,
-                { backgroundColor: hexToRgba(branding.primary, 0.15) },
-              ]}
-            >
-              <Ionicons name="checkmark" size={18} color={branding.primary} />
-            </View>
-          ) : (
-            <Ionicons name="chevron-forward" size={18} color={baseTheme.colors.textTertiary} />
-          )}
+          </PlatformBlur>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -407,16 +427,17 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: baseTheme.spacing.lg,
-    paddingBottom: 40,
-    gap: 10,
+    paddingBottom: 44,
+    gap: 14,
   },
 
   // Empty state
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingVertical: baseTheme.spacing['3xl'],
+    paddingTop: 84,
+    paddingBottom: baseTheme.spacing['3xl'],
     gap: baseTheme.spacing.md,
   },
   emptyText: {
@@ -450,20 +471,53 @@ const styles = StyleSheet.create({
   gymCard: {
     borderRadius: baseTheme.borderRadius.xl,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255,255,255,0.08)',
     overflow: 'hidden',
+    backgroundColor: 'rgba(12,12,20,0.75)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 5,
   },
-  gymCardInner: {
+  gymMediaWrap: {
+    height: 134,
+    width: '100%',
+    backgroundColor: 'rgba(20,20,30,0.9)',
+  },
+  gymMediaImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  gymMediaFallback: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gymMediaOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gymCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: baseTheme.spacing.md,
-    backgroundColor: 'rgba(20,20,30,0.70)',
-    borderRadius: baseTheme.borderRadius.xl,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: 'transparent',
+  },
+  gymInfoCard: {
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    overflow: 'hidden',
+  },
+  gymInfoCardBlur: {
+    backgroundColor: 'rgba(14,14,22,0.80)',
   },
   gymIconContainer: {
-    width: 48,
-    height: 48,
+    width: 58,
+    height: 58,
     borderRadius: baseTheme.borderRadius.md,
     borderWidth: 1,
     justifyContent: 'center',
@@ -471,49 +525,50 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   gymLogo: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 54,
+    height: 54,
+    borderRadius: 10,
   },
   gymInfo: {
     flex: 1,
-    gap: 3,
-  },
-  gymNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 5,
   },
   gymName: {
-    ...fontStyles.bodySemiBold,
-    fontSize: 16,
+    ...fontStyles.heading,
+    fontSize: 18,
     color: baseTheme.colors.text,
+    letterSpacing: 0.4,
   },
   gymCity: {
     ...fontStyles.body,
-    fontSize: 13,
+    fontSize: 13.5,
     color: baseTheme.colors.textSecondary,
+    letterSpacing: 0.2,
   },
-  homeGymBadge: {
+  homeGymPill: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  homeGymBadgeText: {
+  homeGymPillText: {
     ...fontStyles.heading,
-    fontSize: 9,
+    fontSize: 9.5,
     letterSpacing: 0.8,
   },
   activeCheck: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
+    borderWidth: 1,
   },
 });

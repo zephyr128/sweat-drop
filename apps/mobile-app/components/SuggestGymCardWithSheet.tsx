@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { PlatformBlur } from '@/components/PlatformBlur';
 import { WaitlistBottomSheet } from '@/components/WaitlistBottomSheet';
 import { fontStyles, hexToRgba, theme as baseTheme } from '@/lib/theme';
 
@@ -55,28 +57,45 @@ export function SuggestGymCardWithSheet({ variant, brandColor, fadeInDelay }: Pr
   } else if (variant === 'gymsList') {
     card = (
       <TouchableOpacity
-        style={[styles.gymsListCard, { borderColor: hexToRgba(brandColor, 0.2) }]}
+        style={[
+          styles.gymsListCard,
+          {
+            borderTopColor: hexToRgba(brandColor, 0.24),
+            borderLeftColor: hexToRgba(brandColor, 0.1),
+            borderRightColor: 'rgba(255,255,255,0.04)',
+            borderBottomColor: 'rgba(255,255,255,0.03)',
+          },
+        ]}
         onPress={() => setOpen(true)}
         activeOpacity={0.75}
       >
-        <View style={styles.gymsListInner}>
-          <View
-            style={[
-              styles.gymsListIcon,
-              {
-                backgroundColor: hexToRgba(brandColor, 0.12),
-                borderColor: hexToRgba(brandColor, 0.25),
-              },
-            ]}
-          >
-            <Ionicons name="add-circle-outline" size={24} color={brandColor} />
+        <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={42} tint="dark" style={styles.gymsListBlur}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0.05)', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={styles.gymsListInner}>
+            <View
+              style={[
+                styles.gymsListIcon,
+                {
+                  backgroundColor: hexToRgba(brandColor, 0.12),
+                  borderColor: hexToRgba(brandColor, 0.25),
+                },
+              ]}
+            >
+              <Ionicons name="add-circle-outline" size={24} color={brandColor} />
+            </View>
+            <View style={styles.gymsListText}>
+              <Text style={styles.gymsListTitle}>{tGyms('suggestGymTitle')}</Text>
+              <Text style={styles.gymsListSub}>{tGyms('suggestGymSub')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={baseTheme.colors.textTertiary} />
           </View>
-          <View style={styles.gymsListText}>
-            <Text style={styles.gymsListTitle}>{tGyms('suggestGymTitle')}</Text>
-            <Text style={styles.gymsListSub}>{tGyms('suggestGymSub')}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={baseTheme.colors.textTertiary} />
-        </View>
+        </PlatformBlur>
       </TouchableOpacity>
     );
   } else {
@@ -143,17 +162,21 @@ const styles = StyleSheet.create({
 
   gymsListCard: {
     borderRadius: baseTheme.borderRadius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     overflow: 'hidden',
+  },
+  gymsListBlur: {
+    backgroundColor: 'rgba(14,14,22,0.80)',
   },
   gymsListInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     padding: baseTheme.spacing.md,
-    backgroundColor: 'rgba(20,20,30,0.70)',
-    borderRadius: baseTheme.borderRadius.xl,
+    backgroundColor: 'transparent',
   },
   gymsListIcon: {
     width: 48,
