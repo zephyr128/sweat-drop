@@ -159,6 +159,31 @@ export default function VerifyEmailScreen() {
     }
   }, [router]);
 
+  // Synchronous reaction: as soon as the auth store sees a confirmed user
+  // (because `onAuthStateChange` fired SIGNED_IN — e.g. when the polling
+  // `signInWithPassword` below succeeds, or a deep-link from the confirm
+  // email landed and ran verifyOtp), flip to the success UI immediately.
+  //
+  // This closes a race where the polling effect's cleanup can set its local
+  // `stopped` flag before the awaited signInWithPassword promise resolves,
+  // causing `setVerified(true)` to be skipped inside the poll.
+  useEffect(() => {
+    if (verified) return;
+    if (!user) return;
+    if (shouldRequireEmailVerification(user)) return;
+    let cancelled = false;
+    (async () => {
+      useAuthStore.getState().clearPendingVerification();
+      await useAuthStore.getState().fetchProfile();
+      if (cancelled) return;
+      nextStepRef.current = useAuthStore.getState().onboardingStep;
+      setVerified(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, verified]);
+
   // Auto-poll: check every 5s to detect email confirmation.
   //
   // Two strategies depending on whether Supabase returned a session after signUp:
@@ -166,6 +191,12 @@ export default function VerifyEmailScreen() {
   //  B) No session (email-confirm-required config) → signInWithPassword using
   //     the credentials stored in authStore.pendingVerification*.  When the
   //     email IS confirmed, signIn succeeds and we get a fresh session.
+  //
+  // Empty deps: the effect owns the interval for the full lifetime of the
+  // screen. `useThrottledRouter` returns a new object on every render, so
+  // depending on `router` / `navigateByStep` would tear down and rebuild the
+  // interval on every re-render — which also let success events slip through
+  // the `stopped`/cleanup race below.
   useEffect(() => {
     let stopped = false;
 
@@ -218,10 +249,15 @@ export default function VerifyEmailScreen() {
             password: pp,
           });
 
-          if (stopped) return;
+          // NOTE: do NOT early-return on `stopped` here. signInWithPassword
+          // success fires SIGNED_IN synchronously, which causes a re-render
+          // that can trigger effect cleanup (setting `stopped = true`) before
+          // this promise resolves. If we bailed out, the success UI would
+          // never flip. The sibling user-watcher effect above handles that
+          // case idempotently; this branch is the belt to that suspenders.
           if (!error && data.session?.user && !shouldRequireEmailVerification(data.session.user)) {
-            stopped = true;
             if (pollRef.current) clearInterval(pollRef.current);
+            stopped = true;
             await advanceAfterConfirmation();
           }
           // "Email not confirmed" or other error → keep polling
@@ -245,7 +281,7 @@ export default function VerifyEmailScreen() {
       if (pollRef.current) clearInterval(pollRef.current);
       sub.remove();
     };
-  }, [router, navigateByStep]);
+  }, []);
 
   const handleResend = useCallback(async () => {
     if (!email.trim()) return;
@@ -273,7 +309,7 @@ export default function VerifyEmailScreen() {
     } finally {
       setResendLoading(false);
     }
-  }, [email, lastResendAt, t]);
+  }, [email, lastResendAt, t, showModal]);
 
   const handleSignOut = useCallback(async () => {
     setSignOutLoading(true);
@@ -284,77 +320,6 @@ export default function VerifyEmailScreen() {
       setSignOutLoading(false);
     }
   }, [router, signOut]);
-
-  const handleRecheck = useCallback(async () => {
-    let confirmedUser = null;
-    const currentSession = useAuthStore.getState().session;
-
-    if (currentSession) {
-      // Strategy A: session exists — refresh and check
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      if (!refreshError && refreshData.session?.user) {
-        confirmedUser = refreshData.session.user;
-      } else {
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData?.user && !shouldRequireEmailVerification(userData.user)) {
-          const { data: retryData } = await supabase.auth.refreshSession();
-          confirmedUser = retryData?.session?.user ?? userData.user;
-        } else if (userData?.user) {
-          showModal({ title: t('auth.verifyTitle'), body: t('auth.verifyInstructions') });
-          return;
-        }
-      }
-    } else {
-      // Strategy B: no session — try signInWithPassword
-      const pe = useAuthStore.getState().pendingVerificationEmail;
-      const pp = useAuthStore.getState().pendingVerificationPassword;
-
-      if (pe && pp) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: pe,
-          password: pp,
-        });
-
-        if (!error && data.session?.user) {
-          confirmedUser = data.session.user;
-        } else if (error) {
-          const msg = error.message.toLowerCase();
-          if (msg.includes('not confirmed') || msg.includes('email not confirmed')) {
-            showModal({ title: t('auth.verifyTitle'), body: t('auth.verifyInstructions') });
-            return;
-          }
-        }
-      }
-    }
-
-    if (confirmedUser && !shouldRequireEmailVerification(confirmedUser)) {
-      const { data: freshSession } = await supabase.auth.getSession();
-      if (freshSession.session) {
-        useAuthStore.setState({ session: freshSession.session, user: freshSession.session.user });
-      }
-      useAuthStore.getState().clearPendingVerification();
-      await useAuthStore.getState().fetchProfile();
-      const step = useAuthStore.getState().onboardingStep;
-      nextStepRef.current = step;
-      setVerified(true);
-      return;
-    }
-
-    if (!confirmedUser) {
-      showModal({
-        title: t('auth.verifyTitle'),
-        body: t('auth.sessionExpiredRecovery'),
-        buttons: [
-          {
-            label: t('auth.verifySignOut'),
-            onPress: () => {
-              signOut().then(() => router.replace('/(onboarding)/auth'));
-            },
-          },
-        ],
-      });
-    }
-  }, [router, navigateByStep, signOut, t, showModal]);
 
   const handleOpenEmail = useCallback(() => {
     openEmailApp(t, showModal);
