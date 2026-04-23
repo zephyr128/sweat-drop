@@ -184,8 +184,8 @@ export default function AvatarScreen() {
             style={[
               styles.previewRing,
               {
-                borderColor: selected ? primary : 'rgba(255,255,255,0.10)',
-                backgroundColor: hexToRgba(primary, 0.06),
+                borderColor: 'rgba(255,255,255,0.10)',
+                backgroundColor: 'rgba(255,255,255,0.04)',
               },
             ]}
           >
@@ -377,25 +377,25 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   previewRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
   previewGlow: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     opacity: 0.08,
   },
   previewImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 108,
+    height: 108,
+    borderRadius: 54,
   },
 
   // ── Header ──
@@ -472,9 +472,9 @@ const styles = StyleSheet.create({
   // ── Buttons ──
   buttonsContainer: {
     paddingHorizontal: 24,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
     paddingTop: 8,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   primaryButton: {
     borderRadius: theme.borderRadius.full,
@@ -488,20 +488,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 18,
+    gap: 8,
+    paddingVertical: 14,
     paddingHorizontal: theme.spacing.xl,
   },
   buttonText: {
     ...fontStyles.heading,
-    fontSize: 18,
+    fontSize: 15,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: theme.glass.border,
     borderRadius: theme.borderRadius.full,
-    paddingVertical: theme.spacing.lg,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   secondaryButtonText: {

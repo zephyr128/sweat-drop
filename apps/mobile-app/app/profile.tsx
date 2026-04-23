@@ -364,7 +364,7 @@ export default function ProfileScreen() {
                 <TouchableOpacity onPress={handleAvatarFlip} activeOpacity={0.92} style={styles.flipCardContainer} disabled={!highestBadge}>
                   <Animated.View style={[styles.flipCardFace, frontAnimatedStyle]}>
                     {/* Glow ring */}
-                    <View style={[styles.avatarGlowRing, { shadowColor: branding.primary, borderColor: hexToRgba(branding.primary, 0.55) }]}>
+                    <View style={styles.avatarGlowRing}>
                       <View style={styles.avatarContainer}>
                         {profile?.avatar_url && profile.avatar_url.startsWith('http') ? (
                           <Image source={localAvatarSource(profile.avatar_url)} style={styles.avatar} transition={200} />
@@ -388,7 +388,7 @@ export default function ProfileScreen() {
                     )}
                   </Animated.View>
                   <Animated.View style={[styles.flipCardFace, styles.flipCardBack, backAnimatedStyle]}>
-                    <View style={[styles.avatarGlowRing, { shadowColor: '#FFD700', borderColor: 'rgba(255,215,0,0.55)' }]}>
+                    <View style={styles.avatarGlowRing}>
                       <View style={styles.avatarContainer}>
                         {highestBadge?.badge_image_url ? (
                           <Image source={highestBadge.badge_image_url} style={styles.avatar} transition={200} />
@@ -730,23 +730,20 @@ const styles = StyleSheet.create({
   heroIdentityRowWithVerification: { paddingTop: 42 },
 
   // flip card
-  flipCardContainer: { width: 76, height: 90, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  flipCardContainer: { width: 82, height: 96, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   flipCardFace: { alignItems: 'center', backfaceVisibility: 'hidden' },
   flipCardBack: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
 
   // avatar
   avatarGlowRing: {
-    width: 72, height: 72, borderRadius: 36,
-    borderWidth: 1.5,
+    width: 78, height: 78, borderRadius: 39,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 12,
-    elevation: 8,
   },
-  avatarContainer: { width: 72, height: 72, borderRadius: 36, overflow: 'hidden' },
+  avatarContainer: { width: 78, height: 78, borderRadius: 39, overflow: 'hidden' },
   avatar: { width: '100%', height: '100%' },
   avatarPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   avatarEmoji: { fontSize: 34 },

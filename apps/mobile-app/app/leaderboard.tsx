@@ -583,7 +583,7 @@ export default function LeaderboardScreen() {
           </View>
 
           {/* Avatar */}
-          <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary }]}>
+          <View style={styles.listAvatarWrap}>
             {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
               <Image source={localAvatarSource(entry.avatar_url)} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
             ) : entry.avatar_url ? (
@@ -1200,7 +1200,7 @@ export default function LeaderboardScreen() {
                                 <Text style={[styles.rankText, { color: isCurrent ? branding.primary : theme.colors.textTertiary }]}>#{rankNum}</Text>
                               )}
                             </View>
-                            <View style={[styles.listAvatarWrap, isCurrent && { borderColor: branding.primary }]}>
+                            <View style={styles.listAvatarWrap}>
                               {entry.avatar_url && entry.avatar_url.startsWith('http') ? (
                                 <Image source={localAvatarSource(entry.avatar_url)} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
                               ) : entry.avatar_url ? (
@@ -1276,7 +1276,7 @@ export default function LeaderboardScreen() {
                         <View style={styles.rankContainer}>
                           <Text style={[styles.rankText, { color: branding.primary }]}>#{currentUserEntry.rank}</Text>
                         </View>
-                        <View style={[styles.listAvatarWrap, { borderColor: branding.primary }]}>
+                        <View style={styles.listAvatarWrap}>
                           {currentUserEntry.avatar_url && currentUserEntry.avatar_url.startsWith('http') ? (
                             <Image source={localAvatarSource(currentUserEntry.avatar_url)} style={[styles.listAvatar, styles.listAvatarInset]} transition={200} />
                           ) : currentUserEntry.avatar_url ? (
@@ -1737,25 +1737,24 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   listAvatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
     position: 'relative',
   },
-  /** Fill the wrap; 2px ring slot + inset keeps all rows aligned */
   listAvatar: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+    borderRadius: 22,
   },
   listAvatarInset: {
-    top: 2,
-    left: 2,
-    right: 2,
-    bottom: 2,
-    borderRadius: 18,
+    top: 1,
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderRadius: 21,
   },
   listAvatarPlaceholder: {
     ...StyleSheet.absoluteFillObject,

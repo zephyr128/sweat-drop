@@ -124,7 +124,7 @@ export default function UserProfileScreen() {
                 end={{ x: 0.5, y: 1 }}
                 style={styles.heroGradient}
               >
-                <View style={[styles.avatarContainer, { borderColor: hexToRgba(branding.primary, 0.4) }]}>
+                <View style={styles.avatarContainer}>
                   {renderAvatar()}
                 </View>
 
@@ -266,10 +266,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -277,9 +278,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   avatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
   },
   avatarEmoji: {
     fontSize: 40,

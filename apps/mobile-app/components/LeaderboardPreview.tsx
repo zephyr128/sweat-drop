@@ -260,7 +260,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(
                 <Text style={[styles.rankBadgeText, { color: rankColor }]}>{index + 1}</Text>
               </View>
 
-              <View style={[styles.avatarCircle, isMe && { borderColor: hexToRgba(branding.primary, 0.4) }]}>
+              <View style={styles.avatarCircle}>
                 <Text style={[styles.avatarInitial, isMe && { color: branding.primary }]}>{initial}</Text>
               </View>
 
@@ -292,7 +292,7 @@ export const LeaderboardPreview: React.FC<LeaderboardPreviewProps> = React.memo(
               <View style={[styles.rankBadge, { backgroundColor: hexToRgba(branding.primary, 0.15) }]}>
                 <Text style={[styles.rankBadgeText, { color: branding.primary }]}>{currentUserRank}</Text>
               </View>
-              <View style={[styles.avatarCircle, { borderColor: hexToRgba(branding.primary, 0.4) }]}>
+              <View style={styles.avatarCircle}>
                 <Text style={[styles.avatarInitial, { color: branding.primary }]}>
                   {(currentUserEntry.username[0] ?? 'U').toUpperCase()}
                 </Text>
@@ -393,12 +393,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   avatarCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.10)',
     justifyContent: 'center',
     alignItems: 'center',
   },
