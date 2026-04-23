@@ -1043,12 +1043,12 @@ export default function HomeScreen() {
                   <View style={es.previewRow}>
                     <PlatformBlur intensity={30} tint="dark" style={es.previewCard} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name="flame-outline" size={24} color="rgba(255,255,255,0.25)" />
-                      <Text style={es.previewCardTitle}>{t('challenges')}</Text>
+                      <Text style={es.previewCardTitle}>{t('challengesLabel')}</Text>
                       <Text style={es.previewCardSub}>{t('challengesSub')}</Text>
                     </PlatformBlur>
                     <PlatformBlur intensity={30} tint="dark" style={es.previewCard} androidColor="rgba(20,20,30,0.95)">
                       <Ionicons name="trophy-outline" size={24} color="rgba(255,255,255,0.25)" />
-                      <Text style={es.previewCardTitle}>{t('arenas')}</Text>
+                      <Text style={es.previewCardTitle}>{t('arenasLabel')}</Text>
                       <Text style={es.previewCardSub}>{t('arenasSub')}</Text>
                     </PlatformBlur>
                   </View>
@@ -2409,6 +2409,7 @@ const es = StyleSheet.create({
   /* ── Available Gyms ── */
   gymsSection: {
     paddingHorizontal: 16,
+    marginTop: 10,
     marginBottom: 16,
   },
   gymsSectionHeader: {
