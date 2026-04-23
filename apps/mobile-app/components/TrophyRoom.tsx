@@ -6,7 +6,7 @@ import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
-import { useAllBadges, BadgeWithProgress } from '@/hooks/useAllBadges';
+import { useAllBadges, BadgeWithProgress, AchievementCategory } from '@/hooks/useAllBadges';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -18,6 +18,23 @@ import { BadgeDetailModal } from './BadgeDetailModal';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const CATEGORY_ORDER: AchievementCategory[] = [
+  'sessions', 'total_drops', 'streak', 'multi_gym', 'distance', 'special',
+];
+
+const TIER_RANK: Record<string, number> = {
+  bronze: 0, silver: 1, gold: 2, platinum: 3, diamond: 4,
+};
+
+const CATEGORY_ICONS: Record<AchievementCategory, React.ComponentProps<typeof Ionicons>['name']> = {
+  sessions: 'barbell-outline',
+  total_drops: 'water-outline',
+  streak: 'flame-outline',
+  multi_gym: 'map-outline',
+  distance: 'bicycle-outline',
+  special: 'star-outline',
+};
 
 interface TrophyRoomProps {
   userId?: string;
@@ -63,6 +80,8 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         earned_at: earnedBadge?.earned_at || null,
         progress: earned ? 100 : (prog?.progress_percent ?? 0),
         progress_data: prog?.progress_data,
+        category: achievement.category,
+        tier: achievement.tier,
       });
     });
 
@@ -109,47 +128,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
 
     return badges;
   }, [globalAchievements, gymChallenges, earnedBadges, userProgress, activeGymId]);
-
-  const filteredBadges = useMemo(() => {
-    let filtered = allBadgesWithProgress;
-
-    if (filterType === 'this_gym') {
-      filtered = filtered.filter((badge) =>
-        badge.badge_type === 'gym' &&
-        (!activeGymId || badge.gym_id === activeGymId)
-      );
-    } else if (filterType === 'all') {
-      filtered = filtered.filter((badge) =>
-        badge.badge_type === 'global' ||
-        (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId))
-      );
-    } else if (filterType === 'earned') {
-      filtered = filtered.filter((badge) =>
-        badge.is_earned &&
-        (badge.badge_type === 'global' ||
-          (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId)))
-      );
-    } else if (filterType === 'locked') {
-      filtered = filtered.filter((badge) =>
-        !badge.is_earned &&
-        (badge.badge_type === 'global' ||
-          (badge.badge_type === 'gym' && (!activeGymId || badge.gym_id === activeGymId)))
-      );
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((badge) =>
-        badge.name.toLowerCase().includes(query) ||
-        (badge.description && badge.description.toLowerCase().includes(query))
-      );
-    }
-
-    return filtered;
-  }, [allBadgesWithProgress, filterType, searchQuery, activeGymId]);
-
-  const earnedFiltered = filteredBadges.filter((b) => b.is_earned);
-  const lockedFiltered = filteredBadges.filter((b) => !b.is_earned);
 
   const totalEarned = allBadgesWithProgress.filter((b) => b.is_earned).length;
   const totalAvailable = allBadgesWithProgress.length;
@@ -198,7 +176,85 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         progress={badge.progress}
         onPress={() => handleBadgePress(badge)}
         size="medium"
+        tier={badge.tier}
       />
+    );
+  };
+
+  const CATEGORY_LABELS: Record<AchievementCategory, string> = {
+    sessions: t('categorySessions'),
+    total_drops: t('categoryTotalDrops'),
+    streak: t('categoryStreak'),
+    multi_gym: t('categoryMultiGym'),
+    distance: t('categoryDistance'),
+    special: t('categorySpecial'),
+  };
+
+  const renderLockedByCategory = (lockedBadges: BadgeWithProgress[]) => {
+    // Separate global (with category) from gym/uncategorized
+    const categorized = lockedBadges.filter((b) => b.badge_type === 'global' && b.category);
+    const uncategorized = lockedBadges.filter((b) => b.badge_type !== 'global' || !b.category);
+
+    // Build category buckets preserving tier order
+    const buckets: Partial<Record<AchievementCategory, BadgeWithProgress[]>> = {};
+    categorized.forEach((b) => {
+      const cat = b.category!;
+      if (!buckets[cat]) buckets[cat] = [];
+      buckets[cat]!.push(b);
+    });
+    for (const cat of Object.keys(buckets) as AchievementCategory[]) {
+      buckets[cat]!.sort(
+        (a, b) => (TIER_RANK[a.tier ?? ''] ?? 99) - (TIER_RANK[b.tier ?? ''] ?? 99),
+      );
+    }
+
+    const hasSections = CATEGORY_ORDER.some((cat) => buckets[cat]?.length);
+
+    if (!hasSections && uncategorized.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        {/* Section header */}
+        <View style={styles.sectionHeader}>
+          <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+          <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
+          <View style={styles.sectionCountPill}>
+            <Text style={styles.sectionCountText}>{lockedBadges.length}</Text>
+          </View>
+        </View>
+
+        {/* Per-category sub-sections */}
+        {CATEGORY_ORDER.map((cat) => {
+          const group = buckets[cat];
+          if (!group || group.length === 0) return null;
+          return (
+            <View key={cat} style={styles.categorySubSection}>
+              <View style={styles.categorySubHeader}>
+                <Ionicons
+                  name={CATEGORY_ICONS[cat]}
+                  size={13}
+                  color={hexToRgba(branding.primary, 0.7)}
+                />
+                <Text style={styles.categorySubTitle}>
+                  {CATEGORY_LABELS[cat]}
+                </Text>
+              </View>
+              <View style={styles.badgeGrid}>
+                {group.map(renderBadgeItem)}
+              </View>
+            </View>
+          );
+        })}
+
+        {/* Uncategorized / gym badges */}
+        {uncategorized.length > 0 && (
+          <View style={hasSections ? styles.categorySubSection : undefined}>
+            <View style={styles.badgeGrid}>
+              {uncategorized.map(renderBadgeItem)}
+            </View>
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -305,7 +361,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           barStyle={styles.tabBar}
         >
           {FILTERS.map(({ key }) => {
-            // Each page recomputes filtered badges for its own filter key
             const pageBadges = (() => {
               let filtered = allBadgesWithProgress;
               if (key === 'this_gym') {
@@ -323,8 +378,10 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
               }
               return filtered;
             })();
+
             const earnedPage = pageBadges.filter((b) => b.is_earned);
             const lockedPage = pageBadges.filter((b) => !b.is_earned);
+
             return (
               <ScrollView
                 key={key}
@@ -357,19 +414,25 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                         </View>
                       </View>
                     )}
+
+                    {/* In Progress: category-grouped on "All" tab, flat on others */}
                     {lockedPage.length > 0 && (
-                      <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                          <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-                          <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
-                          <View style={styles.sectionCountPill}>
-                            <Text style={styles.sectionCountText}>{lockedPage.length}</Text>
+                      key === 'all'
+                        ? renderLockedByCategory(lockedPage)
+                        : (
+                          <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                              <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+                              <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
+                              <View style={styles.sectionCountPill}>
+                                <Text style={styles.sectionCountText}>{lockedPage.length}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.badgeGrid}>
+                              {lockedPage.map(renderBadgeItem)}
+                            </View>
                           </View>
-                        </View>
-                        <View style={styles.badgeGrid}>
-                          {lockedPage.map(renderBadgeItem)}
-                        </View>
-                      </View>
+                        )
                     )}
                   </>
                 )}
@@ -490,7 +553,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-
   /* ── Search ── */
   searchWrapper: {
     paddingHorizontal: 16,
@@ -524,9 +586,6 @@ const styles = StyleSheet.create({
   },
 
   /* ── Scroll ── */
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
     paddingHorizontal: 0,
     paddingTop: 4,
@@ -567,6 +626,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     ...fontStyles.bodySemiBold,
     color: 'rgba(255, 255, 255, 0.35)',
+  },
+
+  /* ── Category sub-sections (In Progress → All tab) ── */
+  categorySubSection: {
+    marginTop: 16,
+  },
+  categorySubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingLeft: 2,
+  },
+  categorySubTitle: {
+    fontSize: 11,
+    ...fontStyles.heading,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 1.5,
   },
 
   /* ── Badge grid ── */

@@ -194,7 +194,8 @@ export async function createAdminUser(
     email,
     password,
     email_confirm: false,
-    user_metadata: { username },
+    // Use preferred_username — the handle_new_user trigger checks this key first
+    user_metadata: { preferred_username: username },
   });
 
   if (createResult.error) {

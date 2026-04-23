@@ -4,6 +4,9 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 import { useGymStore } from '@/lib/stores/useGymStore';
 
+export type AchievementCategory = 'sessions' | 'total_drops' | 'streak' | 'multi_gym' | 'distance' | 'special';
+export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+
 export interface GlobalAchievement {
   id: string;
   code: string;
@@ -14,6 +17,8 @@ export interface GlobalAchievement {
   reward_drops: number;
   is_active: boolean;
   display_order: number;
+  category: AchievementCategory | null;
+  tier: AchievementTier | null;
 }
 
 export interface GymChallenge {
@@ -42,6 +47,8 @@ export interface BadgeWithProgress {
   earned_at: string | null;
   progress: number; // 0-100
   progress_data?: Record<string, any>;
+  category?: AchievementCategory | null;
+  tier?: AchievementTier | null;
 }
 
 export function useAllBadges() {

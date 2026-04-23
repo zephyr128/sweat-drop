@@ -210,7 +210,6 @@ export async function reorderGalleryImages(
     );
     await Promise.all(updates);
 
-    revalidatePath(`/dashboard/gym/${gymId}/settings`);
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to reorder' };

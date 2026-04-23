@@ -19,6 +19,16 @@ const criteriaSchema = z.object({
     .optional(),
 });
 
+const tierEnum = z
+  .enum(['bronze', 'silver', 'gold', 'platinum', 'diamond'])
+  .nullable()
+  .optional();
+
+const categoryEnum = z
+  .enum(['sessions', 'total_drops', 'streak', 'multi_gym', 'distance', 'special'])
+  .nullable()
+  .optional();
+
 const createAchievementSchema = z.object({
   code: z
     .string()
@@ -31,6 +41,8 @@ const createAchievementSchema = z.object({
   rewardDrops: z.number().int().min(0).default(0),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().min(0).default(0),
+  tier: tierEnum,
+  category: categoryEnum,
 });
 
 const updateAchievementSchema = z.object({
@@ -46,6 +58,8 @@ const updateAchievementSchema = z.object({
   rewardDrops: z.number().int().min(0).default(0),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().min(0).default(0),
+  tier: tierEnum,
+  category: categoryEnum,
 });
 
 export async function getGlobalAchievements() {
@@ -97,6 +111,8 @@ export async function createAchievement(
         reward_drops: validated.rewardDrops,
         is_active: validated.isActive,
         display_order: validated.displayOrder,
+        tier: validated.tier ?? null,
+        category: validated.category ?? null,
       })
       .select()
       .single();
@@ -138,6 +154,8 @@ export async function updateAchievement(
         reward_drops: validated.rewardDrops,
         is_active: validated.isActive,
         display_order: validated.displayOrder,
+        tier: validated.tier ?? null,
+        category: validated.category ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', validated.id)

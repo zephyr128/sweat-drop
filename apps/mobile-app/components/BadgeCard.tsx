@@ -7,6 +7,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import type { UserBadge } from '@/hooks/useUserBadges';
+import type { AchievementTier } from '@/hooks/useAllBadges';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_PADDING = 16;
@@ -18,12 +19,25 @@ const BADGE_SIZE = Math.floor(
 const CIRCLE_SIZE = BADGE_SIZE - 16;
 const ICON_SIZE = CIRCLE_SIZE * 0.68;
 
+const SMALL_BADGE_SIZE = 80;
+const SMALL_CIRCLE_SIZE = SMALL_BADGE_SIZE - 14;
+const SMALL_ICON_SIZE = SMALL_CIRCLE_SIZE * 0.68;
+
+export const TIER_COLORS: Record<AchievementTier, string> = {
+  bronze: '#CD7F32',
+  silver: '#C0C0C0',
+  gold: '#FFD700',
+  platinum: '#E5E4E2',
+  diamond: '#B9F2FF',
+};
+
 interface BadgeCardProps {
   badge: UserBadge;
   isLocked: boolean;
   progress?: number;
   onPress: () => void;
   size?: 'small' | 'medium' | 'large';
+  tier?: AchievementTier | null;
 }
 
 const ProgressRing: React.FC<{
@@ -79,15 +93,23 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
   isLocked,
   progress = 0,
   onPress,
+  size = 'medium',
+  tier,
 }) => {
   const branding = useBranding();
-  const categoryColor = getBadgeCategoryColor(badge.badge_name, branding.primary);
+  const tierColor = tier ? TIER_COLORS[tier] : null;
+  const categoryColor = tierColor || getBadgeCategoryColor(badge.badge_name, branding.primary);
+
+  const isSmall = size === 'small';
+  const badgeSize = isSmall ? SMALL_BADGE_SIZE : BADGE_SIZE;
+  const circleSize = isSmall ? SMALL_CIRCLE_SIZE : CIRCLE_SIZE;
+  const iconSize = isSmall ? SMALL_ICON_SIZE : ICON_SIZE;
 
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      style={styles.container}
+      style={[styles.container, isSmall && { width: badgeSize }]}
     >
       {/* Outer glow ring — earned only */}
       {!isLocked && (
@@ -95,9 +117,9 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
           style={[
             styles.outerGlow,
             {
-              width: CIRCLE_SIZE + 10,
-              height: CIRCLE_SIZE + 10,
-              borderRadius: (CIRCLE_SIZE + 10) / 2,
+              width: circleSize + 10,
+              height: circleSize + 10,
+              borderRadius: (circleSize + 10) / 2,
               shadowColor: categoryColor,
               borderColor: hexToRgba(categoryColor, 0.22),
             },
@@ -110,9 +132,9 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
         style={[
           styles.badgeCircle,
           {
-            width: CIRCLE_SIZE,
-            height: CIRCLE_SIZE,
-            borderRadius: CIRCLE_SIZE / 2,
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
           },
           !isLocked && {
             backgroundColor: hexToRgba(categoryColor, 0.06),
@@ -123,9 +145,25 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
             backgroundColor: 'rgba(255, 255, 255, 0.02)',
             borderColor: 'rgba(255, 255, 255, 0.07)',
             borderWidth: 1.5,
+            opacity: 0.35,
           },
         ]}
       >
+        {/* Tier-colored inner ring */}
+        {tierColor && !isLocked && (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                borderRadius: circleSize / 2,
+                borderWidth: 2,
+                borderColor: hexToRgba(tierColor, 0.8),
+              },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
         {/* Earned shine */}
         {!isLocked && (
           <LinearGradient
@@ -136,7 +174,7 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
             ]}
             start={{ x: 0.15, y: 0 }}
             end={{ x: 0.85, y: 1 }}
-            style={[StyleSheet.absoluteFill, { borderRadius: CIRCLE_SIZE / 2 }]}
+            style={[StyleSheet.absoluteFill, { borderRadius: circleSize / 2 }]}
           />
         )}
 
@@ -144,7 +182,7 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
         {isLocked && progress > 0 && (
           <ProgressRing
             progress={progress}
-            size={CIRCLE_SIZE}
+            size={circleSize}
             color={categoryColor}
           />
         )}
@@ -155,7 +193,7 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
             source={{ uri: badge.badge_image_url }}
             style={[
               styles.badgeImage,
-              { width: ICON_SIZE, height: ICON_SIZE },
+              { width: iconSize, height: iconSize },
               isLocked && styles.badgeImageLocked,
             ]}
             contentFit="contain"
@@ -163,29 +201,29 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
         ) : (
           <Ionicons
             name="trophy"
-            size={ICON_SIZE * 0.65}
+            size={iconSize * 0.65}
             color={isLocked ? 'rgba(255,255,255,0.12)' : categoryColor}
           />
         )}
       </View>
 
-      {/* Lock badge — outside the circle so overflow:hidden doesn't clip it */}
-      {isLocked && progress === 0 && (
-        <View style={styles.lockBadge}>
-          <Ionicons name="lock-closed" size={9} color="rgba(255,255,255,0.55)" />
+      {/* Lock overlay for locked tier badges */}
+      {isLocked && (
+        <View style={[styles.lockBadge, isSmall && styles.lockBadgeSmall]}>
+          <Ionicons name="lock-closed" size={isSmall ? 8 : 9} color="rgba(255,255,255,0.55)" />
         </View>
       )}
 
       {/* Earned checkmark — outside the circle */}
       {!isLocked && (
         <View style={[styles.checkBadge, { backgroundColor: categoryColor, borderColor: '#000' }]}>
-          <Ionicons name="checkmark" size={9} color="#000" />
+          <Ionicons name="checkmark" size={isSmall ? 8 : 9} color="#000" />
         </View>
       )}
 
       {/* Badge name */}
       <Text
-        style={[styles.badgeName, isLocked && styles.badgeNameLocked]}
+        style={[styles.badgeName, isLocked && styles.badgeNameLocked, isSmall && styles.badgeNameSmall]}
         numberOfLines={2}
       >
         {badge.badge_name}
@@ -252,6 +290,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
   },
+  lockBadgeSmall: {
+    top: 10 + SMALL_CIRCLE_SIZE - 10,
+    right: (SMALL_BADGE_SIZE - SMALL_CIRCLE_SIZE) / 2 - 1,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
   checkBadge: {
     position: 'absolute',
     top: 10 + CIRCLE_SIZE - 12,
@@ -276,6 +321,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 14,
     maxWidth: BADGE_SIZE - 4,
+  },
+  badgeNameSmall: {
+    fontSize: 9,
+    lineHeight: 12,
+    maxWidth: SMALL_BADGE_SIZE - 4,
+    marginTop: 6,
   },
   badgeNameLocked: {
     color: 'rgba(255, 255, 255, 0.28)',

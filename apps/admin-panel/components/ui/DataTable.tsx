@@ -205,7 +205,7 @@ export function DataTable<T>({
                     } ${col.headerClassName || ''}`}
                     onClick={col.sortable ? () => handleSort(col.key) : undefined}
                   >
-                    <span className="flex items-center gap-1">
+                    <span className={`flex items-center gap-1 ${col.headerClassName?.includes('text-right') ? 'justify-end' : ''}`}>
                       {col.label}
                       {col.sortable && sortBy === col.key && (
                         sortDir === 'asc'

@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-21 (external pilot demo gate)
+**Last Updated:** 2026-04-23 (production global achievements — tiered category system)
 
 ---
 
@@ -16,6 +16,57 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-04-23] - Production Global Achievements — Tiered Category System (Phase 1)
+
+**Migrations:**
+- `20260423100000_add_tier_category_to_global_achievements.sql`
+- `20260423100001_seed_production_global_achievements.sql`
+
+**Agent:** supabase-dba
+
+#### Changes
+- Added `tier TEXT` column to `global_achievements` with CHECK constraint (`bronze | silver | gold | platinum | diamond`). Nullable — legacy rows unaffected.
+- Added `category TEXT` column to `global_achievements` with CHECK constraint (`sessions | total_drops | streak | multi_gym | distance | special`). Nullable.
+- Added composite index `idx_global_achievements_category_tier ON (category, tier) WHERE is_active = true` for mobile grouping query performance.
+- Soft-deactivated 12 legacy seed achievements (`is_active = false`) — rows preserved for existing `user_badges` FK references.
+- Seeded 25 production tiered achievements: 5 categories × 5 tiers (bronze → silver → gold → platinum → diamond).
+
+#### Active Achievement Counts (after migration)
+| Category    | Bronze | Silver | Gold | Platinum | Diamond |
+|-------------|--------|--------|------|----------|---------|
+| sessions    | 1      | 1      | 1    | 1        | 1       |
+| total_drops | 1      | 1      | 1    | 1        | 1       |
+| streak      | 1      | 1      | 1    | 1        | 1       |
+| multi_gym   | 1      | 1      | 1    | 1        | 1       |
+| distance    | 1      | 1      | 1    | 1        | 1       |
+| **Total**   |        |        |      |          | **25**  |
+
+#### Impact
+- **Mobile App (Phase 3):** `TrophyRoom` must read `category` + `tier` to render the new grouped ladder layout. `BadgeCard` needs a `tier` prop for frame color. `useAllBadges` hook must include these fields. See `docs/plans/production_global_achievements_redesign_plan.md` Phase 3.
+- **Admin Panel (Phase 4):** `AchievementsManager` should add Category/Tier selects and grouped list view with tier chips. "Show inactive" toggle to surface the 12 deactivated legacy rows. See plan Phase 4.
+
+#### Breaking Changes
+- **None.** Existing `user_badges` rows untouched. Legacy achievement rows soft-deactivated (not deleted). Old Trophy Room renders unchanged — it ignores `category`/`tier` columns gracefully.
+
+#### Verification Queries
+```sql
+-- Should return 25
+SELECT COUNT(*) FROM global_achievements WHERE is_active = true;
+
+-- Should show 5 rows per category, 1 per tier
+SELECT category, tier, COUNT(*) FROM global_achievements WHERE is_active = true GROUP BY 1, 2 ORDER BY 1, 2;
+
+-- Legacy rows still present but inactive
+SELECT code, is_active FROM global_achievements WHERE code IN ('first_workout', 'ten_sessions', 'multi_gym');
+```
+
+#### Next Steps
+1. [ ] Phase 2: Upload 25 PNGs to `global-achievement-badges` bucket (`{code}-badge.png` per catalog)
+2. [ ] Phase 3: mobile-coder — Trophy Room redesign with category/tier layout
+3. [ ] Phase 4: admin-coder — AchievementsManager grouped view + tier chips
+
+---
 
 ### [2026-04-21] - External Pilot Demo Gate (`profiles.is_demo` + demo machines)
 
