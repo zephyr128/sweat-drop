@@ -18,6 +18,21 @@
 
 set -euo pipefail
 
+# Critical: disable Expo's automatic `.env*` file loading for the ENTIRE build.
+# Without this, `@expo/cli` inside Metro (invoked by `./gradlew bundleRelease`)
+# silently reads `apps/mobile-app/.env` at bundle time. Vars that are ALREADY
+# exported in the shell (from `.env.prod.local` below) are preserved, but any
+# variable NOT already in env — e.g. `EXPO_PUBLIC_DEV_QR_UUID` which devs keep
+# in their local `.env` for 5×-tap convenience — gets injected into the bundle.
+# That leaks a dev-DB QR UUID into the prod AAB and breaks demo simulator on
+# prod (`get_machine_status()` can't find a machine that only exists in dev).
+# Sourcing only `.env.prod.local` + `EXPO_NO_DOTENV=1` gives us a hermetic env.
+export EXPO_NO_DOTENV=1
+
+# Defensive: if the caller's shell already exports a dev-only env var, strip
+# it before we source the per-env file so we never leak it into a prod build.
+unset EXPO_PUBLIC_DEV_QR_UUID
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_CONFIG="$APP_DIR/app.config.js"
@@ -247,6 +262,23 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
+
+# ── Prod safety guards ────────────────────────────────────────────────────────
+# Fail fast if env file smells like the wrong environment (these are cheap
+# cross-checks that catch "I ran --env prod but .env.prod.local actually has
+# dev values" and "a dev-only var leaked through the shell" in the same pass).
+if [[ "$LABEL" == "PRODUCTION" ]]; then
+  if [[ -n "${EXPO_PUBLIC_DEV_QR_UUID:-}" ]]; then
+    error "EXPO_PUBLIC_DEV_QR_UUID is set in env ('$EXPO_PUBLIC_DEV_QR_UUID') while building PRODUCTION. This would bake a dev-DB UUID into the prod AAB. Remove it from .env.prod.local and your shell."
+  fi
+  if [[ "${EXPO_PUBLIC_APP_ENV:-}" != "production" ]]; then
+    error "EXPO_PUBLIC_APP_ENV='${EXPO_PUBLIC_APP_ENV:-}' but LABEL=PRODUCTION. Fix $ENV_FILE."
+  fi
+  case "${EXPO_PUBLIC_SUPABASE_URL:-}" in
+    *qdtdfofodfdlutkmlzzf*) : ;;  # prod project ref (see ENVIRONMENTS.md)
+    *) error "EXPO_PUBLIC_SUPABASE_URL='${EXPO_PUBLIC_SUPABASE_URL:-}' does not look like the prod Supabase URL. Refusing to build." ;;
+  esac
+fi
 
 # ── Prebuild ──────────────────────────────────────────────────────────────────
 # Backup iOS icon Contents.json before prebuild — expo prebuild --platform android

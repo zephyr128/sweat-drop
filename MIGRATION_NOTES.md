@@ -2,7 +2,7 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-23 (prod hotfix: align get_machine_status() with COALESCE(is_active, true))
+**Last Updated:** 2026-04-23 (prod hotfix: stop Android prod AAB from baking in dev `EXPO_PUBLIC_DEV_QR_UUID`)
 
 ---
 
@@ -16,6 +16,83 @@ This file tracks database schema changes and their impact on frontend applicatio
 ---
 
 ## Recent Migrations
+
+### [2026-04-23] - Prod Hotfix #2: Android prod AAB leaking dev `EXPO_PUBLIC_DEV_QR_UUID`
+
+**Migration:** _none (build-script + app-config change only)_
+
+**Agent:** devops / mobile-coder
+
+#### Observed Problem (QA, persistent)
+After the COALESCE fix below was shipped, demo user on the **Android prod
+AAB** still saw:
+
+> Development machine with QR UUID `92e1ad0d-8a2a-4993-8b19-61244ab82164`
+> not found. Please check DEV_QR_UUID in ScannerScreen.tsx
+
+The **iOS prod IPA** (built through EAS Cloud using `eas.json` → `production`
+profile) worked correctly for the same demo account. The UUID in the error
+(`92e1…`) is a **dev-Supabase** machine — it does not exist in the prod DB,
+so no SQL change could have ever fixed this.
+
+#### Root Cause
+Two-step leak specific to the local Android release pipeline
+(`apps/mobile-app/scripts/build-android-release.sh --env prod`):
+
+1. `apps/mobile-app/.env` (local, gitignored) contains
+   `EXPO_PUBLIC_DEV_QR_UUID=92e1ad0d-…` for 5×-tap simulator convenience
+   during dev. `.env.prod.local` correctly does **not** define it.
+2. The build script sourced `.env.prod.local` into the shell and passed
+   `EXPO_NO_DOTENV=1` **only** to `expo prebuild`. The later
+   `./gradlew bundleRelease` step invokes Metro through `@expo/cli`, which
+   re-reads `.env` from disk by default. `@expo/cli`'s dotenv loader uses
+   _"existing env wins"_ — so `EXPO_PUBLIC_SUPABASE_URL` correctly stayed
+   prod (already in shell), but `EXPO_PUBLIC_DEV_QR_UUID` (not in shell)
+   got injected from `.env` into `process.env` and baked into the JS bundle
+   by `babel-preset-expo`.
+3. At runtime on the Android prod AAB, `useDemoMachine` sees the env var,
+   short-circuits past `get_my_demo_machine()`, and `ScannerScreen` calls
+   `get_machine_status('92e1…')` against the prod DB, where that row does
+   not exist → `machineNotFound` / `devModeNotFound` modal.
+
+iOS prod was unaffected because the iOS IPA is built via **EAS Cloud**,
+which ignores local dotfiles and injects only the `eas.json` → `production`
+env block (where `EXPO_PUBLIC_DEV_QR_UUID` is deliberately absent).
+
+#### Changes
+- `apps/mobile-app/scripts/build-android-release.sh`:
+  - `export EXPO_NO_DOTENV=1` at the top of the script so **every** child
+    process (prebuild, Metro inside gradle, expo-cli, etc.) skips on-disk
+    `.env*` files. The shell env, sourced explicitly from `.env.prod.local`
+    or `.env.dev.local`, becomes the single source of truth.
+  - `unset EXPO_PUBLIC_DEV_QR_UUID` before sourcing the per-env file, in
+    case the caller's interactive shell has it exported.
+  - New prod safety guards that fail the build fast if:
+    - `EXPO_PUBLIC_DEV_QR_UUID` is set while building prod;
+    - `EXPO_PUBLIC_APP_ENV` ≠ `production`;
+    - `EXPO_PUBLIC_SUPABASE_URL` does not match the known prod project ref.
+- Android `versionCode` bumped (auto-incremented by the build script on the
+  next run). The previous AAB (versionCode 29) must not be uploaded.
+
+#### Impact on Frontend
+- **Mobile App:** no source change required — the runtime code paths were
+  already correct. Demo user on Android prod will now fall back to
+  `get_my_demo_machine()` (the same path iOS was using), which returns the
+  real prod demo machine and passes `get_machine_status()` cleanly.
+- **Admin Panel:** no change.
+
+#### Breaking Changes
+None.
+
+#### Deploy
+1. Rebuild Android AAB: `cd apps/mobile-app && ./scripts/build-android-release.sh --env prod`.
+2. Verify the guards printed `[build] Environment: PRODUCTION` and that no
+   error about `EXPO_PUBLIC_DEV_QR_UUID` is printed.
+3. Upload the new AAB to Play Console → Internal Testing.
+4. QA on Android: sign in with demo account → 5× tap scan frame → Start →
+   simulator session must launch without the "machine not found" modal.
+
+---
 
 ### [2026-04-23] - Prod Hotfix: Demo Simulator "machine not found" on Android
 
