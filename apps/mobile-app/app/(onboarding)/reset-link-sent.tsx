@@ -4,7 +4,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  AppState,
   Linking,
   ActionSheetIOS,
   Platform,
@@ -12,14 +11,13 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/lib/stores/authStore';
 import { theme, fontStyles } from '@/lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useAppModal } from '@/lib/stores/useAppModal';
@@ -119,47 +117,20 @@ export default function ResetLinkSentScreen() {
   const { email } = useLocalSearchParams<{ email: string }>();
   const { t } = useTranslation('onboarding');
   const showModal = useAppModal((s) => s.showModal);
-  const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
 
   const [resendLoading, setResendLoading] = useState(false);
   const [lastResendAt, setLastResendAt] = useState<number | null>(null);
 
-  // ── Deep-link / auth-event detection ──────────────────────────────────────
-  // When the user clicks the reset link on THIS device, _layout.tsx sets
-  // pendingPasswordRecovery and navigates to reset-password. But if the user
-  // switches to the email app and back, AppState change may arrive first.
-  // We watch both pendingPasswordRecovery (store flag) and PASSWORD_RECOVERY
-  // auth events, plus re-check on foreground.
-
-  useEffect(() => {
-    if (!pendingPasswordRecovery) return;
-    router.replace('/(onboarding)/reset-password');
-  }, [pendingPasswordRecovery, router]);
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        log.info('[ResetLinkSent] PASSWORD_RECOVERY auth event received');
-        useAuthStore.getState().setPendingPasswordRecovery();
-      }
-    });
-
-    return () => { subscription.unsubscribe(); };
-  }, []);
-
-  // Re-check on app foreground — catches the case where the deep link was
-  // processed while we were in the background
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        const pr = useAuthStore.getState().pendingPasswordRecovery;
-        if (pr) {
-          router.replace('/(onboarding)/reset-password');
-        }
-      }
-    });
-    return () => { sub.remove(); };
-  }, [router]);
+  // NOTE: Navigation to /reset-password on a successful deep-link recovery is
+  // handled exclusively by _layout.tsx (pendingPasswordRecovery effect).
+  // This screen intentionally does NOT watch pendingPasswordRecovery or the
+  // PASSWORD_RECOVERY auth event. When the user submits the in-app form on
+  // /reset-password, supabase.auth.verifyOtp({type:'recovery'}) fires another
+  // PASSWORD_RECOVERY event while this screen is still mounted below in the
+  // stack — any extra listener here would call router.replace() back to
+  // /reset-password, remounting it and wiping local formDone state. The user
+  // would then see the password form a second time despite a successful
+  // update. See commit 3cda6d6 for the prior half-fix in _layout.tsx.
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
