@@ -146,40 +146,6 @@ export const HomeHeroPager = forwardRef<HomeHeroPagerHandle, HomeHeroPagerProps>
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [onPageChange]);
 
-  const dot0Style = useAnimatedStyle(() => {
-    const dist = Math.abs(pageOffset.value - 0);
-    const active = Math.max(0, 1 - dist);
-    return {
-      width: interpolate(active, [0, 1], [6, 22]),
-      opacity: interpolate(active, [0, 1], [0.3, 1]),
-    };
-  });
-  const dot1Style = useAnimatedStyle(() => {
-    const dist = Math.abs(pageOffset.value - 1);
-    const active = Math.max(0, 1 - dist);
-    return {
-      width: interpolate(active, [0, 1], [6, 22]),
-      opacity: interpolate(active, [0, 1], [0.3, 1]),
-    };
-  });
-  const dot2Style = useAnimatedStyle(() => {
-    const dist = Math.abs(pageOffset.value - 2);
-    const active = Math.max(0, 1 - dist);
-    return {
-      width: interpolate(active, [0, 1], [6, 22]),
-      opacity: interpolate(active, [0, 1], [0.3, 1]),
-    };
-  });
-  const dot3Style = useAnimatedStyle(() => {
-    const dist = Math.abs(pageOffset.value - 3);
-    const active = Math.max(0, 1 - dist);
-    return {
-      width: interpolate(active, [0, 1], [6, 22]),
-      opacity: interpolate(active, [0, 1], [0.3, 1]),
-    };
-  });
-  const dotStyles = [dot0Style, dot1Style, dot2Style, dot3Style];
-
   const page0Style = useAnimatedStyle(() => {
     const dist = Math.abs(pageOffset.value - 0);
     const active = Math.max(0, 1 - Math.min(dist, 1));
@@ -281,18 +247,6 @@ export const HomeHeroPager = forwardRef<HomeHeroPagerHandle, HomeHeroPagerProps>
         </View>
       </PagerView>
 
-      <View style={styles.dots}>
-        {dotStyles.map((ds, i) => (
-          <Animated.View
-            key={i}
-            style={[
-              styles.dot,
-              { backgroundColor: branding.primary },
-              ds,
-            ]}
-          />
-        ))}
-      </View>
     </View>
   );
 });
@@ -319,15 +273,5 @@ const styles = StyleSheet.create({
   ringSlot: {
     transform: [{ scale: 1 }],
     overflow: 'visible',
-  },
-  dots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 4,
-  },
-  dot: {
-    height: 5,
-    borderRadius: 2.5,
   },
 });

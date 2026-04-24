@@ -2205,6 +2205,9 @@ export type Database = {
       }
       owner_branding: {
         Row: {
+          background_gradient_end: string
+          background_gradient_start: string
+          background_overlay: number
           background_url: string | null
           created_at: string
           id: string
@@ -2214,6 +2217,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          background_gradient_end?: string
+          background_gradient_start?: string
+          background_overlay?: number
           background_url?: string | null
           created_at?: string
           id?: string
@@ -2223,6 +2229,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          background_gradient_end?: string
+          background_gradient_start?: string
+          background_overlay?: number
           background_url?: string | null
           created_at?: string
           id?: string

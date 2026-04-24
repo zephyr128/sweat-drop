@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { Building2, MapPin, Palette, Clock, Camera, Crown } from 'lucide-react';
 import { GymGeneralForm, type GymGeneralData } from '@/components/modules/GymGeneralForm';
 import { CheckinSettingsModule } from '@/components/modules/CheckinSettingsModule';
@@ -32,6 +32,9 @@ interface GymSetupTabsProps {
     primary_color: string | null;
     logo_url: string | null;
     background_url: string | null;
+    background_overlay: number | null;
+    background_gradient_start: string | null;
+    background_gradient_end: string | null;
   } | null;
   workingHours: GymWorkingHours | null;
   currentOwner: {
@@ -65,35 +68,47 @@ export function GymSetupTabs({
   currentOwner,
 }: GymSetupTabsProps) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   const showBranding = role === 'gym_owner' && brandingData !== null;
   const showOwnership = role === 'superadmin';
-  const visibleTabs = ALL_TABS.filter((t) => {
-    if (t.key === 'branding') return showBranding;
-    if (t.key === 'ownership') return showOwnership;
-    return true;
-  });
+  const visibleTabs = useMemo(
+    () =>
+      ALL_TABS.filter((t) => {
+        if (t.key === 'branding') return showBranding;
+        if (t.key === 'ownership') return showOwnership;
+        return true;
+      }),
+    [showBranding, showOwnership],
+  );
 
   const initialTab = (searchParams.get('tab') as TabKey) || 'general';
   const [activeTab, setActiveTab] = useState<TabKey>(
     visibleTabs.some((t) => t.key === initialTab) ? initialTab : 'general',
   );
 
+  // Keep state in sync if the URL changes externally (back/forward, deep link).
+  // We intentionally avoid putting `visibleTabs` in deps (it's memoized, but the
+  // sync only needs to react to URL changes).
   useEffect(() => {
-    const tabParam = searchParams.get('tab') as TabKey;
-    if (tabParam && visibleTabs.some((t) => t.key === tabParam)) {
-      setActiveTab(tabParam);
-    }
+    const tabParam = searchParams.get('tab') as TabKey | null;
+    const next: TabKey = tabParam && visibleTabs.some((t) => t.key === tabParam) ? tabParam : 'general';
+    setActiveTab((prev) => (prev === next ? prev : next));
   }, [searchParams, visibleTabs]);
 
+  // Update the URL via the History API instead of router.push so we don't
+  // trigger a full server navigation (which would unmount tabs, show
+  // loading.tsx skeleton, and re-run all server queries on every tab click).
   const handleTabChange = (tab: TabKey) => {
+    if (tab === activeTab) return;
     setActiveTab(tab);
     const params = new URLSearchParams();
     if (tab !== 'general') params.set('tab', tab);
     const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    const url = qs ? `${pathname}?${qs}` : pathname;
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', url);
+    }
   };
 
   return (
@@ -144,7 +159,16 @@ export function GymSetupTabs({
       {activeTab === 'branding' && showBranding && (
         <BrandingModule
           ownerId={ownerId}
-          initialData={brandingData || { primary_color: null, logo_url: null, background_url: null }}
+          initialData={
+            brandingData || {
+              primary_color: null,
+              logo_url: null,
+              background_url: null,
+              background_overlay: null,
+              background_gradient_start: null,
+              background_gradient_end: null,
+            }
+          }
         />
       )}
 

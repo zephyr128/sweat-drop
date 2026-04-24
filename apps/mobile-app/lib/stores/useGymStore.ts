@@ -21,6 +21,12 @@ export interface Gym {
   owner_id?: string | null;
   primary_color?: string;
   background_url?: string | null;
+  /** 0..1 darken-layer strength applied over background_url. Default 0.5. */
+  background_overlay?: number | null;
+  /** Hex #RRGGBB — top of fallback gradient when background_url is null. */
+  background_gradient_start?: string | null;
+  /** Hex #RRGGBB — bottom of fallback gradient when background_url is null. */
+  background_gradient_end?: string | null;
   logo_url?: string | null;
   smartcoach_enabled?: boolean;
 

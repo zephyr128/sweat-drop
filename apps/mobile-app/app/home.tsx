@@ -1104,18 +1104,54 @@ export default function HomeScreen() {
                 transition={200}
               />
             </Animated.View>
-            <LinearGradient
-              colors={['rgba(0,0,0,0.30)', 'rgba(8,8,8,0.50)', 'rgba(0,0,0,0.65)']}
-              style={StyleSheet.absoluteFillObject}
-            />
+            {/* User-tunable darkening overlay (owner_branding.background_overlay).
+                Scales the same 3-stop gradient we used to hardcode (0.30, 0.50, 0.65)
+                from a base of 0.5 so branding defaults remain visually identical. */}
+            {(() => {
+              const raw = activeGym?.background_overlay;
+              const overlay =
+                raw === null || raw === undefined || Number.isNaN(Number(raw))
+                  ? 0.5
+                  : Math.max(0, Math.min(1, Number(raw)));
+              const top = Math.min(1, overlay * 0.60).toFixed(2);
+              const mid = Math.min(1, overlay * 1.00).toFixed(2);
+              const bot = Math.min(1, overlay * 1.30).toFixed(2);
+              return (
+                <LinearGradient
+                  colors={[
+                    `rgba(0,0,0,${top})`,
+                    `rgba(8,8,8,${mid})`,
+                    `rgba(0,0,0,${bot})`,
+                  ] as any}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              );
+            })()}
           </View>
         ) : (
-          <LinearGradient
-            colors={['#080808', '#0A0E1A', '#080808'] as any}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
+          (() => {
+            // User-customizable gradient (owner_branding.background_gradient_start/end).
+            // Falls back to the legacy dark gradient so gyms without owner_branding look the same.
+            const hexRe = /^#[0-9a-fA-F]{6}$/;
+            const top =
+              typeof activeGym?.background_gradient_start === 'string' &&
+              hexRe.test(activeGym.background_gradient_start)
+                ? activeGym.background_gradient_start
+                : '#080808';
+            const bot =
+              typeof activeGym?.background_gradient_end === 'string' &&
+              hexRe.test(activeGym.background_gradient_end)
+                ? activeGym.background_gradient_end
+                : '#0A0E1A';
+            return (
+              <LinearGradient
+                colors={[top, bot] as any}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+            );
+          })()
         )}
 
         {/* ── Fixed header — sits above the scroll, always visible ── */}
@@ -1233,7 +1269,7 @@ export default function HomeScreen() {
 
             {/* Gym logo badge */}
             <View style={styles.sheetLogoBadgeWrap} pointerEvents="none">
-              <View style={[styles.sheetLogoBadge, { borderColor: hexToRgba(branding.primary, 0.55) }]}>
+              <View style={[styles.sheetLogoBadge, { borderColor: hexToRgba(branding.primary, 0.55) }, (activeGym?.logo_url && !sheetLogoLoadFailed) ? { width: 94, paddingHorizontal: 0, paddingVertical: 0 } : { backgroundColor: branding.primary }]}>
                 {activeGym?.logo_url && !sheetLogoLoadFailed ? (
                   <Image
                     source={{ uri: activeGym.logo_url }}
@@ -1244,7 +1280,9 @@ export default function HomeScreen() {
                     onError={() => setSheetLogoLoadFailed(true)}
                   />
                 ) : (
-                  <Ionicons name="fitness-outline" size={16} color="rgba(255,255,255,0.70)" />
+                  <Text style={styles.sheetLogoBadgeText} numberOfLines={1}>
+                    {activeGym?.name ?? ''}
+                  </Text>
                 )}
               </View>
             </View>
@@ -1474,20 +1512,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: -2,
     alignItems: 'center',
     zIndex: 12,
   },
   sheetLogoBadge: {
-    height: 34,
-    width: 94,
-    borderRadius: 18,
+    height: 32,
+    minWidth: 80,
+    maxWidth: SCREEN_WIDTH * 0.55,
+    borderRadius: 17,
     borderWidth: 1.5,
     backgroundColor: 'rgba(43, 50, 68, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    padding: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
     shadowOpacity: 0.22,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -1495,7 +1535,14 @@ const styles = StyleSheet.create({
   sheetLogoBadgeImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 13,
+    borderRadius: 15.5,
+  },
+  sheetLogoBadgeText: {
+    fontFamily: 'BebasNeue_400Regular',
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   sheetTabBar: {
     paddingHorizontal: 4,

@@ -102,13 +102,18 @@ export const useGymData = () => {
         primary_color: '#00E5FF', // Default cyan
         logo_url: null as string | null,
         background_url: null as string | null,
+        background_overlay: 0.5 as number,
+        background_gradient_start: '#080808' as string,
+        background_gradient_end: '#0A0E1A' as string,
       };
 
       // Get owner_branding (global branding per owner)
       if (gymData.owner_id) {
         const { data: ownerBranding, error: brandingError } = await supabase
           .from('owner_branding')
-          .select('primary_color, logo_url, background_url')
+          .select(
+            'primary_color, logo_url, background_url, background_overlay, background_gradient_start, background_gradient_end',
+          )
           .eq('owner_id', gymData.owner_id)
           .single();
 
@@ -118,10 +123,35 @@ export const useGymData = () => {
         }
 
         if (ownerBranding) {
+          const ob = ownerBranding as {
+            primary_color?: string | null;
+            logo_url?: string | null;
+            background_url?: string | null;
+            background_overlay?: number | null;
+            background_gradient_start?: string | null;
+            background_gradient_end?: string | null;
+          };
+          const rawOverlay = ob.background_overlay;
+          const overlay =
+            rawOverlay === null || rawOverlay === undefined || Number.isNaN(Number(rawOverlay))
+              ? branding.background_overlay
+              : Math.max(0, Math.min(1, Number(rawOverlay)));
+          const hexRe = /^#[0-9a-fA-F]{6}$/;
+          const gradStart =
+            typeof ob.background_gradient_start === 'string' && hexRe.test(ob.background_gradient_start)
+              ? ob.background_gradient_start
+              : branding.background_gradient_start;
+          const gradEnd =
+            typeof ob.background_gradient_end === 'string' && hexRe.test(ob.background_gradient_end)
+              ? ob.background_gradient_end
+              : branding.background_gradient_end;
           branding = {
-            primary_color: ownerBranding.primary_color || branding.primary_color,
-            logo_url: ownerBranding.logo_url || branding.logo_url,
-            background_url: ownerBranding.background_url || branding.background_url,
+            primary_color: ob.primary_color || branding.primary_color,
+            logo_url: ob.logo_url || branding.logo_url,
+            background_url: ob.background_url || branding.background_url,
+            background_overlay: overlay,
+            background_gradient_start: gradStart,
+            background_gradient_end: gradEnd,
           };
         } else {
           log.warn('[useGymData] No owner_branding found for owner_id:', gymData.owner_id);
@@ -136,6 +166,9 @@ export const useGymData = () => {
         primary_color: branding.primary_color,
         logo_url: branding.logo_url,
         background_url: branding.background_url,
+        background_overlay: branding.background_overlay,
+        background_gradient_start: branding.background_gradient_start,
+        background_gradient_end: branding.background_gradient_end,
       };
 
       setActiveGym(gymWithBranding);

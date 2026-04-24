@@ -61,14 +61,39 @@ export default async function GymSettingsPage({ params }: SettingsPageProps) {
       : 20;
 
   // Fetch branding for gym owners
-  let brandingData: { primary_color: string | null; logo_url: string | null; background_url: string | null } | null = null;
+  let brandingData: {
+    primary_color: string | null;
+    logo_url: string | null;
+    background_url: string | null;
+    background_overlay: number | null;
+    background_gradient_start: string | null;
+    background_gradient_end: string | null;
+  } | null = null;
   if (profile.role === 'gym_owner' && gym.owner_id) {
     const { data: ownerBranding } = await supabase
       .from('owner_branding')
-      .select('primary_color, logo_url, background_url')
+      .select(
+        'primary_color, logo_url, background_url, background_overlay, background_gradient_start, background_gradient_end',
+      )
       .eq('owner_id', gym.owner_id)
       .single();
-    brandingData = ownerBranding || { primary_color: null, logo_url: null, background_url: null };
+    brandingData = ownerBranding
+      ? (ownerBranding as {
+          primary_color: string | null;
+          logo_url: string | null;
+          background_url: string | null;
+          background_overlay: number | null;
+          background_gradient_start: string | null;
+          background_gradient_end: string | null;
+        })
+      : {
+          primary_color: null,
+          logo_url: null,
+          background_url: null,
+          background_overlay: null,
+          background_gradient_start: null,
+          background_gradient_end: null,
+        };
   }
 
   // Fetch current owner profile for superadmin "Ownership" tab

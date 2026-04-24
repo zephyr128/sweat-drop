@@ -7,7 +7,24 @@ interface UpdateBrandingInput {
   ownerId: string; // Now uses owner_id instead of gym_id for global branding
   primaryColor?: string;
   logoUrl?: string;
-  backgroundUrl?: string;
+  /** Pass `''` or `null` to clear the background image. */
+  backgroundUrl?: string | null;
+  backgroundOverlay?: number; // 0..1 — darken-layer strength over background
+  /** Hex #RRGGBB — top of the fallback gradient when no background image is set. */
+  backgroundGradientStart?: string;
+  /** Hex #RRGGBB — bottom of the fallback gradient when no background image is set. */
+  backgroundGradientEnd?: string;
+}
+
+function sanitizeHex(input: string | undefined | null): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  const raw = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (/^[0-9a-fA-F]{6}$/.test(raw)) return `#${raw.toUpperCase()}`;
+  if (/^[0-9a-fA-F]{3}$/.test(raw)) {
+    return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`.toUpperCase();
+  }
+  return null;
 }
 
 export async function updateBranding(input: UpdateBrandingInput) {
@@ -28,6 +45,18 @@ export async function updateBranding(input: UpdateBrandingInput) {
     }
     if (input.backgroundUrl !== undefined) {
       updateData.background_url = input.backgroundUrl || null;
+    }
+    if (input.backgroundOverlay !== undefined) {
+      const clamped = Math.max(0, Math.min(1, input.backgroundOverlay));
+      updateData.background_overlay = Math.round(clamped * 100) / 100;
+    }
+    if (input.backgroundGradientStart !== undefined) {
+      const hex = sanitizeHex(input.backgroundGradientStart);
+      if (hex) updateData.background_gradient_start = hex;
+    }
+    if (input.backgroundGradientEnd !== undefined) {
+      const hex = sanitizeHex(input.backgroundGradientEnd);
+      if (hex) updateData.background_gradient_end = hex;
     }
 
     // Upsert into owner_branding table (global branding per owner)
