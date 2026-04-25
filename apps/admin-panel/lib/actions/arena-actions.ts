@@ -335,22 +335,32 @@ export async function updateArena(
 
     if (error) throw error;
 
-    // Update gym links if provided
+    // Update gym links — only for local arenas.
+    // Regional/network gyms are managed via the invitation acceptance flow;
+    // directly mutating arena_gyms for those scopes would bypass invitation acceptance.
     if (input.gym_ids) {
-      // Delete existing links
-      await supabaseAdmin.from('arena_gyms').delete().eq('arena_id', arenaId);
+      const { data: arenaForScope } = await supabaseAdmin
+        .from('sweat_arenas')
+        .select('arena_scope')
+        .eq('id', arenaId)
+        .single();
 
-      // Insert new links
-      if (input.gym_ids.length > 0) {
-        const gymLinks = input.gym_ids.map((gymId) => ({
-          arena_id: arenaId,
-          gym_id: gymId,
-          approved_by: profile.id,
-          approved_at: new Date().toISOString(),
-        }));
+      if ((arenaForScope as any)?.arena_scope === 'local') {
+        // Delete existing links and replace
+        await supabaseAdmin.from('arena_gyms').delete().eq('arena_id', arenaId);
 
-        await supabaseAdmin.from('arena_gyms').insert(gymLinks as any);
+        if (input.gym_ids.length > 0) {
+          const gymLinks = input.gym_ids.map((gymId) => ({
+            arena_id: arenaId,
+            gym_id: gymId,
+            approved_by: profile.id,
+            approved_at: new Date().toISOString(),
+          }));
+
+          await supabaseAdmin.from('arena_gyms').insert(gymLinks as any);
+        }
       }
+      // For regional/network arenas: silently skip — gym membership managed via invitations.
     }
 
     revalidatePath('/dashboard/arenas');

@@ -212,7 +212,10 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
       start_date: arena.start_date,
       end_date: arena.end_date,
       sponsor_fee_cents: arena.sponsor_fee_cents || 0,
-      gym_ids: (arena.gyms || []).map((g) => g.gym_id),
+      // Only populate direct gym links for local arenas.
+      // Regional/network gyms are managed via the invitation flow — editing them
+      // here would bypass invitation acceptance and re-link gyms directly.
+      gym_ids: arena.arena_scope === 'local' ? (arena.gyms || []).map((g) => g.gym_id) : [],
       prizes: arena.prizes.length > 0
         ? arena.prizes
         : [{ rank: 1, prize: '' }, { rank: 2, prize: '' }, { rank: 3, prize: '' }],
@@ -788,7 +791,16 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                   <label className="block text-sm font-medium text-white mb-2">Scope *</label>
                   <select
                     value={formData.arena_scope}
-                    onChange={(e) => setFormData({ ...formData, arena_scope: e.target.value })}
+                    onChange={(e) => {
+                      const newScope = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        arena_scope: newScope,
+                        // Clear direct gym links when switching to non-local scope —
+                        // those scopes require the invitation flow, not direct linking.
+                        gym_ids: newScope !== 'local' ? [] : prev.gym_ids,
+                      }));
+                    }}
                     disabled={!!gymId || !isSuperadmin} // Only superadmin can set non-local scope
                     className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none disabled:opacity-50"
                   >
@@ -1086,39 +1098,57 @@ export function ArenasManager({ gymId, isSuperadmin }: ArenasManagerProps) {
                   <div className="flex items-center gap-2 mb-4">
                     <MapPin className="w-4 h-4 text-[#808080]" />
                     <h3 className="text-sm font-medium text-white">Participating Gyms</h3>
-                    <span className="text-xs text-[#808080]">({formData.gym_ids.length} selected)</span>
+                    {formData.arena_scope === 'local' && (
+                      <span className="text-xs text-[#808080]">({formData.gym_ids.length} selected)</span>
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                    {allGyms.map((gym) => (
-                      <label
-                        key={gym.id}
-                        className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer border transition-colors ${
-                          formData.gym_ids.includes(gym.id)
-                            ? 'bg-[#00E5FF]/10 border-[#00E5FF]/30 text-white'
-                            : 'bg-[#1A1A1A] border-[#1A1A1A] text-[#808080] hover:border-[#333]'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.gym_ids.includes(gym.id)}
-                          onChange={() => toggleGym(gym.id)}
-                          className="sr-only"
-                        />
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                          formData.gym_ids.includes(gym.id)
-                            ? 'bg-[#00E5FF] border-[#00E5FF]'
-                            : 'border-[#555]'
-                        }`}>
-                          {formData.gym_ids.includes(gym.id) && (
-                            <svg className="w-3 h-3 text-black" viewBox="0 0 12 12">
-                              <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" fill="none" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="text-sm truncate">{gym.name}</span>
-                      </label>
-                    ))}
-                  </div>
+
+                  {formData.arena_scope === 'local' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                      {allGyms.map((gym) => (
+                        <label
+                          key={gym.id}
+                          className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer border transition-colors ${
+                            formData.gym_ids.includes(gym.id)
+                              ? 'bg-[#00E5FF]/10 border-[#00E5FF]/30 text-white'
+                              : 'bg-[#1A1A1A] border-[#1A1A1A] text-[#808080] hover:border-[#333]'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.gym_ids.includes(gym.id)}
+                            onChange={() => toggleGym(gym.id)}
+                            className="sr-only"
+                          />
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            formData.gym_ids.includes(gym.id)
+                              ? 'bg-[#00E5FF] border-[#00E5FF]'
+                              : 'border-[#555]'
+                          }`}>
+                            {formData.gym_ids.includes(gym.id) && (
+                              <svg className="w-3 h-3 text-black" viewBox="0 0 12 12">
+                                <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" fill="none" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-sm truncate">{gym.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-3 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                      <Send className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm text-blue-300 font-medium mb-1">Use the invitation flow to add gyms</p>
+                        <p className="text-xs text-[#808080]">
+                          For {formData.arena_scope === 'regional' ? 'regional' : 'network'} arenas, gyms must be invited and accept before they appear in the arena.
+                          After creating this arena, use the <span className="text-white font-medium">Invite Gyms</span> button (
+                          <Send className="w-3 h-3 inline text-[#808080]" />) on the arena card to send invitations.
+                          Gyms are added to <code className="text-[#00E5FF] text-xs">arena_gyms</code> only after they accept.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
