@@ -188,6 +188,15 @@ export default function NotificationsScreen() {
     ({ item }: { item: AppNotification }) => {
       const meta = getMeta(item.type);
       const isUnread = !item.read_at;
+      // Defense-in-depth: producers (happy_hour_reminder, rank_overtaken,
+      // arena_prize, leaderboard_prize, prize_ready, …) stamp gym_name onto
+      // data so this surface can render "@ Gym Name" without parsing
+      // free-form body text. Non-gym-specific notifications (e.g. global
+      // streak reminder) won't have it and the line is omitted.
+      const dataGymName =
+        typeof item.data?.gym_name === 'string' && item.data.gym_name.length > 0
+          ? (item.data.gym_name as string)
+          : null;
 
       return (
         <TouchableOpacity
@@ -213,9 +222,24 @@ export default function NotificationsScreen() {
             <Text style={styles.cardBody} numberOfLines={2}>
               {item.body}
             </Text>
-            <Text style={styles.cardTime}>
-              {relativeTime(item.created_at, tNotif)}
-            </Text>
+            <View style={styles.metaRow}>
+              {dataGymName ? (
+                <View style={styles.gymPill}>
+                  <Ionicons
+                    name="business-outline"
+                    size={10}
+                    color={branding.primary}
+                    style={styles.gymPillIcon}
+                  />
+                  <Text style={[styles.gymPillText, { color: branding.primary }]} numberOfLines={1}>
+                    {dataGymName}
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={styles.cardTime}>
+                {relativeTime(item.created_at, tNotif)}
+              </Text>
+            </View>
           </View>
 
           {/* Chevron */}
@@ -432,6 +456,32 @@ const styles = StyleSheet.create({
     ...fontStyles.body,
     fontSize: 11,
     color: t.colors.textTertiary,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+    flexWrap: 'wrap',
+  },
+  gymPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    maxWidth: '70%',
+  },
+  gymPillIcon: {
+    marginRight: 3,
+  },
+  gymPillText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 10,
+    letterSpacing: 0.3,
   },
   chevron: {
     marginLeft: 4,

@@ -69,15 +69,19 @@ function maskId(id: string): string {
   return id.slice(0, 4) + '…' + id.slice(-4);
 }
 
-function buildPushBody(offsetMin: number, multiplier: number): string {
+// Happy Hour rules are gym-scoped, but a user can be a member of multiple
+// gyms (and so can receive multiple happy_hour reminders in a short window
+// from different gyms). Without the gym name in the title/body, the user
+// has no way to tell where the boost is — so we always prefix it.
+function buildPushBody(offsetMin: number, multiplier: number, gymName: string): string {
   const mult = `x${multiplier} drops`;
-  if (offsetMin === 0) return `Happy Hour is LIVE now • ${mult}`;
-  return `Happy Hour starts in ${offsetMin} min • ${mult}`;
+  if (offsetMin === 0) return `${gymName}: Happy Hour is LIVE now • ${mult}`;
+  return `${gymName}: Happy Hour starts in ${offsetMin} min • ${mult}`;
 }
 
-function buildPushTitle(offsetMin: number): string {
-  if (offsetMin === 0) return '🔥 Happy Hour is LIVE!';
-  return '⏰ Happy Hour coming up!';
+function buildPushTitle(offsetMin: number, gymName: string): string {
+  if (offsetMin === 0) return `🔥 Happy Hour is LIVE — ${gymName}`;
+  return `⏰ Happy Hour coming up — ${gymName}`;
 }
 
 serve(async (req) => {
@@ -117,6 +121,25 @@ serve(async (req) => {
 
     const gymIds = [...new Set((rules as BoostRule[]).map((r) => r.gym_id))];
     summary.gyms_scanned = gymIds.length;
+
+    // Pre-fetch all gym names in one query so the per-rule loop can stamp
+    // the gym name onto every push without re-querying.
+    const gymNameById = new Map<string, string>();
+    if (gymIds.length > 0) {
+      const { data: gymsRows, error: gymsErr } = await supabase
+        .from('gyms')
+        .select('id, name')
+        .in('id', gymIds);
+      if (gymsErr) {
+        summary.errors.push(`gym name lookup: ${gymsErr.message}`);
+      } else {
+        for (const g of gymsRows ?? []) {
+          if (g?.id && typeof g.name === 'string' && g.name.length > 0) {
+            gymNameById.set(g.id, g.name);
+          }
+        }
+      }
+    }
 
     const now = new Date();
 
@@ -194,6 +217,7 @@ serve(async (req) => {
           // tokens may be empty for tokenless users — send-push writes inbox row regardless.
           try {
             const label = rule.display_label || rule.name;
+            const gymName = gymNameById.get(rule.gym_id) ?? 'your gym';
             const pushRes = await fetch(
               `${supabaseUrl}/functions/v1/send-push`,
               {
@@ -206,11 +230,12 @@ serve(async (req) => {
                   client_ref: 'happy_hour_reminder',
                   tokens: hasValidToken ? [token] : [],
                   user_ids: [membership.user_id],
-                  title: buildPushTitle(offset),
-                  body: buildPushBody(offset, rule.multiplier),
+                  title: buildPushTitle(offset, gymName),
+                  body: buildPushBody(offset, rule.multiplier, gymName),
                   data: {
                     type: 'happy_hour_reminder',
                     gym_id: rule.gym_id,
+                    gym_name: gymName,
                     rule_id: rule.id,
                     label,
                     multiplier: rule.multiplier,
