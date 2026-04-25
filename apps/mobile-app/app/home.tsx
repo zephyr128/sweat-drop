@@ -283,7 +283,7 @@ export default function HomeScreen() {
   const { updateHomeGym, loadActiveGym } = useGymData();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const unreadNotifCount = useUnreadNotificationCount();
-  const unclaimedPrizeCount = useUnclaimedPrizeCount();
+  const unclaimedPrizeCount = useUnclaimedPrizeCount(activeGymId);
 
   // Fade-in animation for smooth transition from splash
   const fadeOpacity = useSharedValue(0);
@@ -1514,7 +1514,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: 58,
+    marginTop: 38,
   },
   stickySectionBlur: {
     overflow: 'hidden',

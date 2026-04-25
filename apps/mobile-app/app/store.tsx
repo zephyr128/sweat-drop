@@ -77,8 +77,12 @@ export default function StoreScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const branding = useBranding();
-  const { getActiveGymId } = useGymStore();
-  const activeGymId = getActiveGymId();
+  // Subscribe to gym ids individually so a gym switch reactively
+  // re-renders this screen and reloads gym-scoped data (rewards,
+  // redemptions, prizes). Same pattern as home.tsx — see comment there.
+  const homeGymId = useGymStore((s) => s.homeGymId);
+  const previewGymId = useGymStore((s) => s.previewGymId);
+  const activeGymId = previewGymId || homeGymId;
   const { t } = useTranslation('store');
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const [rewards, setRewards] = useState<any[]>([]);
@@ -130,11 +134,19 @@ export default function StoreScreen() {
     }
   }, [session?.user, activeGymId]);
 
+  // Prizes are gym-local: a leaderboard / arena prize is collected at the
+  // gym where it was earned and cannot be redeemed elsewhere. Scope the
+  // "Your Prizes" section to the active gym so a prize from gym A never
+  // shows up in gym B's store (where tapping it would land the user on
+  // an empty /redemptions screen — the bug this resolves).
   const loadPrizes = useCallback(async () => {
-    if (!session?.user) return;
+    if (!session?.user || !activeGymId) {
+      setPrizes([]);
+      return;
+    }
     try {
       const { data } = await supabase.rpc('get_my_redemptions', {
-        p_gym_id: undefined,
+        p_gym_id: activeGymId,
         p_statuses: ['pending', 'pending_verification'],
         p_limit: null,
       });
@@ -143,11 +155,13 @@ export default function StoreScreen() {
           (r) => r.source_type === 'arena_prize' || r.source_type === 'leaderboard_prize',
         );
         setPrizes(prizeRows);
+      } else {
+        setPrizes([]);
       }
     } catch (err) {
       log.error('[Store] Error loading prizes:', err);
     }
-  }, [session?.user]);
+  }, [session?.user, activeGymId]);
 
   useFocusEffect(
     useCallback(() => {
