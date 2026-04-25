@@ -33,6 +33,15 @@ const ACTIVITIES = {
   crossfit:      'mdi:kettlebell',
 };
 
+// Strip explicit color attributes so the icon inherits fill/stroke from the
+// parent <g>. We preserve `fill="none"` and `stroke="none"` (semantic, not color).
+function sanitizeIconInner(inner) {
+  return inner
+    .replace(/\sfill="(?!none\b)[^"]*"/gi, '')
+    .replace(/\sstroke="(?!none\b)[^"]*"/gi, '')
+    .replace(/\scolor="[^"]*"/gi, '');
+}
+
 // ---------- Fetch icon SVG from Iconify ----------
 // Returns { inner, viewBox: { w, h } } so we can scale correctly for any viewBox.
 async function fetchIcon(ref) {
@@ -50,12 +59,12 @@ async function fetchIcon(ref) {
     vbH = parts[3];
   }
 
-  const inner = svg
+  const innerRaw = svg
     .replace(/^[\s\S]*?<svg[^>]*>/, '')
     .replace(/<\/svg>\s*$/, '')
     .trim();
 
-  return { inner, vbW, vbH };
+  return { inner: sanitizeIconInner(innerRaw), vbW, vbH };
 }
 
 // ---------- SVG template ----------
@@ -71,13 +80,15 @@ function renderSVG({ icon, color }) {
   const scaledH = icon.vbH * scale;
   const tx = (SIZE - scaledW) / 2;
   const ty = (SIZE - scaledH) / 2;
+  // Soft offset shadow under the icon (purely translated, no filter — works in resvg)
+  const shadowDy = 4;
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
   <defs>
     <radialGradient id="aura" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"  stop-color="${c.aura}" stop-opacity="0.25"/>
-      <stop offset="70%" stop-color="${c.aura}" stop-opacity="0.05"/>
+      <stop offset="0%"  stop-color="${c.aura}" stop-opacity="0.30"/>
+      <stop offset="70%" stop-color="${c.aura}" stop-opacity="0.06"/>
       <stop offset="100%" stop-color="${c.aura}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -85,9 +96,31 @@ function renderSVG({ icon, color }) {
       <stop offset="50%"  stop-color="${c.light}"/>
       <stop offset="100%" stop-color="${c.dark}"/>
     </linearGradient>
-    <linearGradient id="glass" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.12"/>
+    <linearGradient id="silverPlate" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#FAFBFD"/>
+      <stop offset="32%"  stop-color="#DCE2EB"/>
+      <stop offset="55%"  stop-color="#B6BDC8"/>
+      <stop offset="78%"  stop-color="#D6DCE5"/>
+      <stop offset="100%" stop-color="#F4F6FA"/>
+    </linearGradient>
+    <linearGradient id="silverShine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="45%"  stop-color="#FFFFFF" stop-opacity="0.10"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="plateVignette" cx="50%" cy="50%" r="50%">
+      <stop offset="55%"  stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.22"/>
+    </radialGradient>
+    <radialGradient id="specularHi" cx="35%" cy="30%" r="55%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="60%"  stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="iconMetal" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#5E6776"/>
+      <stop offset="55%"  stop-color="#262E3D"/>
+      <stop offset="100%" stop-color="#0E131C"/>
     </linearGradient>
     <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="6"/>
@@ -97,20 +130,43 @@ function renderSVG({ icon, color }) {
   <!-- Aura -->
   <circle cx="256" cy="256" r="256" fill="url(#aura)"/>
 
-  <!-- Drop shadow -->
-  <circle cx="256" cy="268" r="224" fill="#000" opacity="0.45" filter="url(#softShadow)"/>
+  <!-- Drop shadow under the badge -->
+  <circle cx="256" cy="270" r="224" fill="#000" opacity="0.5" filter="url(#softShadow)"/>
 
   <!-- Outer color ring -->
   <circle cx="256" cy="256" r="224" fill="url(#ring)"/>
-  <circle cx="256" cy="256" r="224" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="2"/>
+  <circle cx="256" cy="256" r="224" fill="none" stroke="#000" stroke-opacity="0.30" stroke-width="2"/>
+  <circle cx="256" cy="256" r="221" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="1"/>
 
-  <!-- Inner glass disk -->
-  <circle cx="256" cy="256" r="176" fill="rgba(18,20,30,0.94)"/>
-  <circle cx="256" cy="256" r="176" fill="url(#glass)"/>
-  <circle cx="256" cy="256" r="176" fill="none" stroke="${c.aura}" stroke-opacity="0.35" stroke-width="2"/>
+  <!-- Inner metallic silver plate -->
+  <circle cx="256" cy="256" r="176" fill="url(#silverPlate)"/>
+  <circle cx="256" cy="256" r="176" fill="url(#silverShine)"/>
 
-  <!-- Activity icon (centered, scaled from ${icon.vbW}x${icon.vbH} to fit ${ICON_SIZE}x${ICON_SIZE}) -->
-  <g transform="translate(${tx.toFixed(1)},${ty.toFixed(1)}) scale(${scale.toFixed(4)})" fill="#FFFFFF" stroke="none">
+  <!-- Brushed-metal concentric arcs (very subtle) -->
+  <g fill="none">
+    <circle cx="256" cy="256" r="168" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="1"/>
+    <circle cx="256" cy="256" r="156" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="1"/>
+    <circle cx="256" cy="256" r="142" stroke="#000000" stroke-opacity="0.06" stroke-width="1"/>
+    <circle cx="256" cy="256" r="126" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="1"/>
+  </g>
+
+  <!-- Specular highlight (top-left lit) -->
+  <circle cx="256" cy="256" r="176" fill="url(#specularHi)"/>
+  <ellipse cx="206" cy="196" rx="118" ry="48" fill="#FFFFFF" fill-opacity="0.18"/>
+
+  <!-- Plate vignette (darkens edges for depth) -->
+  <circle cx="256" cy="256" r="176" fill="url(#plateVignette)"/>
+
+  <!-- Inner bezel rings -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="${c.aura}" stroke-opacity="0.55" stroke-width="2"/>
+  <circle cx="256" cy="256" r="170" fill="none" stroke="${c.aura}" stroke-opacity="0.18" stroke-width="1"/>
+
+  <!-- Activity icon — soft drop shadow underlay (covers both filled & stroke icons) -->
+  <g transform="translate(${tx.toFixed(1)},${(ty + shadowDy).toFixed(1)}) scale(${scale.toFixed(4)})" fill="#000000" fill-opacity="0.22" stroke="#000000" stroke-opacity="0.22">
+    ${icon.inner}
+  </g>
+  <!-- Activity icon — metallic gradient (inherited via fill/stroke on parent <g>) -->
+  <g transform="translate(${tx.toFixed(1)},${ty.toFixed(1)}) scale(${scale.toFixed(4)})" fill="url(#iconMetal)" stroke="url(#iconMetal)">
     ${icon.inner}
   </g>
 
