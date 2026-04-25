@@ -99,5 +99,22 @@
   "noCompletedArenas": "Još nema završenih arena",
   "noCompletedArenasDesc": "Takmičenja koja si završio/la će se pojaviti ovde",
   "upcomingPill": "USKORO",
-  "rankResult": "#{{rank}} / {{total}}"
+  "rankResult": "#{{rank}} / {{total}}",
+  "infoSheetTitle": "Sweat Arene",
+  "infoSheetWhat": "Arene su međuteretanska takmičenja u kojima članovi sakupljaju poene trenirajući. Takmičiš se protiv članova iz drugih teretana i osvajaš prave nagrade za najbolje plasmane.",
+  "infoSheetClose": "Razumem",
+  "infoScoringTitle": "Modeli bodovanja",
+  "infoScoringDrops": "Ukupno drops — osvoji najviše drops-ova kroz sve sesije",
+  "infoScoringDays": "Posećeni dani — treniraj najveći broj različitih dana",
+  "infoScoringVariety": "Raznolikost — koristi najširi spektar sprava",
+  "infoScoringStreak": "Dani niza — izgradi najduži neprekidni niz treninga",
+  "infoPrizesTitle": "Nagrade",
+  "infoRank1": "1. mesto — glavna nagrada",
+  "infoRank2": "2. mesto — druga nagrada",
+  "infoRank3": "3. mesto — treća nagrada",
+  "infoPrizesCollect": "Fizičke nagrade se preuzimaju na recepciji teretane u kojoj si se prijavio/la. Dobićeš kod za preuzimanje kada se arena završi.",
+  "infoJoinTitle": "Kako se pridružiti",
+  "infoJoinHow": "Klikni na bilo koju aktivnu arenu i pritisni \"Pridruži se\". Neke arene zahtevaju minimalan niz treninga ili ulaz u drops-ovima. Kada se pridružiš, tvoje sesije se automatski računaju za tvoj rezultat.",
+  "viewMyPrizes": "Pogledaj nagrade",
+  "collectAt": "Preuzmi u: {{gym}}"
 }

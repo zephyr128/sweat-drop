@@ -102,6 +102,7 @@ export default function ArenaDetailScreen() {
   const [userProfile, setUserProfile] = useState<{ streak_days: number; total_drops: number } | null>(null);
   const [localBalance, setLocalBalance] = useState(0);
   const [arenaResult, setArenaResult] = useState<ArenaResult | null>(null);
+  const [collectionGymName, setCollectionGymName] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
 
   const arenaColors = useMemo(() => {
@@ -207,6 +208,20 @@ export default function ArenaDetailScreen() {
             top_participants: row.top_participants || [],
           });
         }
+      }
+
+      // Fetch collection gym name from arena_participants
+      const { data: participantData } = await supabase
+        .from('arena_participants')
+        .select('gym_id, gyms(name)')
+        .eq('arena_id', id)
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (participantData?.gyms) {
+        const gymsData = participantData.gyms as { name: string } | { name: string }[];
+        const gymName = Array.isArray(gymsData) ? gymsData[0]?.name : gymsData?.name;
+        setCollectionGymName(gymName ?? null);
       }
     } catch (err) {
       log.error('Arena result error:', err);
@@ -703,55 +718,80 @@ export default function ArenaDetailScreen() {
 
             {/* Prize won */}
             {arenaResult.prize_description && (
-              <Animated.View entering={FadeInDown.delay(320).duration(400)}>
-                <View style={[
-                  styles.card,
-                  { borderTopColor: hexToRgba(arenaColors.primary, 0.25), borderLeftColor: hexToRgba(arenaColors.primary, 0.10), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' },
-                ]}>
-                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
-                    <View style={styles.cardHeader}>
-                      <View style={[styles.cardIconWrap, { backgroundColor: hexToRgba(arenaColors.primary, 0.10) }]}>
-                        <Ionicons name="trophy-outline" size={16} color={arenaColors.primary} />
-                      </View>
-                      <Text style={styles.cardTitle}>{t('yourPrize')}</Text>
-                    </View>
-
-                    <Text style={[styles.prizeWonText, { color: arenaColors.primary }]}>
-                      {arenaResult.prize_description}
-                    </Text>
-
-                    {arenaResult.redemption_code && (
-                      <View style={styles.redemptionCodeRow}>
-                        <View style={[styles.redemptionCodeBox, { backgroundColor: hexToRgba(arenaColors.primary, 0.08) }]}>
-                          <Text style={styles.redemptionCodeLabel}>{t('redemptionCode')}</Text>
-                          <Text style={[styles.redemptionCodeValue, getNumberStyle(16)]}>{arenaResult.redemption_code}</Text>
+              <>
+                <Animated.View entering={FadeInDown.delay(320).duration(400)}>
+                  <View style={[
+                    styles.card,
+                    { borderTopColor: hexToRgba(arenaColors.primary, 0.25), borderLeftColor: hexToRgba(arenaColors.primary, 0.10), borderRightColor: 'rgba(255,255,255,0.04)', borderBottomColor: 'rgba(255,255,255,0.02)' },
+                  ]}>
+                    <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
+                      <View style={styles.cardHeader}>
+                        <View style={[styles.cardIconWrap, { backgroundColor: hexToRgba(arenaColors.primary, 0.10) }]}>
+                          <Ionicons name="trophy-outline" size={16} color={arenaColors.primary} />
                         </View>
-                        <TouchableOpacity
-                          style={[styles.copyButton, { backgroundColor: hexToRgba(arenaColors.primary, 0.15) }]}
-                          onPress={() => handleCopyCode(arenaResult.redemption_code!)}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name={codeCopied ? 'checkmark' : 'copy-outline'} size={18} color={arenaColors.primary} />
-                          {codeCopied && <Text style={[styles.copiedText, { color: arenaColors.primary }]}>{t('copied')}</Text>}
-                        </TouchableOpacity>
+                        <Text style={styles.cardTitle}>{t('yourPrize')}</Text>
                       </View>
-                    )}
 
-                    {arenaResult.redemption_status && (
-                      <View style={styles.redemptionStatusRow}>
-                        <Ionicons
-                          name={arenaResult.redemption_status === 'redeemed' ? 'checkmark-circle' : 'time-outline'}
-                          size={13}
-                          color={arenaResult.redemption_status === 'redeemed' ? '#4ade80' : theme.colors.textTertiary}
-                        />
-                        <Text style={[styles.redemptionStatusText, arenaResult.redemption_status === 'redeemed' && { color: '#4ade80' }]}>
-                          {arenaResult.redemption_status === 'redeemed' ? t('redeemed') : t('pendingRedemption')}
-                        </Text>
-                      </View>
-                    )}
-                  </PlatformBlur>
-                </View>
-              </Animated.View>
+                      <Text style={[styles.prizeWonText, { color: arenaColors.primary }]}>
+                        {arenaResult.prize_description}
+                      </Text>
+
+                      {arenaResult.redemption_code && (
+                        <View style={styles.redemptionCodeRow}>
+                          <View style={[styles.redemptionCodeBox, { backgroundColor: hexToRgba(arenaColors.primary, 0.08) }]}>
+                            <Text style={styles.redemptionCodeLabel}>{t('redemptionCode')}</Text>
+                            <Text style={[styles.redemptionCodeValue, getNumberStyle(16)]}>{arenaResult.redemption_code}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[styles.copyButton, { backgroundColor: hexToRgba(arenaColors.primary, 0.15) }]}
+                            onPress={() => handleCopyCode(arenaResult.redemption_code!)}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name={codeCopied ? 'checkmark' : 'copy-outline'} size={18} color={arenaColors.primary} />
+                            {codeCopied && <Text style={[styles.copiedText, { color: arenaColors.primary }]}>{t('copied')}</Text>}
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {arenaResult.redemption_status && (
+                        <View style={styles.redemptionStatusRow}>
+                          <Ionicons
+                            name={arenaResult.redemption_status === 'redeemed' ? 'checkmark-circle' : 'time-outline'}
+                            size={13}
+                            color={arenaResult.redemption_status === 'redeemed' ? '#4ade80' : theme.colors.textTertiary}
+                          />
+                          <Text style={[styles.redemptionStatusText, arenaResult.redemption_status === 'redeemed' && { color: '#4ade80' }]}>
+                            {arenaResult.redemption_status === 'redeemed' ? t('redeemed') : t('pendingRedemption')}
+                          </Text>
+                        </View>
+                      )}
+
+                      {collectionGymName && (
+                        <View style={[styles.redemptionStatusRow, { marginTop: 6 }]}>
+                          <Ionicons name="location-outline" size={13} color={theme.colors.textTertiary} />
+                          <Text style={styles.redemptionStatusText}>
+                            {t('collectAt', { gym: collectionGymName })}
+                          </Text>
+                        </View>
+                      )}
+                    </PlatformBlur>
+                  </View>
+                </Animated.View>
+
+                <Animated.View entering={FadeInDown.delay(370).duration(400)}>
+                  <TouchableOpacity
+                    style={[styles.viewPrizesButton, { borderColor: hexToRgba(arenaColors.primary, 0.30) }]}
+                    onPress={() => router.push('/redemptions')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="gift-outline" size={17} color={arenaColors.primary} />
+                    <Text style={[styles.viewPrizesText, { color: arenaColors.primary }]}>
+                      {t('viewMyPrizes')}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={hexToRgba(arenaColors.primary, 0.6)} />
+                  </TouchableOpacity>
+                </Animated.View>
+              </>
             )}
 
             {/* Final leaderboard */}
@@ -1508,5 +1548,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textTertiary,
     letterSpacing: 0.2,
+  },
+
+  /* View prizes button */
+  viewPrizesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  viewPrizesText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
 });

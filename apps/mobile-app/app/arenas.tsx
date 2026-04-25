@@ -25,6 +25,7 @@ import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { useAvailableArenas, type AvailableArena } from '@/hooks/useAvailableArenas';
 import { useSession } from '@/hooks/useSession';
 import { SliderTabs } from '@/components/SliderTabs';
+import { ArenaInfoSheet } from '@/components/ArenaInfoSheet';
 
 const CYAN = '#22D3EE';
 const GOLD = '#EAB308';
@@ -62,6 +63,7 @@ export default function ArenasScreen() {
   const { arenas, loading, refresh } = useAvailableArenas();
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
+  const [infoSheetVisible, setInfoSheetVisible] = useState(false);
   const hasLoadedRef = useRef(false);
 
   useFocusEffect(
@@ -457,7 +459,18 @@ export default function ArenasScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <ScreenHeader title={t('title')} />
+      <ScreenHeader
+        title={t('title')}
+        right={
+          <TouchableOpacity
+            onPress={() => setInfoSheetVisible(true)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="information-circle-outline" size={22} color={CYAN} />
+          </TouchableOpacity>
+        }
+      />
 
       <SliderTabs
         tabs={[
@@ -473,6 +486,12 @@ export default function ArenasScreen() {
         {activePage}
         {completedPage}
       </SliderTabs>
+
+      <ArenaInfoSheet
+        visible={infoSheetVisible}
+        onClose={() => setInfoSheetVisible(false)}
+        accentColor={CYAN}
+      />
     </View>
   );
 }

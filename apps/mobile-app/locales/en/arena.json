@@ -98,5 +98,22 @@
   "noCompletedArenas": "No completed arenas yet",
   "noCompletedArenasDesc": "Your finished competitions will appear here",
   "upcomingPill": "UPCOMING",
-  "rankResult": "#{{rank}} / {{total}}"
+  "rankResult": "#{{rank}} / {{total}}",
+  "infoSheetTitle": "Sweat Arenas",
+  "infoSheetWhat": "Arenas are inter-gym competitions where members earn points by training. Compete against members from other gyms in your network and win real prizes for top placements.",
+  "infoSheetClose": "Got it",
+  "infoScoringTitle": "Scoring models",
+  "infoScoringDrops": "Total Drops — earn the most drops across all sessions",
+  "infoScoringDays": "Days Visited — train on the most unique days",
+  "infoScoringVariety": "Variety Score — use the widest range of machines",
+  "infoScoringStreak": "Streak Days — build the longest unbroken training streak",
+  "infoPrizesTitle": "Prizes",
+  "infoRank1": "1st place — top prize",
+  "infoRank2": "2nd place — runner-up prize",
+  "infoRank3": "3rd place — bronze prize",
+  "infoPrizesCollect": "Physical prizes are collected at your opt-in gym's reception desk. You'll receive a redemption code when the arena ends.",
+  "infoJoinTitle": "How to join",
+  "infoJoinHow": "Tap any active arena card and press \"Join Arena\". Some arenas require a minimum streak or a drops entry fee. Once joined, your training sessions automatically count toward your score.",
+  "viewMyPrizes": "View My Prizes",
+  "collectAt": "Collect at: {{gym}}"
 }
