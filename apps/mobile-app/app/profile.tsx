@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
 import { useGymStore } from '@/lib/stores/useGymStore';
+import { useAppModal } from '@/lib/stores/useAppModal';
 import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { VerificationSheet } from '@/components/VerificationSheet';
@@ -91,6 +92,19 @@ export default function ProfileScreen() {
   const { t } = useTranslation('profile');
   const { t: tCommon } = useTranslation('common');
   const { t: tSocial } = useTranslation('socialFriends');
+  const showModal = useAppModal((s) => s.showModal);
+
+  // Lifetime drops on the profile is a vanity / cumulative-across-gyms stat.
+  // Spendable drops are kept gym-local (gym_memberships.local_drops_balance),
+  // so the two numbers genuinely differ. Surface a modal explaining this so
+  // users don't tap the profile number expecting it to match a gym's store.
+  const showLifetimeDropsInfo = useCallback(() => {
+    showModal({
+      title: t('lifetimeDropsInfoTitle'),
+      body: t('lifetimeDropsInfoBody'),
+      buttons: [{ label: tCommon('ok'), style: 'default' }],
+    });
+  }, [showModal, t, tCommon]);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats>({ totalWorkouts: 0, totalHours: 0, totalDropsEarned: 0 });
   const [userGyms, setUserGyms] = useState<UserGym[]>([]);
@@ -439,22 +453,38 @@ export default function ProfileScreen() {
               {/* ── Stat strip ── */}
               <View style={[styles.heroStatStrip, { borderTopColor: hexToRgba(branding.primary, 0.10) }]}>
                 {[
-                  { icon: 'water' as const,   value: profile?.total_drops  ?? 0,          label: t('totalDrops'),   color: branding.primary, numeric: true },
+                  { icon: 'water' as const,   value: profile?.total_drops  ?? 0,          label: t('totalDrops'),   color: branding.primary, numeric: true, onInfo: showLifetimeDropsInfo },
                   { icon: 'flame' as const,    value: profile?.streak_days  ?? 0,          label: t('streak'),       color: '#FF6B00',         numeric: true },
                   { icon: 'barbell' as const,  value: stats.totalWorkouts,                 label: t('totalWorkouts'), color: branding.primary, numeric: true },
                   { icon: 'time' as const,     value: stats.totalHours > 0 ? `${stats.totalHours}h` : '—', label: t('trained'), color: branding.primary, numeric: false },
-                ].map((s, i, arr) => (
-                  <View key={i} style={styles.heroStatItem}>
-                    {i > 0 && <View style={[styles.heroStatDivider, { backgroundColor: hexToRgba(branding.primary, 0.10) }]} />}
-                    <Ionicons name={s.icon} size={14} color={s.color} />
-                    <Text style={[styles.heroStatValue, getNumberStyle(15), { color: '#FFFFFF' }]}>
-                      {s.numeric && typeof s.value === 'number'
-                        ? (s.value === 0 ? '—' : s.value.toLocaleString())
-                        : s.value}
-                    </Text>
-                    <Text style={styles.heroStatLabel}>{s.label}</Text>
-                  </View>
-                ))}
+                ].map((s, i, arr) => {
+                  const Wrapper: React.ComponentType<any> = s.onInfo ? TouchableOpacity : View;
+                  const wrapperProps = s.onInfo
+                    ? { activeOpacity: 0.7, onPress: s.onInfo, accessibilityRole: 'button' as const, hitSlop: { top: 6, bottom: 6, left: 6, right: 6 } }
+                    : {};
+                  return (
+                    <Wrapper key={i} style={styles.heroStatItem} {...wrapperProps}>
+                      {i > 0 && <View style={[styles.heroStatDivider, { backgroundColor: hexToRgba(branding.primary, 0.10) }]} />}
+                      <Ionicons name={s.icon} size={14} color={s.color} />
+                      <Text style={[styles.heroStatValue, getNumberStyle(15), { color: '#FFFFFF' }]}>
+                        {s.numeric && typeof s.value === 'number'
+                          ? (s.value === 0 ? '—' : s.value.toLocaleString())
+                          : s.value}
+                      </Text>
+                      <View style={styles.heroStatLabelRow}>
+                        <Text style={styles.heroStatLabel}>{s.label}</Text>
+                        {s.onInfo ? (
+                          <Ionicons
+                            name="information-circle-outline"
+                            size={11}
+                            color="rgba(255,255,255,0.45)"
+                            style={styles.heroStatInfoIcon}
+                          />
+                        ) : null}
+                      </View>
+                    </Wrapper>
+                  );
+                })}
               </View>
 
               {/* ── View detailed stats strip ── */}
@@ -854,6 +884,14 @@ const styles = StyleSheet.create({
   },
   heroStatValue: { lineHeight: 19 },
   heroStatLabel: { ...fontStyles.body, fontSize: 9, color: 'rgba(255,255,255,0.38)', letterSpacing: 0.3, textTransform: 'uppercase', textAlign: 'center' },
+  heroStatLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroStatInfoIcon: {
+    marginLeft: 3,
+  },
 
   // gym strip
   gymStrip: {
