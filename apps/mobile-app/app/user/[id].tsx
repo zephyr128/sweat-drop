@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { localAvatarSource } from '@/lib/avatars';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,11 +10,31 @@ import { PlatformBlur } from '@/components/PlatformBlur';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { formatMonthYear } from '@/lib/utils/formatDate';
+import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
-import { useUserBadges, type UserBadge } from '@/hooks/useUserBadges';
+import { computeBestStreak } from '@/lib/streak/computeBestStreak';
+import { useSession } from '@/hooks/useSession';
+import { type UserBadge } from '@/hooks/useUserBadges';
+import { useAllBadgesWithProgress } from '@/hooks/useAllBadgesWithProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, getNumberStyle, fontStyles, hexToRgba} from '@/lib/theme';
+import { theme, getNumberStyle, fontStyles, hexToRgba } from '@/lib/theme';
 import ScreenHeader from '@/components/ScreenHeader';
+import { BadgeCard } from '@/components/BadgeCard';
+import { BadgeDetailModal } from '@/components/BadgeDetailModal';
+import { TIER_RANK } from '@/lib/badges/categoryMeta';
+import type { AchievementTier, BadgeWithProgress } from '@/hooks/useAllBadges';
+
+// Member-profile badge grid is a flat 4-column showcase (no category
+// grouping — that lives in the user's own Trophy Room). Sized so cards
+// pack neatly inside the panel chrome without horizontal overflow.
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const BADGE_COLUMNS = 4;
+const BADGE_GAP = 8;
+const PANEL_OUTER_PADDING = 16;     // ScrollView padding
+const PANEL_INNER_PADDING = 16;     // badgesSection padding
+const BADGE_AVAILABLE_WIDTH =
+  SCREEN_WIDTH - PANEL_OUTER_PADDING * 2 - PANEL_INNER_PADDING * 2 - BADGE_GAP * (BADGE_COLUMNS - 1);
+const BADGE_CELL_SIZE = Math.floor(BADGE_AVAILABLE_WIDTH / BADGE_COLUMNS);
 
 interface PublicProfile {
   id: string;
@@ -26,6 +46,19 @@ interface PublicProfile {
   is_newcomer: boolean;
 }
 
+// AGENT NOTE: [2026-04-25] - mobile-coder
+// Member profile screen mirrors the Trophy Room visual language: badges
+// render through `BadgeCard` (coin/ring/check), tier + category come from
+// the `get_user_badges` RPC (migration 20260425220000), and the all-time
+// best streak comes from `get_user_best_streak` (migration 20260425230000).
+//
+// Grid is a flat 4-column showcase — no category grouping. The user
+// explicitly asked for a clean grid here ("ne treba kategorije, po 4 u
+// redu"). Tier-sort puts the strongest globals first, then the rest.
+// `BadgeDetailModal` is opened in `canShare={false}` mode unless the
+// viewer is looking at their own profile, since you can't share another
+// user's badge as your own accomplishment.
+
 function formatDate(iso: string): string {
   return formatMonthYear(iso);
 }
@@ -34,30 +67,109 @@ export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation('memberProfile');
   const branding = useBranding();
+  const { session } = useSession();
+  const isOwnProfile = !!session?.user?.id && session.user.id === id;
   const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [bestStreak, setBestStreak] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { badges, loading: badgesLoading } = useUserBadges(id);
+
+  // AGENT NOTE: [2026-04-25] - mobile-coder
+  // Single source of truth for the badge ledger — same hook the Trophy
+  // Room uses, so the "earned" count never disagrees between surfaces.
+  // For the *own* profile this includes any global achievement whose
+  // criteria has been met (even before `evaluate_badges()` writes the
+  // user_badges row), eliminating the off-by-3 the user saw between
+  // Trophy Room (22) and Profile (19). For other-user views,
+  // `useUserProgress` returns an empty list under RLS so the count
+  // collapses back to the actual `user_badges` rows the RPC returns —
+  // which is the only thing we can know about another user.
+  const { allBadges, earnedBadges, loading: badgesLoading } = useAllBadgesWithProgress(id);
+
+  const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
+  const [selectedTier, setSelectedTier] = useState<AchievementTier | null>(null);
+  const [detailVisible, setDetailVisible] = useState(false);
+
+  // Client-side fallback for the best-streak compute when the dedicated
+  // RPC is unavailable (e.g. the migration hasn't been applied to this
+  // environment yet) AND the viewer is looking at their own profile —
+  // because `get_my_sessions` / `get_my_checkins` are auth.uid()-scoped
+  // and can't be used to read another user's history. Uses the shared
+  // `computeBestStreak` helper that buckets days in Europe/Belgrade,
+  // identical to the SQL RPC, so the value is consistent regardless of
+  // which path is taken.
+  const computeOwnBestStreak = useCallback(async (): Promise<number | null> => {
+    try {
+      const [sessionsRes, checkinsRes] = await Promise.all([
+        supabase.rpc('get_my_sessions', {
+          p_gym_id: null,
+          p_active_only: false,
+          p_since: null,
+          p_limit: 5000,
+        }),
+        supabase.rpc('get_my_checkins', {
+          p_gym_id: null,
+          p_since: null,
+          p_limit: 5000,
+        }),
+      ]);
+
+      return computeBestStreak(sessionsRes.data ?? [], checkinsRes.data ?? []);
+    } catch (err) {
+      log.error('[UserProfile] computeOwnBestStreak failed:', err);
+      return null;
+    }
+  }, []);
 
   const loadProfile = useCallback(async () => {
     if (!id) return;
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url, total_drops, streak_days, created_at, is_newcomer')
-        .eq('id', id)
-        .single();
+      // Profile fields + best-streak-ever fetched in parallel. The streak
+      // stat card surfaces the all-time max (per migration
+      // 20260425230000) instead of the live counter, which resets the
+      // first day a user skips.
+      const [profileRes, streakRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, username, avatar_url, total_drops, streak_days, created_at, is_newcomer')
+          .eq('id', id)
+          .single(),
+        supabase.rpc('get_user_best_streak', { p_user_id: id }),
+      ]);
 
-      if (!error && data) {
-        setProfile(data);
+      if (!profileRes.error && profileRes.data) {
+        setProfile(profileRes.data);
       }
-    } catch {
-      // silently fail
+
+      // RPC path: returns the all-time best streak (INTEGER scalar).
+      // We trust the RPC result whenever it succeeds — including 0,
+      // because that genuinely means "no completed sessions or check-ins
+      // ever", which is a real state for brand-new accounts.
+      if (!streakRes.error && streakRes.data !== null && streakRes.data !== undefined) {
+        const val = typeof streakRes.data === 'number' ? streakRes.data : Number(streakRes.data);
+        if (Number.isFinite(val)) {
+          setBestStreak(val);
+          return;
+        }
+      }
+
+      // RPC unavailable (most likely the migration hasn't been applied
+      // yet) — log the reason so the developer can spot it, and fall
+      // back to the client-side compute when looking at our own profile.
+      if (streakRes.error) {
+        log.error('[UserProfile] get_user_best_streak RPC failed:', streakRes.error);
+      }
+      if (isOwnProfile) {
+        const fallback = await computeOwnBestStreak();
+        if (fallback !== null) setBestStreak(fallback);
+      }
+    } catch (err) {
+      log.error('[UserProfile] loadProfile error:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id]);
+  }, [id, isOwnProfile, computeOwnBestStreak]);
 
   useEffect(() => {
     loadProfile();
@@ -67,6 +179,50 @@ export default function UserProfileScreen() {
     setRefreshing(true);
     loadProfile();
   }, [loadProfile]);
+
+  // Flat list, sorted: globals first by tier-rank descending (diamond →
+  // bronze → null), then gym challenges in earned-order. Keeps the most
+  // impressive achievements in the top row of the grid.
+  const earnedBadgesAll = useMemo<BadgeWithProgress[]>(
+    () => allBadges.filter((b) => b.is_earned),
+    [allBadges],
+  );
+
+  const sortedBadges = useMemo<BadgeWithProgress[]>(() => {
+    const tierWeight = (b: BadgeWithProgress): number =>
+      b.badge_type === 'global' ? (TIER_RANK[b.tier ?? ''] ?? -1) : -2;
+    return [...earnedBadgesAll].sort((a, b) => tierWeight(b) - tierWeight(a));
+  }, [earnedBadgesAll]);
+
+  // Maps a `BadgeWithProgress` (catalog shape) onto the `UserBadge`
+  // shape the detail modal expects. Mirrors what TrophyRoom does — when
+  // the user really has a row in `user_badges` we use that (so
+  // `earned_at` and the canonical id are real); otherwise we synthesise
+  // a stand-in record so the modal still renders without a network round
+  // trip. The "stand-in" path only matters for a viewer's own profile
+  // where progress-completed achievements show up before the badge row
+  // is written.
+  const handleBadgePress = useCallback(
+    (badge: BadgeWithProgress) => {
+      const earned = earnedBadges.find(
+        (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type,
+      );
+      const badgeForModal: UserBadge = earned || {
+        badge_id: badge.id,
+        badge_name: badge.name,
+        badge_description: badge.description,
+        badge_image_url: badge.badge_image_url,
+        earned_at: badge.earned_at || '',
+        badge_type: badge.badge_type,
+        gym_name: badge.gym_name,
+        gym_id: badge.gym_id || null,
+      };
+      setSelectedBadge(badgeForModal);
+      setSelectedTier(badge.tier ?? null);
+      setDetailVisible(true);
+    },
+    [earnedBadges],
+  );
 
   if (loading) {
     return (
@@ -162,9 +318,19 @@ export default function UserProfileScreen() {
               <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="flame" size={20} color="#FF6B35" />
                 <Text style={[styles.statValue, getNumberStyle(20)]}>
-                  {profile.streak_days}
+                  {/*
+                    Floor by `profile.streak_days` — the "best ever"
+                    must always be at least the current active streak,
+                    same logic My Stats already applies. Without this,
+                    a profile with current_streak = 10 and historical
+                    runs of <= 9 would show 9 here while My Stats shows
+                    10 (regression caught 2026-04-25).
+                  */}
+                  {bestStreak !== null
+                    ? Math.max(bestStreak, profile.streak_days)
+                    : (profile.streak_days || '—')}
                 </Text>
-                <Text style={styles.statLabel}>{t('streak')}</Text>
+                <Text style={styles.statLabel}>{t('bestStreak')}</Text>
               </PlatformBlur>
             </View>
 
@@ -172,7 +338,7 @@ export default function UserProfileScreen() {
               <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={[styles.statBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
                 <Ionicons name="ribbon" size={20} color="#FFD700" />
                 <Text style={[styles.statValue, getNumberStyle(20)]}>
-                  {badges.length}
+                  {earnedBadgesAll.length}
                 </Text>
                 <Text style={styles.statLabel}>{t('badges')}</Text>
               </PlatformBlur>
@@ -180,7 +346,7 @@ export default function UserProfileScreen() {
           </View>
         </Animated.View>
 
-        {/* Badges section */}
+        {/* Badges — grouped by Trophy Room category */}
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
           <View style={[styles.badgesSection, { borderColor: hexToRgba(branding.primary, 0.15) }]}>
             <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={[styles.badgesSectionBlur, { backgroundColor: 'rgba(20, 20, 30, 0.75)' }]}>
@@ -190,32 +356,37 @@ export default function UserProfileScreen() {
                   {t('earnedBadges')}
                 </Text>
                 <Text style={styles.badgesCount}>
-                  {badges.length}
+                  {earnedBadgesAll.length}
                 </Text>
               </View>
 
               {badgesLoading ? (
                 <ActivityIndicator size="small" color={branding.primary} style={{ padding: 20 }} />
-              ) : badges.length === 0 ? (
+              ) : sortedBadges.length === 0 ? (
                 <View style={styles.noBadges}>
                   <Ionicons name="trophy-outline" size={32} color={theme.colors.textTertiary} />
                   <Text style={styles.noBadgesText}>{t('noBadgesYet')}</Text>
                 </View>
               ) : (
-                <View style={styles.badgesGrid}>
-                  {badges.map((badge: UserBadge) => (
-                    <View key={badge.badge_id} style={styles.badgeItem}>
-                      {badge.badge_image_url ? (
-                        <Image source={badge.badge_image_url} style={styles.badgeImage} transition={200} />
-                      ) : (
-                        <View style={[styles.badgePlaceholder, { backgroundColor: hexToRgba(branding.primary, 0.1) }]}>
-                          <Ionicons name="ribbon" size={20} color={branding.primary} />
-                        </View>
-                      )}
-                      <Text style={styles.badgeName} numberOfLines={2}>
-                        {badge.badge_name}
-                      </Text>
-                    </View>
+                <View style={styles.grid}>
+                  {sortedBadges.map((b) => (
+                    <BadgeCard
+                      key={`${b.badge_type}-${b.id}`}
+                      badge={{
+                        badge_id: b.id,
+                        badge_name: b.name,
+                        badge_description: b.description,
+                        badge_image_url: b.badge_image_url,
+                        earned_at: b.earned_at || '',
+                        badge_type: b.badge_type,
+                        gym_name: b.gym_name,
+                        gym_id: b.gym_id || null,
+                      }}
+                      isLocked={false}
+                      onPress={() => handleBadgePress(b)}
+                      tier={b.tier ?? null}
+                      customSize={BADGE_CELL_SIZE}
+                    />
                   ))}
                 </View>
               )}
@@ -223,6 +394,20 @@ export default function UserProfileScreen() {
           </View>
         </Animated.View>
       </ScrollView>
+
+      <BadgeDetailModal
+        visible={detailVisible}
+        badge={selectedBadge}
+        isLocked={false}
+        progress={100}
+        tier={selectedTier}
+        canShare={isOwnProfile}
+        onClose={() => {
+          setDetailVisible(false);
+          setSelectedBadge(null);
+          setSelectedTier(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -382,33 +567,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
   },
-  badgesGrid: {
+
+  // Flat 4-column badge grid
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
-  badgeItem: {
-    width: '22%' as any,
-    alignItems: 'center',
-    gap: 4,
-  },
-  badgeImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-  },
-  badgePlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeName: {
-    ...fontStyles.body,
-    fontSize: 10,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 13,
+    columnGap: BADGE_GAP,
+    rowGap: 4,
   },
 });

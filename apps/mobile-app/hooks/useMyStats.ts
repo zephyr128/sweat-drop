@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
+import { computeBestStreak, toBelgradeDayKey } from '@/lib/streak/computeBestStreak';
 import { useSession } from './useSession';
 
 export type StatsPeriod = 'today' | 'week' | 'month' | 'all';
@@ -291,13 +292,21 @@ export function useMyStats(gymId: string | null | undefined) {
         p_limit: 5000,
       });
 
-      // Active days (distinct dates with session or checkin)
+      // Active days (distinct dates with session or checkin) — bucketed
+      // by Europe/Belgrade calendar day, NOT UTC. The UTC bucketing
+      // previously used here was inflating `periodBestStreak` by one
+      // day whenever a workout straddled UTC midnight (the workout at
+      // 00:30 Belgrade was being filed under the previous UTC day,
+      // which artificially extended the consecutive run). Belgrade is
+      // the canonical TZ everywhere else (gym_checkins unique index,
+      // streak award triggers, daily quotas) so the per-period view
+      // must agree.
       const activeDateStrings = new Set<string>();
       for (const s of sessions) {
-        if (s.started_at) activeDateStrings.add(new Date(s.started_at).toISOString().slice(0, 10));
+        if (s.started_at) activeDateStrings.add(toBelgradeDayKey(s.started_at));
       }
       for (const c of periodCheckinRows ?? []) {
-        if (c.checked_in_at) activeDateStrings.add(new Date(c.checked_in_at).toISOString().slice(0, 10));
+        if (c.checked_in_at) activeDateStrings.add(toBelgradeDayKey(c.checked_in_at));
       }
       const activeDays = activeDateStrings.size;
 
@@ -308,9 +317,12 @@ export function useMyStats(gymId: string | null | undefined) {
         let best = 1;
         let cur = 1;
         for (let i = 1; i < sorted.length; i++) {
-          const prev = new Date(sorted[i - 1]);
-          const curr = new Date(sorted[i]);
-          const diff = (curr.getTime() - prev.getTime()) / 86400000;
+          // Use UTC midnight for both date strings so the diff is the
+          // same regardless of host TZ — both inputs are bare YYYY-MM-DD
+          // produced from Belgrade-bucket above.
+          const prev = new Date(sorted[i - 1] + 'T00:00:00Z').getTime();
+          const curr = new Date(sorted[i] + 'T00:00:00Z').getTime();
+          const diff = Math.round((curr - prev) / 86400000);
           if (diff === 1) { cur++; best = Math.max(best, cur); }
           else if (diff > 1) { cur = 1; }
         }
@@ -560,7 +572,11 @@ export function useMyStats(gymId: string | null | undefined) {
         challengesCompleted = (rpcChallengeData ?? []).filter((c: any) => c.is_completed).length;
       }
 
-      // Best streak (always all-time)
+      // Best streak (always all-time). Uses Europe/Belgrade day grouping
+      // (via `computeBestStreak`) so this matches the SQL `get_user_best_streak`
+      // RPC used on the public profile screen — we MUST not disagree across
+      // surfaces. Naive UTC bucketing was producing ±1 day drift around
+      // midnight (regression caught 2026-04-25).
       let bestStreak = streak;
       try {
         const [allSessionsForStreak, allCheckinsForStreak] = await Promise.all([
@@ -577,25 +593,11 @@ export function useMyStats(gymId: string | null | undefined) {
           }),
         ]);
 
-        const dateSet = new Set<string>();
-        for (const s of (allSessionsForStreak.data ?? []).filter((s: any) => !s.is_active && (s.drops_earned ?? 0) > 0)) {
-          if (s.started_at) dateSet.add(new Date(s.started_at).toISOString().slice(0, 10));
-        }
-        for (const c of allCheckinsForStreak.data ?? []) {
-          if (c.checked_in_at) dateSet.add(new Date(c.checked_in_at).toISOString().slice(0, 10));
-        }
-        const sorted = [...dateSet].sort();
-        let maxStreak = 0;
-        let cur = 1;
-        for (let i = 1; i < sorted.length; i++) {
-          const prev = new Date(sorted[i - 1]);
-          const curr = new Date(sorted[i]);
-          const diff = (curr.getTime() - prev.getTime()) / 86400000;
-          if (diff === 1) { cur++; }
-          else if (diff > 1) { maxStreak = Math.max(maxStreak, cur); cur = 1; }
-        }
-        maxStreak = Math.max(maxStreak, cur);
-        bestStreak = Math.max(maxStreak, streak);
+        const historicalBest = computeBestStreak(
+          allSessionsForStreak.data ?? [],
+          allCheckinsForStreak.data ?? [],
+        );
+        bestStreak = Math.max(historicalBest, streak);
       } catch { /* non-critical */ }
 
       const newState: MyStatsState = {
