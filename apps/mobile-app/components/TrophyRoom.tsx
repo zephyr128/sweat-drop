@@ -23,6 +23,13 @@ const CATEGORY_ORDER: AchievementCategory[] = [
   'sessions', 'total_drops', 'streak', 'multi_gym', 'distance', 'special',
 ];
 
+// Below this badge count we drop per-category sub-headers and render the
+// section as a single flat grid ("Trophy Showcase" mode). Sub-section
+// headers feel like wasted whitespace when each category has only 1-2
+// badges; once the section grows past this threshold, categorising starts
+// helping the user navigate and we switch back to the grouped layout.
+const COMPACT_THRESHOLD = 12;
+
 const TIER_RANK: Record<string, number> = {
   bronze: 0, silver: 1, gold: 2, platinum: 3, diamond: 4,
 };
@@ -194,6 +201,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     badges: BadgeWithProgress[],
     sectionTitle: string,
     dotColor: string,
+    options?: { compact?: boolean },
   ) => {
     const globalCategorized = badges.filter((b) => b.badge_type === 'global' && b.category);
     const gymBadges = badges.filter((b) => b.badge_type === 'gym');
@@ -216,21 +224,47 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     if (!hasAnything) return null;
 
     const isAccent = dotColor !== 'rgba(255,255,255,0.2)';
+    const compact = options?.compact ?? false;
+
+    const header = (
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionDot, { backgroundColor: dotColor }]} />
+        <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+        <View style={[
+          styles.sectionCountPill,
+          isAccent && { backgroundColor: hexToRgba(dotColor, 0.14), borderColor: hexToRgba(dotColor, 0.2) },
+        ]}>
+          <Text style={[styles.sectionCountText, isAccent && { color: dotColor }]}>
+            {badges.length}
+          </Text>
+        </View>
+      </View>
+    );
+
+    // "Trophy Showcase" mode — when the section is sparse, drop the
+    // per-category sub-headers and render everything as one flat grid.
+    // We preserve the same logical order (global → gym → other; categories
+    // in CATEGORY_ORDER, sorted by tier within) so that crossing the
+    // COMPACT_THRESHOLD doesn't reshuffle the visual.
+    if (compact) {
+      const flat: BadgeWithProgress[] = [];
+      CATEGORY_ORDER.forEach((cat) => {
+        if (buckets[cat]?.length) flat.push(...buckets[cat]!);
+      });
+      flat.push(...gymBadges);
+      flat.push(...other);
+
+      return (
+        <View style={styles.section}>
+          {header}
+          <View style={styles.badgeGrid}>{flat.map(renderBadgeItem)}</View>
+        </View>
+      );
+    }
 
     return (
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={[styles.sectionDot, { backgroundColor: dotColor }]} />
-          <Text style={styles.sectionTitle}>{sectionTitle}</Text>
-          <View style={[
-            styles.sectionCountPill,
-            isAccent && { backgroundColor: hexToRgba(dotColor, 0.14), borderColor: hexToRgba(dotColor, 0.2) },
-          ]}>
-            <Text style={[styles.sectionCountText, isAccent && { color: dotColor }]}>
-              {badges.length}
-            </Text>
-          </View>
-        </View>
+        {header}
 
         {CATEGORY_ORDER.map((cat) => {
           const group = buckets[cat];
@@ -417,11 +451,13 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                       earnedPage,
                       t('sectionEarned'),
                       branding.primary,
+                      { compact: earnedPage.length < COMPACT_THRESHOLD },
                     )}
                     {lockedPage.length > 0 && renderBadgesByCategory(
                       lockedPage,
                       t('sectionInProgress'),
                       'rgba(255,255,255,0.2)',
+                      { compact: lockedPage.length < COMPACT_THRESHOLD },
                     )}
                   </>
                 )}
