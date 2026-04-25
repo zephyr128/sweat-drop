@@ -853,7 +853,7 @@ const styles = StyleSheet.create({
     width: StyleSheet.hairlineWidth,
   },
   heroStatValue: { lineHeight: 19 },
-  heroStatLabel: { ...fontStyles.body, fontSize: 9, color: 'rgba(255,255,255,0.38)', letterSpacing: 0.3, textTransform: 'uppercase' },
+  heroStatLabel: { ...fontStyles.body, fontSize: 9, color: 'rgba(255,255,255,0.38)', letterSpacing: 0.3, textTransform: 'uppercase', textAlign: 'center' },
 
   // gym strip
   gymStrip: {
