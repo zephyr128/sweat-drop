@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { useAvailableArenas, type AvailableArena } from '@/hooks/useAvailableArenas';
 import { useSession } from '@/hooks/useSession';
+import { useGymStore } from '@/lib/stores/useGymStore';
 import { SliderTabs } from '@/components/SliderTabs';
 import { ArenaInfoSheet } from '@/components/ArenaInfoSheet';
 
@@ -60,7 +61,12 @@ export default function ArenasScreen() {
   const { session } = useSession();
   const branding = useBranding();
   const { t } = useTranslation('arena');
-  const { arenas, loading, refresh } = useAvailableArenas();
+  // Subscribe to gym ids individually so a gym switch refetches arenas
+  // immediately (same pattern as home.tsx — see comment there).
+  const homeGymId = useGymStore((s) => s.homeGymId);
+  const previewGymId = useGymStore((s) => s.previewGymId);
+  const activeGymId = previewGymId || homeGymId;
+  const { arenas, loading, refresh } = useAvailableArenas(activeGymId);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [infoSheetVisible, setInfoSheetVisible] = useState(false);

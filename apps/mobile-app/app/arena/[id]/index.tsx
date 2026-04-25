@@ -28,6 +28,7 @@ import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { AvailableArena } from '@/hooks/useAvailableArenas';
 import ArenaGymBreakdown from '@/components/ArenaGymBreakdown';
 import { useAppModal } from '@/lib/stores/useAppModal';
+import { useGymStore } from '@/lib/stores/useGymStore';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,12 @@ export default function ArenaDetailScreen() {
   const branding = useBranding();
   const { t } = useTranslation('arena');
   const showModal = useAppModal((s) => s.showModal);
+  // Scope detail lookup by active gym so opening an arena via deep-link or
+  // stale nav state can't leak details from another gym (matches the
+  // backend filter in 20260425183000_arenas_visible_only_at_linked_gym.sql).
+  const homeGymId = useGymStore((s) => s.homeGymId);
+  const previewGymId = useGymStore((s) => s.previewGymId);
+  const activeGymId = previewGymId || homeGymId;
 
   const [arena, setArena] = useState<AvailableArena | null>(null);
   const [miniLeaderboard, setMiniLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -125,6 +132,7 @@ export default function ArenaDetailScreen() {
     try {
       const { data, error } = await supabase.rpc('get_available_arenas', {
         p_user_id: session.user.id,
+        p_gym_id: activeGymId ?? null,
       });
 
       if (error) {
@@ -170,7 +178,7 @@ export default function ArenaDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, id]);
+  }, [session?.user?.id, id, activeGymId]);
 
   const loadMiniLeaderboard = async () => {
     try {

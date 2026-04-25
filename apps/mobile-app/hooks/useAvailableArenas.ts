@@ -48,8 +48,15 @@ export interface AvailableArena {
  *  - backend/supabase/migrations/20260303100002_sweat_arenas_system.sql
  *  - apps/mobile-app/app/home.tsx (arena carousel)
  *  - apps/mobile-app/app/leaderboard.tsx (arenas tab)
+ *
+ * AGENT NOTE: [2026-04-25] - mobile-coder
+ * Accepts an optional `gymId` so callers can scope the visible arenas to
+ * the active gym. Local arenas linked to gym A must not appear when the
+ * user is browsing gym B's arena tab. The backend (see
+ * 20260425183000_arenas_visible_only_at_linked_gym.sql) enforces the same
+ * predicate via arena_gyms when p_gym_id is provided.
  */
-export function useAvailableArenas() {
+export function useAvailableArenas(gymId?: string | null) {
   const { session } = useSession();
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,6 +78,10 @@ export function useAvailableArenas() {
         async () => {
           const { data: rpcData, error } = await supabase.rpc('get_available_arenas', {
             p_user_id: session.user.id,
+            // When gymId is null/undefined the RPC falls back to the
+            // legacy "any user-membership" eligibility check, which keeps
+            // older callers working until they pass an explicit gym.
+            p_gym_id: gymId ?? null,
           });
           if (error) throw error;
           return rpcData as AvailableArena[];
@@ -91,7 +102,7 @@ export function useAvailableArenas() {
         setLoading(false);
       }
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, gymId]);
 
   useEffect(() => {
     loadArenas();

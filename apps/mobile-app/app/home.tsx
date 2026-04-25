@@ -375,8 +375,10 @@ export default function HomeScreen() {
   // ── New stats hook (streak, todayDrops, lastWorkout, closestReward, weeklyActivity) ──
   const { stats: homeStats, checkinStatus: homeCheckinStatus, refresh: refreshStats } = useHomeStats(activeGymId);
 
-  // Available arenas
-  const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas();
+  // Available arenas — scoped to the active gym so a local arena linked
+  // to gym A never leaks into gym B's view (mirrors the backend filter in
+  // 20260425183000_arenas_visible_only_at_linked_gym.sql).
+  const { arenas: availableArenas, refresh: refreshArenas } = useAvailableArenas(activeGymId);
   const activeArenas = availableArenas ? availableArenas.filter(a => a.arena_status !== 'ended') : [];
 
   // Happy Hour — upcoming windows card
