@@ -51,6 +51,9 @@
 --     them as expected.
 --   - Admin Panel: no change.
 
+-- Must drop first — PostgreSQL cannot change RETURNS TABLE column set via CREATE OR REPLACE
+DROP FUNCTION IF EXISTS public.get_user_drop_limits(UUID);
+
 CREATE OR REPLACE FUNCTION public.get_user_drop_limits(
   p_gym_id UUID
 )
