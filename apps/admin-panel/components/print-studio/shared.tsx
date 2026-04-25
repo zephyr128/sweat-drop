@@ -151,6 +151,13 @@ export function StickerArtwork({
       '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   };
 
+  // ── LANDSCAPE ────────────────────────────────────────────────────────
+  // Two columns: QR on the left, CTA centered on the right with a small
+  // "Powered by SweatDrop" footer pinned to the bottom-right of the
+  // content column. The previous design put a SweatDrop logo + wordmark
+  // in the top-right corner, which fought the CTA for visual weight and
+  // left awkward whitespace; the footer placement is humbler, brand-
+  // recognized, and frees the right column to lead with the call-to-action.
   if (preset.orientation === 'landscape') {
     return (
       <div style={frame}>
@@ -165,7 +172,7 @@ export function StickerArtwork({
             height: '100%',
             padding: isReception ? '0.4in' : '0.16in',
             columnGap: isReception ? '0.3in' : '0.14in',
-            alignItems: 'center',
+            alignItems: 'stretch',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -181,30 +188,15 @@ export function StickerArtwork({
               overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: isReception ? 8 : 5 }}>
-              <SweatDropGlyph
-                style={{
-                  width: isReception ? 20 : 11,
-                  height: isReception ? 20 : 11,
-                  color: cyan,
-                  flexShrink: 0,
-                }}
-              />
-              <div
-                style={{
-                  fontSize: isReception ? 12 : 7,
-                  letterSpacing: isReception ? 4 : 2,
-                  fontWeight: 700,
-                  color: cyan,
-                  textTransform: 'uppercase',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                SweatDrop
-              </div>
-            </div>
-
-            <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                minWidth: 0,
+              }}
+            >
               <div
                 style={{
                   fontSize: isReception ? 46 : 15,
@@ -261,14 +253,21 @@ export function StickerArtwork({
                 </>
               )}
             </div>
-
-            <div />
+            <PoweredByFooter scale={preset.scale} align="left" />
           </div>
         </div>
       </div>
     );
   }
 
+  // ── PORTRAIT + SQUARE ────────────────────────────────────────────────
+  // Single column. Previous design wedged a SweatDrop logo header at the
+  // top, the QR in the middle, and the CTA at the bottom — three rows
+  // competing for the same vertical space, which on the 2×2 in machine
+  // square felt cramped. New layout: QR + CTA become a single visually
+  // coherent block centered vertically; the small "Powered by SweatDrop"
+  // footer pins to the bottom. This gives the QR room to breathe and
+  // removes one fighting element from the stack.
   return (
     <div style={frame}>
       <SubtleGlow />
@@ -279,95 +278,133 @@ export function StickerArtwork({
           zIndex: 1,
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'space-between',
           height: '100%',
           padding: isReception ? '0.4in 0.38in' : '0.16in 0.14in',
           textAlign: 'center',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: isReception ? 8 : 5 }}>
-          <SweatDropGlyph
-            style={{
-              width: isReception ? 22 : 11,
-              height: isReception ? 22 : 11,
-              color: cyan,
-            }}
-          />
-          <div
-            style={{
-              fontSize: isReception ? 13 : 7,
-              letterSpacing: isReception ? 5 : 2,
-              fontWeight: 700,
-              color: cyan,
-              textTransform: 'uppercase',
-            }}
-          >
-            SweatDrop
-          </div>
-        </div>
-
-        <QRTile size={preset.qrSizePx} value={qrData} scale={preset.scale} glow={isReception} />
-
-        <div style={{ marginTop: isReception ? 6 : 2, width: '100%' }}>
-          <div
-            style={{
-              fontSize: isReception ? 40 : 15,
-              lineHeight: 0.95,
-              letterSpacing: isReception ? -0.5 : -0.2,
-              fontWeight: 900,
-              color: '#fff',
-              textTransform: 'uppercase',
-              wordBreak: 'break-word',
-            }}
-          >
-            {cta.line1}
-          </div>
-          {cta.line2 && (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: isReception ? 18 : 7,
+          }}
+        >
+          <QRTile size={preset.qrSizePx} value={qrData} scale={preset.scale} glow={isReception} />
+          <div style={{ width: '100%' }}>
             <div
               style={{
                 fontSize: isReception ? 40 : 15,
                 lineHeight: 0.95,
                 letterSpacing: isReception ? -0.5 : -0.2,
                 fontWeight: 900,
-                color: cyan,
+                color: '#fff',
                 textTransform: 'uppercase',
-                marginTop: isReception ? 4 : 1,
                 wordBreak: 'break-word',
               }}
             >
-              {cta.line2}
+              {cta.line1}
             </div>
-          )}
-          {caption && (
-            <>
+            {cta.line2 && (
               <div
                 style={{
-                  height: 1,
-                  width: isReception ? 100 : 36,
-                  background: cyan,
-                  margin: isReception ? '12px auto 8px' : '5px auto 3px',
-                }}
-              />
-              <div
-                style={{
-                  fontSize: isReception ? 12 : 7,
-                  color: '#fff',
-                  fontWeight: 600,
-                  letterSpacing: 0.5,
+                  fontSize: isReception ? 40 : 15,
+                  lineHeight: 0.95,
+                  letterSpacing: isReception ? -0.5 : -0.2,
+                  fontWeight: 900,
+                  color: cyan,
                   textTransform: 'uppercase',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  marginTop: isReception ? 4 : 1,
+                  wordBreak: 'break-word',
                 }}
               >
-                {caption}
+                {cta.line2}
               </div>
-            </>
-          )}
+            )}
+            {caption && (
+              <>
+                <div
+                  style={{
+                    height: 1,
+                    width: isReception ? 100 : 36,
+                    background: cyan,
+                    margin: isReception ? '12px auto 8px' : '5px auto 3px',
+                  }}
+                />
+                <div
+                  style={{
+                    fontSize: isReception ? 12 : 7,
+                    color: '#fff',
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {caption}
+                </div>
+              </>
+            )}
+          </div>
         </div>
+        <PoweredByFooter scale={preset.scale} align="center" />
+      </div>
+    </div>
+  );
+}
 
-        <div />
+// ---------------------------------------------------------------------------
+// Footer — humble "Powered by SweatDrop" attribution. Lives at the bottom
+// of every sticker so the QR + CTA can lead the visual hierarchy.
+// ---------------------------------------------------------------------------
+
+function PoweredByFooter({
+  scale,
+  align,
+}: {
+  scale: 'machine' | 'reception';
+  align: 'center' | 'left' | 'right';
+}) {
+  const isReception = scale === 'reception';
+  const justify =
+    align === 'center' ? 'center' : align === 'left' ? 'flex-start' : 'flex-end';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: justify,
+        gap: isReception ? 6 : 3,
+        opacity: 0.78,
+        marginTop: isReception ? 8 : 2,
+      }}
+    >
+      <SweatDropGlyph
+        style={{
+          width: isReception ? 10 : 6,
+          height: isReception ? 10 : 6,
+          color: '#00E5FF',
+          flexShrink: 0,
+        }}
+      />
+      <div
+        style={{
+          fontSize: isReception ? 9 : 5.5,
+          letterSpacing: isReception ? 1.6 : 0.8,
+          fontWeight: 600,
+          color: 'rgba(255,255,255,0.65)',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Powered by{' '}
+        <span style={{ color: '#00E5FF', fontWeight: 700 }}>SweatDrop</span>
       </div>
     </div>
   );
