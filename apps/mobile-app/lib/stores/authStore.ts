@@ -340,6 +340,19 @@ export const useAuthStore = create<AuthState>()(
 
       // ────────────────────────────────────────────────────
       // fetchProfile() — loads profile from Supabase
+      //
+      // CRITICAL: if the fetched profile belongs to an elevated role
+      // (admin / staff), this function MUST NOT write the profile or
+      // step into the store. Several callers race here on sign-in
+      // (the SIGNED_IN listener fires its own fetchProfile alongside
+      // the auth screen's awaited one), and any consumer that observes
+      // an admin profile + 'stepper' step in the store between the
+      // fetch and the rejectElevatedSession signOut would happily
+      // navigate to the onboarding stepper / how-it-works carousel.
+      // The fix is to do the role check INSIDE fetchProfile itself,
+      // call rejectElevatedSession synchronously, and leave profile
+      // null so every caller's downstream "is this a consumer?" guard
+      // can short-circuit to no-op.
       // ────────────────────────────────────────────────────
       fetchProfile: async () => {
         const session = get().session;
@@ -359,6 +372,21 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const profile = rpcData as unknown as ProfileData;
+
+          // Defense-in-depth: never seed an elevated-role profile into
+          // the auth store. Reset state to a clean signed-out shape and
+          // hand off to rejectElevatedSession which signs out + shows
+          // the "admin account detected" modal.
+          if (profile && !isConsumerRole(profile.role)) {
+            log.warn(
+              '[AuthStore] fetchProfile: elevated role detected, rejecting',
+              { role: profile.role },
+            );
+            set({ profile: null, onboardingStep: 'auth', isLoading: false });
+            await rejectElevatedSession('fetch_profile_elevated_role', profile.role);
+            return;
+          }
+
           const step = computeOnboardingStep(profile, get().onboardingStep);
           set({ profile, onboardingStep: step, isLoading: false });
         } catch (err) {

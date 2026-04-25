@@ -131,9 +131,19 @@ export default function AuthScreen() {
   const isLoading = googleLoading || appleLoading || emailLoading;
 
   // ── Navigate to correct onboarding step ──
+  // CRITICAL: must NOT navigate when there is no session. An elevated-role
+  // sign-in is rejected via rejectElevatedSession which clears the session
+  // before we get back here; falling through to /home in that case would
+  // briefly land the (now signed-out) user on a member-only screen and was
+  // the root cause of the "admin lands on how-it-works / onboarding" bug.
   const navigateToNextStep = () => {
-    const step = useAuthStore.getState().onboardingStep;
+    const state = useAuthStore.getState();
+    if (!state.session?.user) return;
+    const step = state.onboardingStep;
     switch (step) {
+      case 'auth':
+        // Already on /auth — nothing to do.
+        return;
       case 'stepper':
         router.replace('/(onboarding)/stepper');
         break;
@@ -146,17 +156,58 @@ export default function AuthScreen() {
       case 'notifications':
         router.replace('/(onboarding)/notifications');
         break;
+      case 'profile_setup':
+        router.replace('/(onboarding)/step-gender');
+        break;
       case 'done':
         router.replace('/home');
         break;
       default:
-        router.replace('/home');
+        // Unknown step — stay put rather than guess. Better a stuck auth
+        // screen than leaking a non-consumer into the member flow.
+        return;
     }
+  };
+
+  /**
+   * Pre-flight role check from the freshly-issued auth payload. Supabase
+   * stores the user role in app_metadata (and we mirror to user_metadata
+   * for older profiles), so we can reject elevated accounts SYNCHRONOUSLY
+   * before any state hits the auth store. This is the primary kill switch
+   * — finishSignInAfterSession's profile-based check is the backstop.
+   *
+   * Returns true when the caller should bail out (rejection has been
+   * triggered or is pending).
+   */
+  const rejectIfElevatedFromAuthUser = async (
+    authUser: { app_metadata?: Record<string, unknown> | null; user_metadata?: Record<string, unknown> | null } | null | undefined,
+    reason: string,
+  ): Promise<boolean> => {
+    const appRole = authUser?.app_metadata?.role;
+    const userRole = authUser?.user_metadata?.role;
+    const metaRole =
+      (typeof appRole === 'string' ? appRole : undefined) ??
+      (typeof userRole === 'string' ? userRole : undefined);
+    if (metaRole !== undefined && !isConsumerRole(metaRole)) {
+      await rejectElevatedSession(reason, metaRole);
+      return true;
+    }
+    return false;
   };
 
   // ── After session exists: profile, role guard, email verification gate ──
   const finishSignInAfterSession = async () => {
+    // Re-check session BEFORE any work — the SIGNED_IN listener may have
+    // already rejected an elevated account in parallel.
     const sessionUser = useAuthStore.getState().session?.user;
+    if (!sessionUser) return;
+
+    // Backstop: synchronous role check on the live auth user (covers a
+    // freshly rotated profile that wasn't in app_metadata at sign-in).
+    if (await rejectIfElevatedFromAuthUser(sessionUser, 'auth_screen_session_user_elevated')) {
+      return;
+    }
+
     if (sessionUser?.id) {
       const now = new Date().toISOString();
       await supabase
@@ -169,16 +220,32 @@ export default function AuthScreen() {
         .eq('id', sessionUser.id);
     }
 
-    await fetchProfile();
-    const profile = useAuthStore.getState().profile;
-    const freshSessionUser = useAuthStore.getState().session?.user;
+    // Re-check session — the long-running profile update above leaves
+    // a wide window for the SIGNED_IN listener's rejection to land.
+    if (!useAuthStore.getState().session?.user) return;
 
-    if (profile?.role && !isConsumerRole(profile.role)) {
+    await fetchProfile();
+
+    // After fetchProfile, profile is either a consumer profile or null
+    // (fetchProfile itself calls rejectElevatedSession on non-consumer
+    // roles and refuses to seed the store). If session was cleared in
+    // the meantime — by either rejection path — bail out without any
+    // navigation. Falling through here is what previously sent the
+    // user to /home or /(onboarding)/stepper.
+    const freshSessionUser = useAuthStore.getState().session?.user;
+    const profile = useAuthStore.getState().profile;
+
+    if (!freshSessionUser) return;
+
+    if (profile && !isConsumerRole(profile.role)) {
+      // Final backstop — this branch should be unreachable now that
+      // fetchProfile rejects internally, but we keep it so future
+      // refactors that bypass fetchProfile still hit the kill switch.
       await rejectElevatedSession('auth_screen_elevated_role', profile.role);
       return;
     }
 
-    if (freshSessionUser && shouldRequireEmailVerification(freshSessionUser)) {
+    if (shouldRequireEmailVerification(freshSessionUser)) {
       router.replace('/(onboarding)/verify-email');
       return;
     }
@@ -234,7 +301,7 @@ export default function AuthScreen() {
         throw new Error(t('auth.noIdTokenGoogle'));
       }
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { data: googleData, error } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
       });
@@ -245,6 +312,12 @@ export default function AuthScreen() {
       }
 
       if (__DEV__) log.debug('[Auth:Google] phase=supabase_ok');
+      // Pre-flight: kill admin/staff sessions synchronously from the
+      // freshly issued auth payload before any onboarding navigation can
+      // be triggered downstream.
+      if (await rejectIfElevatedFromAuthUser(googleData?.user, 'auth_google_elevated_role')) {
+        return;
+      }
       await finishSignInAfterSession();
     } catch (error: any) {
       const code = error?.code ?? '';
@@ -313,7 +386,7 @@ export default function AuthScreen() {
         throw new Error(t('auth.noIdTokenApple'));
       }
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { data: appleData, error } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
         nonce: nonce,
@@ -321,6 +394,9 @@ export default function AuthScreen() {
 
       if (error) throw error;
 
+      if (await rejectIfElevatedFromAuthUser(appleData?.user, 'auth_apple_elevated_role')) {
+        return;
+      }
       await finishSignInAfterSession();
     } catch (error: any) {
       const code = error?.code ?? '';
@@ -404,6 +480,12 @@ export default function AuthScreen() {
         });
 
       if (!signInError && signInData.session) {
+        // Pre-flight: kill admin/staff sessions synchronously from the
+        // freshly issued auth payload before finishSignInAfterSession
+        // (or any other handler) can trigger onboarding navigation.
+        if (await rejectIfElevatedFromAuthUser(signInData.user, 'auth_email_elevated_role')) {
+          return;
+        }
         await finishSignInAfterSession();
         return;
       }
@@ -436,6 +518,9 @@ export default function AuthScreen() {
         }
 
         if (signUpData.session) {
+          if (await rejectIfElevatedFromAuthUser(signUpData.user, 'auth_signup_elevated_role')) {
+            return;
+          }
           await finishSignInAfterSession();
         }
         return;
