@@ -2,7 +2,216 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-23 (prod hotfix: stop Android prod AAB from baking in dev `EXPO_PUBLIC_DEV_QR_UUID`)
+**Last Updated:** 2026-04-25 (`get_user_arena_result` anchor fix + four-state ended UI)
+
+---
+
+## [2026-04-25] - `get_user_arena_result`: always return one row for finalized arenas
+
+**Migrations**
+- `20260425280000_get_user_arena_result_always_return_row_for_finalized.sql`
+
+**Agents:** supabase-dba, mobile-coder
+
+#### User-Reported Problem
+> "Proveri zasto pise rezultati jos nisu dostupni za zavrsene arene"
+> ("Check why it says results not yet available for finished arenas.")
+
+The Decathlon arena on prod-v2 was finalized at 2026-04-25T00:30 UTC by
+the `finalize-arena` cron, but had zero participants. Mobile rendered
+the generic "Rezultati još nisu dostupni" placeholder, indistinguishable
+from an arena still pending finalization.
+
+#### Root Cause
+The previous `get_user_arena_result` body:
+```sql
+FROM public.arena_results ar
+WHERE ar.arena_id = p_arena_id
+  AND ar.user_id  = p_user_id;
+```
+With no row in `arena_results` for the (arena, user) pair, the entire
+result set was empty — including the `top_participants` subquery, which
+was computed per-row. Two distinct UX states collapsed into the same
+"no row" return: (a) arena still pending finalization, and (b) arena
+finalized but the caller didn't participate (or nobody did). Mobile
+treated both as state (a).
+
+#### Fix
+- Anchor on `public.sweat_arenas` with `LEFT JOIN` to `arena_results`
+  and `redemptions`. The function now produces one row for every
+  finalized arena; user-level columns are `NULL` when the caller has no
+  result entry.
+- `total_participants` and `top_participants` are always populated. A
+  finalized arena with no participants legitimately returns
+  `total_participants = 0` and `top_participants = []`.
+- Non-finalized arenas continue to return zero rows by design — the
+  mobile UI uses absence-of-row as the signal for "results pending".
+
+#### Frontend Changes
+- `apps/mobile-app/app/arena/[id]/index.tsx`:
+  - `loadArenaResult` is now invoked for **every** ended arena, not only
+    when the caller opted in. Non-participants now see the published
+    leaderboard.
+  - The ended-state branch was split into four sub-states:
+    1. Ended + not finalized → "Results being calculated".
+    2. Finalized + 0 participants → "Nobody joined this arena".
+    3. Finalized + user did not participate → "DNP" copy + full
+       leaderboard card.
+    4. Finalized + user has a result → original personal-result panel.
+  - The prizes card is now hidden only when the user has a personal
+    result (state 4). For states 1-3 the prize list remains visible so
+    people can see what was on the line.
+- `apps/mobile-app/hooks/useAvailableArenas.ts`: `AvailableArena` gains
+  `is_finalized: boolean` and `finalized_at: string | null` (the RPC has
+  returned them since 2026-03-11).
+- `apps/mobile-app/locales/{en,sr}/arena.json`: new keys
+  `noParticipants`, `didNotParticipate`. Existing `noResults` re-copied
+  from "Results not available yet" → "Results are being calculated" to
+  match its actual meaning.
+
+#### Verified Impact (prod-v2)
+| Arena | State | RPC return | UI render |
+| --- | --- | --- | --- |
+| Decathlon (finalized, 0 participants) | (2) | one row, all-null user fields, `total_participants=0`, `top_participants=[]` | "Nobody joined this arena" |
+| SweatDrop Arena (active, not finalized) | n/a | zero rows | n/a (active branch) |
+| Hypothetical: finalized + 5 participants, caller didn't join | (3) | one row, user fields null, leaderboard array length 5 | "DNP" + leaderboard |
+
+#### Breaking Changes
+None. Function signature and column list unchanged. Existing callers
+that read `final_rank` / `final_score` / `prize_description` already
+treat them as nullable, so no client churn beyond the mobile detail
+screen above.
+
+---
+
+## [2026-04-25] - `get_available_arenas`: stop hiding ended-but-not-finalized arenas
+
+**Migrations**
+- `20260425270000_get_available_arenas_show_ended_and_unfinalized.sql`
+
+**Agents:** supabase-dba
+
+#### User-Reported Problem
+> "U adminu kao vlasnik teretane jasno vidim da je jedna arena live i jedna
+> zavrsena za moju gym. Kada odem u app — nema nijedne arene. Nema aktivnih,
+> nema zavrsenih. Ovo se desava na produkciji. Dodajem arene, ali se nijedna
+> vise ne vidi u appu."
+
+Translation: in admin, the gym owner sees one live and one finished arena;
+mobile shows zero arenas. Reported on production.
+
+#### Root Cause
+`get_available_arenas`'s WHERE clause had two compounding date traps that
+filtered arenas the admin still surfaces:
+
+1. **Ended-but-not-finalized trap.** The predicate read:
+   ```
+   (is_finalized = false AND end_date >= CURRENT_DATE)
+   OR (is_finalized = true  AND end_date >= CURRENT_DATE - 30d)
+   ```
+   An arena whose `end_date < today` but whose `is_finalized` is still
+   `false` (because `finalize_arena()` runs only on superadmin click /
+   future cron) fell through both branches. A brand-new arena that ended
+   yesterday silently disappeared from the home carousel and arenas tab
+   until somebody finalized it manually.
+2. **30-day finalized window.** Even after `finalize_arena()` runs, the
+   arena vanishes from mobile after 30 days. The admin keeps showing it
+   indefinitely, so a gym whose only arenas finished >30 days ago shows
+   zero arenas in mobile while the admin lists them — exactly the
+   user-visible discrepancy.
+
+#### Fix
+- Replace the conditional date predicate with a single 90-day look-back:
+  `sa.end_date >= CURRENT_DATE - INTERVAL '90 days'`.
+- Keep `is_active = true` (admin can intentionally hide an arena).
+- The status `CASE` already maps `end_date < today → 'ended'` regardless
+  of `is_finalized`, so the existing mobile UI ("Ended" pill, finalized
+  banner) keeps rendering correctly.
+- Three-bucket ordering (upcoming → active → ended) preserved.
+
+#### Verified Impact
+| Gym | Before fix | After fix |
+| --- | --- | --- |
+| Vortex (1 active + 7 historical) | 3 arenas | 8 arenas |
+| NSF Autokomanda (3 finalized >30d ago) | 0 arenas | 3 arenas |
+| Play (3 finalized >30d ago) | 0 arenas | 3 arenas |
+| Blok 45 (no arena_gyms link) | 0 (correct) | 0 (correct) |
+
+#### Frontend Impact
+- **Mobile App** — arenas tab and home carousel now match what gym owners
+  see in the admin panel. No frontend code change required.
+- **Admin Panel** — no change.
+
+#### Breaking Changes
+None. Function signature and return columns are unchanged. Legacy mobile
+builds calling `get_available_arenas(p_user_id)` (single argument) keep
+working — `p_gym_id` remains `DEFAULT NULL` and falls back to the
+"any-gym membership" eligibility check.
+
+---
+
+## [2026-04-25] - Per-gym home dashboard: NULL gym_id backfill + stale-state hardening
+
+**Migrations**
+- `20260425260000_backfill_drops_transactions_gym_id.sql` (data-only)
+
+**Agents:** supabase-dba, mobile-coder
+
+#### User-Reported Problem
+> "I dalje mi na home screenu pisu drops iz druge teretane. U gym 1 sam zaradio
+> 56 drops + 30 bonus. Kada se prebacim u gym2 i dalje se vidi to, a treba da
+> pise 0 jer u tom gymu 2 nisam nista ostvario. Isto to i za today u gauge."
+
+Translation: home gauge / "+N bonus" pill keeps showing gym1's drops after the
+user switches to gym2.
+
+#### Root Cause (two compounding issues)
+1. **Backend — legacy NULL `gym_id` on `drops_transactions`.**
+   The deprecated `add_drops(p_user_id, p_gym_id, p_amount, …)` function
+   (last revised in `20250127170000_fix_add_drops_session_date.sql`, fully
+   dropped in `20260305000001_cleanup_unused_objects.sql`) accepted
+   `p_gym_id` but **never** included it in the INSERT into
+   `drops_transactions`. Every row it wrote — sessions, challenge rewards,
+   refunds — got `gym_id = NULL`. After `20260425181000` added the per-gym
+   filter `(p_gym_id IS NULL OR dt.gym_id = p_gym_id)` to
+   `get_home_dashboard.week_drops`, those legacy rows became invisible on
+   any specific gym (correct economically: an unattributable drop is not
+   gym-spendable). But the user still perceived "drops follow me everywhere"
+   because in environments where `20260425181000` had not been deployed,
+   the RPC returned all rows regardless of gym.
+2. **Frontend — `useHomeStats` / `useDropLimitStatus` / `useCompeteStats`
+   kept the previous gym's data on the screen until the new gym's RPC
+   resolved**, with no sentinel check on returning responses, so a slow
+   reply from gym1 could overwrite gym2's just-loaded state.
+
+#### Fixes
+**Backend** (`20260425260000_backfill_drops_transactions_gym_id.sql`):
+- Backfill `drops_transactions.gym_id` for legacy NULL rows by joining:
+  - `sessions` for `transaction_type = 'session'`
+  - `gym_checkins` (proximity match within ±2 min, single-candidate only) for `'checkin'`
+  - `gym_challenges` for `'challenge'`
+  - `arena_participants` (keyed on user_id + arena_id) for `'arena'`
+  - `redemptions` for `'reward_claim'` / `'redemption'` / `'expired'` / `'refund'`
+- Genuinely unattributable rows (e.g. `'bonus'` with deleted reference) are
+  intentionally left NULL — the home dashboard correctly excludes them.
+- Idempotent and safe to re-run.
+
+**Mobile**
+- `useHomeStats.ts`, `useDropLimitStatus.ts`, `useCompeteStats.ts`: added an
+  `activeGymRef` sentinel that
+  - resets state to empty/defaults the moment `gymId` changes (so the gauge
+    flips to 0 instantly, no stale gym1 values during the RPC round-trip), and
+  - drops in-flight responses whose `requestedGymId !== activeGymRef.current`
+    (race-condition guard for rapid gym switches).
+
+#### Deployment Required
+- **Verify `20260425181000_home_dashboard_gym_filter_and_badge_drops_fix.sql`
+  has been applied** to the target Supabase (`get_home_dashboard.week_drops`
+  must include the `(p_gym_id IS NULL OR dt.gym_id = p_gym_id)` predicate).
+  Without it, the per-gym view collapses back to "all drops everywhere".
+- Apply `20260425260000_backfill_drops_transactions_gym_id.sql` to clean up
+  any legacy NULL `gym_id` rows.
+- Ship the mobile changes.
 
 ---
 

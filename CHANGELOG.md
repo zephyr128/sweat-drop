@@ -22,6 +22,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `get_my_profile()` now includes `is_demo` for server-truth simulator gating (single-row RPC contract preserved)
   - `machines.is_demo_machine` and `get_my_demo_machine()` added to bind demo sessions to explicitly marked machines
 
+### Fixed
+- **"Results not available yet" stuck on already-finalized arenas**
+  (`20260425280000_get_user_arena_result_always_return_row_for_finalized.sql`
+  + mobile `apps/mobile-app/app/arena/[id]/index.tsx`):
+  `get_user_arena_result` was anchored on `arena_results` and returned
+  zero rows when the calling user had no entry. So a finalized arena that
+  the user did not opt in to — or one where nobody opted in (the
+  finalize_arena() cron still flips `is_finalized = true`) — looked
+  identical to an arena still pending finalization, and the mobile
+  rendered the "Rezultati još nisu dostupni" placeholder. The RPC now
+  anchors on `sweat_arenas` (LEFT JOIN to results), so it returns one row
+  for every finalized arena with `total_participants` and
+  `top_participants` always populated and user-level fields nullable. The
+  arena detail screen now distinguishes four ended states: pending
+  finalization, finalized-no-participants, finalized-DNP (with full
+  leaderboard), and finalized-with-personal-result. New i18n keys
+  `noParticipants` and `didNotParticipate` added.
+- **Arenas missing from mobile while admin shows them**
+  (`20260425270000_get_available_arenas_show_ended_and_unfinalized.sql`):
+  `get_available_arenas` previously hid arenas whose `end_date < today AND
+  is_finalized = false` (an arena that ended but hadn't been finalized
+  yet) and silently dropped finalized arenas after 30 days. Gym owners
+  saw "1 live + 1 finished" in the admin panel while the mobile app
+  showed an empty arenas tab. The function now returns every linked,
+  `is_active = true` arena whose `end_date` is within the last 90 days,
+  regardless of finalization. Status is computed from dates so
+  ended-but-not-finalized arenas correctly render as "Ended" in the UI.
+- **Home gauge bleeding across gyms** (`20260425260000_backfill_drops_transactions_gym_id.sql` + mobile):
+  Legacy `drops_transactions` rows minted by the deprecated `add_drops()`
+  function had `gym_id IS NULL`, so per-gym home dashboards either hid
+  them entirely (correct, post `20260425181000`) or — when that filter
+  hadn't shipped — showed identical totals in every gym. Backfilled
+  legacy `gym_id` from `sessions` / `gym_checkins` / `gym_challenges` /
+  `arena_participants` / `redemptions`. Mobile hooks `useHomeStats`,
+  `useDropLimitStatus` and `useCompeteStats` now reset state on `gymId`
+  change and drop stale RPC responses via an `activeGymRef` sentinel,
+  so switching gym1 → gym2 instantly flips the gauge / "+N bonus" pill
+  to gym2's values instead of holding gym1's totals during the RPC
+  round-trip.
+
 ---
 
 ## [2026-04-20] - Reception Reward Flow
