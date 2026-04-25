@@ -56,9 +56,14 @@ interface LeaderboardEntry {
   gym_name: string | null;
 }
 
+// After 20260425280000_get_user_arena_result_always_return_row_for_finalized.sql
+// the RPC returns one row for every finalized arena, even when the caller did
+// not participate or when nobody participated at all. User-level fields are
+// nullable in those cases. The mobile UI uses the nullability to distinguish
+// "you didn't participate" / "no participants" from "you placed Nth".
 interface ArenaResult {
-  final_rank: number;
-  final_score: number;
+  final_rank: number | null;
+  final_score: number | null;
   total_participants: number;
   prize_description: string | null;
   redemption_code: string | null;
@@ -142,7 +147,12 @@ export default function ArenaDetailScreen() {
         const match = ((data as AvailableArena[]) || []).find((a) => a.arena_id === id);
         setArena(match || null);
 
-        if (match?.arena_status === 'ended' && match.user_opted_in) {
+        // Always pull the finalized result for ended arenas — the RPC now
+        // returns the leaderboard even when the caller did not participate,
+        // so non-participants still see who won. Returns 0 rows (→ null
+        // arenaResult below) for arenas that ended but haven't been
+        // finalized yet, which the UI renders as "results pending".
+        if (match?.arena_status === 'ended') {
           await loadArenaResult();
         } else if (match?.user_opted_in) {
           await loadMiniLeaderboard();
@@ -607,7 +617,11 @@ export default function ArenaDetailScreen() {
         </Animated.View>
 
         {/* ── Prizes card ───────────────────────────────────────────────── */}
-        {!(isEnded && arenaResult) && arena.prizes && arena.prizes.length > 0 && (
+        {/* Hide the prizes card only when we are showing the user's own
+            personal result panel below — for ended arenas where the user
+            didn't participate (or nobody did), surface the prize list so
+            people can still see what was at stake. */}
+        {!(isEnded && arenaResult?.final_rank != null) && arena.prizes && arena.prizes.length > 0 && (
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <View style={[
               styles.card,
@@ -664,7 +678,15 @@ export default function ArenaDetailScreen() {
         )}
 
         {/* ── ENDED RESULTS MODE ────────────────────────────────────────── */}
-        {isEnded && arenaResult ? (
+        {/* Four sub-states the UI now distinguishes:
+              1. Ended, NOT finalized               → arenaResult is null
+                                                     ("results being calculated")
+              2. Finalized, total_participants = 0 → "no participants"
+              3. Finalized, user didn't participate → leaderboard + DNP panel
+              4. Finalized, user has a result      → full personal panel
+            The render sequence below shares the ended banner across all
+            four states and then layers the relevant cards on top. */}
+        {isEnded && arenaResult?.final_rank != null ? (
           <>
             {/* Ended banner */}
             <Animated.View entering={FadeInDown.delay(200).duration(400)}>
@@ -861,7 +883,10 @@ export default function ArenaDetailScreen() {
             )}
           </>
         ) : isEnded ? (
-          /* Ended, no results */
+          /* Ended sub-states (ordered by precedence):
+              - Finalized + leaderboard exists → show "DNP" + leaderboard
+              - Finalized + 0 participants     → show "no participants"
+              - Not yet finalized              → show "results pending"   */
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <View style={[styles.endedBanner, { borderColor: hexToRgba(arenaColors.primary, 0.12) }]}>
               <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={40} tint="dark" style={styles.endedBannerBlur}>
@@ -871,10 +896,78 @@ export default function ArenaDetailScreen() {
                 </Text>
               </PlatformBlur>
             </View>
-            <View style={styles.noResultsBox}>
-              <Ionicons name="hourglass-outline" size={28} color={theme.colors.textTertiary} />
-              <Text style={styles.noResultsText}>{t('noResults')}</Text>
-            </View>
+
+            {arena.is_finalized && arenaResult && arenaResult.top_participants && arenaResult.top_participants.length > 0 ? (
+              <>
+                {/* Caller did not participate but results are published —
+                    surface the leaderboard so the gym still has a record of
+                    who won, plus a clear "you didn't join" panel. */}
+                <View style={styles.noResultsBox}>
+                  <Ionicons name="people-outline" size={28} color={theme.colors.textTertiary} />
+                  <Text style={styles.noResultsText}>
+                    {t('didNotParticipate', { count: arenaResult.total_participants })}
+                  </Text>
+                </View>
+
+                <View style={[
+                  styles.card,
+                  {
+                    borderTopColor: hexToRgba(arenaColors.primary, 0.18),
+                    borderLeftColor: hexToRgba(arenaColors.primary, 0.08),
+                    borderRightColor: 'rgba(255,255,255,0.03)',
+                    borderBottomColor: 'rgba(255,255,255,0.02)',
+                  },
+                ]}>
+                  <PlatformBlur androidColor="rgba(12,12,22,0.97)" intensity={50} tint="dark" style={styles.cardBlur}>
+                    <View style={styles.cardHeader}>
+                      <View style={[styles.cardIconWrap, { backgroundColor: hexToRgba(arenaColors.primary, 0.10) }]}>
+                        <Ionicons name="podium-outline" size={16} color={arenaColors.primary} />
+                      </View>
+                      <Text style={styles.cardTitle}>{t('leaderboard')}</Text>
+                    </View>
+                    {arenaResult.top_participants.map((entry, index) => {
+                      const medalColor = index < 3 ? MEDAL_COLORS[index] : null;
+                      return (
+                        <View
+                          key={`${entry.rank}-${entry.username}`}
+                          style={[
+                            styles.lbItem,
+                            index < arenaResult.top_participants.length - 1 && styles.lbItemBorder,
+                          ]}
+                        >
+                          <Text style={[styles.lbRank, getNumberStyle(13), { color: medalColor ?? theme.colors.textSecondary }]}>
+                            #{entry.rank}
+                          </Text>
+                          <View style={styles.lbUserInfo}>
+                            <Text style={styles.lbUsername}>{entry.username}</Text>
+                            {entry.gym_name ? <Text style={styles.lbGymName}>{entry.gym_name}</Text> : null}
+                          </View>
+                          <View style={styles.scoreChip}>
+                            <Text style={[styles.lbScore, { color: theme.colors.textSecondary }]}>
+                              {cleanScoreLabel(entry.score_label || `${Math.round(entry.score)}`)}
+                            </Text>
+                            <Ionicons name="water" size={11} color={theme.colors.textSecondary} />
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </PlatformBlur>
+                </View>
+              </>
+            ) : arena.is_finalized && arenaResult ? (
+              /* Finalized but nobody participated. */
+              <View style={styles.noResultsBox}>
+                <Ionicons name="people-outline" size={28} color={theme.colors.textTertiary} />
+                <Text style={styles.noResultsText}>{t('noParticipants')}</Text>
+              </View>
+            ) : (
+              /* Ended but the finalize_arena() cron hasn't run yet — results
+                 are still being computed. */
+              <View style={styles.noResultsBox}>
+                <Ionicons name="hourglass-outline" size={28} color={theme.colors.textTertiary} />
+                <Text style={styles.noResultsText}>{t('noResults')}</Text>
+              </View>
+            )}
           </Animated.View>
         ) : !arena.user_opted_in ? (
           /* Not joined — opt-in info + join button */
