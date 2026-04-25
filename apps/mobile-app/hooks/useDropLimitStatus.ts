@@ -99,6 +99,18 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
       let capMode: RewardedSessionsCapMode = 'soft';
       let graceSec = 300;
 
+      // get_user_drop_limits failures previously fell through silently and
+      // pinned the UI to the hardcoded defaults above (300 / 1500), making
+      // every gym look identical regardless of its tokenomics_config row.
+      // Surface them now so we never lose visibility on a misconfigured RPC
+      // again.
+      if (limitsRes.error) {
+        log.warn('[useDropLimitStatus] get_user_drop_limits failed', {
+          gymId,
+          error: limitsRes.error,
+        });
+      }
+
       const rpcRow = Array.isArray(limitsRes.data) ? limitsRes.data[0] : limitsRes.data;
       if (rpcRow) {
         maxSessionDrops = Math.max(1, Number(rpcRow.max_drops_per_session ?? 120));
@@ -114,6 +126,8 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
         if (rpcRow.session_restart_grace_sec != null) {
           graceSec = Math.max(0, Number(rpcRow.session_restart_grace_sec));
         }
+      } else if (!limitsRes.error) {
+        log.warn('[useDropLimitStatus] get_user_drop_limits returned no row', { gymId });
       }
 
       let rewardedToday = 0;
