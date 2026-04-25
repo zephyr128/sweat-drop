@@ -271,9 +271,16 @@ export default function HomeScreen() {
   const { session } = useSession();
   const { activeGym, isUnlocked } = useTheme();
   const branding = useBranding();
-  const { getActiveGymId, homeGymId, previewGymId } = useGymStore();
+  // Subscribe to homeGymId/previewGymId individually with selectors so the
+  // component re-renders deterministically whenever either field changes.
+  // Computing activeGymId from the subscribed values guarantees that the
+  // dependent hooks (useHomeStats, useDropLimitStatus, etc.) receive the new
+  // gym id immediately on a gym switch — otherwise daily-goal / cap state
+  // can stay pinned to the previous gym until the next refresh tick.
+  const homeGymId = useGymStore((s) => s.homeGymId);
+  const previewGymId = useGymStore((s) => s.previewGymId);
+  const activeGymId = previewGymId || homeGymId;
   const { updateHomeGym, loadActiveGym } = useGymData();
-  const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const unreadNotifCount = useUnreadNotificationCount();
   const unclaimedPrizeCount = useUnclaimedPrizeCount();
