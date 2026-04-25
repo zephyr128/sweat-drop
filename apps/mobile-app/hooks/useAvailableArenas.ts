@@ -37,6 +37,12 @@ export interface AvailableArena {
     score: number;
     sessions: number;
   }> | null;                   // Per-gym score breakdown (only for opted-in users)
+  // Finalization state — used by mobile UI to distinguish
+  // "ended-and-finalized" (results published) from "ended-but-pending"
+  // (the finalize_arena() cron hasn't run yet). RPC has returned these
+  // since 20260311000001_arena_completed_visibility_and_results.sql.
+  is_finalized: boolean;
+  finalized_at: string | null;
 }
 
 /**

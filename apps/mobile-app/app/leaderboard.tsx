@@ -280,6 +280,7 @@ export default function LeaderboardScreen() {
   const [arenas, setArenas] = useState<AvailableArena[]>([]);
   const [arenasLoading, setArenasLoading] = useState(false);
   const [arenasChecked, setArenasChecked] = useState(false);
+  const prevGymIdRef = useRef<string | null>(null);
   const [infoSheetVisible, setInfoSheetVisible] = useState(false);
   const [expandedSnapshots, setExpandedSnapshots] = useState<Record<string, boolean>>({});
   const [winnerBanner, setWinnerBanner] = useState<{
@@ -393,7 +394,13 @@ export default function LeaderboardScreen() {
     if (!session?.user) return;
     setArenasLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_available_arenas', { p_user_id: session.user.id });
+      const { data, error } = await supabase.rpc('get_available_arenas', {
+        p_user_id: session.user.id,
+        // Scope to the active gym so arenas from other gyms never bleed in.
+        // When the user has no active gym yet the parameter stays null and
+        // the RPC falls back to the legacy "any user-membership" semantics.
+        p_gym_id: activeGymId ?? null,
+      });
       if (error) { log.error('[Leaderboard] Error loading arenas:', error); setArenas([]); }
       else setArenas((data as AvailableArena[]) || []);
     } catch (err) {
@@ -403,7 +410,17 @@ export default function LeaderboardScreen() {
       setArenasLoading(false);
       setArenasChecked(true);
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, activeGymId]);
+
+  // When the active gym changes, reset arenasChecked so the tab-bar
+  // visibility re-evaluates against the new gym's arena list.
+  useEffect(() => {
+    if (prevGymIdRef.current !== (activeGymId ?? null)) {
+      prevGymIdRef.current = activeGymId ?? null;
+      setArenasChecked(false);
+      setArenas([]);
+    }
+  }, [activeGymId]);
 
   // Preload all periods when tab/scope changes; load arenas when on arenas tab
   // Also collapse any expanded lists when the data context changes
@@ -417,7 +434,8 @@ export default function LeaderboardScreen() {
     }
   }, [session?.user?.id, activeTab, activeGymId, newcomerOnly]);
 
-  // Always load arenas on mount to determine whether to show the top tabs
+  // Always load arenas on mount (or after gym switch) to determine whether
+  // to show the top tabs at all — the tab bar is hidden when no arenas.
   useEffect(() => {
     if (!session?.user || arenasChecked) return;
     void loadArenas();

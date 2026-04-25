@@ -12,7 +12,7 @@
  * The hook also exposes checkin_status so home.tsx no longer needs its own
  * rpc('get_checkin_status') call.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
@@ -112,8 +112,18 @@ export function useHomeStats(gymId: string | null) {
   const [checkinStatus, setCheckinStatus] = useState<CheckinStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Tracks the gymId of the most recent fetch. We use this to:
+  //   1. Drop in-flight responses whose gymId no longer matches the active gym
+  //      (race condition on rapid gym switches), and
+  //   2. Reset state to EMPTY_STATS the instant the active gym changes, so the
+  //      home gauge / "+N bonus" pill never shows the previous gym's drops
+  //      while the new RPC is in flight.
+  const activeGymRef = useRef<string | null>(gymId);
+
   const refresh = useCallback(async () => {
     if (!session?.user) return;
+
+    const requestedGymId = gymId ?? null;
 
     try {
       const now = new Date();
@@ -121,8 +131,15 @@ export function useHomeStats(gymId: string | null) {
       const dayOfWeek = now.getDay();
 
       const { data, error } = await supabase.rpc('get_home_dashboard', {
-        p_gym_id: gymId ?? null,
+        p_gym_id: requestedGymId,
       });
+
+      // If the user switched gyms while this RPC was in flight, drop the
+      // response — a newer effect already re-armed with EMPTY_STATS and is
+      // fetching fresh data for the new gym.
+      if (activeGymRef.current !== requestedGymId) {
+        return;
+      }
 
       if (error) {
         log.error('[useHomeStats] get_home_dashboard error:', error);
@@ -229,6 +246,13 @@ export function useHomeStats(gymId: string | null) {
       }));
       const activeDaysThisWeek = dailyDrops.filter((d) => d > 0).length;
 
+      // Re-check the sentinel right before commit — the user may have
+      // switched gyms between the RPC resolving and React batching this
+      // setState call.
+      if (activeGymRef.current !== requestedGymId) {
+        return;
+      }
+
       setStats({
         streak,
         todayDrops,
@@ -248,8 +272,17 @@ export function useHomeStats(gymId: string | null) {
   }, [session?.user?.id, gymId]);
 
   useEffect(() => {
+    // Reset stats immediately on gym change so the user never sees the
+    // previous gym's "today drops" / "+N bonus" while the new RPC loads.
+    // Without this, switching gym1 → gym2 leaves the gym1 numbers visible
+    // for the entire RPC round-trip (~150-400ms+ on a slow network), which
+    // is what the user perceived as "drops iz druge teretane".
+    activeGymRef.current = gymId ?? null;
+    setStats(EMPTY_STATS);
+    setCheckinStatus(null);
+    setLoading(true);
     refresh();
-  }, [refresh]);
+  }, [refresh, gymId]);
 
   return useMemo(
     () => ({ stats, checkinStatus, loading, refresh }),

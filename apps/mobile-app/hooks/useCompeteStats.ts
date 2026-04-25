@@ -3,7 +3,7 @@
  * Fetches leaderboard data for all three periods (weekly / monthly / all_time)
  * in parallel and derives the "drops to #1" delta for each period.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from './useSession';
 
@@ -109,12 +109,17 @@ export function useCompeteStats(gymId: string | null | undefined): {
   const [stats, setStats] = useState<CompeteStats>(DEFAULT);
   const [loading, setLoading] = useState(true);
 
+  // Sentinel — discard responses whose gymId no longer matches the active
+  // gym so leaderboard ranks from gym1 don't bleed into gym2's compete card.
+  const activeGymRef = useRef<string | null>(gymId ?? null);
+
   const load = useCallback(async () => {
     if (!session?.user || !gymId) {
       setLoading(false);
       return;
     }
     const userId = session.user.id;
+    const requestedGymId = gymId;
     setLoading(true);
 
     try {
@@ -122,17 +127,16 @@ export function useCompeteStats(gymId: string | null | undefined): {
         supabase
           .rpc('get_leaderboard', {
             p_type: 'gym',
-            p_scope_id: gymId,
+            p_scope_id: requestedGymId,
             p_period: period,
             p_limit: 200,
             p_newcomer_only: false,
           })
           .then(({ data, error }) => {
             if (error || !data) {
-              // Fallback to local leaderboard
               return supabase
                 .rpc('get_local_leaderboard', {
-                  p_gym_id: gymId,
+                  p_gym_id: requestedGymId,
                   p_period: period,
                   p_limit: 200,
                   p_newcomer_only: false,
@@ -148,6 +152,10 @@ export function useCompeteStats(gymId: string | null | undefined): {
         rpc('all_time'),
       ]);
 
+      if (activeGymRef.current !== requestedGymId) {
+        return;
+      }
+
       setStats({
         weekly: extractPeriodInfo(weeklyEntries, userId),
         monthly: extractPeriodInfo(monthlyEntries, userId),
@@ -157,13 +165,18 @@ export function useCompeteStats(gymId: string | null | undefined): {
     } catch {
       // Non-critical — leave previous state
     } finally {
-      setLoading(false);
+      if (activeGymRef.current === requestedGymId) {
+        setLoading(false);
+      }
     }
   }, [session?.user?.id, gymId]);
 
   useEffect(() => {
+    activeGymRef.current = gymId ?? null;
+    setStats(DEFAULT);
+    setLoading(true);
     void load();
-  }, [load]);
+  }, [load, gymId]);
 
   return useMemo(() => ({ stats, loading, refresh: load }), [stats, loading, load]);
 }

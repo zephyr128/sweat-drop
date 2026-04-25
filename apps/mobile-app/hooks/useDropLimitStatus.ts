@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { log } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -60,8 +60,17 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
   const { session: authSession } = useSession();
   const [status, setStatus] = useState<DropLimitStatus>(DEFAULTS);
 
+  // Sentinel for the most recently requested gymId. Lets us discard stale
+  // RPC responses when the user switches gyms mid-flight, and immediately
+  // reset the gauge to 0 / defaults the moment gymId changes (so the user
+  // never sees the previous gym's "minted today / week" values bleed into
+  // the new gym's view).
+  const activeGymRef = useRef<string | null>(gymId ?? null);
+
   const load = useCallback(async () => {
     if (!authSession?.user || !gymId) return;
+
+    const requestedGymId = gymId;
 
     try {
       const todayStr = getBelgradeDateString(new Date());
@@ -77,20 +86,24 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
 
       // Fire all 3 queries in parallel
       const [limitsRes, sessionRes, txRes] = await Promise.all([
-        supabase.rpc('get_user_drop_limits', { p_gym_id: gymId }),
+        supabase.rpc('get_user_drop_limits', { p_gym_id: requestedGymId }),
         supabase.rpc('get_my_sessions', {
-          p_gym_id: gymId,
+          p_gym_id: requestedGymId,
           p_active_only: false,
           p_since: weekStart.toISOString(),
           p_limit: 50,
         }),
         supabase.rpc('get_my_drops', {
-          p_gym_id: gymId,
+          p_gym_id: requestedGymId,
           p_types: EARNED_TYPES,
           p_since: weekStart.toISOString(),
           p_limit: 5000,
         }),
       ]);
+
+      if (activeGymRef.current !== requestedGymId) {
+        return;
+      }
 
       let maxSessionDrops = 120;
       let maxSession = 4;
@@ -166,6 +179,10 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
       const nearLimit = !limitReached && capMode === 'hard' && sessionsRemaining === 1;
       const softSessionWarning = capMode === 'soft' && sessionsRemaining <= 0 && !dayCapped && !weekCapped;
 
+      if (activeGymRef.current !== requestedGymId) {
+        return;
+      }
+
       setStatus({
         rewardedSessionsToday: rewardedToday,
         maxRewardedSessionsPerDay: maxSession,
@@ -192,8 +209,13 @@ export function useDropLimitStatus(gymId: string | null | undefined): DropLimitS
   }, [authSession?.user, gymId]);
 
   useEffect(() => {
+    // Reset to DEFAULTS the instant gymId changes so the gauge / "+ bonus"
+    // pill immediately stops showing the previous gym's totals while the
+    // RPC for the new gym is in flight.
+    activeGymRef.current = gymId ?? null;
+    setStatus({ ...DEFAULTS, loading: true });
     void load();
-  }, [load]);
+  }, [load, gymId]);
 
   return useMemo(() => ({ ...status, refresh: load }), [status, load]);
 }
