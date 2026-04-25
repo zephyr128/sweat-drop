@@ -70,5 +70,10 @@
   "cancelSuccess": "Preuzimanje otkazano",
   "cancelSuccessDesc": "{{drops}} drops je vraćeno na tvoj balans.",
   "cancelError": "Nije moguće otkazati",
-  "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo."
+  "cancelErrorDesc": "Nešto je pošlo naopako. Pokušaj ponovo.",
+  "lockNeed": "+{{count}} drops",
+  "yourPrizesTitle": "Tvoje nagrade",
+  "arenaPrize": "Arena nagrada",
+  "leaderboardPrize": "Leaderboard nagrada",
+  "collectAt": "Preuzmi u: {{gym}}"
 }

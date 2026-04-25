@@ -52,6 +52,7 @@ import { useAvailableArenas } from '@/hooks/useAvailableArenas';
 import { useUpcomingHappyHours } from '@/hooks/useUpcomingHappyHours';
 import { useForegroundRefresh } from '@/hooks/useForegroundRefresh';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
+import { useUnclaimedPrizeCount } from '@/hooks/useUnclaimedPrizeCount';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { SuggestGymCardWithSheet } from '@/components/SuggestGymCardWithSheet';
 import { log } from '@/lib/logger';
@@ -201,10 +202,10 @@ const sk = StyleSheet.create({
     width: 94,
     height: 34,
     borderRadius: 17,
-    marginTop: 10,
+    marginTop: 34,
   },
   skStickyChrome: {
-    marginTop: 10,
+    marginTop: 58,
     marginHorizontal: 0,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -275,6 +276,7 @@ export default function HomeScreen() {
   const activeGymId = getActiveGymId();
   const { localDrops, refreshLocalDrops } = useLocalDrops(activeGymId);
   const unreadNotifCount = useUnreadNotificationCount();
+  const unclaimedPrizeCount = useUnclaimedPrizeCount();
 
   // Fade-in animation for smooth transition from splash
   const fadeOpacity = useSharedValue(0);
@@ -1174,15 +1176,24 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
-              onPress={() => router.push('/store')}
-              activeOpacity={0.75}
-            >
-              <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
-                <Ionicons name="storefront-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
-              </PlatformBlur>
-            </TouchableOpacity>
+            <View style={styles.headerActionWrap}>
+              <TouchableOpacity
+                style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
+                onPress={() => router.push('/store')}
+                activeOpacity={0.75}
+              >
+                <PlatformBlur intensity={20} tint="dark" style={styles.headerActionBlur} androidColor="rgba(255,255,255,0.05)">
+                  <Ionicons name="storefront-outline" size={18} color={hexToRgba(branding.primary, 0.9)} />
+                </PlatformBlur>
+              </TouchableOpacity>
+              {unclaimedPrizeCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {unclaimedPrizeCount > 99 ? '99+' : unclaimedPrizeCount}
+                  </Text>
+                </View>
+              )}
+            </View>
             <View style={styles.headerActionWrap}>
               <TouchableOpacity
                 style={[styles.headerActionButton, { borderColor: hexToRgba(branding.primary, 0.25) }]}
@@ -1494,7 +1505,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: 10,
+    marginTop: 58,
   },
   stickySectionBlur: {
     overflow: 'hidden',
@@ -1512,7 +1523,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: -2,
+    bottom: -26,
     alignItems: 'center',
     zIndex: 12,
   },

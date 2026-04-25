@@ -70,5 +70,10 @@
   "cancelSuccess": "Redemption cancelled",
   "cancelSuccessDesc": "{{drops}} drops have been refunded to your balance.",
   "cancelError": "Could not cancel",
-  "cancelErrorDesc": "Something went wrong. Please try again."
+  "cancelErrorDesc": "Something went wrong. Please try again.",
+  "lockNeed": "+{{count}} drops",
+  "yourPrizesTitle": "Your Prizes",
+  "arenaPrize": "Arena Prize",
+  "leaderboardPrize": "Leaderboard Prize",
+  "collectAt": "Collect at: {{gym}}"
 }
