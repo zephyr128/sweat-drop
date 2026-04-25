@@ -30,6 +30,7 @@ function GymCard({
   isHomeGym,
   onPress,
   branding,
+  galleryImageUrl,
 }: {
   gym: Gym;
   index: number;
@@ -37,8 +38,10 @@ function GymCard({
   isHomeGym: boolean;
   onPress: () => void;
   branding: { primary: string };
+  galleryImageUrl?: string | null;
 }) {
   const gymAccent = gym.primary_color || branding.primary;
+  const heroImageUrl = galleryImageUrl || gym.background_url || null;
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(400)}>
@@ -54,8 +57,8 @@ function GymCard({
         activeOpacity={0.75}
       >
         <View style={styles.gymMediaWrap}>
-          {gym.background_url ? (
-            <Image source={{ uri: gym.background_url }} style={styles.gymMediaImage} resizeMode="cover" />
+          {heroImageUrl ? (
+            <Image source={{ uri: heroImageUrl }} style={styles.gymMediaImage} resizeMode="cover" />
           ) : (
             <LinearGradient
               colors={[hexToRgba(gymAccent, 0.45), 'rgba(24,24,40,0.92)', 'rgba(12,12,20,0.98)']}
@@ -149,6 +152,7 @@ export default function GymsScreen() {
   const { gyms, setGyms, homeGymId, setLoading, isLoading } = useGymStore();
   const [localLoading, setLocalLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [gymGalleryMap, setGymGalleryMap] = useState<Record<string, string>>({});
 
   const loadGyms = useCallback(async () => {
     setLocalLoading(true);
@@ -227,6 +231,27 @@ export default function GymsScreen() {
       );
 
       setGyms(gymsWithBranding);
+
+      // Batch-fetch first gallery image per gym (single query, sorted by display_order)
+      const allGymIds = gymsWithBranding.map((g) => g.id);
+      if (allGymIds.length > 0) {
+        const { data: galleryRows } = await supabase
+          .from('gym_gallery')
+          .select('gym_id, image_url, sort_order')
+          .in('gym_id', allGymIds)
+          .order('sort_order', { ascending: true });
+
+        if (galleryRows && galleryRows.length > 0) {
+          const galleryMap: Record<string, string> = {};
+          for (const row of galleryRows) {
+            // Only keep the first (lowest sort_order) image per gym
+            if (!galleryMap[row.gym_id] && row.image_url) {
+              galleryMap[row.gym_id] = row.image_url;
+            }
+          }
+          setGymGalleryMap(galleryMap);
+        }
+      }
     } catch (error) {
       log.error('Error loading gyms:', error);
       const message =
@@ -333,6 +358,7 @@ export default function GymsScreen() {
               isHomeGym={item.id === homeGymId}
               onPress={() => handleGymSelect(item)}
               branding={branding}
+              galleryImageUrl={gymGalleryMap[item.id] ?? null}
             />
           )}
         />
