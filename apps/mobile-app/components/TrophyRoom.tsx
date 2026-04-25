@@ -23,12 +23,14 @@ const CATEGORY_ORDER: AchievementCategory[] = [
   'sessions', 'total_drops', 'streak', 'multi_gym', 'distance', 'special',
 ];
 
-// Below this badge count we drop per-category sub-headers and render the
-// section as a single flat grid ("Trophy Showcase" mode). Sub-section
-// headers feel like wasted whitespace when each category has only 1-2
-// badges; once the section grows past this threshold, categorising starts
-// helping the user navigate and we switch back to the grouped layout.
-const COMPACT_THRESHOLD = 12;
+// Minimum number of badges a sub-category needs to keep its own header.
+// Categories below this size lose the header and get tail-merged into a
+// single flat grid at the bottom of the section, so single-badge rows
+// under small all-caps headers don't look lonely. Bundling all the
+// singletons into one row makes the layout dense again. A 2-badge row
+// visually fills ~60% of the row width which feels natural, so 2 is the
+// sweet spot — categories with 1 badge merge, 2+ stand on their own.
+const SINGLE_THRESHOLD = 2;
 
 const TIER_RANK: Record<string, number> = {
   bronze: 0, silver: 1, gold: 2, platinum: 3, diamond: 4,
@@ -201,7 +203,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     badges: BadgeWithProgress[],
     sectionTitle: string,
     dotColor: string,
-    options?: { compact?: boolean },
   ) => {
     const globalCategorized = badges.filter((b) => b.badge_type === 'global' && b.category);
     const gymBadges = badges.filter((b) => b.badge_type === 'gym');
@@ -219,12 +220,9 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       );
     }
 
-    const hasGlobalSections = CATEGORY_ORDER.some((cat) => buckets[cat]?.length);
-    const hasAnything = hasGlobalSections || gymBadges.length > 0 || other.length > 0;
-    if (!hasAnything) return null;
+    if (badges.length === 0) return null;
 
     const isAccent = dotColor !== 'rgba(255,255,255,0.2)';
-    const compact = options?.compact ?? false;
 
     const header = (
       <View style={styles.sectionHeader}>
@@ -241,48 +239,52 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       </View>
     );
 
-    // "Trophy Showcase" mode — when the section is sparse, drop the
-    // per-category sub-headers and render everything as one flat grid.
-    // We preserve the same logical order (global → gym → other; categories
-    // in CATEGORY_ORDER, sorted by tier within) so that crossing the
-    // COMPACT_THRESHOLD doesn't reshuffle the visual.
-    if (compact) {
-      const flat: BadgeWithProgress[] = [];
-      CATEGORY_ORDER.forEach((cat) => {
-        if (buckets[cat]?.length) flat.push(...buckets[cat]!);
-      });
-      flat.push(...gymBadges);
-      flat.push(...other);
+    // Split into "proud" sub-sections (>= SINGLE_THRESHOLD badges) which keep
+    // their own sub-header, and a "lonely" tail (single-badge categories +
+    // single-badge gym group) which gets packed into one flat grid at the
+    // bottom of the section. A 1-badge row under a small all-caps header
+    // looks lonely; bundling all the singletons into one row makes it
+    // visually full again. When ALL categories are sparse (e.g. on fresh
+    // accounts with 3 badges across 3 categories) this naturally degrades
+    // to "everything in one flat row under the section header" — i.e. the
+    // showcase view.
+    const proudCategories: { cat: AchievementCategory; items: BadgeWithProgress[] }[] = [];
+    const lonelyTail: BadgeWithProgress[] = [];
 
-      return (
-        <View style={styles.section}>
-          {header}
-          <View style={styles.badgeGrid}>{flat.map(renderBadgeItem)}</View>
-        </View>
-      );
+    CATEGORY_ORDER.forEach((cat) => {
+      const items = buckets[cat] ?? [];
+      if (items.length === 0) return;
+      if (items.length >= SINGLE_THRESHOLD) {
+        proudCategories.push({ cat, items });
+      } else {
+        lonelyTail.push(...items);
+      }
+    });
+
+    const showGymSubSection = gymBadges.length >= SINGLE_THRESHOLD;
+    if (!showGymSubSection) {
+      lonelyTail.push(...gymBadges);
     }
+
+    const hasProud = proudCategories.length > 0 || showGymSubSection;
 
     return (
       <View style={styles.section}>
         {header}
 
-        {CATEGORY_ORDER.map((cat) => {
-          const group = buckets[cat];
-          if (!group || group.length === 0) return null;
-          return (
-            <View key={cat} style={styles.categorySubSection}>
-              <View style={styles.categorySubHeader}>
-                <Ionicons name={CATEGORY_ICONS[cat]} size={13} color={hexToRgba(branding.primary, 0.7)} />
-                <Text style={styles.categorySubTitle}>{CATEGORY_LABELS[cat]}</Text>
-              </View>
-              <View style={styles.badgeGrid}>
-                {group.map(renderBadgeItem)}
-              </View>
+        {proudCategories.map(({ cat, items }) => (
+          <View key={cat} style={styles.categorySubSection}>
+            <View style={styles.categorySubHeader}>
+              <Ionicons name={CATEGORY_ICONS[cat]} size={13} color={hexToRgba(branding.primary, 0.7)} />
+              <Text style={styles.categorySubTitle}>{CATEGORY_LABELS[cat]}</Text>
             </View>
-          );
-        })}
+            <View style={styles.badgeGrid}>
+              {items.map(renderBadgeItem)}
+            </View>
+          </View>
+        ))}
 
-        {gymBadges.length > 0 && (
+        {showGymSubSection && (
           <View style={styles.categorySubSection}>
             <View style={styles.categorySubHeader}>
               <Ionicons name="fitness-outline" size={13} color={hexToRgba(branding.primary, 0.7)} />
@@ -294,8 +296,16 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           </View>
         )}
 
+        {lonelyTail.length > 0 && (
+          <View style={hasProud ? styles.categorySubSection : undefined}>
+            <View style={styles.badgeGrid}>
+              {lonelyTail.map(renderBadgeItem)}
+            </View>
+          </View>
+        )}
+
         {other.length > 0 && (
-          <View style={(hasGlobalSections || gymBadges.length > 0) ? styles.categorySubSection : undefined}>
+          <View style={(hasProud || lonelyTail.length > 0) ? styles.categorySubSection : undefined}>
             <View style={styles.badgeGrid}>
               {other.map(renderBadgeItem)}
             </View>
@@ -451,13 +461,11 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                       earnedPage,
                       t('sectionEarned'),
                       branding.primary,
-                      { compact: earnedPage.length < COMPACT_THRESHOLD },
                     )}
                     {lockedPage.length > 0 && renderBadgesByCategory(
                       lockedPage,
                       t('sectionInProgress'),
                       'rgba(255,255,255,0.2)',
-                      { compact: lockedPage.length < COMPACT_THRESHOLD },
                     )}
                   </>
                 )}
