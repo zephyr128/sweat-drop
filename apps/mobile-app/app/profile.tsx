@@ -472,7 +472,13 @@ export default function ProfileScreen() {
                           : s.value}
                       </Text>
                       <View style={styles.heroStatLabelRow}>
-                        <Text style={styles.heroStatLabel}>{s.label}</Text>
+                        {/* numberOfLines={2} + flexShrink lets long labels
+                            ("Lifetime drops" / "Trenirano") wrap onto two
+                            lines instead of bumping into the next column's
+                            divider on narrow phones. */}
+                        <Text style={styles.heroStatLabel} numberOfLines={2}>
+                          {s.label}
+                        </Text>
                         {s.onInfo ? (
                           <Ionicons
                             name="information-circle-outline"
@@ -870,24 +876,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderTopWidth: 1,
     paddingVertical: 14,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   heroStatItem: {
     flex: 1,
     alignItems: 'center',
     gap: 3,
     position: 'relative',
+    paddingHorizontal: 4,
   },
   heroStatDivider: {
     position: 'absolute', left: 0, top: '10%', bottom: '10%',
     width: StyleSheet.hairlineWidth,
   },
   heroStatValue: { lineHeight: 19 },
-  heroStatLabel: { ...fontStyles.body, fontSize: 9, color: 'rgba(255,255,255,0.38)', letterSpacing: 0.3, textTransform: 'uppercase', textAlign: 'center' },
+  heroStatLabel: {
+    ...fontStyles.body,
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    // flexShrink lets the label wrap inside its column instead of pushing
+    // the info icon past the divider on narrow phones.
+    flexShrink: 1,
+    lineHeight: 12,
+  },
   heroStatLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // Allow the icon to wrap below the label if the label takes 2 lines —
+    // prevents the icon from pushing the row outside the column bounds.
+    flexWrap: 'wrap',
   },
   heroStatInfoIcon: {
     marginLeft: 3,

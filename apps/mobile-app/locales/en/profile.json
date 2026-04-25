@@ -6,7 +6,7 @@
     "rewards": "REWARDS",
     "settings": "SETTINGS"
   },
-  "totalDrops": "Lifetime drops",
+  "totalDrops": "Lifetime",
   "lifetimeDropsInfoTitle": "Lifetime drops",
   "lifetimeDropsInfoBody": "This is the total drops you've ever earned across all your gyms.\n\nYour spendable balance is kept per gym — open a gym's store to see how many drops you can spend there. Drops earned at one gym can only be redeemed at that gym.",
   "dayStreak": "Day streak",

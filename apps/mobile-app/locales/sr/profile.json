@@ -6,8 +6,8 @@
     "rewards": "NAGRADE",
     "settings": "PODEŠAVANJA"
   },
-  "totalDrops": "Lifetime drops",
-  "lifetimeDropsInfoTitle": "Lifetime drops",
+  "totalDrops": "Sveukupno",
+  "lifetimeDropsInfoTitle": "Sveukupno drops",
   "lifetimeDropsInfoBody": "Ovo je ukupan broj drops-a koje si ikada zaradio/la u svim svojim teretanama.\n\nTvoj potrošivi balans se vodi posebno za svaku teretanu — otvori prodavnicu u teretani da vidiš koliko drops-a tamo možeš da potrošiš. Drops zarađeni u jednoj teretani mogu se iskoristiti samo u toj teretani.",
   "dayStreak": "Streak dana",
   "totalWorkouts": "Treninzi",
