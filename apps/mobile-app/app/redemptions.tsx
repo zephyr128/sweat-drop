@@ -305,11 +305,19 @@ export default function RedemptionsScreen() {
 
   // ── Helpers ──
   const getRedemptionName = useCallback((r: any) => {
-    if (r.source_type === 'leaderboard_prize' || r.source_type === 'arena_prize') {
+    const st = r.source_type;
+    if (st === 'leaderboard_prize' || st === 'arena_prize') {
       const desc: string = r.description || '';
+      if (st === 'arena_prize') {
+        // "Arena Prize: <name> #<rank> - <prize>" → take after LAST " - "
+        const lastDashIdx = desc.lastIndexOf(' - ');
+        if (lastDashIdx !== -1) return desc.slice(lastDashIdx + 3);
+        return desc || t('arenaPrize');
+      }
+      // Leaderboard uses em-dash separator
       const dashIdx = desc.indexOf(' — ');
       if (dashIdx !== -1) return desc.slice(dashIdx + 3);
-      return desc || (r.source_type === 'leaderboard_prize' ? t('leaderboardPrize') : t('arenaPrize'));
+      return desc || t('leaderboardPrize');
     }
     return r.reward_name || t('unknownReward');
   }, [t]);
@@ -324,10 +332,36 @@ export default function RedemptionsScreen() {
     }
   };
 
-  const getSourceIcon = (sourceType: string): string | null => {
-    if (sourceType === 'leaderboard_prize') return '🏆';
-    if (sourceType === 'arena_prize') return '⚔️';
+  const getSourceIcon = (sourceType: string): keyof typeof Ionicons.glyphMap | null => {
+    if (sourceType === 'leaderboard_prize') return 'podium-outline';
+    if (sourceType === 'arena_prize') return 'shield-outline';
     return null;
+  };
+
+  const getSourceIconColor = (sourceType: string): string => {
+    if (sourceType === 'arena_prize') return '#EAB308';
+    return branding.primary;
+  };
+
+  const getSourceInfoLine = (r: any): string | null => {
+    const st = r.source_type;
+    if (st !== 'leaderboard_prize' && st !== 'arena_prize') return null;
+    const desc: string = r.description || '';
+
+    if (st === 'arena_prize') {
+      // Format: "Arena Prize: <name> #<rank> - <prize>"
+      // The source line should show "<name> #<rank>" — everything before the LAST " - ".
+      const stripped = desc.replace(/^Arena Prize:\s*/i, '');
+      const lastDashIdx = stripped.lastIndexOf(' - ');
+      const sourceLine = lastDashIdx !== -1 ? stripped.slice(0, lastDashIdx) : stripped;
+      return sourceLine || t('arenaPrize');
+    }
+
+    // Leaderboard format: "Leaderboard Prize: #<rank> <period> at <gym> — <prize>"
+    const stripped = desc.replace(/^Leaderboard Prize:\s*/i, '');
+    const dashIdx = stripped.indexOf(' — ');
+    const sourceLine = dashIdx !== -1 ? stripped.slice(0, dashIdx) : stripped;
+    return sourceLine || t('leaderboardPrize');
   };
 
   const copyCode = useCallback((code: string) => {
@@ -410,6 +444,8 @@ export default function RedemptionsScreen() {
 
     const imageUrl = redemption.reward_image;
     const sourceIcon = getSourceIcon(redemption.source_type);
+    const sourceIconColor = getSourceIconColor(redemption.source_type);
+    const sourceInfoLine = getSourceInfoLine(redemption);
     const isHighlighted = highlightId === redemption.id;
 
     // States where the code section is shown
@@ -456,9 +492,9 @@ export default function RedemptionsScreen() {
                   transition={200}
                 />
               ) : (
-                <View style={[styles.itemIconBox, { backgroundColor: hexToRgba(branding.primary, 0.08) }]}>
+                <View style={[styles.itemIconBox, { backgroundColor: hexToRgba(sourceIcon ? sourceIconColor : branding.primary, 0.10) }]}>
                   {sourceIcon ? (
-                    <Text style={styles.sourceEmoji}>{sourceIcon}</Text>
+                    <Ionicons name={sourceIcon} size={26} color={sourceIconColor} />
                   ) : (
                     <Ionicons name={getRewardIcon(redemption.reward_type || '')} size={24} color={branding.primary} />
                   )}
@@ -467,6 +503,14 @@ export default function RedemptionsScreen() {
 
               <View style={styles.cardInfo}>
                 <Text style={styles.itemName} numberOfLines={2}>{getRedemptionName(redemption)}</Text>
+                {sourceInfoLine && (
+                  <View style={styles.sourceInfoRow}>
+                    <Ionicons name={sourceIcon!} size={11} color={sourceIconColor} />
+                    <Text style={[styles.sourceInfoText, { color: sourceIconColor }]} numberOfLines={1}>
+                      {sourceInfoLine}
+                    </Text>
+                  </View>
+                )}
                 <Text style={styles.itemGym} numberOfLines={1}>{gymName}</Text>
                 <Text style={styles.itemDate}>
                   {fmtDate(redemption.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -927,8 +971,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sourceEmoji: {
-    fontSize: 24,
+  sourceInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  sourceInfoText: {
+    ...fontStyles.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
   cardInfo: {
     flex: 1,
