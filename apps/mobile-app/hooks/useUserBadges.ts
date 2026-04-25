@@ -30,6 +30,12 @@ export interface UserBadge {
   badge_type: 'global' | 'gym';
   gym_name: string | null;
   gym_id: string | null;
+  // Surfaced by get_user_badges() RPC after migration
+  // 20260425220000_get_user_badges_include_tier_category.sql so member
+  // profile screens can render Trophy-Room-style tier rings + category
+  // groupings without an extra fetch. Both NULL for gym challenges.
+  tier?: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | null;
+  category?: 'sessions' | 'total_drops' | 'streak' | 'multi_gym' | 'distance' | 'special' | null;
 }
 
 export function useUserBadges(userId?: string) {
