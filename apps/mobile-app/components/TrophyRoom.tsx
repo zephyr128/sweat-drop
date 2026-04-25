@@ -190,14 +190,17 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     special: t('categorySpecial'),
   };
 
-  const renderLockedByCategory = (lockedBadges: BadgeWithProgress[]) => {
-    // Separate global (with category) from gym/uncategorized
-    const categorized = lockedBadges.filter((b) => b.badge_type === 'global' && b.category);
-    const uncategorized = lockedBadges.filter((b) => b.badge_type !== 'global' || !b.category);
+  const renderBadgesByCategory = (
+    badges: BadgeWithProgress[],
+    sectionTitle: string,
+    dotColor: string,
+  ) => {
+    const globalCategorized = badges.filter((b) => b.badge_type === 'global' && b.category);
+    const gymBadges = badges.filter((b) => b.badge_type === 'gym');
+    const other = badges.filter((b) => b.badge_type !== 'gym' && (b.badge_type !== 'global' || !b.category));
 
-    // Build category buckets preserving tier order
     const buckets: Partial<Record<AchievementCategory, BadgeWithProgress[]>> = {};
-    categorized.forEach((b) => {
+    globalCategorized.forEach((b) => {
       const cat = b.category!;
       if (!buckets[cat]) buckets[cat] = [];
       buckets[cat]!.push(b);
@@ -208,36 +211,35 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
       );
     }
 
-    const hasSections = CATEGORY_ORDER.some((cat) => buckets[cat]?.length);
+    const hasGlobalSections = CATEGORY_ORDER.some((cat) => buckets[cat]?.length);
+    const hasAnything = hasGlobalSections || gymBadges.length > 0 || other.length > 0;
+    if (!hasAnything) return null;
 
-    if (!hasSections && uncategorized.length === 0) return null;
+    const isAccent = dotColor !== 'rgba(255,255,255,0.2)';
 
     return (
       <View style={styles.section}>
-        {/* Section header */}
         <View style={styles.sectionHeader}>
-          <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-          <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
-          <View style={styles.sectionCountPill}>
-            <Text style={styles.sectionCountText}>{lockedBadges.length}</Text>
+          <View style={[styles.sectionDot, { backgroundColor: dotColor }]} />
+          <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+          <View style={[
+            styles.sectionCountPill,
+            isAccent && { backgroundColor: hexToRgba(dotColor, 0.14), borderColor: hexToRgba(dotColor, 0.2) },
+          ]}>
+            <Text style={[styles.sectionCountText, isAccent && { color: dotColor }]}>
+              {badges.length}
+            </Text>
           </View>
         </View>
 
-        {/* Per-category sub-sections */}
         {CATEGORY_ORDER.map((cat) => {
           const group = buckets[cat];
           if (!group || group.length === 0) return null;
           return (
             <View key={cat} style={styles.categorySubSection}>
               <View style={styles.categorySubHeader}>
-                <Ionicons
-                  name={CATEGORY_ICONS[cat]}
-                  size={13}
-                  color={hexToRgba(branding.primary, 0.7)}
-                />
-                <Text style={styles.categorySubTitle}>
-                  {CATEGORY_LABELS[cat]}
-                </Text>
+                <Ionicons name={CATEGORY_ICONS[cat]} size={13} color={hexToRgba(branding.primary, 0.7)} />
+                <Text style={styles.categorySubTitle}>{CATEGORY_LABELS[cat]}</Text>
               </View>
               <View style={styles.badgeGrid}>
                 {group.map(renderBadgeItem)}
@@ -246,11 +248,22 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           );
         })}
 
-        {/* Uncategorized / gym badges */}
-        {uncategorized.length > 0 && (
-          <View style={hasSections ? styles.categorySubSection : undefined}>
+        {gymBadges.length > 0 && (
+          <View style={styles.categorySubSection}>
+            <View style={styles.categorySubHeader}>
+              <Ionicons name="fitness-outline" size={13} color={hexToRgba(branding.primary, 0.7)} />
+              <Text style={styles.categorySubTitle}>{t('categoryGym')}</Text>
+            </View>
             <View style={styles.badgeGrid}>
-              {uncategorized.map(renderBadgeItem)}
+              {gymBadges.map(renderBadgeItem)}
+            </View>
+          </View>
+        )}
+
+        {other.length > 0 && (
+          <View style={(hasGlobalSections || gymBadges.length > 0) ? styles.categorySubSection : undefined}>
+            <View style={styles.badgeGrid}>
+              {other.map(renderBadgeItem)}
             </View>
           </View>
         )}
@@ -400,39 +413,15 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                   </View>
                 ) : (
                   <>
-                    {earnedPage.length > 0 && (
-                      <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                          <View style={[styles.sectionDot, { backgroundColor: branding.primary }]} />
-                          <Text style={styles.sectionTitle}>{t('sectionEarned')}</Text>
-                          <View style={[styles.sectionCountPill, { backgroundColor: hexToRgba(branding.primary, 0.14), borderColor: hexToRgba(branding.primary, 0.2) }]}>
-                            <Text style={[styles.sectionCountText, { color: branding.primary }]}>{earnedPage.length}</Text>
-                          </View>
-                        </View>
-                        <View style={styles.badgeGrid}>
-                          {earnedPage.map(renderBadgeItem)}
-                        </View>
-                      </View>
+                    {earnedPage.length > 0 && renderBadgesByCategory(
+                      earnedPage,
+                      t('sectionEarned'),
+                      branding.primary,
                     )}
-
-                    {/* In Progress: category-grouped on "All" tab, flat on others */}
-                    {lockedPage.length > 0 && (
-                      key === 'all'
-                        ? renderLockedByCategory(lockedPage)
-                        : (
-                          <View style={styles.section}>
-                            <View style={styles.sectionHeader}>
-                              <View style={[styles.sectionDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-                              <Text style={styles.sectionTitle}>{t('sectionInProgress')}</Text>
-                              <View style={styles.sectionCountPill}>
-                                <Text style={styles.sectionCountText}>{lockedPage.length}</Text>
-                              </View>
-                            </View>
-                            <View style={styles.badgeGrid}>
-                              {lockedPage.map(renderBadgeItem)}
-                            </View>
-                          </View>
-                        )
+                    {lockedPage.length > 0 && renderBadgesByCategory(
+                      lockedPage,
+                      t('sectionInProgress'),
+                      'rgba(255,255,255,0.2)',
                     )}
                   </>
                 )}
@@ -579,15 +568,15 @@ const styles = StyleSheet.create({
   /* ── Tabs + Pages wrapper ── */
   tabsWrapper: {
     flex: 1,
-    paddingHorizontal: 16,
   },
   tabBar: {
     marginBottom: 10,
+    marginHorizontal: 16,
   },
 
   /* ── Scroll ── */
   scrollContent: {
-    paddingHorizontal: 0,
+    paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 64,
   },
