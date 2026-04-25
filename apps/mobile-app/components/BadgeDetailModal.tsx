@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -20,38 +21,28 @@ import Animated, {
   withDelay,
   withSequence,
   Easing,
-  runOnJS,
-  interpolate,
 } from 'react-native-reanimated';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles, getNumberStyle, hexToRgba } from '@/lib/theme';
+import { theme, fontStyles, hexToRgba } from '@/lib/theme';
 import { UserBadge } from '@/hooks/useUserBadges';
+import { AchievementTier } from '@/hooks/useAllBadges';
 import { useSession } from '@/hooks/useSession';
 import { supabase } from '@/lib/supabase';
 import { formatDate as fmtDate } from '@/lib/utils/formatDate';
 import { ShareableBadgeCard, ShareableBadgeData } from './ShareableBadgeCard';
+import { TIER_COLORS, getBadgeCategoryColor } from './BadgeCard';
 import { log } from '@/lib/logger';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface BadgeDetailModalProps {
   visible: boolean;
   badge: UserBadge | null;
   onClose: () => void;
   isLocked?: boolean;
-  progress?: number; // 0-100 for locked badges
-}
-
-function getBadgeCategoryColor(badgeName: string, brandPrimary: string): string {
-  const name = badgeName.toLowerCase();
-  if (name.includes('streak') || name.includes('warm-up') || name.includes('unstoppable') || name.includes('iron will'))
-    return '#FF9500';
-  if (name.includes('drop') || name.includes('collector') || name.includes('hoarder') || name.includes('legend'))
-    return '#30D158';
-  if (name.includes('gym') || name.includes('explorer'))
-    return '#BF5AF2';
-  return brandPrimary;
+  progress?: number;
+  tier?: AchievementTier | null;
 }
 
 export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
@@ -60,10 +51,13 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
   onClose,
   isLocked = false,
   progress = 0,
+  tier = null,
 }) => {
   const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { session } = useSession();
+  const { t } = useTranslation('trophyRoom');
+  const { t: tCommon } = useTranslation('common');
   const viewShotRef = useRef<View>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
@@ -79,7 +73,6 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
   const shareTranslateY = useSharedValue(20);
   const shareOpacity = useSharedValue(0);
 
-  // Fetch username
   useEffect(() => {
     if (!session?.user?.id) return;
     supabase
@@ -92,39 +85,35 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
       });
   }, [session?.user?.id]);
 
-  // Entrance animation — scale first, then 360° flip
+  // Entrance: scale-in pop, then a single 360° flip while the info
+  // section stages in below. Same staging the original modal had — keeps
+  // the "trophy reveal" moment intact across this redesign.
   useEffect(() => {
     if (visible && badge) {
       setIsClosing(false);
 
-      // Backdrop: fast fade
       backdropOpacity.value = withTiming(1, { duration: 180 });
 
-      // Phase 1: Pop in — scale from tiny to full size
       coinOpacity.value = withTiming(1, { duration: 80 });
-      coinRotation.value = withTiming(0, { duration: 0 }); // start face-up
+      coinRotation.value = withTiming(0, { duration: 0 });
       coinScale.value = withSequence(
         withTiming(0.2, { duration: 0 }),
-        withSpring(1, { damping: 10, stiffness: 260, mass: 0.7 })
+        withSpring(1, { damping: 10, stiffness: 260, mass: 0.7 }),
       );
 
-      // Phase 2: Full 360° flip after scale settles (~350ms)
       coinRotation.value = withDelay(
         350,
-        withTiming(360, { duration: 600, easing: Easing.inOut(Easing.cubic) })
+        withTiming(360, { duration: 600, easing: Easing.inOut(Easing.cubic) }),
       );
 
-      // Info: appears after flip starts
       infoOpacity.value = withDelay(500, withTiming(1, { duration: 200 }));
       infoTranslateY.value = withDelay(500, withSpring(0, { damping: 14, stiffness: 200 }));
 
-      // Share button: after info
       shareOpacity.value = withDelay(650, withTiming(1, { duration: 180 }));
       shareTranslateY.value = withDelay(650, withSpring(0, { damping: 14, stiffness: 200 }));
     }
   }, [visible, badge]);
 
-  // Close animation — clean fade out
   const handleClose = () => {
     if (isClosing) return;
     setIsClosing(true);
@@ -168,11 +157,9 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return fmtDate(dateString, { year: 'numeric', month: 'long', day: 'numeric' });
-  };
+  const formatDate = (dateString: string) =>
+    fmtDate(dateString, { year: 'numeric', month: 'long', day: 'numeric' });
 
-  // Animated styles
   const backdropAnimStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
   }));
@@ -198,10 +185,17 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
 
   if (!badge) return null;
 
-  const categoryColor = getBadgeCategoryColor(badge.badge_name, branding.primary);
-  const COIN_SIZE = 160;
+  // Single source of truth for the "what colour is this badge?" question:
+  //   1. tier colour (if the badge has a tier — bronze/silver/.../diamond)
+  //   2. category colour (legacy name-based fallback for badges without tier)
+  // The same primary colour drives the inner ring, glow, gradient shine,
+  // tier pill, share button gradient, and the shareable card. So the modal
+  // visually reads as "the same badge you tapped, just bigger".
+  const tierColor = tier ? TIER_COLORS[tier] : null;
+  const categoryColor = tierColor || getBadgeCategoryColor(badge.badge_name, branding.primary);
+  const COIN_SIZE = 168;
+  const tierLabel = tier ? t(`tier${tier.charAt(0).toUpperCase()}${tier.slice(1)}`) : null;
 
-  // Data for the shareable card
   const shareData: ShareableBadgeData = {
     badgeName: badge.badge_name,
     badgeDescription: badge.badge_description,
@@ -212,6 +206,8 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
     username: username,
     brandColor: branding.primary,
     brandColorDark: branding.primaryDark,
+    tier: tier,
+    tierLabel: tierLabel,
   };
 
   return (
@@ -222,73 +218,105 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      {/* Backdrop */}
       <Animated.View style={[styles.overlay, backdropAnimStyle]}>
         {Platform.OS === 'ios' ? (
           <PlatformBlur intensity={40} style={StyleSheet.absoluteFill} tint="dark" androidColor="rgba(0,0,0,0.85)" />
         ) : null}
         <View style={[styles.darkOverlay, Platform.OS === 'android' && styles.androidBackdrop]} />
+
+        {/* Tier-tinted radial wash behind the badge so it feels enthroned
+            instead of just floating on a flat overlay. */}
+        <View
+          pointerEvents="none"
+          style={[styles.tierGlow, { backgroundColor: hexToRgba(categoryColor, isLocked ? 0.04 : 0.10) }]}
+        />
       </Animated.View>
 
-      {/* Tap-to-close layer + Centered content */}
       <TouchableOpacity
         style={styles.contentLayer}
         activeOpacity={1}
         onPress={handleClose}
       >
         <View style={styles.centeredContent} pointerEvents="box-none">
-          {/* Coin badge — 3D flip animation */}
-          <Animated.View style={[styles.coinWrapper, coinAnimStyle]}>
-            {/* Outer metallic ring */}
-            <View style={[
-              styles.coinOuter,
-              {
-                width: COIN_SIZE + 16,
-                height: COIN_SIZE + 16,
-                borderRadius: (COIN_SIZE + 16) / 2,
-                borderColor: isLocked
-                  ? 'rgba(255,255,255,0.08)'
-                  : hexToRgba(categoryColor, 0.3),
-                shadowColor: isLocked ? 'transparent' : categoryColor,
-              },
-            ]}>
-              {/* Inner ring */}
-              <View style={[
-                styles.coinInner,
+          <Animated.View style={[styles.coinWrapper, coinAnimStyle]} pointerEvents="box-none">
+            {/* Outer halo — uses iOS shadowColor for the coloured glow on
+                iOS, and a softly bordered ring on Android (where coloured
+                shadows don't work). Earned only — locked stays muted. */}
+            {!isLocked && (
+              <View
+                style={[
+                  styles.coinHalo,
+                  {
+                    width: COIN_SIZE + 24,
+                    height: COIN_SIZE + 24,
+                    borderRadius: (COIN_SIZE + 24) / 2,
+                    shadowColor: categoryColor,
+                    borderColor: hexToRgba(categoryColor, 0.22),
+                  },
+                ]}
+              />
+            )}
+
+            <View
+              style={[
+                styles.coinOuter,
                 {
-                  width: COIN_SIZE,
-                  height: COIN_SIZE,
-                  borderRadius: COIN_SIZE / 2,
+                  width: COIN_SIZE + 12,
+                  height: COIN_SIZE + 12,
+                  borderRadius: (COIN_SIZE + 12) / 2,
                   borderColor: isLocked
-                    ? 'rgba(255,255,255,0.12)'
-                    : categoryColor,
-                  backgroundColor: isLocked
-                    ? 'rgba(255,255,255,0.03)'
-                    : hexToRgba(categoryColor, 0.06),
+                    ? 'rgba(255,255,255,0.10)'
+                    : hexToRgba(categoryColor, 0.32),
                 },
-              ]}>
-                {/* Metallic shine gradient */}
+              ]}
+            >
+              <View
+                style={[
+                  styles.coinInner,
+                  {
+                    width: COIN_SIZE,
+                    height: COIN_SIZE,
+                    borderRadius: COIN_SIZE / 2,
+                    borderColor: isLocked
+                      ? 'rgba(255,255,255,0.14)'
+                      : categoryColor,
+                    backgroundColor: isLocked
+                      ? 'rgba(255,255,255,0.03)'
+                      : hexToRgba(categoryColor, 0.07),
+                  },
+                ]}
+              >
+                {/* Layered metallic sheen (subtle two-stop gradient) */}
                 {!isLocked && (
-                  <LinearGradient
-                    colors={[
-                      hexToRgba(categoryColor, 0.12),
-                      'transparent',
-                      hexToRgba(categoryColor, 0.06),
-                    ]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[StyleSheet.absoluteFill, { borderRadius: COIN_SIZE / 2 }]}
-                  />
+                  <>
+                    <LinearGradient
+                      colors={[
+                        hexToRgba(categoryColor, 0.22),
+                        'transparent',
+                        hexToRgba(categoryColor, 0.05),
+                      ]}
+                      start={{ x: 0.15, y: 0 }}
+                      end={{ x: 0.85, y: 1 }}
+                      style={[StyleSheet.absoluteFill, { borderRadius: COIN_SIZE / 2 }]}
+                    />
+                    {/* Top-left specular highlight — gives the disc that
+                        polished-metal feel rather than flat colour fill. */}
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0.6, y: 0.55 }}
+                      style={[StyleSheet.absoluteFill, { borderRadius: COIN_SIZE / 2 }]}
+                    />
+                  </>
                 )}
 
-                {/* Badge image or fallback */}
                 {badge.badge_image_url ? (
                   <Image
                     source={{ uri: badge.badge_image_url }}
                     style={[
                       styles.coinImage,
-                      { width: COIN_SIZE * 0.72, height: COIN_SIZE * 0.72 },
-                      isLocked && { opacity: 0.3 },
+                      { width: COIN_SIZE * 0.74, height: COIN_SIZE * 0.74 },
+                      isLocked && { opacity: 0.28 },
                     ]}
                     contentFit="contain"
                   />
@@ -301,24 +329,31 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
                 )}
               </View>
 
-              {/* Lock icon — positioned on coinOuter (outside overflow:hidden coinInner) */}
               {isLocked && (
                 <View style={styles.coinLock}>
                   <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.7)" />
                 </View>
               )}
-            </View>
 
-            {/* Earned checkmark */}
-            {!isLocked && (
-              <View style={[styles.coinCheck, { backgroundColor: categoryColor }]}>
-                <Ionicons name="checkmark" size={16} color="#000" />
-              </View>
-            )}
+              {!isLocked && (
+                <View style={[styles.coinCheck, { backgroundColor: categoryColor }]}>
+                  <Ionicons name="checkmark" size={16} color="#000" />
+                </View>
+              )}
+            </View>
           </Animated.View>
 
-          {/* Info section */}
           <Animated.View style={[styles.infoSection, infoAnimStyle]}>
+            {/* Tier pill — sits above the name, like a small "GOLD" stamp.
+                Makes the rarity instantly readable without forcing the
+                user to recognise tier colour from the ring alone. */}
+            {tierLabel && !isLocked && (
+              <View style={[styles.tierPill, { backgroundColor: hexToRgba(categoryColor, 0.12), borderColor: hexToRgba(categoryColor, 0.35) }]}>
+                <View style={[styles.tierDot, { backgroundColor: categoryColor }]} />
+                <Text style={[styles.tierPillText, { color: categoryColor }]}>{tierLabel.toUpperCase()}</Text>
+              </View>
+            )}
+
             <Text style={styles.badgeName}>{badge.badge_name}</Text>
 
             {badge.badge_type === 'gym' && badge.gym_name && (
@@ -334,7 +369,6 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
               <Text style={styles.badgeDescription}>{badge.badge_description}</Text>
             )}
 
-            {/* Progress bar for locked badges */}
             {isLocked && progress > 0 && (
               <View style={styles.progressSection}>
                 <View style={styles.progressBarBg}>
@@ -354,20 +388,18 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
               </View>
             )}
 
-            {/* Earned date */}
             {!isLocked && badge.earned_at && (
               <View style={styles.earnedRow}>
-                <View style={[styles.earnedPill, { backgroundColor: hexToRgba(categoryColor, 0.1) }]}>
+                <View style={[styles.earnedPill, { backgroundColor: hexToRgba(categoryColor, 0.10) }]}>
                   <Ionicons name="checkmark-circle" size={15} color={categoryColor} />
                   <Text style={[styles.earnedText, { color: categoryColor }]}>
-                    Earned {formatDate(badge.earned_at)}
+                    {t('earned')} {formatDate(badge.earned_at)}
                   </Text>
                 </View>
               </View>
             )}
           </Animated.View>
 
-          {/* Share button — only for earned badges */}
           {!isLocked && (
             <Animated.View style={[styles.shareSection, shareAnimStyle]}>
               <TouchableOpacity
@@ -377,7 +409,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
                 disabled={isSharing}
               >
                 <LinearGradient
-                  colors={[categoryColor, hexToRgba(categoryColor, 0.8)]}
+                  colors={[categoryColor, hexToRgba(categoryColor, 0.78)]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.shareGradient}
@@ -387,7 +419,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
                   ) : (
                     <>
                       <Ionicons name="share-outline" size={18} color="#000" />
-                      <Text style={styles.shareText}>Share Badge</Text>
+                      <Text style={styles.shareText}>{t('shareBadge')}</Text>
                     </>
                   )}
                 </LinearGradient>
@@ -397,7 +429,9 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
         </View>
       </TouchableOpacity>
 
-      {/* Off-screen shareable card for capturing */}
+      {/* Off-screen shareable card. Captured into a PNG by view-shot when
+          the user taps "Share Badge" — kept mounted (not just rendered on
+          demand) so layout settles before capture. */}
       <View style={styles.offScreenCapture} pointerEvents="none">
         <View ref={viewShotRef} collapsable={false}>
           <ShareableBadgeCard data={shareData} />
@@ -418,6 +452,14 @@ const styles = StyleSheet.create({
   androidBackdrop: {
     backgroundColor: 'rgba(0, 0, 0, 0.88)',
   },
+  tierGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 360,
+    opacity: 0.85,
+  },
   contentLayer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -430,19 +472,25 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     width: '100%',
   },
+
   /* ── Coin ── */
   coinWrapper: {
     alignItems: 'center',
-    marginBottom: 28,
+    justifyContent: 'center',
+    marginBottom: 26,
     overflow: 'visible',
   },
+  coinHalo: {
+    position: 'absolute',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 32,
+  },
   coinOuter: {
-    borderWidth: 3,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
   },
   coinInner: {
     borderWidth: 2.5,
@@ -456,11 +504,11 @@ const styles = StyleSheet.create({
   coinLock: {
     position: 'absolute',
     bottom: 6,
-    right: 6,
+    right: 10,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
@@ -469,14 +517,14 @@ const styles = StyleSheet.create({
   coinCheck: {
     position: 'absolute',
     bottom: 4,
-    right: 16,
+    right: 14,
     width: 30,
     height: 30,
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2.5,
-    borderColor: '#141418',
+    borderColor: '#0A0E1A',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -487,7 +535,27 @@ const styles = StyleSheet.create({
   /* ── Info section ── */
   infoSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 22,
+  },
+  tierPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  tierDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  tierPillText: {
+    ...fontStyles.heading,
+    fontSize: 11,
+    letterSpacing: 1.6,
   },
   badgeName: {
     fontSize: 26,
@@ -509,7 +577,7 @@ const styles = StyleSheet.create({
   },
   badgeDescription: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.55)',
     textAlign: 'center',
     lineHeight: 21,
     marginBottom: 16,
@@ -547,9 +615,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 14,
   },
   earnedText: {
     fontSize: 13,

@@ -35,5 +35,6 @@
   "chipAll": "All",
   "chipEarned": "Earned",
   "chipLocked": "Locked",
-  "noBadgesInCategory": "Keep going to unlock badges!"
+  "noBadgesInCategory": "Keep going to unlock badges!",
+  "viewAll": "View all"
 }
