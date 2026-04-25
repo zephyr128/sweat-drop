@@ -19,8 +19,13 @@ const BADGE_SIZE = Math.floor(
 const CIRCLE_SIZE = BADGE_SIZE - 16;
 const ICON_SIZE = CIRCLE_SIZE * 0.68;
 
-const SMALL_BADGE_SIZE = 80;
-const SMALL_CIRCLE_SIZE = SMALL_BADGE_SIZE - 14;
+// "small" cards live in the per-category horizontal carousels in the
+// Trophy Room. The previous 96px version still read as a thumbnail
+// next to the row chrome — bumped to 120 so the badge artwork is the
+// hero of the row (this is the showcase carousel, not a grid). The
+// per-category drill-down screen still uses medium for its full grid.
+const SMALL_BADGE_SIZE = 120;
+const SMALL_CIRCLE_SIZE = SMALL_BADGE_SIZE - 16;
 const SMALL_ICON_SIZE = SMALL_CIRCLE_SIZE * 0.68;
 
 export const TIER_COLORS: Record<AchievementTier, string> = {
@@ -38,6 +43,11 @@ interface BadgeCardProps {
   onPress: () => void;
   size?: 'small' | 'medium' | 'large';
   tier?: AchievementTier | null;
+  // Explicit width override for non-3-column layouts (e.g. the 4-col grid
+  // on the member profile screen). When provided, the internal circle and
+  // icon scale to match so the proportions read identically to the
+  // standard sizes — just smaller.
+  customSize?: number;
 }
 
 const ProgressRing: React.FC<{
@@ -95,21 +105,26 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
   onPress,
   size = 'medium',
   tier,
+  customSize,
 }) => {
   const branding = useBranding();
   const tierColor = tier ? TIER_COLORS[tier] : null;
   const categoryColor = tierColor || getBadgeCategoryColor(badge.badge_name, branding.primary);
 
   const isSmall = size === 'small';
-  const badgeSize = isSmall ? SMALL_BADGE_SIZE : BADGE_SIZE;
-  const circleSize = isSmall ? SMALL_CIRCLE_SIZE : CIRCLE_SIZE;
-  const iconSize = isSmall ? SMALL_ICON_SIZE : ICON_SIZE;
+  const isCustom = typeof customSize === 'number' && customSize > 0;
+  const badgeSize = isCustom ? customSize : isSmall ? SMALL_BADGE_SIZE : BADGE_SIZE;
+  // Keep the same circle/icon ratios the standard sizes use so the badge
+  // reads identically — just at a different scale.
+  const circleSize = isCustom ? badgeSize - 16 : isSmall ? SMALL_CIRCLE_SIZE : CIRCLE_SIZE;
+  const iconSize = isCustom ? circleSize * 0.68 : isSmall ? SMALL_ICON_SIZE : ICON_SIZE;
+  const useTightOverlay = isSmall || isCustom;
 
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      style={[styles.container, isSmall && { width: badgeSize }]}
+      style={[styles.container, (isSmall || isCustom) && { width: badgeSize }]}
     >
       {/* Outer glow ring — earned only */}
       {!isLocked && (
@@ -209,21 +224,46 @@ export const BadgeCard: React.FC<BadgeCardProps> = ({
 
       {/* Lock overlay for locked tier badges */}
       {isLocked && (
-        <View style={[styles.lockBadge, isSmall && styles.lockBadgeSmall]}>
-          <Ionicons name="lock-closed" size={isSmall ? 8 : 9} color="rgba(255,255,255,0.55)" />
+        <View
+          style={[
+            styles.lockBadge,
+            useTightOverlay && styles.lockBadgeSmall,
+            isCustom && {
+              top: 10 + circleSize - 10,
+              right: (badgeSize - circleSize) / 2 - 1,
+            },
+          ]}
+        >
+          <Ionicons name="lock-closed" size={useTightOverlay ? 8 : 9} color="rgba(255,255,255,0.55)" />
         </View>
       )}
 
-      {/* Earned checkmark — outside the circle */}
+      {/* Earned checkmark — pinned to the bottom-right of the badge circle,
+          mirroring the lock badge position. Without the small-size override
+          the check inherits medium-size offsets and floats off below the
+          name on small carousel cards. */}
       {!isLocked && (
-        <View style={[styles.checkBadge, { backgroundColor: categoryColor, borderColor: '#000' }]}>
-          <Ionicons name="checkmark" size={isSmall ? 8 : 9} color="#000" />
+        <View style={[
+          styles.checkBadge,
+          useTightOverlay && styles.checkBadgeSmall,
+          isCustom && {
+            top: 10 + circleSize - 10,
+            right: (badgeSize - circleSize) / 2 - 1,
+          },
+          { backgroundColor: categoryColor, borderColor: '#000' },
+        ]}>
+          <Ionicons name="checkmark" size={useTightOverlay ? 8 : 9} color="#000" />
         </View>
       )}
 
       {/* Badge name */}
       <Text
-        style={[styles.badgeName, isLocked && styles.badgeNameLocked, isSmall && styles.badgeNameSmall]}
+        style={[
+          styles.badgeName,
+          isLocked && styles.badgeNameLocked,
+          (isSmall || isCustom) && styles.badgeNameSmall,
+          isCustom && { maxWidth: badgeSize - 4 },
+        ]}
         numberOfLines={2}
       >
         {badge.badge_name}
@@ -313,6 +353,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 3,
   },
+  checkBadgeSmall: {
+    top: 10 + SMALL_CIRCLE_SIZE - 10,
+    right: (SMALL_BADGE_SIZE - SMALL_CIRCLE_SIZE) / 2 - 1,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+  },
   badgeName: {
     fontSize: 11,
     color: theme.colors.text,
@@ -323,10 +371,10 @@ const styles = StyleSheet.create({
     maxWidth: BADGE_SIZE - 4,
   },
   badgeNameSmall: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
     maxWidth: SMALL_BADGE_SIZE - 4,
-    marginTop: 6,
+    marginTop: 7,
   },
   badgeNameLocked: {
     color: 'rgba(255, 255, 255, 0.28)',

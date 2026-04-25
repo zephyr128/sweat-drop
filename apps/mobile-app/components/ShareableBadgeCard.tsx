@@ -9,15 +9,17 @@ import { TIER_COLORS } from './BadgeCard';
 import type { AchievementTier } from '@/hooks/useAllBadges';
 
 // AGENT NOTE: [2026-04-25] - mobile-coder
-// Shareable badge card for social sharing — 1:1 square format.
-// Captured with react-native-view-shot and shared via expo-sharing.
-// Used from BadgeDetailModal when the user taps "Share Badge".
+// Shareable badge card — 1:1 square asset captured by react-native-view-shot
+// and handed to expo-sharing when the user taps "Share Badge".
 //
-// Visual identity mirrors BadgeCard + BadgeDetailModal so the user gets
-// a single coherent badge "moment" across the in-app card, the detail
-// modal, and what their followers see in the share image. Tier colour
-// drives the rings, gradients, and the tier pill; falls back to a
-// category colour for legacy badges that don't have a tier set.
+// Design philosophy: the badge is the hero. The card is a flat, cohesive
+// dark surface (no two-tone halves, no top wash, no accent-colored brand
+// header). Tier colour drives only the rings + earned pill — text colour
+// stays neutral white-on-dark so the badge artwork is the visual punch.
+//
+// Inspired by the Apple Fitness award screen and Strava achievement
+// share — both lean on a dark backdrop and a single hero element instead
+// of marketing chrome. No tagline, no tier label, no decorative pills.
 
 const CARD_SIZE = Dimensions.get('window').width - 48;
 
@@ -31,8 +33,10 @@ export interface ShareableBadgeData {
   username?: string | null;
   brandColor?: string;
   brandColorDark?: string;
+  // Tier still flows through so we can pick the ring colour from the
+  // shared TIER_COLORS palette. We deliberately don't render any tier
+  // text/pill — the colour says it.
   tier?: AchievementTier | null;
-  tierLabel?: string | null;
 }
 
 function formatDate(dateString: string): string {
@@ -55,142 +59,146 @@ export function ShareableBadgeCard({ data }: { data: ShareableBadgeData }) {
   const tierColor = data.tier ? TIER_COLORS[data.tier] : null;
   const accent = tierColor || getBadgeCategoryColor(data.badgeName, brandColor);
 
-  // The share image is wider than the in-app coin so the inner-ring +
-  // outer-ring sizes are scaled up proportionally. They keep the same
-  // ratio so the rendered card reads as the same artefact as the modal.
-  const COIN_OUTER = 132;
-  const COIN_INNER = 110;
-  const COIN_IMG = 80;
+  const COIN_OUTER = 152;
+  const COIN_INNER = 128;
+  const COIN_IMG = 92;
 
   return (
     <View style={styles.cardWrapper}>
       <LinearGradient
-        colors={['#050510', '#0C1020', '#050510']}
+        colors={['#0A0A14', '#131726', '#0A0A14']}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={styles.card}
       >
-        {/* Tier-tinted radial wash at the top so the badge looks enthroned
-            rather than sitting on a flat dark surface. */}
-        <View style={[styles.topGlow, { backgroundColor: hexToRgba(accent, 0.10) }]} />
-
-        {/* Brand header — small, top-left, leaves the badge to be the hero. */}
-        <View style={styles.brandHeader}>
-          <Ionicons name="water" size={16} color={hexToRgba(brandColor, 0.65)} />
-          <Text style={[styles.brandName, { color: hexToRgba(brandColor, 0.65) }]}>SweatDrop</Text>
-        </View>
-
-        {/* Tier pill — top-right when present. Tells the audience how rare
-            the badge is at a glance. */}
-        {data.tierLabel && (
-          <View
-            style={[
-              styles.tierPill,
-              {
-                backgroundColor: hexToRgba(accent, 0.14),
-                borderColor: hexToRgba(accent, 0.4),
-              },
-            ]}
-          >
-            <View style={[styles.tierDot, { backgroundColor: accent }]} />
-            <Text style={[styles.tierPillText, { color: accent }]}>{data.tierLabel.toUpperCase()}</Text>
-          </View>
-        )}
-
-        {/* Badge hero — outer ring + inner ring + earned check, just like
-            BadgeCard but scaled up for the share format. */}
-        <View style={styles.badgeHero}>
-          <View
-            style={[
-              styles.outerRing,
-              {
-                width: COIN_OUTER,
-                height: COIN_OUTER,
-                borderRadius: COIN_OUTER / 2,
-                borderColor: hexToRgba(accent, 0.28),
-              },
-            ]}
-          >
+        {/* Center block — flex:1 so the hero + info stack is vertically
+            centered between the top edge and the footer. */}
+        <View style={styles.centerBlock}>
+          <View style={styles.hero}>
+            {/* Outer halo — iOS shadow paints the coloured glow, Android
+                falls back to a softly tinted border (Android elevation
+                ignores shadowColor). Earned only artefact. */}
             <View
               style={[
-                styles.innerRing,
+                styles.halo,
                 {
-                  width: COIN_INNER,
-                  height: COIN_INNER,
-                  borderRadius: COIN_INNER / 2,
-                  borderColor: accent,
-                  backgroundColor: hexToRgba(accent, 0.06),
+                  width: COIN_OUTER + 22,
+                  height: COIN_OUTER + 22,
+                  borderRadius: (COIN_OUTER + 22) / 2,
+                  shadowColor: accent,
+                  borderColor: hexToRgba(accent, 0.18),
+                },
+              ]}
+            />
+
+            <View
+              style={[
+                styles.outerRing,
+                {
+                  width: COIN_OUTER,
+                  height: COIN_OUTER,
+                  borderRadius: COIN_OUTER / 2,
+                  borderColor: hexToRgba(accent, 0.32),
                 },
               ]}
             >
-              {/* Diagonal sheen */}
-              <LinearGradient
-                colors={[
-                  hexToRgba(accent, 0.22),
-                  'transparent',
-                  hexToRgba(accent, 0.05),
+              <View
+                style={[
+                  styles.innerRing,
+                  {
+                    width: COIN_INNER,
+                    height: COIN_INNER,
+                    borderRadius: COIN_INNER / 2,
+                    borderColor: accent,
+                    backgroundColor: hexToRgba(accent, 0.06),
+                  },
                 ]}
-                start={{ x: 0.15, y: 0 }}
-                end={{ x: 0.85, y: 1 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: COIN_INNER / 2 }]}
-              />
-              {/* Top-left specular */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0.55, y: 0.55 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: COIN_INNER / 2 }]}
-              />
-
-              {data.badgeImageUrl ? (
-                <Image
-                  source={{ uri: data.badgeImageUrl }}
-                  style={{ width: COIN_IMG, height: COIN_IMG, borderRadius: 999 }}
-                  contentFit="contain"
+              >
+                {/* Diagonal sheen */}
+                <LinearGradient
+                  colors={[
+                    hexToRgba(accent, 0.22),
+                    'transparent',
+                    hexToRgba(accent, 0.05),
+                  ]}
+                  start={{ x: 0.15, y: 0 }}
+                  end={{ x: 0.85, y: 1 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: COIN_INNER / 2 }]}
                 />
-              ) : (
-                <Ionicons name="trophy" size={COIN_IMG * 0.6} color={accent} />
-              )}
+                {/* Top-left specular highlight */}
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0.55, y: 0.55 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: COIN_INNER / 2 }]}
+                />
+
+                {data.badgeImageUrl ? (
+                  <Image
+                    source={{ uri: data.badgeImageUrl }}
+                    style={{ width: COIN_IMG, height: COIN_IMG, borderRadius: 999 }}
+                    contentFit="contain"
+                  />
+                ) : (
+                  <Ionicons name="trophy" size={COIN_IMG * 0.6} color={accent} />
+                )}
+              </View>
+            </View>
+
+            {/* Earned check — pinned to the bottom-right of the inner ring,
+                same anchor as BadgeCard so the share image reads as the
+                same artefact captured at a higher resolution. */}
+            <View style={[styles.checkBadge, { backgroundColor: accent }]}>
+              <Ionicons name="checkmark" size={14} color="#000" />
             </View>
           </View>
 
-          <View style={[styles.checkBadge, { backgroundColor: accent }]}>
-            <Ionicons name="checkmark" size={14} color="#000" />
-          </View>
-        </View>
+          <Text style={styles.badgeName} numberOfLines={2}>
+            {data.badgeName}
+          </Text>
 
-        <Text style={styles.badgeName} numberOfLines={2}>{data.badgeName}</Text>
+          {data.badgeDescription && (
+            <Text style={styles.badgeDescription} numberOfLines={2}>
+              {data.badgeDescription}
+            </Text>
+          )}
 
-        {data.badgeDescription && (
-          <Text style={styles.badgeDescription} numberOfLines={2}>{data.badgeDescription}</Text>
-        )}
-
-        {data.earnedAt && (
-          <View style={styles.earnedRow}>
-            <View style={[styles.earnedPill, { backgroundColor: hexToRgba(accent, 0.10) }]}>
-              <Ionicons name="checkmark-circle" size={14} color={accent} />
+          {data.earnedAt && (
+            <View
+              style={[
+                styles.earnedPill,
+                {
+                  backgroundColor: hexToRgba(accent, 0.12),
+                  borderColor: hexToRgba(accent, 0.28),
+                },
+              ]}
+            >
+              <Ionicons name="checkmark-circle" size={13} color={accent} />
               <Text style={[styles.earnedText, { color: accent }]}>
                 Earned {formatDate(data.earnedAt)}
               </Text>
             </View>
-          </View>
-        )}
+          )}
 
-        {data.gymName && (
-          <View style={styles.gymRow}>
-            <Ionicons name="business-outline" size={13} color="rgba(255,255,255,0.35)" />
-            <Text style={styles.gymText} numberOfLines={1}>{data.gymName}</Text>
-          </View>
-        )}
+          {data.gymName && (
+            <View style={styles.gymRow}>
+              <Ionicons name="business-outline" size={12} color="rgba(255,255,255,0.4)" />
+              <Text style={styles.gymText} numberOfLines={1}>
+                {data.gymName}
+              </Text>
+            </View>
+          )}
+        </View>
 
-        {/* Footer — divider + username + tagline */}
+        {/* Footer — neutral wordmark, no brand colour. The coin already
+            carries the colour; this block just signs the image. */}
         <View style={styles.footer}>
-          <View style={styles.footerDivider} />
-          <View style={styles.footerContent}>
-            {data.username && (
-              <Text style={styles.username}>@{data.username}</Text>
-            )}
-            <Text style={styles.tagline}>SCAN. TRAIN. EARN.</Text>
+          {data.username ? (
+            <Text style={styles.username}>@{data.username}</Text>
+          ) : null}
+          <View style={styles.brandMark}>
+            <Ionicons name="water" size={11} color="rgba(255,255,255,0.32)" />
+            <Text style={styles.brandText}>SweatDrop</Text>
           </View>
         </View>
       </LinearGradient>
@@ -207,57 +215,30 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingTop: 56,
-    paddingBottom: 56,
-    justifyContent: 'flex-start',
+    paddingTop: 30,
+    paddingBottom: 22,
     alignItems: 'center',
   },
-  topGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-  },
-  brandHeader: {
-    position: 'absolute',
-    top: 20,
-    left: 22,
-    flexDirection: 'row',
+
+  /* ── Center block (badge + info, vertically centered) ── */
+  centerBlock: {
+    flex: 1,
+    width: '100%',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
   },
-  brandName: {
-    ...fontStyles.heading,
-    fontSize: 14,
-    letterSpacing: 1.4,
-  },
-  tierPill: {
-    position: 'absolute',
-    top: 22,
-    right: 22,
-    flexDirection: 'row',
+
+  hero: {
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 11,
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  halo: {
+    position: 'absolute',
     borderWidth: 1,
-  },
-  tierDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  tierPillText: {
-    ...fontStyles.heading,
-    fontSize: 10,
-    letterSpacing: 1.4,
-  },
-  badgeHero: {
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 18,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 28,
   },
   outerRing: {
     borderWidth: 2,
@@ -273,53 +254,55 @@ const styles = StyleSheet.create({
   checkBadge: {
     position: 'absolute',
     bottom: -2,
-    right: -2,
+    right: 4,
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#050510',
+    borderColor: '#0A0A14',
   },
+
   badgeName: {
     ...fontStyles.heading,
     fontSize: 24,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: 0.3,
-    marginBottom: 8,
+    letterSpacing: 0.4,
+    marginBottom: 6,
     lineHeight: 28,
+    maxWidth: '90%',
   },
   badgeDescription: {
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.55)',
+    color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 14,
+    marginBottom: 12,
     maxWidth: '85%',
     ...fontStyles.body,
   },
-  earnedRow: {
-    marginBottom: 8,
-  },
+
   earnedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 8,
   },
   earnedText: {
     ...fontStyles.bodySemiBold,
     fontSize: 12,
   },
+
   gymRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 4,
   },
   gymText: {
     ...fontStyles.bodyMedium,
@@ -327,33 +310,27 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.4)',
     maxWidth: CARD_SIZE * 0.7,
   },
+
+  /* ── Footer (signature block, neutral colours) ── */
   footer: {
-    position: 'absolute',
-    bottom: 22,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    gap: 6,
-  },
-  footerDivider: {
-    width: 36,
-    height: 1.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 1,
-  },
-  footerContent: {
     alignItems: 'center',
     gap: 4,
   },
   username: {
     ...fontStyles.bodySemiBold,
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.55)',
+    letterSpacing: 0.2,
   },
-  tagline: {
+  brandMark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  brandText: {
     ...fontStyles.heading,
-    fontSize: 9,
-    color: 'rgba(255, 255, 255, 0.28)',
-    letterSpacing: 2.4,
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.32)',
+    letterSpacing: 1.4,
   },
 });

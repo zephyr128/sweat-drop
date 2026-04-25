@@ -7,7 +7,6 @@ import {
   Platform,
   TouchableOpacity,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -23,8 +22,8 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { PlatformBlur } from '@/components/PlatformBlur';
-import { useTheme, useBranding } from '@/lib/contexts/ThemeContext';
-import { theme, fontStyles, hexToRgba } from '@/lib/theme';
+import { useBranding } from '@/lib/contexts/ThemeContext';
+import { fontStyles, hexToRgba } from '@/lib/theme';
 import { UserBadge } from '@/hooks/useUserBadges';
 import { AchievementTier } from '@/hooks/useAllBadges';
 import { useSession } from '@/hooks/useSession';
@@ -34,8 +33,6 @@ import { ShareableBadgeCard, ShareableBadgeData } from './ShareableBadgeCard';
 import { TIER_COLORS, getBadgeCategoryColor } from './BadgeCard';
 import { log } from '@/lib/logger';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 interface BadgeDetailModalProps {
   visible: boolean;
   badge: UserBadge | null;
@@ -43,6 +40,11 @@ interface BadgeDetailModalProps {
   isLocked?: boolean;
   progress?: number;
   tier?: AchievementTier | null;
+  // When false, hides the "Share badge" button. Used on member profile
+  // screens (app/user/[id].tsx) where the viewer is looking at another
+  // user's badge — sharing someone else's accomplishment as your own is
+  // misleading, so we suppress the action.
+  canShare?: boolean;
 }
 
 export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
@@ -52,12 +54,11 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
   isLocked = false,
   progress = 0,
   tier = null,
+  canShare = true,
 }) => {
-  const { theme: currentTheme } = useTheme();
   const branding = useBranding();
   const { session } = useSession();
   const { t } = useTranslation('trophyRoom');
-  const { t: tCommon } = useTranslation('common');
   const viewShotRef = useRef<View>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
@@ -207,7 +208,6 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
     brandColor: branding.primary,
     brandColorDark: branding.primaryDark,
     tier: tier,
-    tierLabel: tierLabel,
   };
 
   return (
@@ -223,13 +223,6 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
           <PlatformBlur intensity={40} style={StyleSheet.absoluteFill} tint="dark" androidColor="rgba(0,0,0,0.85)" />
         ) : null}
         <View style={[styles.darkOverlay, Platform.OS === 'android' && styles.androidBackdrop]} />
-
-        {/* Tier-tinted radial wash behind the badge so it feels enthroned
-            instead of just floating on a flat overlay. */}
-        <View
-          pointerEvents="none"
-          style={[styles.tierGlow, { backgroundColor: hexToRgba(categoryColor, isLocked ? 0.04 : 0.10) }]}
-        />
       </Animated.View>
 
       <TouchableOpacity
@@ -400,7 +393,7 @@ export const BadgeDetailModal: React.FC<BadgeDetailModalProps> = ({
             )}
           </Animated.View>
 
-          {!isLocked && (
+          {!isLocked && canShare && (
             <Animated.View style={[styles.shareSection, shareAnimStyle]}>
               <TouchableOpacity
                 style={[styles.shareButton, { opacity: isSharing ? 0.6 : 1 }]}
@@ -452,14 +445,6 @@ const styles = StyleSheet.create({
   androidBackdrop: {
     backgroundColor: 'rgba(0, 0, 0, 0.88)',
   },
-  tierGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 360,
-    opacity: 0.85,
-  },
   contentLayer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -484,8 +469,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderWidth: 1,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 32,
+    // Toned down from 0.55/32 → 0.35/22. The previous strong tier-coloured
+    // bloom leaked into the surrounding backdrop and read as a "half-tinted
+    // overlay" rather than a clean modal — the user explicitly called this
+    // out. The coin's own ring + inner sheen carry enough colour identity.
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
   },
   coinOuter: {
     borderWidth: 1.5,

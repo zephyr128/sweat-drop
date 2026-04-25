@@ -5,62 +5,24 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useUserBadges, UserBadge } from '@/hooks/useUserBadges';
-import { useAllBadges, BadgeWithProgress, AchievementCategory } from '@/hooks/useAllBadges';
-import { useUserProgress } from '@/hooks/useUserProgress';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
+import { UserBadge } from '@/hooks/useUserBadges';
+import { BadgeWithProgress } from '@/hooks/useAllBadges';
+import { useAllBadgesWithProgress } from '@/hooks/useAllBadgesWithProgress';
 import { useBranding } from '@/lib/contexts/ThemeContext';
 import { useGymStore } from '@/lib/stores/useGymStore';
 import { theme, fontStyles, hexToRgba } from '@/lib/theme';
+import {
+  buildCategoryGroups,
+  sortBadgesForRow,
+  type CategoryGroup,
+  type CategoryKey,
+} from '@/lib/badges/categoryMeta';
 import BackButton from './BackButton';
 import { SliderTabs } from './SliderTabs';
 import { BadgeCard } from './BadgeCard';
 import { BadgeDetailModal } from './BadgeDetailModal';
-import { BadgeCategoryModal } from './BadgeCategoryModal';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-
-const CATEGORY_ORDER: AchievementCategory[] = [
-  'sessions', 'total_drops', 'streak', 'multi_gym', 'distance', 'special',
-];
-
-const TIER_RANK: Record<string, number> = {
-  bronze: 0, silver: 1, gold: 2, platinum: 3, diamond: 4,
-};
-
-const CATEGORY_ICONS: Record<AchievementCategory, React.ComponentProps<typeof Ionicons>['name']> = {
-  sessions: 'barbell-outline',
-  total_drops: 'water-outline',
-  streak: 'flame-outline',
-  multi_gym: 'map-outline',
-  distance: 'bicycle-outline',
-  special: 'star-outline',
-};
-
-// Per-category accent colors. Used as a subtle tint on the row icon, the
-// "X / Y" pill and the View-All chevron, so each row reads at a glance
-// (Workouts = blue, Streak = orange, Drops = green, etc.). These match the
-// colour cues we already use elsewhere (drop balance is green, streak is
-// orange, etc.) and tier colours still drive the badge cards themselves.
-const CATEGORY_ACCENT: Record<string, string> = {
-  sessions: '#5AC8FA',
-  total_drops: '#30D158',
-  streak: '#FF9500',
-  multi_gym: '#BF5AF2',
-  distance: '#64D2FF',
-  special: '#FFD60A',
-  gym: '#FF6482',
-};
-
-// A "category group" is one row in the trophy room: an icon, a label, an
-// accent colour, and the badges (earned + locked, mixed) that belong to it.
-// Built once per page from the big BadgeWithProgress[] list so the rows know
-// nothing about the global/gym distinction beyond rendering.
-type CategoryGroup = {
-  key: string;
-  label: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  accent: string;
-  badges: BadgeWithProgress[];
-};
 
 interface TrophyRoomProps {
   userId?: string;
@@ -70,12 +32,11 @@ interface TrophyRoomProps {
 export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const { t } = useTranslation('trophyRoom');
   const branding = useBranding();
+  const router = useThrottledRouter();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
-  const { badges: earnedBadges, loading: badgesLoading } = useUserBadges(userId);
-  const { globalAchievements, gymChallenges, loading: allBadgesLoading } = useAllBadges();
-  const { progress: userProgress } = useUserProgress(userId);
-  const [filterType, setFilterType] = useState<'all' | 'this_gym' | 'earned' | 'locked'>('all');
+  const { allBadges: allBadgesWithProgress, earnedBadges, loading } = useAllBadgesWithProgress(userId);
+  const [filterType, setFilterType] = useState<'all' | 'this_gym'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Selected badge — drives BadgeDetailModal
@@ -85,98 +46,28 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
   const [selectedBadgeTier, setSelectedBadgeTier] = useState<BadgeWithProgress['tier']>(null);
   const [detailVisible, setDetailVisible] = useState(false);
 
-  // Category modal — drives BadgeCategoryModal (View All)
-  const [categoryModalGroup, setCategoryModalGroup] = useState<CategoryGroup | null>(null);
-
-  const loading = badgesLoading || allBadgesLoading;
-
-  const allBadgesWithProgress = useMemo((): BadgeWithProgress[] => {
-    const badges: BadgeWithProgress[] = [];
-
-    globalAchievements.forEach((achievement) => {
-      const earnedBadge = earnedBadges.find(
-        (b) => b.badge_type === 'global' && b.badge_name === achievement.name
-      );
-      const prog = userProgress.find((p) => p.global_achievement_id === achievement.id);
-      const earned = !!earnedBadge || prog?.is_completed === true;
-
-      badges.push({
-        id: achievement.id,
-        name: achievement.name,
-        description: achievement.description,
-        badge_image_url: achievement.badge_image_url,
-        badge_type: 'global',
-        gym_name: null,
-        gym_id: null,
-        is_earned: earned,
-        earned_at: earnedBadge?.earned_at || null,
-        progress: earned ? 100 : (prog?.progress_percent ?? 0),
-        progress_data: prog?.progress_data,
-        category: achievement.category,
-        tier: achievement.tier,
-      });
-    });
-
-    gymChallenges.forEach((challenge) => {
-      const earnedBadge = earnedBadges.find(
-        (b) => b.badge_type === 'gym' && b.badge_name === challenge.name
-      );
-      const prog = userProgress.find((p) => p.gym_challenge_id === challenge.id);
-      const earned = !!earnedBadge || prog?.is_completed === true;
-
-      badges.push({
-        id: challenge.id,
-        name: challenge.name,
-        description: challenge.description,
-        badge_image_url: challenge.badge_image_url,
-        badge_type: 'gym',
-        gym_name: challenge.gym_name,
-        gym_id: challenge.gym_id,
-        is_earned: earned,
-        earned_at: earnedBadge?.earned_at || null,
-        progress: earned ? 100 : (prog?.progress_percent ?? 0),
-        progress_data: prog?.progress_data,
-      });
-    });
-
-    const coveredGymBadgeNames = new Set(gymChallenges.map((c) => c.name));
-    earnedBadges
-      .filter((b) => b.badge_type === 'gym' && !coveredGymBadgeNames.has(b.badge_name))
-      .filter((b) => !activeGymId || b.gym_id === activeGymId)
-      .forEach((b) => {
-        badges.push({
-          id: b.badge_id,
-          name: b.badge_name,
-          description: b.badge_description,
-          badge_image_url: b.badge_image_url,
-          badge_type: 'gym',
-          gym_name: b.gym_name,
-          gym_id: b.gym_id,
-          is_earned: true,
-          earned_at: b.earned_at,
-          progress: 100,
-        });
-      });
-
-    return badges;
-  }, [globalAchievements, gymChallenges, earnedBadges, userProgress, activeGymId]);
-
   const totalEarned = allBadgesWithProgress.filter((b) => b.is_earned).length;
   const totalAvailable = allBadgesWithProgress.length;
   const completionPct = totalAvailable > 0 ? Math.round((totalEarned / totalAvailable) * 100) : 0;
 
-  const CATEGORY_LABELS: Record<AchievementCategory, string> = useMemo(() => ({
-    sessions: t('categorySessions'),
-    total_drops: t('categoryTotalDrops'),
-    streak: t('categoryStreak'),
-    multi_gym: t('categoryMultiGym'),
-    distance: t('categoryDistance'),
-    special: t('categorySpecial'),
-  }), [t]);
+  const labelFor = useCallback(
+    (key: CategoryKey): string => {
+      switch (key) {
+        case 'sessions':    return t('categorySessions');
+        case 'total_drops': return t('categoryTotalDrops');
+        case 'streak':      return t('categoryStreak');
+        case 'multi_gym':   return t('categoryMultiGym');
+        case 'distance':    return t('categoryDistance');
+        case 'special':     return t('categorySpecial');
+        case 'gym':         return t('categoryGym');
+      }
+    },
+    [t],
+  );
 
   const handleBadgePress = useCallback((badge: BadgeWithProgress) => {
     const earnedBadge = earnedBadges.find(
-      (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type
+      (b) => b.badge_name === badge.name && b.badge_type === badge.badge_type,
     );
 
     const badgeForModal: UserBadge = earnedBadge || {
@@ -197,56 +88,19 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     setDetailVisible(true);
   }, [earnedBadges]);
 
-  // Build category groups — one row per category, in CATEGORY_ORDER, plus
-  // a final "This Gym" row for gym badges and a fallback "Special" group
-  // for any global achievement that's missing a category in the DB. Empty
-  // groups (after filtering by tab + search) are filtered out by the caller.
-  const buildCategoryGroups = useCallback((badges: BadgeWithProgress[]): CategoryGroup[] => {
-    const groups: CategoryGroup[] = [];
-    const buckets: Partial<Record<AchievementCategory, BadgeWithProgress[]>> = {};
-    const orphanGlobals: BadgeWithProgress[] = [];
-    const gymBadges: BadgeWithProgress[] = [];
-
-    badges.forEach((b) => {
-      if (b.badge_type === 'gym') {
-        gymBadges.push(b);
-        return;
-      }
-      if (b.category) {
-        if (!buckets[b.category]) buckets[b.category] = [];
-        buckets[b.category]!.push(b);
-      } else {
-        orphanGlobals.push(b);
-      }
-    });
-
-    CATEGORY_ORDER.forEach((cat) => {
-      const items = buckets[cat] ?? [];
-      if (cat === 'special' && orphanGlobals.length > 0) {
-        items.push(...orphanGlobals);
-      }
-      if (items.length === 0) return;
-      groups.push({
-        key: cat,
-        label: CATEGORY_LABELS[cat],
-        icon: CATEGORY_ICONS[cat],
-        accent: CATEGORY_ACCENT[cat] ?? branding.primary,
-        badges: items,
+  // "View all" pushes to the category drill-down screen on the trophy
+  // room's own stack — same iOS-style slide-from-right transition the
+  // rest of the app uses, instead of the previous modal that
+  // (correctly) felt out of place.
+  const handleViewAll = useCallback(
+    (group: CategoryGroup) => {
+      router.push({
+        pathname: '/trophy-room/category/[key]',
+        params: { key: group.key },
       });
-    });
-
-    if (gymBadges.length > 0) {
-      groups.push({
-        key: 'gym',
-        label: t('categoryGym'),
-        icon: 'fitness-outline',
-        accent: CATEGORY_ACCENT.gym ?? branding.primary,
-        badges: gymBadges,
-      });
-    }
-
-    return groups;
-  }, [CATEGORY_LABELS, t, branding.primary]);
+    },
+    [router],
+  );
 
   if (loading) {
     return (
@@ -262,11 +116,14 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
     );
   }
 
-  const FILTERS: { key: 'all' | 'this_gym' | 'earned' | 'locked'; labelKey: string }[] = [
+  // Earned/Locked tabs were removed — every category row already shows
+  // earned + locked badges mixed (earned first, locked tail), so a
+  // global "earned only" filter just produced ratios like
+  // "1/1 2/2 3/3" that read as redundant noise. The "All" + "This Gym"
+  // split is what users actually need: one focused view per badge scope.
+  const FILTERS: { key: 'all' | 'this_gym'; labelKey: string }[] = [
     { key: 'all',      labelKey: 'filterAll' },
     { key: 'this_gym', labelKey: 'filterThisGym' },
-    { key: 'earned',   labelKey: 'filterEarned' },
-    { key: 'locked',   labelKey: 'filterLocked' },
   ];
 
   return (
@@ -341,7 +198,13 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
         </View>
       </Animated.View>
 
-      {/* Filter tabs + swipeable pages */}
+      {/* Filter tabs + swipeable pages.
+          - "All" page: per-category horizontal carousels (gym category
+            included, since the user expects every category to use the
+            same scroll affordance instead of one-off grids).
+          - "This Gym" page: a single flat grid of every gym badge —
+            this tab IS the "view all gym badges" affordance, so no
+            inner row chrome is needed. */}
       <Animated.View entering={FadeInDown.delay(220).duration(400)} style={styles.tabsWrapper}>
         <SliderTabs
           tabs={FILTERS.map(({ key, labelKey }) => ({ key, label: t(labelKey) }))}
@@ -351,35 +214,81 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           barStyle={styles.tabBar}
         >
           {FILTERS.map(({ key }) => {
-            // Build the page-level filtered list (gym scoping + tab filter +
-            // search). The category-row filtering ("Earned"/"Locked" tabs)
-            // runs separately so a row stays visible as long as it has at
-            // least one badge after filtering.
-            const pageBadges = (() => {
+            const filteredBadges = (() => {
               let filtered = allBadgesWithProgress;
               const gymOk = (b: BadgeWithProgress) =>
                 b.badge_type === 'global' || (b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId));
 
               if (key === 'this_gym') {
-                filtered = filtered.filter((b) => b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId));
-              } else if (key === 'all') {
+                filtered = filtered.filter(
+                  (b) => b.badge_type === 'gym' && (!activeGymId || b.gym_id === activeGymId),
+                );
+              } else {
                 filtered = filtered.filter(gymOk);
-              } else if (key === 'earned') {
-                filtered = filtered.filter((b) => b.is_earned && gymOk(b));
-              } else if (key === 'locked') {
-                filtered = filtered.filter((b) => !b.is_earned && gymOk(b));
               }
 
               if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
                 filtered = filtered.filter(
-                  (b) => b.name.toLowerCase().includes(q) || (b.description && b.description.toLowerCase().includes(q)),
+                  (b) =>
+                    b.name.toLowerCase().includes(q) ||
+                    (b.description && b.description.toLowerCase().includes(q)),
                 );
               }
               return filtered;
             })();
 
-            const groups = buildCategoryGroups(pageBadges);
+            // "This Gym" — flat grid, no category headers. Sorting still
+            // earned-first / progress-desc so the tab opens with the
+            // user's wins on top and the next-up locked badges below.
+            if (key === 'this_gym') {
+              const sorted = sortBadgesForRow(filteredBadges);
+              return (
+                <ScrollView
+                  key={key}
+                  contentContainerStyle={styles.gridScrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {sorted.length === 0 ? (
+                    <View style={styles.emptyState}>
+                      <View style={styles.emptyIconBox}>
+                        <Ionicons name="trophy-outline" size={40} color="rgba(255,255,255,0.15)" />
+                      </View>
+                      <Text style={styles.emptyTitle}>{t('noBadgesFound')}</Text>
+                      <Text style={styles.emptyText}>
+                        {searchQuery ? t('tryAdjustingSearch') : t('completeWorkouts')}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.flatGrid}>
+                      {sorted.map((b) => (
+                        <BadgeCard
+                          key={`${b.badge_type}-${b.id}`}
+                          badge={{
+                            badge_id: b.id,
+                            badge_name: b.name,
+                            badge_description: b.description,
+                            badge_image_url: b.badge_image_url,
+                            earned_at: b.earned_at || '',
+                            badge_type: b.badge_type,
+                            gym_name: b.gym_name,
+                            gym_id: b.gym_id || null,
+                          }}
+                          isLocked={!b.is_earned}
+                          progress={b.progress}
+                          onPress={() => handleBadgePress(b)}
+                          size="medium"
+                          tier={b.tier}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </ScrollView>
+              );
+            }
+
+            // "All" — per-category rows, every row a carousel.
+            const groups = buildCategoryGroups(filteredBadges, labelFor, branding.primary);
 
             return (
               <ScrollView
@@ -404,7 +313,7 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
                       group={group}
                       index={idx}
                       onBadgePress={handleBadgePress}
-                      onViewAll={() => setCategoryModalGroup(group)}
+                      onViewAll={() => handleViewAll(group)}
                       t={t}
                     />
                   ))
@@ -414,15 +323,6 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
           })}
         </SliderTabs>
       </Animated.View>
-
-      <BadgeCategoryModal
-        visible={categoryModalGroup !== null}
-        group={categoryModalGroup}
-        onClose={() => setCategoryModalGroup(null)}
-        onBadgePress={(b) => {
-          handleBadgePress(b);
-        }}
-      />
 
       <BadgeDetailModal
         visible={detailVisible}
@@ -448,6 +348,10 @@ export const TrophyRoom: React.FC<TrophyRoomProps> = ({ userId, onClose }) => {
 // small badge cards. Earned badges come first (sorted by tier rank); locked
 // badges follow, sorted by progress descending so the "almost there" ones
 // surface near the front of the carousel where they nudge the user.
+//
+// Every category — including "This Gym" inside the All tab — uses this
+// same carousel. The user explicitly asked for the gym row to scroll
+// horizontally too so the All view reads as a consistent stack of rows.
 // ---------------------------------------------------------------------------
 
 const CategoryRow: React.FC<{
@@ -457,23 +361,14 @@ const CategoryRow: React.FC<{
   onViewAll: () => void;
   t: (k: string) => string;
 }> = ({ group, index, onBadgePress, onViewAll, t }) => {
-  const sorted = useMemo(() => {
-    const earned = group.badges
-      .filter((b) => b.is_earned)
-      .sort((a, b) => (TIER_RANK[a.tier ?? ''] ?? 99) - (TIER_RANK[b.tier ?? ''] ?? 99));
-    const locked = group.badges
-      .filter((b) => !b.is_earned)
-      .sort((a, b) => b.progress - a.progress);
-    return [...earned, ...locked];
-  }, [group.badges]);
+  const sorted = useMemo(() => sortBadgesForRow(group.badges), [group.badges]);
 
   const earnedCount = group.badges.filter((b) => b.is_earned).length;
   const totalCount = group.badges.length;
 
-  // Show "View All" affordance once a category has more badges than fit
-  // on screen (~4 small cards). Below that the user can already see them
-  // all, and the chevron just adds noise.
-  const showViewAll = totalCount > 4;
+  // Show "View all" once a category has more badges than fit on screen
+  // (~3 large carousel cards). Below that the chevron is just noise.
+  const showViewAll = totalCount > 3;
 
   return (
     <Animated.View
@@ -481,7 +376,8 @@ const CategoryRow: React.FC<{
       style={styles.row}
     >
       <TouchableOpacity
-        onPress={onViewAll}
+        onPress={showViewAll ? onViewAll : undefined}
+        disabled={!showViewAll}
         activeOpacity={0.7}
         accessibilityRole="button"
         style={styles.rowHeader}
@@ -666,6 +562,11 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 64,
   },
+  gridScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 80,
+  },
 
   /* ── Category row ── */
   row: {
@@ -720,7 +621,14 @@ const styles = StyleSheet.create({
   },
   carouselContent: {
     paddingHorizontal: 16,
-    gap: 6,
+    gap: 8,
+  },
+
+  /* ── This-gym flat grid ── */
+  flatGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
 
   /* ── Empty state ── */
