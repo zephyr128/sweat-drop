@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+import { isConsumerRole } from '@/lib/auth/isConsumerAccount';
 import { log } from '@/lib/logger';
 
 // Keep splash screen visible while we determine the initial route
@@ -14,6 +15,7 @@ export default function Index() {
   const router = useThrottledRouter();
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const session = useAuthStore((s) => s.session);
+  const profile = useAuthStore((s) => s.profile);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
   const pendingPasswordRecovery = useAuthStore((s) => s.pendingPasswordRecovery);
   const pendingVerificationEmail = useAuthStore((s) => s.pendingVerificationEmail);
@@ -51,6 +53,13 @@ export default function Index() {
           } else {
             router.replace('/(onboarding)/welcome');
           }
+        } else if (profile && !isConsumerRole(profile.role)) {
+          // Elevated role detected — authStore.fetchProfile() is already calling
+          // rejectElevatedSession() which signs out and resets state. Yield here
+          // so we don't race ahead and navigate into onboarding before reset settles.
+          log.warn('[Index] Elevated role in profile — yielding for authStore rejection');
+          setHasNavigated(true);
+          return;
         } else if (shouldRequireEmailVerification(session?.user)) {
           consumePendingQR();
           router.replace('/(onboarding)/verify-email');
@@ -108,6 +117,7 @@ export default function Index() {
   }, [
     isInitialized,
     session,
+    profile,
     onboardingStep,
     pendingPasswordRecovery,
     pendingVerificationEmail,

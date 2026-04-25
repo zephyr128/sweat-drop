@@ -19,6 +19,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
+import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAccount';
 import {
   getPrivacyUrl,
   getTermsUrl,
@@ -172,10 +173,8 @@ export default function AuthScreen() {
     const profile = useAuthStore.getState().profile;
     const freshSessionUser = useAuthStore.getState().session?.user;
 
-    if (profile?.role && profile.role !== 'member' && profile.role !== 'user') {
-      await supabase.auth.signOut();
-      useAuthStore.getState().reset();
-      showModal({ title: t('auth.accessDenied'), body: t('auth.adminNotAllowed') });
+    if (profile?.role && !isConsumerRole(profile.role)) {
+      await rejectElevatedSession('auth_screen_elevated_role', profile.role);
       return;
     }
 
