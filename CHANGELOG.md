@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Mobile gym discovery (onboarding + home empty state) routed through `get_public_gyms_for_mobile` RPC for demo-gym gating. (`apps/mobile-app/app/(onboarding)/home-gym.tsx`, `apps/mobile-app/app/home.tsx`)
+
 ### Added
+- `gyms.is_demo_gym` flag + demo-aware `get_public_gyms_for_mobile()` RPC: SweatDrop test gym hidden from non-demo users at the server level; demo users (Apple reviewers, internal QA) continue to see it. Superadmin-only mutation guard enforced via BEFORE UPDATE trigger (mirrors `profiles.is_demo` pattern). Cleanup migration drops the legacy 2-arg `get_public_gyms_for_mobile(boolean, boolean)` overload left over from `20260328000002`. (`20260427120000_gyms_is_demo_gym_and_rpc_demo_filter.sql`, `20260427121500_drop_get_public_gyms_for_mobile_2arg_overload.sql`)
 - Agent communication protocol (`docs/AGENT_COMMUNICATION.md`)
 - Changelog file for tracking all changes
 - Migration notes system for database changes

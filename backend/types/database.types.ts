@@ -1732,6 +1732,7 @@ export type Database = {
           id: string
           instagram: string | null
           is_active: boolean
+          is_demo_gym: boolean
           is_founding_partner: boolean
           is_mobile_listed: boolean
           is_pilot_enabled: boolean
@@ -1768,6 +1769,7 @@ export type Database = {
           id?: string
           instagram?: string | null
           is_active?: boolean
+          is_demo_gym?: boolean
           is_founding_partner?: boolean
           is_mobile_listed?: boolean
           is_pilot_enabled?: boolean
@@ -1804,6 +1806,7 @@ export type Database = {
           id?: string
           instagram?: string | null
           is_active?: boolean
+          is_demo_gym?: boolean
           is_founding_partner?: boolean
           is_mobile_listed?: boolean
           is_pilot_enabled?: boolean
@@ -4246,20 +4249,43 @@ export type Database = {
         Returns: Json
       }
       get_public_gyms_for_mobile: {
-        Args: { p_listed_only?: boolean; p_pilot_only?: boolean }
+        Args: { p_pilot_only?: boolean }
         Returns: {
-          address: string
-          city: string
-          country: string
+          address: string | null
+          branding_id: string | null
+          checkin_drops: number
+          checkin_verification_mode: string
+          city: string | null
+          country: string | null
           created_at: string
+          description: string | null
+          email: string | null
+          gps_radius_m: number
           id: string
+          instagram: string | null
+          is_active: boolean
+          is_demo_gym: boolean
+          is_founding_partner: boolean
           is_mobile_listed: boolean
           is_pilot_enabled: boolean
-          lat: number
-          lng: number
+          is_suspended: boolean
+          lat: number | null
+          latitude: number | null
+          lng: number | null
+          longitude: number | null
           name: string
-          owner_id: string
+          owner_id: string | null
+          phone: string | null
+          session_inactivity_autofinish_sec: number
+          session_takeover_stale_sec: number
+          session_warning_after_sec: number
+          smartcoach_enabled: boolean
+          status: string | null
+          subscription_plan: string | null
+          subscription_type: string | null
           updated_at: string
+          website: string | null
+          working_hours: Json | null
         }[]
       }
       get_realtime_tables: {

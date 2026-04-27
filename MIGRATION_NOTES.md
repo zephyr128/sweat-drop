@@ -2,7 +2,45 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-25 (`get_user_arena_result` anchor fix + four-state ended UI)
+**Last Updated:** 2026-04-27 (`gyms.is_demo_gym` flag + demo-aware `get_public_gyms_for_mobile` RPC)
+
+---
+
+## [2026-04-27] - Demo Gym Visibility Gating (`gyms.is_demo_gym` + RPC patch)
+
+**Migration Files:**
+- `backend/supabase/migrations/20260427120000_gyms_is_demo_gym_and_rpc_demo_filter.sql`
+- `backend/supabase/migrations/20260427121500_drop_get_public_gyms_for_mobile_2arg_overload.sql` (cleanup of legacy 2-arg overload)
+
+**Agent:** supabase-dba
+
+**Changes:**
+- Added column `public.gyms.is_demo_gym BOOLEAN NOT NULL DEFAULT false`
+- Added partial index `idx_gyms_is_demo_gym` (WHERE is_demo_gym = true)
+- Added trigger function `enforce_gyms_is_demo_gym_superadmin_only()` — mirrors `profiles.is_demo` guard; only superadmin can flip the flag
+- Added BEFORE UPDATE trigger `trg_gyms_guard_is_demo_gym_update` on `public.gyms`
+- Dropped the legacy 2-arg overload `get_public_gyms_for_mobile(BOOLEAN, BOOLEAN)` from `20260328000002` (cleanup migration `20260427121500`) — without this, `CREATE OR REPLACE` of the new 1-arg version would not actually replace the prior version (different signatures = a second overload), causing ambiguity for `supabase.rpc('get_public_gyms_for_mobile')` calls without args.
+- Replaced `get_public_gyms_for_mobile(BOOLEAN)` with a demo-aware version:
+  - Return type widened from hand-listed `TABLE(...)` to `SETOF public.gyms` (all columns, backwards-compatible)
+  - Demo gyms (`is_demo_gym = true`) now hidden from non-demo callers; visible only to `profiles.is_demo = true` users
+  - Signature preserved: `p_pilot_only BOOLEAN DEFAULT false`
+  - EXECUTE re-granted to `authenticated` and `anon`
+- Data UPDATE: SweatDrop test gym → `is_demo_gym = true`, `is_mobile_listed = false`
+  - WHERE clause: `name ILIKE 'sweatdrop gym%' AND COALESCE(is_demo_gym, false) = false`
+  - If the SweatDrop test gym id needs to be referenced explicitly in future migrations, retrieve it via: `SELECT id, name FROM public.gyms WHERE is_demo_gym = true;`
+
+**Impact:**
+- **Mobile App:** `gyms.tsx` (already RPC-driven) — no change needed. `mobile-coder` must update `home.tsx` and `(onboarding)/home-gym.tsx` to switch from direct table queries to `supabase.rpc('get_public_gyms_for_mobile')` (Step 2 of plan).
+- **Admin Panel:** No change required; admins see all gyms regardless of `is_demo_gym`.
+
+**Breaking Changes:**
+- None. Return shape of `get_public_gyms_for_mobile()` widens (every previously returned column is still present).
+
+**Next Steps:**
+1. [x] `supabase gen types typescript --linked > backend/types/database.types.ts` — done
+2. [ ] mobile-coder: `apps/mobile-app/app/(onboarding)/home-gym.tsx` — switch to RPC (Step 2.1)
+3. [ ] mobile-coder: `apps/mobile-app/app/home.tsx` (~L662) — switch to RPC (Step 2.2)
+4. [ ] Verification: demo user sees SweatDrop gym in onboarding; non-demo user does not
 
 ---
 
