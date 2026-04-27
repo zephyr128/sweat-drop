@@ -661,13 +661,16 @@ export default function HomeScreen() {
 
     const loadGyms = async () => {
       try {
-        const { data: gymsData, error } = await supabase
-          .from('gyms')
-          .select('id, name, city, address, owner_id, is_active, is_mobile_listed')
-          .eq('is_active', true)
-          .eq('is_mobile_listed', true)
-          .order('name')
-          .limit(10);
+        const { data: rpcGyms, error } = await supabase
+          .rpc('get_public_gyms_for_mobile');
+        type RpcGym = {
+          id: string;
+          name: string;
+          city: string | null;
+          address: string | null;
+          owner_id: string | null;
+        };
+        const gymsData: RpcGym[] = ((rpcGyms ?? []) as RpcGym[]).slice(0, 10);
 
         if (error) {
           log.warn('[Home] Gyms query failed, trying fallback:', error.message);
@@ -675,6 +678,7 @@ export default function HomeScreen() {
             .from('gyms')
             .select('id, name, city, address, owner_id')
             .eq('is_active', true)
+            .eq('is_mobile_listed', true)
             .limit(10);
           if (fallbackData) {
             setAvailableGyms(fallbackData.map(g => ({ ...g, logo_url: null, primary_color: null })));

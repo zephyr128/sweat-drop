@@ -113,16 +113,12 @@ export default function HomeGymScreen() {
 
   const loadGyms = async () => {
     try {
-      // Only show gyms that are both mobile-listed AND active
-      const { data: gymsData, error } = await supabase
-        .from('gyms')
-        .select('*')
-        .eq('is_mobile_listed', true)
-        .eq('is_active', true)
-        .order('name');
+      const { data: rpcData, error } = await supabase
+        .rpc('get_public_gyms_for_mobile');
 
       if (error) throw error;
-      if (!gymsData) {
+      const gymsData = (rpcData ?? []) as Gym[];
+      if (gymsData.length === 0) {
         setGyms([]);
         setLoading(false);
         return;
