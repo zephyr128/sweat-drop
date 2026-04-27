@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { createMMKV } from 'react-native-mmkv';
 import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
 
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -18,10 +18,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 const finalSupabaseUrl = supabaseUrl || 'https://placeholder.supabase.co';
 const finalSupabaseAnonKey = supabaseAnonKey || 'placeholder-anon-key';
+const supabaseStorage = createMMKV({ id: 'supabase-auth' });
+
+const supabaseMmkvStorage = {
+  getItem: async (key: string) => {
+    const value = supabaseStorage.getString(key);
+    return value ?? null;
+  },
+  setItem: async (key: string, value: string) => {
+    if (value == null) {
+      supabaseStorage.remove(key);
+      return;
+    }
+    supabaseStorage.set(key, value);
+  },
+  removeItem: async (key: string) => {
+    supabaseStorage.remove(key);
+  },
+};
 
 export const supabase = createClient(finalSupabaseUrl, finalSupabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: supabaseMmkvStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
