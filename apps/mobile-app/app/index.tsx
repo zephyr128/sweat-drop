@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
 import { isConsumerRole } from '@/lib/auth/isConsumerAccount';
+import { parseQrPayload } from '@/lib/qr/handleQrDeepLink';
 import { log } from '@/lib/logger';
 
 // Keep splash screen visible while we determine the initial route
@@ -92,12 +93,32 @@ export default function Index() {
           // Logged in and onboarding done — check for pending QR from native camera
           const pendingQR = consumePendingQR();
           if (pendingQR) {
-            log.debug('[Index] Pending QR from cold-start deep link, opening scan:', pendingQR);
+            log.debug('[Index] Pending QR from cold-start deep link, routing directly:', pendingQR);
+            const parsed = parseQrPayload(pendingQR);
             router.replace('/home');
-            // Small delay so home mounts before scan modal opens
+            // Delay > useThrottledRouter THROTTLE_MS (600ms) so the second
+            // navigation actually fires (the throttle ref was just bumped by
+            // the router.replace above and would silently drop a follow-up
+            // call within 600ms, leaving the user stuck on /home with no
+            // deep-link processing).
             setTimeout(() => {
-              router.push({ pathname: '/scan', params: { autoQR: pendingQR } });
-            }, 400);
+              if (parsed.kind === 'machine') {
+                router.push({
+                  pathname: '/m/[uuid]',
+                  params: {
+                    uuid: parsed.qrUuid,
+                    ...(parsed.sensorHint ? { s: parsed.sensorHint } : {}),
+                  },
+                });
+              } else if (parsed.kind === 'checkin') {
+                router.push({
+                  pathname: '/c/[gymId]',
+                  params: { gymId: parsed.gymId },
+                });
+              } else {
+                router.push({ pathname: '/scan', params: { autoQR: pendingQR } });
+              }
+            }, 800);
           } else {
             // onboarding_completed — go straight to home.
             // Push token sync for returning users happens silently in _layout.tsx.

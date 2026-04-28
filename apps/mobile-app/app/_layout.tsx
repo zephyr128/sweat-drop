@@ -146,6 +146,48 @@ function StackNavigator() {
       <Stack.Screen name="auth/confirm" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="transactions" options={{ headerShown: false }} />
+      {/* QR deep-link routes — transparent modal so there's no visible slide-in
+          before handleQrDeepLink completes and router.replace fires */}
+      <Stack.Screen
+        name="m/[uuid]"
+        options={{
+          headerShown: false,
+          presentation: 'transparentModal',
+          animation: 'fade',
+          animationDuration: 200,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="c/[gymId]"
+        options={{
+          headerShown: false,
+          presentation: 'transparentModal',
+          animation: 'fade',
+          animationDuration: 200,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="machine/[uuid]"
+        options={{
+          headerShown: false,
+          presentation: 'transparentModal',
+          animation: 'fade',
+          animationDuration: 200,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="checkin/[gymId]"
+        options={{
+          headerShown: false,
+          presentation: 'transparentModal',
+          animation: 'fade',
+          animationDuration: 200,
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
     </NavigationThemeProvider>
   );
@@ -251,22 +293,38 @@ export default function RootLayout() {
   //          sweatdrop://join/<code> (referral), sweatdrop://auth/confirm#... (email tokens)
   useEffect(() => {
     const processUrl = async (url: string, isWarmLaunch: boolean) => {
-      // QR deep links from native camera: checkin or machine scan
-      const isCheckin = url.indexOf('sweatdrop://checkin/') === 0;
-      const isMachine = url.indexOf('sweatdrop://machine/') === 0;
+      // QR deep links via legacy sweatdrop:// custom scheme.
+      // HTTPS Universal / App Links (sweat-drop.com/m/... /c/...) are handled
+      // automatically by expo-router via application(_:continue:userActivity:)
+      // on iOS and the intent system on Android — they do NOT fire this listener.
+      const isCheckin = url.startsWith('sweatdrop://checkin/');
+      const isMachine = url.startsWith('sweatdrop://machine/');
       if (isCheckin || isMachine) {
         log.debug('[App] QR deep link received:', url, 'warm:', isWarmLaunch);
         if (isWarmLaunch) {
           const currentSession = useAuthStore.getState().session;
           if (!currentSession?.user) {
-            // Not logged in — send to welcome screen
             router.replace('/(onboarding)/welcome');
             return;
           }
-          // Logged in — open scan screen with pre-loaded QR
-          setTimeout(() => {
-            router.push({ pathname: '/scan', params: { autoQR: url } });
-          }, 150);
+          // Route through the real expo-router route files so that
+          // handleQrDeepLink runs and the deep-link screen is properly
+          // replaced (no [...unmatched] regression on close).
+          if (isMachine) {
+            const rest = url.slice('sweatdrop://machine/'.length);
+            const [uuid, qs] = rest.split('?');
+            const sensorParam = qs
+              ? new URLSearchParams(qs).get('sensor') ??
+                new URLSearchParams(qs).get('s')
+              : null;
+            router.replace({
+              pathname: '/machine/[uuid]',
+              params: { uuid, ...(sensorParam ? { s: sensorParam } : {}) },
+            });
+          } else {
+            const gymId = url.slice('sweatdrop://checkin/'.length);
+            router.replace({ pathname: '/checkin/[gymId]', params: { gymId } });
+          }
         } else {
           // Cold start — store and handle once auth is ready
           coldStartQRUrl.current = url;

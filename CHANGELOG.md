@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Landing page: `/m/[uuid]` and `/c/[gymId]` env-aware platform-aware redirects so QR stickers route to TestFlight / App Store / Play Internal Testing / Play Store based on `STORE_REDIRECT_CHANNEL` without sticker reprints. AASA `components` extended to include `/m/*` and `/c/*`. (`apps/landing-page/lib/store-redirect.ts`, `apps/landing-page/app/m/[uuid]/page.tsx`, `apps/landing-page/app/c/[gymId]/page.tsx`, `apps/landing-page/components/qr/QrRedirectPage.tsx`)
+- **Mobile app:** Dedicated deep-link route handlers for all QR URL formats:
+  - `app/m/[uuid].tsx` — HTTPS Universal / App Link machine QR codes (`https://sweat-drop.com/m/<uuid>`)
+  - `app/c/[gymId].tsx` — HTTPS Universal / App Link check-in QR codes (`https://sweat-drop.com/c/<gymId>`)
+  - `app/machine/[uuid].tsx` — backward-compat alias for legacy `sweatdrop://machine/<uuid>` stickers
+  - `app/checkin/[gymId].tsx` — backward-compat alias for legacy `sweatdrop://checkin/<gymId>` stickers
+  - `lib/qr/handleQrDeepLink.ts` — shared `parseQrPayload()` + `handleQrDeepLink()` module; replicates machine-scan and check-in flows from ScannerScreen without modifying it
+  - `app.config.js` Android `intentFilters` extended with `autoVerify=true` intent filter claiming `/m/` and `/c/` path prefixes on both `sweat-drop.com` and `www.sweat-drop.com` hosts (Android App Links); `ios.buildNumber` bumped to `18`, `android.versionCode` bumped to `38`
+
+### Fixed
+- **Closing the in-app scanner after entering via a QR deep link no longer surfaces `[...unmatched]`.** Real route files now exist for every QR deep-link path (`/m/`, `/c/`, `/machine/`, `/checkin/`); expo-router can no longer fall through to the unmatched route handler.
+- **Warm-launch `sweatdrop://machine/` and `sweatdrop://checkin/` URLs now route through the new route files** (`/machine/[uuid]`, `/checkin/[gymId]`) instead of pushing `/scan?autoQR=`.
+- **Cold-start pending QR replay** in `index.tsx` now routes directly to `/m/[uuid]` or `/c/[gymId]` (with `/home` pushed beneath) instead of `/scan?autoQR=`. Inter-call delay bumped from 400ms to 800ms to clear the 600ms `useThrottledRouter` window so the second navigation actually fires.
+- **Unauthenticated cold-start of a deep-link route** (`/m/[uuid]`, `/c/[gymId]`, `/machine/[uuid]`, `/checkin/[gymId]`) now explicitly redirects to `/(onboarding)/welcome` instead of leaving the user on a blank black screen — there is no global no-session guard in `_layout.tsx` that would otherwise rescue them.
 
 ### Changed
 - Mobile gym discovery (onboarding + home empty state) routed through `get_public_gyms_for_mobile` RPC for demo-gym gating. (`apps/mobile-app/app/(onboarding)/home-gym.tsx`, `apps/mobile-app/app/home.tsx`)

@@ -34,7 +34,7 @@ module.exports = {
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: true,
-      buildNumber: '17',
+      buildNumber: '18',
       bundleIdentifier: bundleId,
       associatedDomains: ['applinks:sweat-drop.com', 'applinks:www.sweat-drop.com'],
       entitlements: {
@@ -59,7 +59,7 @@ module.exports = {
         foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
         backgroundColor: '#0A0E1A', // Dark navy background
       },
-      versionCode: 36,
+      versionCode: 38,
       package: bundleId,
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON || './google-services.json',
@@ -105,6 +105,18 @@ module.exports = {
               host: 'www.sweat-drop.com',
               pathPrefix: '/join',
             },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+        // QR Universal / App Link paths — /m/ (machine) and /c/ (check-in)
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            { scheme: 'https', host: 'sweat-drop.com', pathPrefix: '/m/' },
+            { scheme: 'https', host: 'sweat-drop.com', pathPrefix: '/c/' },
+            { scheme: 'https', host: 'www.sweat-drop.com', pathPrefix: '/m/' },
+            { scheme: 'https', host: 'www.sweat-drop.com', pathPrefix: '/c/' },
           ],
           category: ['BROWSABLE', 'DEFAULT'],
         },
