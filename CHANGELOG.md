@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unauthenticated cold-start of a deep-link route** (`/m/[uuid]`, `/c/[gymId]`, `/machine/[uuid]`, `/checkin/[gymId]`) now explicitly redirects to `/(onboarding)/welcome` instead of leaving the user on a blank black screen — there is no global no-session guard in `_layout.tsx` that would otherwise rescue them.
 
 ### Changed
+- Admin panel: QR generation now emits HTTPS Universal/App Link URLs (`https://sweat-drop.com/m/<uuid>`, `/c/<gymId>`) routed through `apps/admin-panel/lib/qr-urls.ts`. Replaces legacy `sweatdrop://` custom-scheme payloads across all six surfaces: `MachineDetailView`, `MachinesManager`, `CheckinSettingsModule`, `print-qr/page`, `print-qr/batch/page`, `MachineFloor`. Host is configurable via `NEXT_PUBLIC_QR_PUBLIC_HOST` (defaults to `https://sweat-drop.com`).
 - Mobile gym discovery (onboarding + home empty state) routed through `get_public_gyms_for_mobile` RPC for demo-gym gating. (`apps/mobile-app/app/(onboarding)/home-gym.tsx`, `apps/mobile-app/app/home.tsx`)
 
 ### Added

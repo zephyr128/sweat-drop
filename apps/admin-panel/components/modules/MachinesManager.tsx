@@ -13,6 +13,7 @@ import { UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase-client';
 import { MachineQRPrint } from '@/components/MachineQRPrint';
 import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
+import { machineQrUrl } from '@/lib/qr-urls';
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -615,7 +616,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                                 <Eye className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => copyQRCode(`sweatdrop://machine/${machine.qr_uuid}`)}
+                                onClick={() => copyQRCode(machineQrUrl(machine.qr_uuid!, machine.type))}
                                 className="p-1 text-[#808080] hover:text-[#00E5FF] transition-colors"
                                 title="Copy QR URL"
                               >
@@ -992,7 +993,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                 <>
                   <div className="flex justify-center bg-white p-4 rounded-lg">
                     <BrandedQRCode
-                      value={`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
+                      value={machineQrUrl(selectedMachineForQR.qr_uuid, selectedMachineForQR.type)}
                       size={256}
                     />
                   </div>
@@ -1002,12 +1003,12 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                       <label className="text-xs text-[#808080] block mb-1">QR URL</label>
                       <div className="flex items-center gap-2">
                         <code className="text-xs text-[#00E5FF] font-mono bg-[#1A1A1A] px-3 py-2 rounded flex-1 break-all">
-                          {`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`}
+                          {machineQrUrl(selectedMachineForQR.qr_uuid, selectedMachineForQR.type)}
                         </code>
                         <button
                           onClick={() => {
                             if (selectedMachineForQR.qr_uuid) {
-                              navigator.clipboard.writeText(`sweatdrop://machine/${selectedMachineForQR.qr_uuid}`);
+                              navigator.clipboard.writeText(machineQrUrl(selectedMachineForQR.qr_uuid, selectedMachineForQR.type));
                               toast.success('QR URL copied to clipboard');
                             }
                           }}

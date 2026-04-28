@@ -13,6 +13,7 @@ import {
   SweatDropGlyph,
 } from '@/components/print-studio/shared';
 import { warmLogoCache } from '@/components/ui/BrandedQRCode';
+import { machineQrUrl, checkinQrUrl } from '@/lib/qr-urls';
 
 // ---------------------------------------------------------------------------
 // Page
@@ -34,9 +35,9 @@ function PrintQRContent() {
   // Resolve QR payload
   const qrData = useMemo(() => {
     if (initialType === 'checkin') {
-      return `sweatdrop://checkin/${gymId}`;
+      return checkinQrUrl(gymId);
     }
-    return `sweatdrop://machine/${machineId}${machineTypeParam === 'bike' ? '?sensor=csc' : ''}`;
+    return machineQrUrl(machineId, machineTypeParam);
   }, [initialType, gymId, machineId, machineTypeParam]);
 
   // ---- Local UI state ----

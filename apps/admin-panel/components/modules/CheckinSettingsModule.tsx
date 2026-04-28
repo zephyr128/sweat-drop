@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { MapPin, Printer, Navigation, ChevronDown, Droplet, Info, AlertTriangle } from 'lucide-react';
 import { updateGymCheckinSettings, type CheckinVerificationMode } from '@/lib/actions/gym-actions';
+import { checkinQrUrl } from '@/lib/qr-urls';
 
 interface CheckinSettingsModuleProps {
   gymId: string;
@@ -99,7 +100,7 @@ export function CheckinSettingsModule({ gymId, gymName, initialData }: CheckinSe
     }
   };
 
-  const checkinQrValue = `sweatdrop://checkin/${gymId}`;
+  const checkinQrValue = checkinQrUrl(gymId);
 
   return (
     <div className="space-y-4">

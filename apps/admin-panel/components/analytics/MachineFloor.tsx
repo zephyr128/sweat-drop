@@ -18,6 +18,7 @@ import {
   registerBLEDevice,
   getMachineQRMap,
 } from '@/lib/actions/machine-actions';
+import { machineQrUrl } from '@/lib/qr-urls';
 import {
   getGymDemoMachines,
   toggleDemoMachine,
@@ -802,7 +803,7 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
         const qrData = qrMap[selectedMachineForQR.id];
         const qrUuid = qrData?.qr_uuid || qrData?.unique_qr_code || selectedMachineForQR.id;
         const machineCode = qrData?.unique_qr_code || qrUuid;
-        const qrUrl = `sweatdrop://machine/${qrUuid}`;
+        const qrUrl = machineQrUrl(qrUuid, selectedMachineForQR.type);
         return (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
             <div className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl p-8 max-w-md w-full mx-4">

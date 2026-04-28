@@ -26,6 +26,7 @@ import {
   getMachinesForPrintBatch,
   type PrintBatchMachine,
 } from '@/lib/actions/machine-actions';
+import { machineQrUrl } from '@/lib/qr-urls';
 
 // ---------------------------------------------------------------------------
 // Batch print studio
@@ -756,10 +757,7 @@ function ManifestPages({
 // ---------------------------------------------------------------------------
 
 function buildMachineQrUrl(machine: PrintBatchMachine): string {
-  // Matches `/print-qr` single mode. The `?sensor=csc` hint only applies to
-  // bikes (so the mobile app pre-selects the CSC BLE pairing flow).
-  const sensorSuffix = machine.type === 'bike' ? '?sensor=csc' : '';
-  return `sweatdrop://machine/${machine.qr_uuid}${sensorSuffix}`;
+  return machineQrUrl(machine.qr_uuid, machine.type);
 }
 
 function typeEmoji(type: string): string {

@@ -9,6 +9,7 @@ import {
   ArrowLeft, Printer, Copy, Check, Save, Wrench, Power, Radio,
 } from 'lucide-react';
 import { UserRole } from '@/lib/auth';
+import { machineQrUrl } from '@/lib/qr-urls';
 import {
   updateMachine,
   toggleMachineStatus,
@@ -71,7 +72,7 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
   const isSuperAdmin = userRole === 'superadmin';
 
   const qrUuid = machine.qr_uuid || machine.unique_qr_code;
-  const qrUrl = `sweatdrop://machine/${qrUuid}`;
+  const qrUrl = machineQrUrl(qrUuid, machine.type);
   const resolvedGymName = gymName || machine.gyms?.name || '';
   const typeIcon = TYPE_ICONS[machine.type?.toLowerCase()] || '⚙️';
   const typeLabel = TYPE_LABELS[machine.type?.toLowerCase()] || machine.type;
