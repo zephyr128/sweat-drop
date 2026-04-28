@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Landing page: `/m/[uuid]` and `/c/[gymId]` env-aware platform-aware redirects so QR stickers route to TestFlight / App Store / Play Internal Testing / Play Store based on `STORE_REDIRECT_CHANNEL` without sticker reprints. AASA `components` extended to include `/m/*` and `/c/*`. (`apps/landing-page/lib/store-redirect.ts`, `apps/landing-page/app/m/[uuid]/page.tsx`, `apps/landing-page/app/c/[gymId]/page.tsx`, `apps/landing-page/components/qr/QrRedirectPage.tsx`)
+
 ### Changed
 - Mobile gym discovery (onboarding + home empty state) routed through `get_public_gyms_for_mobile` RPC for demo-gym gating. (`apps/mobile-app/app/(onboarding)/home-gym.tsx`, `apps/mobile-app/app/home.tsx`)
 
