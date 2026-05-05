@@ -134,6 +134,12 @@ export function parseQrPayload(input: string): ParsedQR {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function t(key: string): string {
+  // Allow callers to specify a different namespace via "ns:key" prefix.
+  // Without this, t('common:ok') would become i18n.t('scanner:common:ok') —
+  // which resolves to a missing-key fallback like "COMMON.OK".
+  if (key.includes(':')) {
+    return i18n.t(key) as string;
+  }
   return i18n.t(`scanner:${key}`) as string;
 }
 

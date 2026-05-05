@@ -11,8 +11,7 @@
 
 import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useThrottledRouter } from '@/hooks/useThrottledRouter';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { usePendingQRStore } from '@/lib/stores/usePendingQRStore';
 import { useAppModal } from '@/lib/stores/useAppModal';
@@ -22,7 +21,7 @@ import { log } from '@/lib/logger';
 
 export default function CheckinDeepLink() {
   const { gymId } = useLocalSearchParams<{ gymId: string }>();
-  const router = useThrottledRouter();
+  const router = useRouter();
   const session = useAuthStore((state) => state.session);
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const showModal = useAppModal((state) => state.showModal);

@@ -54,6 +54,7 @@ import {
   type SimMachineType,
 } from '@/lib/workout/workout-simulator';
 import { useAppModal } from '@/lib/stores/useAppModal';
+import { parseQrPayload } from '@/lib/qr/handleQrDeepLink';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -162,7 +163,7 @@ export function ScannerScreen() {
   isScanningRef.current = isScanning;
   const isProcessingRef = useRef(isProcessing);
   isProcessingRef.current = isProcessing;
-  
+
   const resetScan = useCallback(() => {
     hasScannedRef.current = false;
     setIsScanning(true);
@@ -443,37 +444,28 @@ export function ScannerScreen() {
     runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      // Check-in QR: sweatdrop://checkin/{gymId}
-      if (qrCode.startsWith('sweatdrop://checkin/')) {
-        const gymId = qrCode.replace('sweatdrop://checkin/', '').trim();
-        await handleCheckin(gymId);
+      const parsed = parseQrPayload(qrCode);
+      if (parsed.kind === 'unknown') {
+        showModal({
+          title: t('invalidQR'),
+          body: t('invalidQRDesc'),
+          buttons: [{ label: t('common:ok'), onPress: resetScan }],
+        });
+        return;
+      }
+      if (parsed.kind === 'checkin') {
+        await handleCheckin(parsed.gymId);
         return;
       }
 
-      // Parse QR code
-      let qrUuid: string | null = null;
-      let sensorType: string | null = null;
-
-      if (qrCode.startsWith('sweatdrop://machine/')) {
-        const urlParts = qrCode.replace('sweatdrop://machine/', '').split('?');
-        qrUuid = urlParts[0];
-        
-        if (urlParts[1]) {
-          const params = new URLSearchParams(urlParts[1]);
-          sensorType = params.get('sensor') || 'csc';
-        } else {
-          sensorType = 'csc';
-        }
-      } else {
-        qrUuid = qrCode.trim();
-        sensorType = 'csc';
-      }
+      const qrUuid = parsed.qrUuid;
+      const sensorType = parsed.sensorHint || 'csc';
 
       if (!qrUuid) {
         throw new Error('Invalid QR code format');
       }
 
-      log.debug('[Scanner] Scanned QR UUID:', qrUuid);
+      log.debug('[Scanner] Scanned machine QR:', qrUuid, 'sensor:', sensorType);
 
       // Check machine status via RPC
       const { data: machineStatus, error: rpcError } = await supabase.rpc('get_machine_status', {

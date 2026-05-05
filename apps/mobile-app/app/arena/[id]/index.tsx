@@ -738,7 +738,7 @@ export default function ArenaDetailScreen() {
                     <View style={styles.resultScoreValueRow}>
                       <Ionicons name={SCORING_ICONS[arena.scoring_model] ?? 'water'} size={15} color={arenaColors.primary} />
                       <Text style={[styles.resultScoreValue, getNumberStyle(17), { color: arenaColors.primary }]}>
-                        {Math.round(arenaResult.final_score)}
+                        {Math.round(arenaResult.final_score ?? 0)}
                       </Text>
                     </View>
                   </View>

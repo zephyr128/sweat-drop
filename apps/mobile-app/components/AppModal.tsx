@@ -1,77 +1,86 @@
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { theme, fontStyles } from '@/lib/theme';
 import { PlatformBlur } from '@/components/PlatformBlur';
 
+/**
+ * In-app alert overlay. Intentionally does NOT use React Native's <Modal>:
+ * when a native-stack screen is already presented as a modal (e.g. /scan,
+ * /m/[uuid] as transparentModal), presenting a second RN Modal on iOS throws
+ * "already presenting RNSScreen" and the dialog never appears reliably.
+ */
 export function AppModal() {
   const { visible, title, body, buttons, hideModal } = useAppModal();
 
   if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={hideModal}
-      statusBarTranslucent
-    >
-      <TouchableOpacity
+    <View style={styles.root} pointerEvents="auto">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss dialog"
         style={styles.backdrop}
-        activeOpacity={1}
         onPress={() => {
-          // Only dismiss on backdrop if there's a single OK-style button
           if (buttons.length <= 1) hideModal();
         }}
-      >
-        <View style={styles.card}>
-          <PlatformBlur intensity={75} tint="dark" style={styles.blur} androidColor="rgba(14,16,26,0.98)">
-            <Text style={styles.title}>{title}</Text>
-            {!!body && <Text style={styles.body}>{body}</Text>}
+      />
+      <View pointerEvents="box-none" style={styles.cardCenterWrap}>
+        <View style={styles.card} pointerEvents="auto">
+            <PlatformBlur intensity={75} tint="dark" style={styles.blur} androidColor="rgba(14,16,26,0.98)">
+              <Text style={styles.title}>{title}</Text>
+              {!!body && <Text style={styles.body}>{body}</Text>}
 
-            <View style={[styles.buttonRow, buttons.length > 2 && styles.buttonColumn]}>
-              {buttons.map((btn, idx) => {
-                const isDestructive = btn.style === 'destructive';
-                const isCancel = btn.style === 'cancel';
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.btn,
-                      isDestructive && styles.btnDestructive,
-                      isCancel && styles.btnCancel,
-                      buttons.length === 1 && styles.btnSingle,
-                    ]}
-                    onPress={() => {
-                      hideModal();
-                      btn.onPress?.();
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <Text
+              <View style={[styles.buttonRow, buttons.length > 2 && styles.buttonColumn]}>
+                {buttons.map((btn, idx) => {
+                  const isDestructive = btn.style === 'destructive';
+                  const isCancel = btn.style === 'cancel';
+                  return (
+                    <TouchableOpacity
+                      key={idx}
                       style={[
-                        styles.btnText,
-                        isDestructive && styles.btnTextDestructive,
-                        isCancel && styles.btnTextCancel,
+                        styles.btn,
+                        isDestructive && styles.btnDestructive,
+                        isCancel && styles.btnCancel,
+                        buttons.length === 1 && styles.btnSingle,
                       ]}
+                      onPress={() => {
+                        hideModal();
+                        btn.onPress?.();
+                      }}
+                      activeOpacity={0.75}
                     >
-                      {btn.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </PlatformBlur>
-        </View>
-      </TouchableOpacity>
-    </Modal>
+                      <Text
+                        style={[
+                          styles.btnText,
+                          isDestructive && styles.btnTextDestructive,
+                          isCancel && styles.btnTextCancel,
+                        ]}
+                      >
+                        {btn.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </PlatformBlur>
+          </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 200000,
+    elevation: 200000,
+  },
   backdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  cardCenterWrap: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,

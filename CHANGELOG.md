@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Landing page: `/m/[uuid]` and `/c/[gymId]` env-aware platform-aware redirects so QR stickers route to TestFlight / App Store / Play Internal Testing / Play Store based on `STORE_REDIRECT_CHANNEL` without sticker reprints. AASA `components` extended to include `/m/*` and `/c/*`. (`apps/landing-page/lib/store-redirect.ts`, `apps/landing-page/app/m/[uuid]/page.tsx`, `apps/landing-page/app/c/[gymId]/page.tsx`, `apps/landing-page/components/qr/QrRedirectPage.tsx`)
+
+### Changed
+- **Mobile app:** QR/NFC deep-link route handlers (`/m/[uuid]`, `/c/[gymId]`, `/machine/[uuid]`, `/checkin/[gymId]`) are no longer presented as `transparentModal`. Foreground NFC taps and warm-launch HTTPS deep links previously caused `/workout` and `/checkin-result` to inherit iOS modal presentation context after `router.replace`, surfacing the workout in a stacked-modal frame instead of full-screen. They are now plain card screens with a 200ms fade so the brief mount stays invisible while `handleQrDeepLink` routes onto the real destination. (`apps/mobile-app/app/_layout.tsx`)
+
+### Removed
+- **Mobile app:** Dropped the in-app NFC reader pill on `/scan` and the `useNfcReader` hook. Per the revised `docs/plans/feature_nfc_tag_scanning.md`, OS-level Universal Links / App Links handle every state where the OS is willing to dispatch NFC (iPhone XS+, NFC-enabled Android), and the QR side of the same sticker is the universal fallback for older devices. The custom Core NFC session, `react-native-nfc-manager` dependency, iOS `NFCReaderUsageDescription` + NDEF entitlement, Android `android.permission.NFC`, and `scanner.nfc.*` locale keys (EN + SR) have been removed. (`apps/mobile-app/lib/nfc/useNfcReader.ts` deleted, `apps/mobile-app/components/ScannerScreen.tsx`, `apps/mobile-app/app.config.js`, `apps/mobile-app/ios/SweatDrop/Info.plist`, `apps/mobile-app/ios/SweatDrop/SweatDrop.entitlements`, `apps/mobile-app/locales/{en,sr}/scanner.json`, `apps/mobile-app/package.json`)
 - **Mobile app:** Dedicated deep-link route handlers for all QR URL formats:
   - `app/m/[uuid].tsx` — HTTPS Universal / App Link machine QR codes (`https://sweat-drop.com/m/<uuid>`)
   - `app/c/[gymId].tsx` — HTTPS Universal / App Link check-in QR codes (`https://sweat-drop.com/c/<gymId>`)

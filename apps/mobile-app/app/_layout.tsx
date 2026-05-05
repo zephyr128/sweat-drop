@@ -146,13 +146,18 @@ function StackNavigator() {
       <Stack.Screen name="auth/confirm" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen name="transactions" options={{ headerShown: false }} />
-      {/* QR deep-link routes — transparent modal so there's no visible slide-in
-          before handleQrDeepLink completes and router.replace fires */}
+      {/* QR/NFC deep-link routes — plain card screens (NOT transparentModal).
+          Foreground NFC/QR taps router.push one of these, the route's
+          useEffect runs handleQrDeepLink which router.replace's onto the
+          real destination (/workout, /checkin-result, /gym-welcome, /home).
+          Using transparentModal here used to contaminate the destination
+          screen with iOS modal presentation context, so /workout appeared
+          as a stacked modal instead of a full-screen workout view.
+          A short fade hides the brief black-screen mount. */}
       <Stack.Screen
         name="m/[uuid]"
         options={{
           headerShown: false,
-          presentation: 'transparentModal',
           animation: 'fade',
           animationDuration: 200,
           gestureEnabled: false,
@@ -162,7 +167,6 @@ function StackNavigator() {
         name="c/[gymId]"
         options={{
           headerShown: false,
-          presentation: 'transparentModal',
           animation: 'fade',
           animationDuration: 200,
           gestureEnabled: false,
@@ -172,7 +176,6 @@ function StackNavigator() {
         name="machine/[uuid]"
         options={{
           headerShown: false,
-          presentation: 'transparentModal',
           animation: 'fade',
           animationDuration: 200,
           gestureEnabled: false,
@@ -182,7 +185,6 @@ function StackNavigator() {
         name="checkin/[gymId]"
         options={{
           headerShown: false,
-          presentation: 'transparentModal',
           animation: 'fade',
           animationDuration: 200,
           gestureEnabled: false,
@@ -288,15 +290,49 @@ export default function RootLayout() {
     hydratePendingReferral();
   }, []);
 
-  // Deep link handler for sweatdrop:// URLs
-  // Handles: sweatdrop://checkin/<gymId>, sweatdrop://machine/<uuid>,
-  //          sweatdrop://join/<code> (referral), sweatdrop://auth/confirm#... (email tokens)
+  // Deep link handler for ALL incoming URLs:
+  // - HTTPS Universal / App Links (sweat-drop.com/m/... /c/...)
+  // - Legacy sweatdrop:// custom scheme (sweatdrop://machine/... /checkin/...)
+  // - Auth tokens, referral codes
   useEffect(() => {
     const processUrl = async (url: string, isWarmLaunch: boolean) => {
+      // HTTPS Universal / App Links: sweat-drop.com/m/<uuid> and /c/<gymId>
+      // expo-router's origin is false so it cannot auto-resolve these; handle explicitly.
+      const httpsMatch = url.match(
+        /^https:\/\/(?:www\.)?sweat-drop\.com\/(m|c)\/([^?#]+)(\?.*)?$/,
+      );
+      if (httpsMatch) {
+        const [, type, id, qs] = httpsMatch;
+        log.debug('[App] HTTPS deep link received:', url, 'warm:', isWarmLaunch);
+        if (isWarmLaunch) {
+          const currentSession = useAuthStore.getState().session;
+          if (!currentSession?.user) {
+            router.replace('/(onboarding)/welcome');
+            return;
+          }
+          // push (not replace) so the previous screen (e.g. /home) stays on
+          // the stack beneath the deep-link route. /m/[uuid] then immediately
+          // router.replace's onto /workout (or /checkin-result), giving the
+          // user a back-stack of [home, workout] they can swipe back from.
+          if (type === 'm') {
+            const sensorParam = qs
+              ? new URLSearchParams(qs.slice(1)).get('s') ??
+                new URLSearchParams(qs.slice(1)).get('sensor')
+              : null;
+            router.push({
+              pathname: '/m/[uuid]',
+              params: { uuid: id, ...(sensorParam ? { s: sensorParam } : {}) },
+            });
+          } else {
+            router.push({ pathname: '/c/[gymId]', params: { gymId: id } });
+          }
+        } else {
+          coldStartQRUrl.current = url;
+        }
+        return;
+      }
+
       // QR deep links via legacy sweatdrop:// custom scheme.
-      // HTTPS Universal / App Links (sweat-drop.com/m/... /c/...) are handled
-      // automatically by expo-router via application(_:continue:userActivity:)
-      // on iOS and the intent system on Android — they do NOT fire this listener.
       const isCheckin = url.startsWith('sweatdrop://checkin/');
       const isMachine = url.startsWith('sweatdrop://machine/');
       if (isCheckin || isMachine) {
@@ -307,9 +343,6 @@ export default function RootLayout() {
             router.replace('/(onboarding)/welcome');
             return;
           }
-          // Route through the real expo-router route files so that
-          // handleQrDeepLink runs and the deep-link screen is properly
-          // replaced (no [...unmatched] regression on close).
           if (isMachine) {
             const rest = url.slice('sweatdrop://machine/'.length);
             const [uuid, qs] = rest.split('?');
@@ -317,16 +350,15 @@ export default function RootLayout() {
               ? new URLSearchParams(qs).get('sensor') ??
                 new URLSearchParams(qs).get('s')
               : null;
-            router.replace({
+            router.push({
               pathname: '/machine/[uuid]',
               params: { uuid, ...(sensorParam ? { s: sensorParam } : {}) },
             });
           } else {
             const gymId = url.slice('sweatdrop://checkin/'.length);
-            router.replace({ pathname: '/checkin/[gymId]', params: { gymId } });
+            router.push({ pathname: '/checkin/[gymId]', params: { gymId } });
           }
         } else {
-          // Cold start — store and handle once auth is ready
           coldStartQRUrl.current = url;
         }
         return;
@@ -634,6 +666,14 @@ export default function RootLayout() {
     router,
     segments,
   ]);
+
+  // Ensure native splash dismisses even when the initial route skips index.tsx
+  // (Universal Link → /m/[uuid] / /c/[gymId] hydration). index.tsx also
+  // hides the splash after auth routing — duplicate hideAsync is safe.
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return;
+    void SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {
     return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
