@@ -416,6 +416,7 @@ export function ScannerScreen() {
           distanceM: String(result.distance_m || 0),
           radiusM: String(result.radius_m || 0),
           isNewGym: isNewGym ? '1' : '0',
+          returnTo: 'home',
         },
       });
     } catch (err: unknown) {
@@ -423,7 +424,7 @@ export function ScannerScreen() {
       const status = getSecurityStatusFromErrorMessage(msg);
       router.replace({
         pathname: '/checkin-result',
-        params: { status, errorMessage: msg },
+        params: { status, errorMessage: msg, returnTo: 'home' },
       });
     } finally {
       setIsProcessing(false);

@@ -354,6 +354,7 @@ async function handleCheckinFlow(
         distanceM: String(result.distance_m || 0),
         radiusM: String(result.radius_m || 0),
         isNewGym: isNewGym ? '1' : '0',
+        returnTo: 'home',
       },
     });
   } catch (err: unknown) {
@@ -361,7 +362,7 @@ async function handleCheckinFlow(
     const status = normaliseCheckinStatus(msg);
     router.replace({
       pathname: '/checkin-result',
-      params: { status, errorMessage: msg },
+      params: { status, errorMessage: msg, returnTo: 'home' },
     });
   }
 }

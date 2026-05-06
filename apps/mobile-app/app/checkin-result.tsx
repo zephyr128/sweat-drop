@@ -40,6 +40,7 @@ export default function CheckinResultScreen() {
     radiusM?: string;
     isNewGym?: string;
     pendingWorkout?: string;
+    returnTo?: string;
   }>();
 
   const status = (params.status || 'error') as CheckinStatus;
@@ -102,11 +103,15 @@ export default function CheckinResultScreen() {
     }, interval);
   };
 
-  const navigate = (ms?: number) => {
+  const navigate = () => {
     if (pendingWorkout) {
       router.replace(pendingWorkout as Parameters<typeof router.replace>[0]);
-    } else {
+    } else if (params.returnTo === 'home') {
+      router.replace('/home');
+    } else if (typeof router.canGoBack === 'function' && router.canGoBack()) {
       router.back();
+    } else {
+      router.replace('/home');
     }
   };
 
