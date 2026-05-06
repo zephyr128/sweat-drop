@@ -2,7 +2,49 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-04-27 (`gyms.is_demo_gym` flag + demo-aware `get_public_gyms_for_mobile` RPC)
+**Last Updated:** 2026-05-06 (`machines.type` CHECK constraint — added `stepper`)
+
+---
+
+## [2026-05-06] - `machines.type` CHECK constraint — add `stepper`
+
+**Migration File:**
+- `backend/supabase/migrations/20260506204600_machines_type_add_stepper.sql`
+
+**Agent:** supabase-dba
+
+**Plan:** `docs/plans/feature_admin_machine_type_elliptical_stepper.md` (Step 5 — DB guardrail check)
+
+**Root Cause:**
+The `machines.type` column has had a CHECK constraint (`machines_type_check`) since the initial schema. The last expansion (`20260302000003`) set it to `('treadmill', 'bike', 'elliptical', 'weight')`. The value `'stepper'` was never added, so any INSERT or UPDATE with `type = 'stepper'` would fail with a constraint violation. `'elliptical'` was already allowed.
+
+**Changes:**
+- Dropped: `machines_type_check` constraint (previous allowed set: `treadmill, bike, elliptical, weight`)
+- Re-added: `machines_type_check` with `('treadmill', 'bike', 'elliptical', 'weight', 'stepper')`
+- Updated column comment on `public.machines.type`
+
+**Impact:**
+- **Admin Panel:** `admin-coder` can now proceed with Steps 1–4 (UI constants, Zod schema extension, label/icon map, QR compatibility). No other admin panel changes required from the DB side.
+- **Mobile App:** No change. Mobile never INSERT/UPDATEs machines directly.
+- **Drop calculation:** Already handles `stepper` — `drop_model_config.machine_type` CHECK (`20260325000004`) and `drop_activity_signal_guard` (`20260325000013`) both already include `stepper`.
+
+**Breaking Changes:**
+- None. Purely additive; all existing rows are unaffected.
+
+**Rollback (pre-condition: no `stepper` rows exist):**
+```sql
+ALTER TABLE public.machines DROP CONSTRAINT IF EXISTS machines_type_check;
+ALTER TABLE public.machines
+  ADD CONSTRAINT machines_type_check
+    CHECK (type IN ('treadmill', 'bike', 'elliptical', 'weight'));
+```
+
+**Next Steps:**
+1. [x] Migration applied via `supabase db push`
+2. [ ] admin-coder: Step 1 — add `MACHINE_TYPES` constants + label/icon map in admin panel
+3. [ ] admin-coder: Step 2 — extend Zod schema in `machine-actions.ts` to include `elliptical | stepper`
+4. [ ] admin-coder: Step 3 — update list/edit modal displays (map-based, all 4 types)
+5. [ ] admin-coder: Step 4 — verify bike QR still appends `?s=csc`; elliptical/stepper do not
 
 ---
 
