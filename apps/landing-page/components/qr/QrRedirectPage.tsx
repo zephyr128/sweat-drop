@@ -4,15 +4,16 @@ import { getIosUrl, getAndroidUrl } from '@/lib/store-redirect';
 interface Props {
   platform: Platform;
   storeUrl: string;
+  appUrl?: string;
   channel: Channel;
 }
 
 /**
- * Rendered server-side. On mobile (iOS / Android) the inline script fires
- * window.location.replace() before React hydration. On desktop no redirect
- * fires — both store buttons are shown.
+ * Rendered server-side. On mobile the inline script runs before hydration.
+ * Android tries the custom scheme first, then falls back to Play Store.
+ * iOS keeps direct App Store behavior. Desktop shows both store buttons.
  */
-export function QrRedirectPage({ platform, storeUrl, channel }: Props) {
+export function QrRedirectPage({ platform, storeUrl, appUrl, channel }: Props) {
   const isMobile = platform === 'ios' || platform === 'android';
   const iosUrl = getIosUrl(channel);
   const androidUrl = getAndroidUrl(channel);
@@ -33,7 +34,7 @@ export function QrRedirectPage({ platform, storeUrl, channel }: Props) {
       {isMobile && (
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{window.location.replace(${JSON.stringify(storeUrl)});}catch(e){}})();`,
+            __html: `(function(){try{var platform=${JSON.stringify(platform)};var storeUrl=${JSON.stringify(storeUrl)};var appUrl=${JSON.stringify(appUrl ?? null)};if(platform==='android'&&appUrl){var fallbackTimer=window.setTimeout(function(){window.location.replace(storeUrl);},1200);var clearFallback=function(){window.clearTimeout(fallbackTimer);};var onVisibilityChange=function(){if(document.visibilityState==='hidden'){clearFallback();document.removeEventListener('visibilitychange',onVisibilityChange);}};window.addEventListener('pagehide',clearFallback,{once:true});window.addEventListener('blur',clearFallback,{once:true});document.addEventListener('visibilitychange',onVisibilityChange);window.location.href=appUrl;return;}window.location.replace(storeUrl);}catch(e){}})();`,
           }}
         />
       )}
@@ -77,7 +78,7 @@ export function QrRedirectPage({ platform, storeUrl, channel }: Props) {
                 <p className="text-text font-medium">
                   {platform === 'ios'
                     ? 'Redirecting to the App Store…'
-                    : 'Redirecting to Google Play…'}
+                    : 'Opening SweatDrop…'}
                 </p>
                 <p className="text-sm text-text-2">
                   If nothing happens in a few seconds, tap the button below.

@@ -30,11 +30,13 @@ export default async function CheckinQrPage({ params }: Props) {
       : storeUrl.includes('#')
         ? storeUrl
         : `${storeUrl}#c/${gymId}`;
+  const appUrl = `sweatdrop://checkin/${encodeURIComponent(gymId)}`;
 
   return (
     <QrRedirectPage
       platform={platform}
       storeUrl={storeUrlWithHint}
+      appUrl={appUrl}
       channel={channel}
     />
   );

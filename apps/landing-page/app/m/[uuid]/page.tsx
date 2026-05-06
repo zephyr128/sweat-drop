@@ -34,11 +34,15 @@ export default async function MachineQrPage({ params, searchParams }: Props) {
       : storeUrl.includes('#')
         ? storeUrl
         : `${storeUrl}#${fragment}`;
+  const appUrl = s
+    ? `sweatdrop://machine/${encodeURIComponent(uuid)}?s=${encodeURIComponent(s)}`
+    : `sweatdrop://machine/${encodeURIComponent(uuid)}`;
 
   return (
     <QrRedirectPage
       platform={platform}
       storeUrl={storeUrlWithHint}
+      appUrl={appUrl}
       channel={channel}
     />
   );
