@@ -1,11 +1,12 @@
 'use client';
 
 import { Printer } from 'lucide-react';
+import type { MachineType } from '@/lib/machine-types';
 
 interface MachineQRPrintProps {
   machineName: string;
   qrUuid: string;
-  machineType: 'treadmill' | 'bike';
+  machineType: MachineType;
   gymName?: string;
 }
 

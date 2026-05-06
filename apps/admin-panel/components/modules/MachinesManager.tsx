@@ -7,6 +7,14 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { createMachine, deleteMachine, toggleMachineStatus, toggleMaintenance, updateMachine, pairSensorToMachine, registerBLEDevice } from '@/lib/actions/machine-actions';
+import {
+  MACHINE_TYPE_VALUES,
+  MACHINE_TYPE_LABELS,
+  MACHINE_TYPE_ICONS,
+  getMachineTypeIcon,
+  getMachineTypeLabel,
+  type MachineType,
+} from '@/lib/machine-types';
 import { X, Trash2, Power, QrCode, Wrench, AlertTriangle, Edit2, Bluetooth, Save, Eye, BarChart3 } from 'lucide-react';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { UserRole } from '@/lib/auth';
@@ -17,9 +25,11 @@ import { machineQrUrl } from '@/lib/qr-urls';
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  type: z.enum(['treadmill', 'bike']),
+  type: z.enum(MACHINE_TYPE_VALUES),
   uniqueQrCode: z.string().optional(), // Optional - will be auto-generated if not provided
 });
+const isKnownMachineType = (value: string): value is MachineType =>
+  (MACHINE_TYPE_VALUES as readonly string[]).includes(value);
 
 type MachineFormData = z.infer<typeof machineSchema>;
 
@@ -27,7 +37,7 @@ interface Machine {
   id: string;
   gym_id: string;
   name: string;
-  type: 'treadmill' | 'bike';
+  type: string;
   unique_qr_code: string;
   qr_uuid?: string;
   is_active: boolean;
@@ -64,7 +74,8 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   const [maintenanceNotes, setMaintenanceNotes] = useState('');
   const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [editingType, setEditingType] = useState<'treadmill' | 'bike'>('treadmill');
+  const [editingType, setEditingType] = useState<MachineType>('treadmill');
+  const [editingTypeDirty, setEditingTypeDirty] = useState(false);
   const [pairingMachineId, setPairingMachineId] = useState<string | null>(null);
   const [isPairing, setIsPairing] = useState(false);
   const [bleRegistrationModal, setBleRegistrationModal] = useState<string | null>(null);
@@ -253,26 +264,31 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   const handleEdit = (machine: Machine) => {
     setEditingMachineId(machine.id);
     setEditingName(machine.name);
-    setEditingType(machine.type);
+    setEditingType(isKnownMachineType(machine.type) ? machine.type : 'treadmill');
+    setEditingTypeDirty(false);
   };
 
   const handleSaveEdit = async (machineId: string) => {
     try {
       const machine = machines.find(m => m.id === machineId);
       const effectiveGymId = isGlobalView && machine ? machine.gym_id : gymId;
-      const result = await updateMachine(machineId, effectiveGymId, {
-        name: editingName,
-        type: editingType,
-      });
+      const updatePayload: { name?: string; type?: MachineType } = { name: editingName };
+      if (machine && (isKnownMachineType(machine.type) || editingTypeDirty)) {
+        updatePayload.type = editingType;
+      }
+      const result = await updateMachine(machineId, effectiveGymId, updatePayload);
 
       if (result.success) {
         setMachines(
           machines.map((m) =>
-            m.id === machineId ? { ...m, name: editingName, type: editingType } : m
+            m.id === machineId
+              ? { ...m, name: editingName, type: updatePayload.type ?? m.type }
+              : m
           )
         );
         toast.success('Machine updated successfully');
         setEditingMachineId(null);
+        setEditingTypeDirty(false);
       } else {
         toast.error(`Failed to update: ${result.error}`);
       }
@@ -589,15 +605,19 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                         {editingMachineId === machine.id ? (
                           <select
                             value={editingType}
-                            onChange={(e) => setEditingType(e.target.value as 'treadmill' | 'bike')}
+                            onChange={(e) => {
+                              setEditingType(e.target.value as MachineType);
+                              setEditingTypeDirty(true);
+                            }}
                             className="px-3 py-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
                           >
-                            <option value="treadmill">🏃 Treadmill</option>
-                            <option value="bike">🚴 Bike</option>
+                            {MACHINE_TYPE_VALUES.map((t) => (
+                              <option key={t} value={t}>{MACHINE_TYPE_ICONS[t]} {MACHINE_TYPE_LABELS[t]}</option>
+                            ))}
                           </select>
                         ) : (
                           <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#FF9100]/10 text-[#FF9100]">
-                            {machine.type === 'treadmill' ? '🏃 Treadmill' : '🚴 Bike'}
+                            {getMachineTypeIcon(machine.type)} {getMachineTypeLabel(machine.type)}
                           </span>
                         )}
                       </td>
@@ -626,7 +646,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                                 <MachineQRPrint
                                   machineName={machine.name}
                                   qrUuid={machine.qr_uuid}
-                                  machineType={machine.type}
+                                  machineType={isKnownMachineType(machine.type) ? machine.type : 'treadmill'}
                                   gymName={machine.gyms?.name}
                                 />
                               )}
@@ -716,6 +736,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                                 onClick={() => {
                                   setEditingMachineId(null);
                                   setEditingName('');
+                                  setEditingTypeDirty(false);
                                 }}
                                 className="p-2 text-[#808080] hover:text-white transition-colors"
                                 title="Cancel"
@@ -854,8 +875,9 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                   {...register('type')}
                   className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
                 >
-                  <option value="treadmill">🏃 Treadmill</option>
-                  <option value="bike">🚴 Bike</option>
+                  {MACHINE_TYPE_VALUES.map((t) => (
+                    <option key={t} value={t}>{MACHINE_TYPE_ICONS[t]} {MACHINE_TYPE_LABELS[t]}</option>
+                  ))}
                 </select>
                 {errors.type && (
                   <p className="mt-1 text-sm text-[#FF5252]">{errors.type.message}</p>
@@ -1050,7 +1072,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                   <MachineQRPrint
                     machineName={selectedMachineForQR.name}
                     qrUuid={selectedMachineForQR.qr_uuid}
-                    machineType={selectedMachineForQR.type}
+                    machineType={isKnownMachineType(selectedMachineForQR.type) ? selectedMachineForQR.type : 'treadmill'}
                     gymName={selectedMachineForQR.gyms?.name}
                   />
                 )}

@@ -31,6 +31,7 @@ import { ActiveWorkoutsList } from './ActiveWorkoutsList';
 import { MachineQRPrint } from '@/components/MachineQRPrint';
 import { confirmAction } from '@/components/ui/ConfirmDialog';
 import { UserRole } from '@/lib/auth';
+import { MACHINE_TYPE_VALUES, MACHINE_TYPE_LABELS, MACHINE_TYPE_ICONS, type MachineType } from '@/lib/machine-types';
 import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import {
   X,
@@ -46,7 +47,7 @@ const POLL_INTERVAL = 15_000;
 
 const machineSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  type: z.enum(['treadmill', 'bike']),
+  type: z.enum(MACHINE_TYPE_VALUES),
   uniqueQrCode: z.string().optional(),
 });
 type MachineFormData = z.infer<typeof machineSchema>;
@@ -62,6 +63,8 @@ const BLE_SERVICES = {
   RSC: 0x1814,
   HEART_RATE: 0x180d,
 };
+const isKnownMachineType = (value: string): value is MachineType =>
+  (MACHINE_TYPE_VALUES as readonly string[]).includes(value);
 
 export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
   // --- Live monitor state ---
@@ -80,7 +83,8 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
   const [maintenanceNotes, setMaintenanceNotes] = useState('');
   const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [editingType, setEditingType] = useState<'treadmill' | 'bike'>('treadmill');
+  const [editingType, setEditingType] = useState<MachineType>('treadmill');
+  const [editingTypeDirty, setEditingTypeDirty] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<LiveMachine | null>(null);
   const [bleRegistrationModal, setBleRegistrationModal] = useState<string | null>(null);
@@ -298,13 +302,19 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
 
   const handleSaveEdit = async (machineId: string) => {
     try {
+      const machine = data?.machines.find((m) => m.id === machineId);
+      const updatePayload: { name?: string; type?: MachineType } = { name: editingName };
+      if (machine && (isKnownMachineType(machine.type) || editingTypeDirty)) {
+        updatePayload.type = editingType;
+      }
+
       const result = await updateMachine(machineId, gymId, {
-        name: editingName,
-        type: editingType,
+        ...updatePayload,
       });
       if (result.success) {
         toast.success('Machine updated');
         setEditingMachineId(null);
+        setEditingTypeDirty(false);
         fetchData();
       } else {
         toast.error(`Failed: ${result.error}`);
@@ -438,7 +448,8 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
       case 'edit':
         setEditingMachineId(machine.id);
         setEditingName(machine.name);
-        setEditingType((machine.type as 'treadmill' | 'bike') || 'treadmill');
+        setEditingType(isKnownMachineType(machine.type) ? machine.type : 'treadmill');
+        setEditingTypeDirty(false);
         break;
       case 'maintenance':
         setMaintenanceMachineId(machine.id);
@@ -680,8 +691,9 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
                   {...register('type')}
                   className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
                 >
-                  <option value="treadmill">🏃 Treadmill</option>
-                  <option value="bike">🚴 Bike</option>
+                  {MACHINE_TYPE_VALUES.map((t) => (
+                    <option key={t} value={t}>{MACHINE_TYPE_ICONS[t]} {MACHINE_TYPE_LABELS[t]}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -734,11 +746,15 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
                 <label className="block text-sm font-medium text-white mb-2">Machine Type</label>
                 <select
                   value={editingType}
-                  onChange={(e) => setEditingType(e.target.value as 'treadmill' | 'bike')}
+                  onChange={(e) => {
+                    setEditingType(e.target.value as MachineType);
+                    setEditingTypeDirty(true);
+                  }}
                   className="w-full px-4 py-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg text-white focus:border-[#00E5FF] focus:outline-none"
                 >
-                  <option value="treadmill">🏃 Treadmill</option>
-                  <option value="bike">🚴 Bike</option>
+                  {MACHINE_TYPE_VALUES.map((t) => (
+                    <option key={t} value={t}>{MACHINE_TYPE_ICONS[t]} {MACHINE_TYPE_LABELS[t]}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex gap-4 pt-2">
@@ -749,7 +765,7 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
                   <Save className="w-4 h-4" />
                   Save
                 </button>
-                <button onClick={() => setEditingMachineId(null)} className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors">
+                <button onClick={() => { setEditingMachineId(null); setEditingTypeDirty(false); }} className="px-6 py-3 bg-[#1A1A1A] text-white rounded-lg font-medium hover:bg-[#2A2A2A] transition-colors">
                   Cancel
                 </button>
               </div>
@@ -874,7 +890,7 @@ export function MachineFloor({ gymId, userRole }: MachineFloorProps) {
                     <MachineQRPrint
                       machineName={selectedMachineForQR.name}
                       qrUuid={qrUuid}
-                      machineType={(selectedMachineForQR.type as 'treadmill' | 'bike') || 'treadmill'}
+                      machineType={((MACHINE_TYPE_VALUES as readonly string[]).includes(selectedMachineForQR.type) ? selectedMachineForQR.type : 'treadmill') as MachineType}
                     />
                   )}
                   <button

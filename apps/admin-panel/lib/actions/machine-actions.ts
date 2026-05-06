@@ -4,6 +4,7 @@ import { getAdminClient } from '@/lib/utils/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getCurrentProfile } from '../auth';
+import { MACHINE_TYPE_VALUES } from '../machine-types';
 
 async function rejectReceptionist() {
   const profile = await getCurrentProfile();
@@ -14,9 +15,18 @@ async function rejectReceptionist() {
 const createMachineSchema = z.object({
   gymId: z.string().uuid(),
   name: z.string().min(1, 'Name is required'),
-  type: z.enum(['treadmill', 'bike']),
+  type: z.enum(MACHINE_TYPE_VALUES),
   uniqueQrCode: z.string().optional(),
 });
+
+const updateMachineSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').optional(),
+    type: z.enum(MACHINE_TYPE_VALUES).optional(),
+  })
+  .refine((input) => input.name !== undefined || input.type !== undefined, {
+    message: 'No fields to update',
+  });
 
 export async function createMachine(input: z.infer<typeof createMachineSchema>) {
   try {
@@ -146,7 +156,7 @@ export async function toggleMachineStatus(
 export async function updateMachine(
   machineId: string,
   gymId: string,
-  input: { name?: string; type?: 'treadmill' | 'bike' }
+  input: { name?: string; type?: (typeof MACHINE_TYPE_VALUES)[number] }
 ) {
   try {
     const profile = await getCurrentProfile();
@@ -156,9 +166,10 @@ export async function updateMachine(
 
     // Gym owners/admins can only update name and type
     if (profile.role === 'gym_owner' || profile.role === 'gym_admin' || profile.role === 'superadmin') {
+      const validated = updateMachineSchema.parse(input);
       const updateData: any = {};
-      if (input.name !== undefined) updateData.name = input.name;
-      if (input.type !== undefined) updateData.type = input.type;
+      if (validated.name !== undefined) updateData.name = validated.name;
+      if (validated.type !== undefined) updateData.type = validated.type;
 
       const supabaseAdmin = getAdminClient();
       if (!supabaseAdmin) {
@@ -179,6 +190,9 @@ export async function updateMachine(
 
     return { success: false, error: 'Unauthorized' };
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: error.errors[0]?.message ?? 'Invalid machine update payload' };
+    }
     return { success: false, error: error.message };
   }
 }

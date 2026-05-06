@@ -15,6 +15,7 @@ import {
   toggleMachineStatus,
   toggleMaintenance,
 } from '@/lib/actions/machine-actions';
+import { MACHINE_TYPE_VALUES, MACHINE_TYPE_LABELS, MACHINE_TYPE_ICONS, type MachineType } from '@/lib/machine-types';
 
 export interface MachineForDetail {
   id: string;
@@ -45,11 +46,15 @@ interface MachineDetailViewProps {
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  treadmill: '🏃', bike: '🚴', elliptical: '⭕', weight: '🏋️', rower: '🚣', stepper: '🪜',
+  ...MACHINE_TYPE_ICONS,
+  weight: '🏋️', rower: '🚣',
 };
 const TYPE_LABELS: Record<string, string> = {
-  treadmill: 'Treadmill', bike: 'Bike', elliptical: 'Elliptical', weight: 'Weight', rower: 'Rower', stepper: 'Stepper',
+  ...MACHINE_TYPE_LABELS,
+  weight: 'Weight', rower: 'Rower',
 };
+const isKnownMachineType = (value: string): value is MachineType =>
+  (MACHINE_TYPE_VALUES as readonly string[]).includes(value);
 
 export function MachineDetailView({ machine, userRole, gymName }: MachineDetailViewProps) {
   const router = useRouter();
@@ -58,9 +63,12 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
   // Edit state
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(machine.name);
-  const [editType, setEditType] = useState<'treadmill' | 'bike'>(
-    machine.type === 'treadmill' || machine.type === 'bike' ? machine.type : 'treadmill',
+  const [editType, setEditType] = useState<MachineType>(
+    isKnownMachineType(machine.type)
+      ? machine.type
+      : 'treadmill',
   );
+  const [typeEdited, setTypeEdited] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Maintenance state
@@ -98,10 +106,16 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await updateMachine(machine.id, machine.gym_id, { name: editName, type: editType });
+      const updatePayload: { name?: string; type?: MachineType } = { name: editName };
+      if (isKnownMachineType(machine.type) || typeEdited) {
+        updatePayload.type = editType;
+      }
+
+      const result = await updateMachine(machine.id, machine.gym_id, updatePayload);
       if (result.success) {
         toast.success('Machine updated');
         setEditing(false);
+        setTypeEdited(false);
         router.refresh();
       } else {
         toast.error(result.error || 'Update failed');
@@ -167,7 +181,7 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-white">Machine Info</h2>
               {canEdit && !editing && (
-                <button onClick={() => setEditing(true)} className="text-xs text-zinc-500 hover:text-[#00E5FF] transition-colors">
+                <button onClick={() => { setEditing(true); setTypeEdited(false); }} className="text-xs text-zinc-500 hover:text-[#00E5FF] transition-colors">
                   Edit
                 </button>
               )}
@@ -188,11 +202,15 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
                   <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Type</label>
                   <select
                     value={editType}
-                    onChange={(e) => setEditType(e.target.value as 'treadmill' | 'bike')}
+                    onChange={(e) => {
+                      setEditType(e.target.value as MachineType);
+                      setTypeEdited(true);
+                    }}
                     className="w-full px-3 py-2 text-sm bg-zinc-900/50 border border-[#1A1A1A] rounded-lg text-white focus:border-[#00E5FF]/40 focus:outline-none"
                   >
-                    <option value="treadmill">🏃 Treadmill</option>
-                    <option value="bike">🚴 Bike</option>
+                    {MACHINE_TYPE_VALUES.map((t) => (
+                      <option key={t} value={t}>{MACHINE_TYPE_ICONS[t]} {MACHINE_TYPE_LABELS[t]}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex gap-3">
@@ -203,7 +221,7 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
                   >
                     <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
                   </button>
-                  <button onClick={() => { setEditing(false); setEditName(machine.name); setEditType(machine.type === 'bike' ? 'bike' : 'treadmill'); }} className="px-4 py-2 bg-zinc-900 text-white rounded-lg text-sm hover:bg-zinc-800 transition-colors">
+                  <button onClick={() => { setEditing(false); setEditName(machine.name); setEditType(isKnownMachineType(machine.type) ? machine.type : 'treadmill'); setTypeEdited(false); }} className="px-4 py-2 bg-zinc-900 text-white rounded-lg text-sm hover:bg-zinc-800 transition-colors">
                     Cancel
                   </button>
                 </div>
