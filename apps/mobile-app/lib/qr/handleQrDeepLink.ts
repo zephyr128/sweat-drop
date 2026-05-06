@@ -68,6 +68,41 @@ const HTTPS_HOSTS = new Set(['sweat-drop.com', 'www.sweat-drop.com']);
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function decodeAndTrim(value: string): string {
+  const base = value.trim();
+  if (!base) return '';
+  try {
+    return decodeURIComponent(base).trim();
+  } catch {
+    return base;
+  }
+}
+
+function extractMachineUuid(candidate: string): string | null {
+  const normalized = decodeAndTrim(candidate);
+  if (!normalized) return null;
+
+  if (UUID_RE.test(normalized)) return normalized;
+
+  if (normalized.startsWith('https://')) {
+    try {
+      const url = new URL(normalized);
+      if (HTTPS_HOSTS.has(url.hostname)) {
+        const parts = url.pathname.split('/').filter(Boolean);
+        if (parts[0] === 'm' && parts[1]) {
+          const pathUuid = decodeAndTrim(parts[1]).replace(/\/+$/, '');
+          if (UUID_RE.test(pathUuid)) return pathUuid;
+        }
+      }
+    } catch {
+      // Fall through to regex extraction.
+    }
+  }
+
+  const match = normalized.match(UUID_RE);
+  return match?.[0] ?? null;
+}
+
 /**
  * Normalise any QR payload format into a ParsedQR discriminated union.
  *
@@ -94,7 +129,9 @@ export function parseQrPayload(input: string): ParsedQR {
         if (parts[0] === 'm' && parts[1]) {
           const sensorHint =
             url.searchParams.get('s') || url.searchParams.get('sensor') || null;
-          return { kind: 'machine', qrUuid: parts[1], sensorHint };
+          const qrUuid = extractMachineUuid(parts[1]);
+          if (!qrUuid) return { kind: 'unknown', raw };
+          return { kind: 'machine', qrUuid, sensorHint };
         }
         if (parts[0] === 'c' && parts[1]) {
           return { kind: 'checkin', gymId: parts[1] };
@@ -109,12 +146,13 @@ export function parseQrPayload(input: string): ParsedQR {
   // ── Legacy sweatdrop:// custom scheme ────────────────────────────────────
   if (raw.startsWith('sweatdrop://machine/')) {
     const rest = raw.slice('sweatdrop://machine/'.length);
-    const [uuid, qs] = rest.split('?');
-    if (!uuid?.trim()) return { kind: 'unknown', raw };
+    const [rawMachineValue, qs] = rest.split('?');
+    const qrUuid = extractMachineUuid(rawMachineValue ?? '');
+    if (!qrUuid) return { kind: 'unknown', raw };
     const params = qs ? new URLSearchParams(qs) : null;
     const sensorHint =
       params?.get('sensor') ?? params?.get('s') ?? null;
-    return { kind: 'machine', qrUuid: uuid.trim(), sensorHint };
+    return { kind: 'machine', qrUuid, sensorHint };
   }
 
   if (raw.startsWith('sweatdrop://checkin/')) {
@@ -124,8 +162,9 @@ export function parseQrPayload(input: string): ParsedQR {
   }
 
   // ── Plain UUID fallback (in-app scanner only) ────────────────────────────
-  if (UUID_RE.test(raw)) {
-    return { kind: 'machine', qrUuid: raw, sensorHint: null };
+  const qrUuid = extractMachineUuid(raw);
+  if (qrUuid) {
+    return { kind: 'machine', qrUuid, sensorHint: null };
   }
 
   return { kind: 'unknown', raw };

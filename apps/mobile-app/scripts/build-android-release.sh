@@ -252,8 +252,9 @@ else
   info "versionCode : $CURRENT_CODE → ${BOLD}$NEW_CODE${NC}"
 
   sed -i '' "s/versionCode: $CURRENT_CODE/versionCode: $NEW_CODE/" "$APP_CONFIG"
-  sed -i '' "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" "$BUILD_GRADLE"
-  success "Bumped versionCode in app.config.js and build.gradle"
+  # android/app/build.gradle may not exist yet in managed workflow until
+  # `expo prebuild` runs. Bumping app.config.js before prebuild is sufficient.
+  success "Bumped versionCode in app.config.js"
 fi
 
 # ── Load env vars ─────────────────────────────────────────────────────────────

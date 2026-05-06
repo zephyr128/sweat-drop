@@ -15,13 +15,29 @@ import {
 } from 'lucide-react';
 import { BrandedQRCode, warmLogoCache } from '@/components/ui/BrandedQRCode';
 import {
+  COMBO_PRESETS,
+  CUSTOM_CTA_ID,
+  CUSTOM_CTA_OPTION,
+  DEFAULT_COMBO_CTA_ID,
   MACHINE_CTAS,
   MACHINE_PRESETS,
   StickerArtwork,
   SweatDropGlyph,
+  ctaCharCap,
+  resolveCta,
   type CtaOption,
   type Preset,
 } from '@/components/print-studio/shared';
+
+// Studio-state localStorage keys (machine-only batch flow).
+const CUSTOM_CTA_STORAGE_KEY = 'sweatdrop:print:custom-cta:machine';
+
+// Sanitize operator-typed copy: keep printable ASCII + Latin Extended only.
+function sanitizeCustomCopy(s: string): string {
+  return s.replace(/[^\u0020-\u024F]/g, '').slice(0, 60);
+}
+
+type PresetGroup = { title: string; description?: string; presets: Preset[] };
 import {
   getMachinesForPrintBatch,
   type PrintBatchMachine,
@@ -59,9 +75,16 @@ function BatchPrintContent() {
   // Selection (default: every machine)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Sticker design controls (shared across every sticker in the batch)
-  const [presetId, setPresetId] = useState<string>(MACHINE_PRESETS[0].id);
-  const [ctaId, setCtaId] = useState<string>(MACHINE_CTAS[0].id);
+  // Sticker design controls (shared across every sticker in the batch).
+  // Default to the premium QR + NFC combo preset for new runs.
+  const [presetId, setPresetId] = useState<string>(COMBO_PRESETS[0].id);
+  // Combo presets default to the tap-first headline ("TAP HERE / EARN DROPS")
+  // — matches the v2 sticker design's NFC zone caption.
+  const [ctaId, setCtaId] = useState<string>(DEFAULT_COMBO_CTA_ID);
+
+  // Custom-copy state (Line 1 / Line 2). Persisted to localStorage.
+  const [customLine1, setCustomLine1] = useState('');
+  const [customLine2, setCustomLine2] = useState('');
 
   // Print-flow state machine — null = regular on-screen preview.
   const [printMode, setPrintMode] = useState<PrintMode>(null);
@@ -74,6 +97,33 @@ function BatchPrintContent() {
     // already has the embedded app icon ready — no empty squares in the PDF.
     void warmLogoCache();
   }, []);
+
+  // Hydrate operator-controlled state from localStorage.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(CUSTOM_CTA_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { line1?: unknown; line2?: unknown };
+        if (typeof parsed.line1 === 'string') setCustomLine1(parsed.line1);
+        if (typeof parsed.line2 === 'string') setCustomLine2(parsed.line2);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        CUSTOM_CTA_STORAGE_KEY,
+        JSON.stringify({ line1: customLine1, line2: customLine2 }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [customLine1, customLine2]);
 
   // Load data on mount.
   useEffect(() => {
@@ -101,15 +151,47 @@ function BatchPrintContent() {
     };
   }, [gymId]);
 
+  // Preset groups — combo (recommended) above, qr-only legacy below.
+  const presetGroups: PresetGroup[] = useMemo(
+    () => [
+      {
+        title: 'QR + NFC · Recommended',
+        description: 'Single die-cut, dual transport.',
+        presets: COMBO_PRESETS,
+      },
+      {
+        title: 'QR-only · Legacy',
+        description: 'No NFC chip. Compatible with v1 print runs.',
+        presets: MACHINE_PRESETS,
+      },
+    ],
+    [],
+  );
+  const allPresets = useMemo(
+    () => presetGroups.flatMap((g) => g.presets),
+    [presetGroups],
+  );
+
+  // CTA list — append the Custom marker.
+  const ctas: CtaOption[] = useMemo(
+    () => [...MACHINE_CTAS, CUSTOM_CTA_OPTION],
+    [],
+  );
+
   // Resolved selections
   const preset = useMemo(
-    () => MACHINE_PRESETS.find((p) => p.id === presetId) ?? MACHINE_PRESETS[0],
-    [presetId],
+    () => allPresets.find((p) => p.id === presetId) ?? allPresets[0],
+    [allPresets, presetId],
+  );
+  const selectedCta = useMemo(
+    () => ctas.find((c) => c.id === ctaId) ?? ctas[0],
+    [ctas, ctaId],
   );
   const cta = useMemo(
-    () => MACHINE_CTAS.find((c) => c.id === ctaId) ?? MACHINE_CTAS[0],
-    [ctaId],
+    () => resolveCta(selectedCta, { line1: customLine1, line2: customLine2 }),
+    [selectedCta, customLine1, customLine2],
   );
+  const charCap = useMemo(() => ctaCharCap(preset), [preset]);
   const selectedMachines = useMemo(
     () => allMachines.filter((m) => selectedIds.has(m.id)),
     [allMachines, selectedIds],
@@ -155,6 +237,10 @@ function BatchPrintContent() {
       printMode === 'manifest' ? '210mm 297mm' : `${preset.widthIn}in ${preset.heightIn}in`;
     const pageWidth = printMode === 'manifest' ? '210mm' : `${preset.widthIn}in`;
     const pageHeight = printMode === 'manifest' ? '297mm' : `${preset.heightIn}in`;
+    // Combo presets render with rounded sticker corners — to make them
+    // visible in the printed PDF, the body background flips to white.
+    const stickerBg = preset.kind === 'combo' ? '#fff' : '#000';
+    const printBg = printMode === 'manifest' ? '#fff' : stickerBg;
 
     return `
       @page { size: ${pageSize}; margin: 0; }
@@ -163,7 +249,7 @@ function BatchPrintContent() {
         html, body {
           margin: 0 !important;
           padding: 0 !important;
-          background: ${printMode === 'manifest' ? '#fff' : '#000'} !important;
+          background: ${printBg} !important;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
@@ -267,29 +353,66 @@ function BatchPrintContent() {
         {/* CONTROLS */}
         <aside className="col-span-12 space-y-6 lg:col-span-4 xl:col-span-3">
           <Section title="Format" hint="Same size for every sticker in the batch">
-            <div className="space-y-2">
-              {MACHINE_PRESETS.map((p) => (
-                <OptionCard
-                  key={p.id}
-                  active={p.id === preset.id}
-                  onClick={() => setPresetId(p.id)}
-                  label={p.label}
-                  description={p.description}
-                />
+            <div className="space-y-4">
+              {presetGroups.map((g) => (
+                <div key={g.title}>
+                  <div className="mb-1.5 flex items-baseline justify-between">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                      {g.title}
+                    </div>
+                    {g.description && (
+                      <div className="text-[9px] text-zinc-600">{g.description}</div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {g.presets.map((p) => (
+                      <OptionCard
+                        key={p.id}
+                        active={p.id === preset.id}
+                        onClick={() => setPresetId(p.id)}
+                        label={p.label}
+                        description={p.description}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </Section>
 
           <Section title="Headline" hint="Same CTA across every sticker">
             <div className="space-y-2">
-              {MACHINE_CTAS.map((c) => (
-                <OptionCard
-                  key={c.id}
-                  active={c.id === cta.id}
-                  onClick={() => setCtaId(c.id)}
-                  label={[c.line1, c.line2].filter(Boolean).join(' ')}
-                />
-              ))}
+              {ctas.map((c) => {
+                if (c.id === CUSTOM_CTA_ID) {
+                  return (
+                    <div key={c.id}>
+                      <OptionCard
+                        active={ctaId === c.id}
+                        onClick={() => setCtaId(c.id)}
+                        label="Custom…"
+                        description="Type your own headline"
+                      />
+                      {ctaId === CUSTOM_CTA_ID && (
+                        <CustomCtaForm
+                          line1={customLine1}
+                          line2={customLine2}
+                          onLine1Change={(v) => setCustomLine1(sanitizeCustomCopy(v))}
+                          onLine2Change={(v) => setCustomLine2(sanitizeCustomCopy(v))}
+                          charCap={charCap}
+                        />
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <OptionCard
+                    key={c.id}
+                    active={c.id === ctaId}
+                    onClick={() => setCtaId(c.id)}
+                    label={[c.line1, c.line2].filter(Boolean).join(' ')}
+                  />
+                );
+              })}
             </div>
           </Section>
 
@@ -848,6 +971,90 @@ function OptionCard({
         </div>
       )}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom CTA form — operator-typed Line 1 / Line 2. Identical UX to the
+// single-sticker studio at /print-qr (deliberately duplicated, like Section
+// and OptionCard above, to keep each route self-contained).
+// ---------------------------------------------------------------------------
+
+function CustomCtaForm({
+  line1,
+  line2,
+  onLine1Change,
+  onLine2Change,
+  charCap,
+}: {
+  line1: string;
+  line2: string;
+  onLine1Change: (value: string) => void;
+  onLine2Change: (value: string) => void;
+  charCap: number;
+}) {
+  return (
+    <div className="mt-2 space-y-2.5 rounded-lg border border-[#00E5FF]/30 bg-[#00E5FF]/[0.04] p-3">
+      <CustomInput
+        label="Line 1"
+        value={line1}
+        onChange={onLine1Change}
+        cap={charCap}
+        placeholder="EVERY DROP"
+      />
+      <CustomInput
+        label="Line 2"
+        value={line2}
+        onChange={onLine2Change}
+        cap={charCap}
+        placeholder="COUNTS"
+        optional
+      />
+      <p className="text-[10px] leading-relaxed text-zinc-500">
+        Auto-uppercased on the sticker. Up to ~{charCap} characters per line for
+        this preset; longer copy wraps but stays printable.
+      </p>
+    </div>
+  );
+}
+
+function CustomInput({
+  label,
+  value,
+  onChange,
+  cap,
+  placeholder,
+  optional,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  cap: number;
+  placeholder: string;
+  optional?: boolean;
+}) {
+  const overflow = value.length > cap;
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-wider">
+        <span className="text-zinc-400">
+          {label}
+          {optional && <span className="ml-1 text-zinc-600">· optional</span>}
+        </span>
+        <span className={overflow ? 'text-red-400' : 'text-zinc-600'}>
+          {value.length}/{cap}
+        </span>
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoCapitalize="characters"
+        className="w-full rounded-md border border-[#222] bg-[#0a0a0a] px-2.5 py-1.5 text-sm text-white placeholder:text-zinc-700 focus:border-[#00E5FF]/60 focus:outline-none"
+      />
+    </div>
   );
 }
 

@@ -31,7 +31,7 @@ export function MachineQRPrint({ machineName, qrUuid, machineType, gymName }: Ma
     <button
       onClick={handleOpen}
       className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors"
-      title="Open print studio"
+      title="Open print studio (QR + combined QR/NFC)"
     >
       <Printer className="w-4 h-4" />
     </button>

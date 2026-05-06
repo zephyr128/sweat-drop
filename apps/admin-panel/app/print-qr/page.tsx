@@ -7,13 +7,42 @@ import { Printer, Download, Copy, Check } from 'lucide-react';
 import {
   CHECKIN_CTAS,
   CHECKIN_PRESETS,
+  COMBO_PRESETS,
+  CUSTOM_CTA_ID,
+  CUSTOM_CTA_OPTION,
+  DEFAULT_COMBO_CTA_ID,
   MACHINE_CTAS,
   MACHINE_PRESETS,
   StickerArtwork,
   SweatDropGlyph,
+  ctaCharCap,
+  resolveCta,
+  type CtaOption,
+  type Preset,
 } from '@/components/print-studio/shared';
 import { warmLogoCache } from '@/components/ui/BrandedQRCode';
 import { machineQrUrl, checkinQrUrl } from '@/lib/qr-urls';
+
+// ---------------------------------------------------------------------------
+// localStorage keys for operator-controlled studio state. Plain client-side
+// concerns — never round-trip these to the backend.
+// ---------------------------------------------------------------------------
+const customCtaStorageKey = (type: 'checkin' | 'machine') =>
+  `sweatdrop:print:custom-cta:${type}`;
+
+// Sanitize operator-typed copy: keep printable ASCII + Latin Extended,
+// strip everything else (emojis, zero-width chars, control bytes — none of
+// which the print pipeline can typeset reliably). Hard cap at 60 characters
+// per line to prevent absurd input; visual cap (`ctaCharCap`) is advisory.
+function sanitizeCustomCopy(s: string): string {
+  return s.replace(/[^\u0020-\u024F]/g, '').slice(0, 60);
+}
+
+type PresetGroup = {
+  title: string;
+  description?: string;
+  presets: Preset[];
+};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -41,15 +70,62 @@ function PrintQRContent() {
   }, [initialType, gymId, machineId, machineTypeParam]);
 
   // ---- Local UI state ----
-  const presets = initialType === 'checkin' ? CHECKIN_PRESETS : MACHINE_PRESETS;
-  const ctas = initialType === 'checkin' ? CHECKIN_CTAS : MACHINE_CTAS;
+  // Preset groups: machine stickers default to the premium QR + NFC combo
+  // family, with the QR-only legacy presets demoted to a secondary group.
+  // Reception (check-in) stickers stay QR-only for now — they sit on the
+  // counter where members type a card / scan a code and don't benefit from
+  // NFC integration the same way machine stickers do.
+  const presetGroups: PresetGroup[] = useMemo(() => {
+    if (initialType === 'machine') {
+      return [
+        {
+          title: 'QR + NFC · Recommended',
+          description: 'Single die-cut, dual transport.',
+          presets: COMBO_PRESETS,
+        },
+        {
+          title: 'QR-only · Legacy',
+          description: 'No NFC chip. Compatible with v1 print runs.',
+          presets: MACHINE_PRESETS,
+        },
+      ];
+    }
+    return [{ title: 'Reception', presets: CHECKIN_PRESETS }];
+  }, [initialType]);
 
-  const [presetId, setPresetId] = useState<string>(presets[0].id);
-  const [ctaId, setCtaId] = useState<string>(ctas[0].id);
+  const allPresets = useMemo(
+    () => presetGroups.flatMap((g) => g.presets),
+    [presetGroups],
+  );
+
+  // CTAs — append the Custom marker so operators can opt into typed copy
+  // without hunting for the option in a hidden menu.
+  const baseCtas = initialType === 'checkin' ? CHECKIN_CTAS : MACHINE_CTAS;
+  const ctas: CtaOption[] = useMemo(
+    () => [...baseCtas, CUSTOM_CTA_OPTION],
+    [baseCtas],
+  );
+
+  const defaultPresetId =
+    initialType === 'machine' ? COMBO_PRESETS[0].id : CHECKIN_PRESETS[0].id;
+  const [presetId, setPresetId] = useState<string>(defaultPresetId);
+  // Combo presets default to the tap-first headline ("TAP HERE / EARN DROPS").
+  // QR-only legacy presets default to the first entry of the existing CTA
+  // library — preserves the pre-redesign behaviour for the legacy branch.
+  const defaultCtaId =
+    initialType === 'machine' ? DEFAULT_COMBO_CTA_ID : baseCtas[0].id;
+  const [ctaId, setCtaId] = useState<string>(defaultCtaId);
   const [copied, setCopied] = useState(false);
 
-  const preset = presets.find((p) => p.id === presetId) ?? presets[0];
-  const cta = ctas.find((c) => c.id === ctaId) ?? ctas[0];
+  // Operator-typed Line 1 / Line 2 — only used when the Custom CTA is active.
+  // Persisted to localStorage so reopening the studio restores the last copy.
+  const [customLine1, setCustomLine1] = useState('');
+  const [customLine2, setCustomLine2] = useState('');
+
+  const preset = allPresets.find((p) => p.id === presetId) ?? allPresets[0];
+  const selectedCta = ctas.find((c) => c.id === ctaId) ?? ctas[0];
+  const cta = resolveCta(selectedCta, { line1: customLine1, line2: customLine2 });
+  const charCap = ctaCharCap(preset);
 
   // Portal mount guard — `createPortal` needs `document` which isn't available during
   // SSR. We flip this after the client mounts.
@@ -62,6 +138,34 @@ function PrintQRContent() {
     // logo slot in the printed PDF.
     void warmLogoCache();
   }, []);
+
+  // Hydrate operator-controlled studio state from localStorage on mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(customCtaStorageKey(initialType));
+      if (raw) {
+        const parsed = JSON.parse(raw) as { line1?: unknown; line2?: unknown };
+        if (typeof parsed.line1 === 'string') setCustomLine1(parsed.line1);
+        if (typeof parsed.line2 === 'string') setCustomLine2(parsed.line2);
+      }
+    } catch {
+      // localStorage may be unavailable (private mode, security policy).
+    }
+  }, [initialType]);
+
+  // Persist operator-typed copy on every change so the next session re-hydrates.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        customCtaStorageKey(initialType),
+        JSON.stringify({ line1: customLine1, line2: customLine2 }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [initialType, customLine1, customLine2]);
 
   const handlePrint = async () => {
     await warmLogoCache();
@@ -90,6 +194,10 @@ function PrintQRContent() {
   //     hidden` (which preserves layout box heights → phantom blank pages).
   //   - `.print-host` only renders its children under `@media print`; the on-screen
   //     preview (inside `.screen-only`) is a separate instance.
+  //   - Combo presets render with rounded sticker corners — to make them visible
+  //     against the page, the print body is white. QR-only/legacy presets keep the
+  //     edge-to-edge black background to match the v1 print profile.
+  const printBg = preset.kind === 'combo' ? '#ffffff' : '#000000';
   const pageCss = `
     @page { size: ${preset.widthIn}in ${preset.heightIn}in; margin: 0; }
     .print-host { display: none; }
@@ -97,7 +205,7 @@ function PrintQRContent() {
       html, body {
         margin: 0 !important;
         padding: 0 !important;
-        background: #000 !important;
+        background: ${printBg} !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -165,32 +273,69 @@ function PrintQRContent() {
         {/* CONTROLS */}
         <aside className="col-span-12 lg:col-span-4 xl:col-span-3">
           <div className="space-y-6">
-            {/* Size */}
+            {/* Size — grouped: combo (recommended) + qr-only (legacy) */}
             <Section title="Format" hint="Dimensions of the printed piece">
-              <div className="space-y-2">
-                {presets.map((p) => (
-                  <OptionCard
-                    key={p.id}
-                    active={p.id === preset.id}
-                    onClick={() => setPresetId(p.id)}
-                    label={p.label}
-                    description={p.description}
-                  />
+              <div className="space-y-4">
+                {presetGroups.map((g) => (
+                  <div key={g.title}>
+                    <div className="mb-1.5 flex items-baseline justify-between">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        {g.title}
+                      </div>
+                      {g.description && (
+                        <div className="text-[9px] text-zinc-600">{g.description}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {g.presets.map((p) => (
+                        <OptionCard
+                          key={p.id}
+                          active={p.id === preset.id}
+                          onClick={() => setPresetId(p.id)}
+                          label={p.label}
+                          description={p.description}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </Section>
 
-            {/* CTA */}
+            {/* CTA — curated entries + Custom expander */}
             <Section title="Headline" hint="Call-to-action copy">
               <div className="space-y-2">
-                {ctas.map((c) => (
-                  <OptionCard
-                    key={c.id}
-                    active={c.id === cta.id}
-                    onClick={() => setCtaId(c.id)}
-                    label={[c.line1, c.line2].filter(Boolean).join(' ')}
-                  />
-                ))}
+                {ctas.map((c) => {
+                  if (c.id === CUSTOM_CTA_ID) {
+                    return (
+                      <div key={c.id}>
+                        <OptionCard
+                          active={ctaId === c.id}
+                          onClick={() => setCtaId(c.id)}
+                          label="Custom…"
+                          description="Type your own headline"
+                        />
+                        {ctaId === CUSTOM_CTA_ID && (
+                          <CustomCtaForm
+                            line1={customLine1}
+                            line2={customLine2}
+                            onLine1Change={(v) => setCustomLine1(sanitizeCustomCopy(v))}
+                            onLine2Change={(v) => setCustomLine2(sanitizeCustomCopy(v))}
+                            charCap={charCap}
+                          />
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <OptionCard
+                      key={c.id}
+                      active={c.id === ctaId}
+                      onClick={() => setCtaId(c.id)}
+                      label={[c.line1, c.line2].filter(Boolean).join(' ')}
+                    />
+                  );
+                })}
               </div>
             </Section>
 
@@ -251,6 +396,7 @@ function PrintQRContent() {
                 cta={cta}
                 qrData={qrData}
                 caption={caption}
+                showTapOrScanLabel={initialType === 'checkin'}
               />
             </div>
           </div>
@@ -279,6 +425,7 @@ function PrintQRContent() {
                 cta={cta}
                 qrData={qrData}
                 caption={caption}
+                showTapOrScanLabel={initialType === 'checkin'}
               />
             </div>
           </div>,
@@ -344,6 +491,93 @@ function OptionCard({
         </div>
       )}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom CTA form — operator-typed Line 1 / Line 2. Mounted inside the
+// Headline section when the Custom… option is selected.
+//
+// Length cap is advisory (red badge), not blocking. The print pipeline lays
+// out long copy with `wordBreak: break-word` so it shrink-wraps rather than
+// overflowing the sticker.
+// ---------------------------------------------------------------------------
+
+function CustomCtaForm({
+  line1,
+  line2,
+  onLine1Change,
+  onLine2Change,
+  charCap,
+}: {
+  line1: string;
+  line2: string;
+  onLine1Change: (value: string) => void;
+  onLine2Change: (value: string) => void;
+  charCap: number;
+}) {
+  return (
+    <div className="mt-2 space-y-2.5 rounded-lg border border-[#00E5FF]/30 bg-[#00E5FF]/[0.04] p-3">
+      <CustomInput
+        label="Line 1"
+        value={line1}
+        onChange={onLine1Change}
+        cap={charCap}
+        placeholder="EVERY DROP"
+      />
+      <CustomInput
+        label="Line 2"
+        value={line2}
+        onChange={onLine2Change}
+        cap={charCap}
+        placeholder="COUNTS"
+        optional
+      />
+      <p className="text-[10px] leading-relaxed text-zinc-500">
+        Auto-uppercased on the sticker. Up to ~{charCap} characters per line for
+        this preset; longer copy wraps but stays printable.
+      </p>
+    </div>
+  );
+}
+
+function CustomInput({
+  label,
+  value,
+  onChange,
+  cap,
+  placeholder,
+  optional,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  cap: number;
+  placeholder: string;
+  optional?: boolean;
+}) {
+  const overflow = value.length > cap;
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-wider">
+        <span className="text-zinc-400">
+          {label}
+          {optional && <span className="ml-1 text-zinc-600">· optional</span>}
+        </span>
+        <span className={overflow ? 'text-red-400' : 'text-zinc-600'}>
+          {value.length}/{cap}
+        </span>
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoCapitalize="characters"
+        className="w-full rounded-md border border-[#222] bg-[#0a0a0a] px-2.5 py-1.5 text-sm text-white placeholder:text-zinc-700 focus:border-[#00E5FF]/60 focus:outline-none"
+      />
+    </div>
   );
 }
 
