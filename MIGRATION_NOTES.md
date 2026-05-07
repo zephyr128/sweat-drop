@@ -2,7 +2,49 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-05-06 (`machines.type` CHECK constraint — added `stepper`)
+**Last Updated:** 2026-05-07 (`cleanup_abandoned_sessions` — orphan session sweep)
+
+---
+
+## [2026-05-07] - `cleanup_abandoned_sessions` — orphan active-session sweep
+
+**Migration File:**
+- `backend/supabase/migrations/20260507060000_cleanup_orphan_active_sessions.sql`
+
+**Agent:** supabase-dba
+
+**Plan / Trigger:** Production incident, Vortex gym (9 FTMS treadmills) — every scan failed with "Machine busy" while `machines.is_busy = false` for every treadmill.
+
+**Root Cause:**
+`start_session_safely()` refuses to create a new session whenever `public.sessions` has a row with `(machine_id = X, is_active = true)` — regardless of `machines.is_busy`. It returns `machine_busy` (different user) or `user_active_session_conflict` (same user). Both are mapped to the "Machine busy" modal in the mobile app (`apps/mobile-app/components/ScannerScreen.tsx`, `lib/qr/handleQrDeepLink.ts`).
+
+The previous `cleanup_abandoned_sessions()` versions (`20260302000011` → `20260325000002` → `20260325000003` → `20260409200003`) iterate **only** over `machines WHERE is_busy = true`. When `unlock_machine()` succeeds but the corresponding session row never gets `is_active = false` (e.g. `award_drops()` failed earlier, app crashed mid-finalize, network timeout on the final sync, or the simulator-bypass insert path that intentionally writes `machine_id = NULL`), the session becomes a permanent orphan. No cron path can ever reach it. Every future scan against that machine — or every future scan attempted by that user — fails with "Machine busy" indefinitely.
+
+**Changes:**
+- `cleanup_abandoned_sessions()` rewritten with **two sweeps**:
+  - **Sweep 1 (unchanged):** machines `WHERE is_busy = true` → existing inactivity / lock-starvation logic. Byte-identical to `20260409200003`.
+  - **Sweep 2 (new):** `sessions WHERE is_active = true` AND the machine is no longer locked by this session's owner (`machine_id IS NULL` OR `m.is_busy = false` OR `m.current_user_id IS DISTINCT FROM s.user_id`) AND last activity is older than `GREATEST(gym.session_inactivity_autofinish_sec, 600)` (10-min hard floor). Closes via `finalize_inactive_session()` with reason `'orphan_session_cleanup'` so any earned drops are still awarded and a `fraud_events` audit row is logged.
+- One-shot `DO $$ ... cleanup_abandoned_sessions() ... $$` block at the end of the migration so existing Vortex orphans heal at deploy time without waiting up to 5 minutes for the next pg_cron tick.
+
+**Impact:**
+- **Mobile App:** No client changes required. Stale `is_active = true` sessions self-heal within the next 5-min cron tick. The "Machine busy" deadlock no longer requires manual SQL intervention.
+- **Admin Panel:** No change.
+- **Cron schedule:** Unchanged (still `*/5 * * * *` via pg_cron job `cleanup-abandoned-sessions`).
+
+**Breaking Changes:**
+- None. Sweep 1 logic is byte-identical to `20260409200003`. Sweep 2 only closes sessions that are by definition already detached from any active machine lock and older than 10 minutes since last activity.
+
+**Safety:**
+- 10-minute hard floor in addition to gym policy threshold. A session mid-finalize (final sync + `award_drops()` round-trip) cannot exceed ~60s, so the floor guarantees we never close a session that is actually still resolving.
+- `finalize_inactive_session()` is idempotent and `SECURITY DEFINER`; it impersonates the session owner via `set_config('request.jwt.claim.sub', ...)` to call `award_drops`, so legitimate orphans that earned drops still credit the user before closing.
+- `SKIP LOCKED` on both sweeps — concurrent cron ticks cannot fight over the same row.
+- Per-row sub-transaction with `EXCEPTION WHEN OTHERS THEN` fallback — a single problematic row can never poison the entire sweep.
+
+**Rollback:**
+```sql
+-- Restore the prior (sweep-1-only) implementation by re-running migration 20260409200003.
+-- No schema changes were introduced by this migration.
+```
 
 ---
 
