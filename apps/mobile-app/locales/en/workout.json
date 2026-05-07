@@ -93,6 +93,37 @@
   "shortWorkoutTitle": "Too short for drops",
   "shortWorkoutBody": "Workouts under 2 minutes don't earn drops ({{seconds}}s so far). End anyway?",
   "shortWorkoutConfirm": "End workout",
+  "connectionLostTitle": "Connection lost",
+  "connectionLostBody": "We can't reach the sensor. We're trying to reconnect…",
+  "connectionLostSaveAction": "Save what I've got",
+  "connectionLostKeepTryingAction": "Keep trying",
+  "connectionAutoFinishExplain": "If you've already left the machine, tap Save — your drops for {{duration}} will be credited.",
+  "cantConnectFinish": "I'm done — save my workout",
+  "autoFinalizedTitle": "Workout finalized",
+  "autoFinalizedBody": "We finalized your workout automatically — {{drops}} drops credited.",
+  "recovery": {
+    "banner": {
+      "title": "Unfinished workout",
+      "body": "You started a {{machineType}} session at {{gymName}} {{minutesAgo}} min ago and never finished it.",
+      "bodyNoMachine": "You have a workout from {{gymName}} that never finished, started {{minutesAgo}} min ago.",
+      "resume": "Resume",
+      "finish": "Finish & save",
+      "dismiss": "Close",
+      "recovering": "Closing…"
+    },
+    "confirmDiscard": {
+      "title": "Close this workout?",
+      "body": "We'll save what we have and credit any drops you earned.",
+      "confirm": "Close & save"
+    },
+    "machineType": {
+      "treadmill": "treadmill",
+      "bike": "bike",
+      "elliptical": "elliptical",
+      "stepper": "stepper",
+      "generic": "machine"
+    }
+  },
   "summary": {
     "workoutComplete": "Workout complete!",
     "workoutLogged": "Workout logged",

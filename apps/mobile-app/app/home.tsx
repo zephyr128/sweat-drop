@@ -55,6 +55,7 @@ import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useUnclaimedPrizeCount } from '@/hooks/useUnclaimedPrizeCount';
 import { usePendingReferralStore } from '@/lib/stores/usePendingReferralStore';
 import { SuggestGymCardWithSheet } from '@/components/SuggestGymCardWithSheet';
+import { ActiveSessionRecoveryBanner } from '@/components/ActiveSessionRecoveryBanner';
 import { log } from '@/lib/logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -1227,6 +1228,11 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* Bug 4b: surfaces an "Unfinished workout" recovery banner when the
+            user has an `is_active = true` session left over from a previous
+            app run. Renders nothing when nothing to recover. */}
+        <ActiveSessionRecoveryBanner />
 
         {/* Static sheet backdrop: stays fixed while content scrolls above it */}
         <View pointerEvents="none" style={styles.sheetStaticBackdrop}>

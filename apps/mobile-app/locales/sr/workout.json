@@ -93,6 +93,37 @@
   "shortWorkoutTitle": "Prekratko za drops",
   "shortWorkoutBody": "Treninzi ispod 2 minuta ne donose drops ({{seconds}}s do sada). Ipak završiti?",
   "shortWorkoutConfirm": "Završi trening",
+  "connectionLostTitle": "Veza izgubljena",
+  "connectionLostBody": "Ne možemo da pronađemo senzor. Pokušavamo ponovo…",
+  "connectionLostSaveAction": "Sačuvaj ovo što imam",
+  "connectionLostKeepTryingAction": "Probaj još",
+  "connectionAutoFinishExplain": "Ako si već otišao sa sprave, dodirni Sačuvaj — drops za {{duration}} biće dodeljeni.",
+  "cantConnectFinish": "Završio sam — sačuvaj trening",
+  "autoFinalizedTitle": "Trening završen",
+  "autoFinalizedBody": "Automatski smo završili tvoj trening — dodeljeno ti je {{drops}} drops.",
+  "recovery": {
+    "banner": {
+      "title": "Nezavršen trening",
+      "body": "Pre {{minutesAgo}} min započeo si {{machineType}} sesiju u {{gymName}} i nisi je završio.",
+      "bodyNoMachine": "Imaš nezavršen trening iz {{gymName}}, pokrenut pre {{minutesAgo}} min.",
+      "resume": "Nastavi",
+      "finish": "Završi i sačuvaj",
+      "dismiss": "Zatvori",
+      "recovering": "Zatvaranje…"
+    },
+    "confirmDiscard": {
+      "title": "Zatvoriti ovaj trening?",
+      "body": "Sačuvaćemo ono što imamo i dodeliti drops koje si zaradio.",
+      "confirm": "Zatvori i sačuvaj"
+    },
+    "machineType": {
+      "treadmill": "traku",
+      "bike": "bicikl",
+      "elliptical": "eliptiku",
+      "stepper": "stepper",
+      "generic": "spravu"
+    }
+  },
   "summary": {
     "workoutComplete": "Trening završen!",
     "workoutLogged": "Trening zabeležen",

@@ -218,6 +218,15 @@ export default function WorkoutScreen() {
   // Bug 8: Resume fail counter — after 3 failures, offer "End workout"
   const resumeFailCountRef = useRef<number>(0);
   const [showForceFinishOption, setShowForceFinishOption] = useState(false);
+  // Bug 4a: Track when the connection-pause overlay first appeared so we can
+  // automatically attempt reconnects + reveal the "Save what I've got"
+  // affordance without user input. Cleared whenever pause exits.
+  const connectionPausedSinceRef = useRef<number | null>(null);
+  const autoReconnectInFlightRef = useRef<boolean>(false);
+  // Bug 4c: Background auto-finalize timer. Set on AppState=background while
+  // BLE is gone; cancelled if app returns to foreground in time.
+  const backgroundFinalizeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoFinalizeFiredRef = useRef<boolean>(false);
   const isPausedRef = useRef(false); // Stable ref for BLE callbacks (avoids stale closures & dep array issues)
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
@@ -382,12 +391,125 @@ export default function WorkoutScreen() {
     bleConnectedShared.value = bleConnected ? 1 : 0;
   }, [bleConnected, bleConnectedShared]);
 
+  // ────────────────────────────────────────────────────────────────────────
+  // Bug 4c refs: AppState callbacks fire long after the closure captured
+  // them, so we need refs for any value the auto-finalize timer must read
+  // at the moment background→foreground transitions occur.
+  // ────────────────────────────────────────────────────────────────────────
+  const pauseReasonRef = useRef(pauseReason);
+  pauseReasonRef.current = pauseReason;
+  const bleConnectedRefSync = useRef(bleConnected);
+  bleConnectedRefSync.current = bleConnected;
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const sessionIdRef = useRef<string | null>(null);
+  sessionIdRef.current = session?.id ?? null;
+  const authUserIdRef = useRef<string | null>(null);
+  authUserIdRef.current = authSession?.user?.id ?? null;
+
   // AppState listener: Track background state; keep BLE + data processing alive
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         isAppInBackgroundRef.current = true;
         log.debug('[Workout] App went to background — BLE + drops continue, UI paused');
+
+        // ────────────────────────────────────────────────────────────────
+        // Bug 4c: schedule a soft auto-finalize 60s after background.
+        // Conditions:
+        //   - BLE is currently disconnected
+        //   - we're paused for connection (i.e. user already walked away)
+        //   - we have ≥60s of synced duration (don't kill a fresh workout
+        //     that the user just minimised intentionally)
+        //   - the session is real (not the simulator/mock branch) AND we
+        //     haven't already auto-finalized this session.
+        // ────────────────────────────────────────────────────────────────
+        const sid = sessionIdRef.current;
+        const uid = authUserIdRef.current;
+        const eligible =
+          !!sid &&
+          !!uid &&
+          sid !== 'mock-session' &&
+          !bleConnectedRefSync.current &&
+          isPausedRef.current &&
+          pauseReasonRef.current === 'connection' &&
+          durationRef.current >= 60 &&
+          !autoFinalizeFiredRef.current;
+
+        if (!eligible) return;
+
+        if (backgroundFinalizeTimerRef.current) {
+          clearTimeout(backgroundFinalizeTimerRef.current);
+        }
+        log.debug('[Workout][AutoFinalize] scheduling 60s background finalize', {
+          sessionId: sid,
+          duration: durationRef.current,
+        });
+        backgroundFinalizeTimerRef.current = setTimeout(async () => {
+          backgroundFinalizeTimerRef.current = null;
+          // Re-check at fire-time — user may have come back to foreground
+          // (which clears isAppInBackgroundRef before this fires) or the
+          // session may have advanced.
+          if (!isAppInBackgroundRef.current) return;
+          if (autoFinalizeFiredRef.current) return;
+          const finalSid = sessionIdRef.current;
+          const finalUid = authUserIdRef.current;
+          if (!finalSid || !finalUid || finalSid === 'mock-session') return;
+          if (bleConnectedRefSync.current) return;
+
+          autoFinalizeFiredRef.current = true;
+          try {
+            log.debug('[Workout][AutoFinalize] firing finalize_inactive_session', {
+              sessionId: finalSid,
+            });
+            type FinalizeRpc = (
+              fn: string,
+              args: Record<string, unknown>,
+            ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+            const rpc = supabase.rpc.bind(supabase) as unknown as FinalizeRpc;
+            const { data, error } = await rpc('finalize_inactive_session', {
+              p_session_id: finalSid,
+              p_reason: 'app_background_disconnect_autofinish',
+            });
+            if (error) throw new Error(error.message || 'finalize failed');
+
+            const row = (Array.isArray(data) ? data[0] : data) as
+              | { drops_earned?: number }
+              | null;
+            const drops =
+              typeof row?.drops_earned === 'number' ? row.drops_earned : 0;
+
+            // One-shot flag: surface a "Workout finalized — N drops" modal on
+            // the next foreground (handled by the recovery banner store, see
+            // Step 9). We use AsyncStorage so the message survives the app
+            // being killed mid-finalize.
+            try {
+              const AsyncStorage = (
+                await import('@react-native-async-storage/async-storage')
+              ).default;
+              await AsyncStorage.setItem(
+                '@sweatdrop/last_autofinalize_session_id',
+                JSON.stringify({ sessionId: finalSid, drops, finalizedAt: Date.now() }),
+              );
+            } catch (storageError) {
+              log.warn('[Workout][AutoFinalize] AsyncStorage write failed:', storageError);
+            }
+
+            log.debug('[Workout][AutoFinalize] success', {
+              sessionId: finalSid,
+              drops,
+            });
+          } catch (finalizeError) {
+            log.warn(
+              '[Workout][AutoFinalize] finalize_inactive_session failed:',
+              finalizeError,
+            );
+            // Don't retry indefinitely. The 5-min cleanup_abandoned_sessions
+            // cron will eventually pick this orphan up; the recovery banner
+            // (Bug 4b) will surface it on next foreground if needed.
+            autoFinalizeFiredRef.current = false;
+          }
+        }, 60_000);
       } else if (nextAppState === 'active') {
         // Re-sync watchdog timestamp so it doesn't immediately zero RPM
         lastPacketTime.value = Date.now();
@@ -399,12 +521,22 @@ export default function WorkoutScreen() {
         } else {
           setSignalStatus('lost');
         }
+        // Bug 4c: cancel any pending auto-finalize if user came back in time.
+        if (backgroundFinalizeTimerRef.current) {
+          log.debug('[Workout][AutoFinalize] foreground returned — cancelling timer');
+          clearTimeout(backgroundFinalizeTimerRef.current);
+          backgroundFinalizeTimerRef.current = null;
+        }
         log.debug('[Workout] App came to foreground — UI resumed');
       }
     });
 
     return () => {
       subscription.remove();
+      if (backgroundFinalizeTimerRef.current) {
+        clearTimeout(backgroundFinalizeTimerRef.current);
+        backgroundFinalizeTimerRef.current = null;
+      }
     };
   }, [lastPacketTime]);
 
@@ -430,6 +562,7 @@ export default function WorkoutScreen() {
       if (heartbeatIntervalRef.current) { clearInterval(heartbeatIntervalRef.current); heartbeatIntervalRef.current = null; }
       if (timeProgressIntervalRef.current) { clearInterval(timeProgressIntervalRef.current); timeProgressIntervalRef.current = null; }
       if (connectingTimeoutRef.current) { clearTimeout(connectingTimeoutRef.current); connectingTimeoutRef.current = null; }
+      if (backgroundFinalizeTimerRef.current) { clearTimeout(backgroundFinalizeTimerRef.current); backgroundFinalizeTimerRef.current = null; }
     };
   }, []);
 
@@ -1133,6 +1266,109 @@ export default function WorkoutScreen() {
 
     return () => clearInterval(watchdog);
   }, [bleConnected, isReconnecting, session?.machine_id, sensorId, t]);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Bug 4a: Auto-escape from "Reconnecting…" overlay
+  //
+  // When the user walks away mid-workout, BLE drops and the watchdog above
+  // flips the screen into `isPaused && pauseReason === 'connection'`. Today,
+  // the only escape from that state is for the user to tap Resume three
+  // times and watch each fail; if they never interact, they're stranded.
+  //
+  // This effect:
+  //   1. Auto-attempts `bleService.reconnect()` every 30s while paused-on-
+  //      connection. Successful reconnect transparently resumes the workout.
+  //   2. Reveals the "Save what I've got" affordance after EITHER 3 auto-
+  //      reconnect failures OR 90s have elapsed since the pause began.
+  //   3. Hard-cap: at 5 minutes elapsed, force the affordance visible
+  //      regardless of reconnect attempts (some hardware never reports a
+  //      clean disconnect; we still want the user to be able to escape
+  //      whenever they next look at the screen).
+  // ────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isPaused || pauseReason !== 'connection') {
+      // Exiting the connection-pause state: clear the timer/origin marker.
+      // resumeFailCountRef + showForceFinishOption are reset in resumeWorkout's
+      // success path so manual resume keeps working as before.
+      connectionPausedSinceRef.current = null;
+      autoReconnectInFlightRef.current = false;
+      return;
+    }
+    if (connectionPausedSinceRef.current === null) {
+      connectionPausedSinceRef.current = Date.now();
+    }
+
+    const tick = async () => {
+      if (!isMountedRef.current) return;
+      const pausedSince = connectionPausedSinceRef.current ?? Date.now();
+      const elapsedSec = Math.floor((Date.now() - pausedSince) / 1000);
+
+      // 5-minute hard cap — always reveal escape regardless of reconnect path.
+      if (elapsedSec >= 300) {
+        setShowForceFinishOption(true);
+      }
+
+      if (autoReconnectInFlightRef.current) return;
+      autoReconnectInFlightRef.current = true;
+
+      try {
+        log.debug('[Workout][AutoReconnect] tick', {
+          elapsedSec,
+          fails: resumeFailCountRef.current,
+        });
+        const ok = await bleService.reconnect();
+        if (!isMountedRef.current) return;
+
+        if (ok) {
+          log.debug('[Workout][AutoReconnect] success — resuming workout');
+          resumeFailCountRef.current = 0;
+          setShowForceFinishOption(false);
+          setBleConnected(true);
+          setBleStatus('');
+          // Match resumeWorkout()'s pause-offset adjustment so the duration
+          // counter doesn't jump.
+          if (pausedTime) {
+            const pauseDuration = Date.now() - pausedTime.getTime();
+            setStartTime((prev) =>
+              prev ? new Date(prev.getTime() + pauseDuration) : prev,
+            );
+          }
+          setPausedTime(null);
+          setPauseReason('manual');
+          setIsPaused(false);
+          connectionPausedSinceRef.current = null;
+        } else {
+          resumeFailCountRef.current += 1;
+          log.debug('[Workout][AutoReconnect] failed', {
+            fails: resumeFailCountRef.current,
+            elapsedSec,
+          });
+          if (resumeFailCountRef.current >= 3 || elapsedSec >= 90) {
+            setShowForceFinishOption(true);
+          }
+        }
+      } catch (err) {
+        if (!isMountedRef.current) return;
+        log.warn('[Workout][AutoReconnect] reconnect threw:', err);
+        resumeFailCountRef.current += 1;
+        if (resumeFailCountRef.current >= 3 || elapsedSec >= 90) {
+          setShowForceFinishOption(true);
+        }
+      } finally {
+        autoReconnectInFlightRef.current = false;
+      }
+    };
+
+    // Fire once after a short grace (let the watchdog stabilize), then on
+    // a 30s cadence so we don't hammer the BLE stack.
+    const initialDelay = setTimeout(() => void tick(), 5000);
+    const intervalId = setInterval(() => void tick(), 30000);
+
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(intervalId);
+    };
+  }, [isPaused, pauseReason, pausedTime]);
 
   const cancelSessionForNoActivity = useCallback(async () => {
     if (!session || !authSession?.user || session.id === 'mock-session') return;
@@ -2288,8 +2524,14 @@ export default function WorkoutScreen() {
     longPressTimerRef.current = setTimeout(() => {
       finishPressProgress.value = 1;
 
-      // Warn user if workout is shorter than 2 minutes — they'll get 0 drops
-      if (duration < 120) {
+      // Warn user if workout is shorter than 2 minutes — they'll get 0 drops.
+      // Bug 4a: skip the warning when the user is being forced to end via the
+      // connection-lost overlay (they can't recover, so the warning is just
+      // friction). Drops are credited based on whatever duration was synced.
+      const isInvoluntaryConnectionEnd =
+        isPaused && pauseReason === 'connection';
+
+      if (duration < 120 && !isInvoluntaryConnectionEnd) {
         showModal({
           title: t('shortWorkoutTitle'),
           body: t('shortWorkoutBody', { seconds: duration }),
@@ -3220,8 +3462,20 @@ export default function WorkoutScreen() {
             size={48}
             color={theme.colors.text}
           />
-          <Text style={styles.pausedText}>{pauseReason === 'connection' ? t('reconnecting') : t('paused')}</Text>
-          <Text style={styles.pausedSubtext}>{pauseOverlayMessage}</Text>
+          <Text style={styles.pausedText}>
+            {pauseReason === 'connection' ? t('connectionLostTitle') : t('paused')}
+          </Text>
+          <Text style={styles.pausedSubtext}>
+            {pauseReason === 'connection' ? t('connectionLostBody') : pauseOverlayMessage}
+          </Text>
+          {/* Bug 4a: when paused-on-connection AND user has any synced duration,
+              spell out exactly what tapping Save will credit so the user knows
+              their workout isn't being thrown away. */}
+          {pauseReason === 'connection' && duration > 0 && showForceFinishOption && (
+            <Text style={[styles.pausedSubtext, { marginTop: 0, marginBottom: 8 }]}>
+              {t('connectionAutoFinishExplain', { duration: formatTime(duration) })}
+            </Text>
+          )}
           <TouchableOpacity
             style={[styles.resumeOverlayButton, isResumingFromPause && styles.resumeOverlayButtonDisabled]}
             onPress={() => {
@@ -3235,7 +3489,11 @@ export default function WorkoutScreen() {
             ) : (
               <>
                 <Ionicons name="play" size={18} color={theme.colors.background} />
-                <Text style={styles.resumeOverlayButtonText}>{t('resume')}</Text>
+                <Text style={styles.resumeOverlayButtonText}>
+                  {pauseReason === 'connection'
+                    ? t('connectionLostKeepTryingAction')
+                    : t('resume')}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -3245,7 +3503,11 @@ export default function WorkoutScreen() {
               onPress={() => handleFinishWorkout()}
               activeOpacity={0.85}
             >
-              <Text style={styles.resumeOverlayButtonText}>{t('endWorkout')}</Text>
+              <Text style={styles.resumeOverlayButtonText}>
+                {pauseReason === 'connection' && duration > 0
+                  ? t('connectionLostSaveAction')
+                  : t('endWorkout')}
+              </Text>
             </TouchableOpacity>
           )}
         </Animated.View>
@@ -3277,7 +3539,13 @@ export default function WorkoutScreen() {
               style={[styles.reconnectButton, { marginTop: 16, backgroundColor: theme.colors.error }]}
               onPress={() => handleFinishWorkout()}
             >
-              <Text style={[styles.reconnectButtonText, { color: '#fff' }]}>{t('cancelWorkout')}</Text>
+              {/* Bug 4a: route through handleFinishWorkout so any synced
+                  duration > 0 still credits drops via award_drops. For a
+                  zero-duration session the same path closes the row and
+                  navigates to summary with 0 drops — no "discard" branch. */}
+              <Text style={[styles.reconnectButtonText, { color: '#fff' }]}>
+                {duration > 0 ? t('cantConnectFinish') : t('cancelWorkout')}
+              </Text>
             </TouchableOpacity>
           )}
         </Animated.View>

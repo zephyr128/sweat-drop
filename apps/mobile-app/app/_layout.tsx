@@ -42,6 +42,7 @@ import { isConsumerRole, rejectElevatedSession } from '@/lib/auth/isConsumerAcco
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { AppModal } from '@/components/AppModal';
+import { useActiveSessionRecoveryWatch } from '@/lib/workout/useActiveSessionRecovery';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const APP_NAV_THEME = {
@@ -531,6 +532,11 @@ export default function RootLayout() {
       drainPendingFinalization();
     });
   }, [isInitialized, session?.user]);
+
+  // Bug 4b: detect orphan `is_active = true` sessions left over from a
+  // previous app run and surface the recovery banner on /home. The hook
+  // reads its own auth + segments state and is gated internally.
+  useActiveSessionRecoveryWatch();
 
   // Initialize BLE Manager (Android)
   useEffect(() => {
