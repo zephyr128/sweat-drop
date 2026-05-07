@@ -55,6 +55,8 @@ import {
 } from '@/lib/workout/workout-simulator';
 import { useAppModal } from '@/lib/stores/useAppModal';
 import { parseQrPayload } from '@/lib/qr/handleQrDeepLink';
+import { recoverStaleActiveSession } from '@/lib/qr/recoverStaleActiveSession';
+import { AppModal } from '@/components/AppModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -163,6 +165,11 @@ export function ScannerScreen() {
   isScanningRef.current = isScanning;
   const isProcessingRef = useRef(isProcessing);
   isProcessingRef.current = isProcessing;
+
+  // Bug 1/Step 5: flipped before any router.replace inside the async handlers
+  // below so the defensive `finally` blocks know not to clear the loader on
+  // a screen that's about to unmount (avoids a brief loader flicker).
+  const hasNavigatedAwayRef = useRef(false);
 
   const resetScan = useCallback(() => {
     hasScannedRef.current = false;
@@ -584,6 +591,13 @@ export function ScannerScreen() {
     } catch (error: any) {
       log.error('[Scanner] Error processing QR code:', error);
       showModal({ title: t('error'), body: error.message || t('errorProcessing'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+    } finally {
+      // Step 5: never strand the loader. resetScan() also fires from modal
+      // onPress callbacks and is idempotent. The hasNavigatedAwayRef guard
+      // avoids a brief flicker when we're about to unmount.
+      if (!hasNavigatedAwayRef.current) {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -623,8 +637,29 @@ export function ScannerScreen() {
 
       if (!startResult?.success || !startResult?.session_id) {
         const errorCode = startResult?.error_code;
-        if (errorCode === 'machine_busy' || errorCode === 'user_active_session_conflict') {
-          showModal({ title: t('machineBusy'), body: t('machineBusyDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+        // Step 3: split the conflated branch into two distinct UX paths.
+        if (errorCode === 'machine_busy') {
+          showModal({
+            title: t('machineBusyOther'),
+            body: t('machineBusyOtherDesc'),
+            buttons: [{ label: t('common:ok'), onPress: resetScan }],
+          });
+          return;
+        }
+        if (errorCode === 'user_active_session_conflict') {
+          showModal({
+            title: t('previousWorkoutOpen'),
+            body: t('previousWorkoutOpenDesc'),
+            buttons: [
+              { label: t('common:cancel'), style: 'cancel', onPress: resetScan },
+              {
+                label: t('closeAndRetry'),
+                onPress: () => {
+                  void handleRecoverAndRetry(machine, isFirstGym);
+                },
+              },
+            ],
+          });
           return;
         }
         throw new Error(startResult?.error_message || t('errorWorkout'));
@@ -690,6 +725,52 @@ export function ScannerScreen() {
     }
   };
 
+  // Bug 1/Step 3: shared "close stale session, then retry" recovery flow.
+  // Used by both `proceedWithWorkout` and `autoCheckinThenStartWorkout` when
+  // start_session_safely() returns `user_active_session_conflict` (the user
+  // has their own orphan `is_active = true` row blocking the new session).
+  const handleRecoverAndRetry = async (
+    machine: MachineStatus,
+    isFirstGym: boolean,
+  ) => {
+    setIsProcessing(true);
+    try {
+      const userId = sessionRef.current?.user?.id;
+      if (!userId) {
+        log.warn('[Scanner] Recovery requested without an authenticated user');
+        resetScan();
+        return;
+      }
+      const result = await recoverStaleActiveSession(userId);
+      if (!result.closed && result.reason === 'failed') {
+        showModal({
+          title: t('recoveryFailed'),
+          body: t('recoveryFailedDesc'),
+          buttons: [{ label: t('common:ok'), onPress: resetScan }],
+        });
+        return;
+      }
+      // Either we closed the orphan, or there wasn't one — both cases mean
+      // the next start_session_safely() should succeed.
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await proceedWithWorkout(machine, isFirstGym);
+    } catch (err) {
+      log.error('[Scanner] recover-and-retry failed:', err);
+      showModal({
+        title: t('recoveryFailed'),
+        body: t('recoveryFailedDesc'),
+        buttons: [{ label: t('common:ok'), onPress: resetScan }],
+      });
+    } finally {
+      // Step 5: never strand the loader; proceedWithWorkout already manages
+      // its own finally on the happy path (it sets hasNavigatedAwayRef before
+      // router.replace).
+      if (!hasNavigatedAwayRef.current) {
+        setIsProcessing(false);
+      }
+    }
+  };
+
   const proceedWithWorkout = async (
     machine: MachineStatus,
     isFirstGym = false,
@@ -735,8 +816,29 @@ export function ScannerScreen() {
 
       if (!startResult?.success || !startResult?.session_id) {
         const errorCode = startResult?.error_code;
-        if (errorCode === 'machine_busy' || errorCode === 'user_active_session_conflict') {
-          showModal({ title: t('machineBusy'), body: t('machineBusyDesc'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+        // Step 3: split the conflated branch into two distinct UX paths.
+        if (errorCode === 'machine_busy') {
+          showModal({
+            title: t('machineBusyOther'),
+            body: t('machineBusyOtherDesc'),
+            buttons: [{ label: t('common:ok'), onPress: resetScan }],
+          });
+          return;
+        }
+        if (errorCode === 'user_active_session_conflict') {
+          showModal({
+            title: t('previousWorkoutOpen'),
+            body: t('previousWorkoutOpenDesc'),
+            buttons: [
+              { label: t('common:cancel'), style: 'cancel', onPress: resetScan },
+              {
+                label: t('closeAndRetry'),
+                onPress: () => {
+                  void handleRecoverAndRetry(machine, isFirstGym);
+                },
+              },
+            ],
+          });
           return;
         }
         throw new Error(startResult?.error_message || t('errorWorkout'));
@@ -777,6 +879,7 @@ export function ScannerScreen() {
           ?? useGymStore.getState().activeGym?.name
           ?? 'Tvojoj teretani';
 
+        hasNavigatedAwayRef.current = true;
         router.replace({
           pathname: '/gym-welcome',
           params: {
@@ -786,6 +889,7 @@ export function ScannerScreen() {
         });
       } else {
         // ── Returning user → go directly to workout ──
+        hasNavigatedAwayRef.current = true;
         router.replace({
           pathname: '/workout',
           params: workoutParams,
@@ -794,6 +898,11 @@ export function ScannerScreen() {
     } catch (error: any) {
       log.error('[Scanner] Error proceeding with workout:', error);
       showModal({ title: t('error'), body: error.message || t('errorWorkout'), buttons: [{ label: t('common:ok'), onPress: resetScan }] });
+    } finally {
+      // Step 5: never strand the loader on async early-return paths.
+      if (!hasNavigatedAwayRef.current) {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -1487,6 +1596,22 @@ export function ScannerScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/*
+        Step 4 (Bug 2 / iOS occlusion fix): render AppModal locally so the
+        alert overlay sits inside the same RNScreen as the camera. The
+        global AppModal mounted in `app/_layout.tsx` is on iOS occluded by
+        the scanner's `transparentModal` presentation, leaving the user with
+        no way to acknowledge "machine busy" / "previous workout open"
+        dialogs (and triggering the hard-restart that produces this whole
+        bug class).
+
+        AppModal is driven by the global `useAppModal` Zustand store so the
+        store API stays unchanged — both copies render identically; only the
+        topmost copy (this one, while ScannerScreen is mounted) is actually
+        visible.
+      */}
+      <AppModal />
     </View>
   );
 }

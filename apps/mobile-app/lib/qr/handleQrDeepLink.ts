@@ -20,6 +20,7 @@ import { getDeviceFingerprintHash } from '@/lib/security/deviceFingerprint';
 import { log } from '@/lib/logger';
 import i18n from '@/lib/i18n';
 import type { AppModalButton } from '@/lib/stores/useAppModal';
+import { recoverStaleActiveSession } from '@/lib/qr/recoverStaleActiveSession';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -469,10 +470,11 @@ async function handleMachineFlow(
 async function startSessionAndRoute(
   machine: MachineStatus,
   isFirstGym: boolean,
-  { router, session, showModal }: HandleQrDeepLinkOptions,
+  options: HandleQrDeepLinkOptions,
   ciResult: Record<string, unknown> | null,
   ciStatus: string | null,
 ): Promise<void> {
+  const { router, session, showModal } = options;
   const goHome = () => router.replace('/home');
   const errorModal = (title: string, body?: string) =>
     showModal({ title, body, buttons: [{ label: t('common:ok'), onPress: goHome }] });
@@ -499,11 +501,32 @@ async function startSessionAndRoute(
 
     if (!startResult?.success || !startResult?.session_id) {
       const errorCode = startResult?.error_code;
-      if (
-        errorCode === 'machine_busy' ||
-        errorCode === 'user_active_session_conflict'
-      ) {
-        errorModal(t('machineBusy'), t('machineBusyDesc'));
+      // Step 6 (Bug 1): split the conflated branch into two distinct UX paths.
+      // The deep-link entry uses the global AppModal (no occlusion risk here —
+      // /m/[uuid] and /machine/[uuid] are plain card screens, not
+      // transparentModal). NFC/Universal-Link entries land here.
+      if (errorCode === 'machine_busy') {
+        showModal({
+          title: t('machineBusyOther'),
+          body: t('machineBusyOtherDesc'),
+          buttons: [{ label: t('common:ok'), onPress: goHome }],
+        });
+        return;
+      }
+      if (errorCode === 'user_active_session_conflict') {
+        showModal({
+          title: t('previousWorkoutOpen'),
+          body: t('previousWorkoutOpenDesc'),
+          buttons: [
+            { label: t('common:cancel'), style: 'cancel', onPress: goHome },
+            {
+              label: t('closeAndRetry'),
+              onPress: () => {
+                void recoverAndRetryDeepLink(machine, isFirstGym, options, ciResult, ciStatus);
+              },
+            },
+          ],
+        });
         return;
       }
       throw new Error(startResult?.error_message || t('errorWorkout'));
@@ -584,5 +607,53 @@ async function startSessionAndRoute(
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     errorModal(t('error'), msg || t('errorWorkout'));
+  }
+}
+
+// ── Recover-and-retry (Step 6, Bug 1) ─────────────────────────────────────────
+
+/**
+ * Close the user's stale `is_active = true` session and retry the deep-link
+ * session start. Mirrors `handleRecoverAndRetry` in `ScannerScreen.tsx` but
+ * routes failures through the deep-link error modal (which sends the user
+ * back to /home rather than re-opening the scanner).
+ */
+async function recoverAndRetryDeepLink(
+  machine: MachineStatus,
+  isFirstGym: boolean,
+  options: HandleQrDeepLinkOptions,
+  ciResult: Record<string, unknown> | null,
+  ciStatus: string | null,
+): Promise<void> {
+  const { router, session, showModal } = options;
+  const goHome = () => router.replace('/home');
+
+  try {
+    const userId = session?.user?.id;
+    if (!userId) {
+      goHome();
+      return;
+    }
+
+    const result = await recoverStaleActiveSession(userId);
+    if (!result.closed && result.reason === 'failed') {
+      showModal({
+        title: t('recoveryFailed'),
+        body: t('recoveryFailedDesc'),
+        buttons: [{ label: t('common:ok'), onPress: goHome }],
+      });
+      return;
+    }
+
+    // Either we closed the orphan, or there wasn't one — either way,
+    // start_session_safely() should now succeed.
+    await startSessionAndRoute(machine, isFirstGym, options, ciResult, ciStatus);
+  } catch (err) {
+    log.error('[handleQrDeepLink] recover-and-retry failed:', err);
+    showModal({
+      title: t('recoveryFailed'),
+      body: t('recoveryFailedDesc'),
+      buttons: [{ label: t('common:ok'), onPress: goHome }],
+    });
   }
 }
