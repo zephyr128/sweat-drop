@@ -35,8 +35,32 @@
   "dailyCapHitBanner": "Daily limit reached — drops paused, keep training!",
   "hardWeekCapReached": "Weekly drop limit reached — workout continues, drops paused",
   "atGym": "At: {{name}}",
-  "connecting": "Connecting to sensor...",
-  "connectingSubtitle": "Please wait while the app connects to the sensor.",
+  "connecting": "Connecting…",
+  "connectingTitle": "Connecting to your machine…",
+  "connectingTitleNamed": "Connecting to {{name}}…",
+  "connectingSubtitle": "Hold tight — we'll lock on as soon as the machine starts moving.",
+  "connectStart": {
+    "bike": {
+      "title": "Start pedaling",
+      "body": "Hop on the bike and start pedaling — the sensor wakes up with motion."
+    },
+    "treadmill": {
+      "title": "Turn on the treadmill and start walking",
+      "body": "Press Start on the console and step onto the belt. We'll lock on once the belt is moving."
+    },
+    "elliptical": {
+      "title": "Step on and start striding",
+      "body": "Step onto the pedals and begin a steady rhythm — the sensor wakes with motion."
+    },
+    "stepper": {
+      "title": "Step on and start climbing",
+      "body": "Step onto the pedals and begin steady stepping — the sensor wakes with motion."
+    },
+    "generic": {
+      "title": "Start the machine",
+      "body": "Begin moving on the machine — the sensor only wakes up when there's activity."
+    }
+  },
   "connected": "Connected",
   "disconnected": "Disconnected",
   "reconnecting": "Reconnecting...",

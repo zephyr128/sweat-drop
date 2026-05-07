@@ -35,8 +35,32 @@
   "dailyCapHitBanner": "Dnevni limit dostignut — drops pauzirani, nastavi da treniraš!",
   "hardWeekCapReached": "Nedeljni limit dostignut — trening nastavlja, drops pauzirani",
   "atGym": "U: {{name}}",
-  "connecting": "Povezivanje sa senzorom...",
-  "connectingSubtitle": "Sačekaj dok se aplikacija povezuje sa senzorom.",
+  "connecting": "Povezivanje…",
+  "connectingTitle": "Povezujemo se sa tvojom spravom…",
+  "connectingTitleNamed": "Povezivanje sa {{name}}…",
+  "connectingSubtitle": "Samo trenutak — povezaćemo se čim sprava počne da se kreće.",
+  "connectStart": {
+    "bike": {
+      "title": "Počni da pedališ",
+      "body": "Sedi na bicikl i počni da pedališ — senzor se budi tek kada krene kretanje."
+    },
+    "treadmill": {
+      "title": "Uključi traku i počni da hodaš",
+      "body": "Pritisni Start na konzoli i stani na traku. Povezaćemo se čim traka krene."
+    },
+    "elliptical": {
+      "title": "Stani na eliptiku i počni",
+      "body": "Stani na pedale i počni da koračaš ujednačeno — senzor se budi pri pokretu."
+    },
+    "stepper": {
+      "title": "Stani na stepper i kreni",
+      "body": "Stani na pedale i počni redovne korake — senzor se budi pri pokretu."
+    },
+    "generic": {
+      "title": "Pokreni spravu",
+      "body": "Počni da se krećeš na spravi — senzor se budi tek kada postoji aktivnost."
+    }
+  },
   "connected": "Povezano",
   "disconnected": "Prekinuto",
   "reconnecting": "Ponovo se povezujem...",
