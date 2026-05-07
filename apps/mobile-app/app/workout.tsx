@@ -56,6 +56,7 @@ import AnimatedText from '@/components/workout/AnimatedText';
 import WorkoutStatsGrid from '@/components/workout/WorkoutStatsGrid';
 import GoalProgressBar from '@/components/workout/GoalProgressBar';
 import WorkoutControls from '@/components/workout/WorkoutControls';
+import { MachineConnectingOverlay } from '@/components/workout/MachineConnectingOverlay';
 import { styles } from './workout.styles';
 
 import { useHappyHour } from '@/hooks/useHappyHour';
@@ -3245,7 +3246,10 @@ export default function WorkoutScreen() {
         <View style={styles.gaugeBackgroundGlow} />
 
         <View style={styles.circleWrapper}>
-          {/* Connecting State: pulse while waiting for BLE — visible from the moment we have a sensor ID */}
+          {/* Subtle pulse circle behind the BLE connecting overlay — kept text-free
+              to avoid duplicating the headline shown by MachineConnectingOverlay,
+              but provides a soft "alive" beat for the brief transition between
+              overlay-dismiss and connection-explosion. */}
           {!bleConnected && (machineId || session?.machine_id) && (sensorId || session?.machine?.sensor_id) && (
             <Animated.View
               style={[
@@ -3253,22 +3257,11 @@ export default function WorkoutScreen() {
                 connectingPulseStyle,
                 {
                   borderColor: theme.colors.textSecondary + '40',
+                  backgroundColor: 'transparent',
                 },
               ]}
-            >
-              {sessionLoading ? (
-                <>
-                  <ActivityIndicator size="small" color={theme.colors.textSecondary} style={{ marginBottom: 8 }} />
-                  <Text style={styles.connectingText}>{t('connecting')}</Text>
-                </>
-              ) : (
-                <Text style={styles.connectingText}>
-                  {session?.machine?.name
-                    ? `${t('connecting').replace('...', '')} ${session.machine.name}...`
-                    : t('connecting')}
-                </Text>
-              )}
-            </Animated.View>
+              pointerEvents="none"
+            />
           )}
 
           {/* Pulse Rings are now rendered inside CircularProgressRing.tsx component */}
@@ -3468,10 +3461,10 @@ export default function WorkoutScreen() {
           <Text style={styles.pausedSubtext}>
             {pauseReason === 'connection' ? t('connectionLostBody') : pauseOverlayMessage}
           </Text>
-          {/* Bug 4a: when paused-on-connection AND user has any synced duration,
-              spell out exactly what tapping Save will credit so the user knows
-              their workout isn't being thrown away. */}
-          {pauseReason === 'connection' && duration > 0 && showForceFinishOption && (
+          {/* When paused-on-connection AND user has any synced duration,
+              spell out exactly what tapping End workout will credit so the
+              user knows their workout isn't being thrown away. */}
+          {pauseReason === 'connection' && duration > 0 && (
             <Text style={[styles.pausedSubtext, { marginTop: 0, marginBottom: 8 }]}>
               {t('connectionAutoFinishExplain', { duration: formatTime(duration) })}
             </Text>
@@ -3497,12 +3490,25 @@ export default function WorkoutScreen() {
               </>
             )}
           </TouchableOpacity>
-          {showForceFinishOption && (
+          {/* End-workout escape hatch:
+              - For connection-pause: always visible from the moment the
+                overlay appears so the user is NEVER stranded waiting for an
+                arbitrary fail counter / timeout. Tapping it routes through
+                handleFinishWorkout() which uses `pauseReason === 'connection'`
+                to skip the short-workout warning (the user can't recover —
+                friction here is harmful).
+              - For other reasons (manual, inactivity): show only after the
+                3-strike fail counter, matching the prior behavior. */}
+          {(pauseReason === 'connection' || showForceFinishOption) && (
             <TouchableOpacity
-              style={[styles.resumeOverlayButton, { marginTop: 8, backgroundColor: theme.colors.error }]}
+              style={[
+                styles.resumeOverlayButton,
+                { marginTop: 10, backgroundColor: theme.colors.error },
+              ]}
               onPress={() => handleFinishWorkout()}
               activeOpacity={0.85}
             >
+              <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
               <Text style={styles.resumeOverlayButtonText}>
                 {pauseReason === 'connection' && duration > 0
                   ? t('connectionLostSaveAction')
@@ -3526,29 +3532,22 @@ export default function WorkoutScreen() {
 
       
 
-      {/* BLE Connection Required Overlay */}
+      {/* BLE Connection Required Overlay — premium machine-aware experience.
+          Replaces the old plain "Connecting to sensor…" spinner with a
+          machine-specific animated illustration + clear action prompt
+          ("Start pedaling", "Step on and walk", etc). The escape hatch
+          remains: handleFinishWorkout() finalizes via award_drops so any
+          synced duration is credited; zero-duration sessions just cancel. */}
       {!showNoActivityCancelOverlay && !isPaused && !bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && (
-        <Animated.View style={[styles.bleConnectionOverlay, pausedOverlayStyle]}>
-          <ActivityIndicator size="large" color={branding.primary} />
-          <Text style={styles.bleConnectionTitle}>{t('connecting')}</Text>
-          <Text style={styles.bleConnectionText}>
-            {bleStatus || t('connectingSubtitle')}
-          </Text>
-          {showConnectingCancel && (
-            <TouchableOpacity
-              style={[styles.reconnectButton, { marginTop: 16, backgroundColor: theme.colors.error }]}
-              onPress={() => handleFinishWorkout()}
-            >
-              {/* Bug 4a: route through handleFinishWorkout so any synced
-                  duration > 0 still credits drops via award_drops. For a
-                  zero-duration session the same path closes the row and
-                  navigates to summary with 0 drops — no "discard" branch. */}
-              <Text style={[styles.reconnectButtonText, { color: '#fff' }]}>
-                {duration > 0 ? t('cantConnectFinish') : t('cancelWorkout')}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </Animated.View>
+        <MachineConnectingOverlay
+          machineType={machineType}
+          machineName={session?.machine?.name ?? null}
+          bleStatus={bleStatus}
+          primaryColor={branding.primary}
+          showCancel={showConnectingCancel}
+          hasSyncedDuration={duration > 0}
+          onCancelOrFinish={() => handleFinishWorkout()}
+        />
       )}
 
       {/* Control Buttons */}
