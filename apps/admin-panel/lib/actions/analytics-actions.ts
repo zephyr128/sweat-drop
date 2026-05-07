@@ -7,7 +7,7 @@ export interface GymAnalytics {
   machine_usage: Array<{
     machine_id: string;
     machine_name: string;
-    machine_type: 'treadmill' | 'bike';
+    machine_type: string;
     scan_count: number;
   }>;
   hourly_traffic: Array<{
