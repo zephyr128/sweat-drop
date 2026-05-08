@@ -47,6 +47,25 @@ export function initSentry(): void {
   })();
 }
 
+export function captureMessage(message: string, context?: { extra?: Record<string, unknown>; level?: 'debug' | 'info' | 'warning' | 'error' }) {
+  if (__DEV__) {
+    console.warn('[Sentry] Would capture message:', message, context);
+    return;
+  }
+  if (!_sentry) return;
+  _sentry.withScope((scope) => {
+    if (context?.extra) {
+      Object.entries(context.extra).forEach(([key, value]) => {
+        scope.setExtra(key, value);
+      });
+    }
+    if (context?.level) {
+      scope.setLevel(context.level as any);
+    }
+    _sentry!.captureMessage(message);
+  });
+}
+
 export function captureException(error: Error, context?: Record<string, unknown>) {
   if (__DEV__) {
     console.error('[Sentry] Would capture:', error.message, context);

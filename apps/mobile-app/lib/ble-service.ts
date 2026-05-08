@@ -44,6 +44,28 @@ try {
 type Device = import('react-native-ble-plx').Device;
 type Characteristic = import('react-native-ble-plx').Characteristic;
 import { log } from '@/lib/logger';
+import { supabase } from '@/lib/supabase';
+import { Sentry, captureMessage as sentryCaptureMessage } from '@/lib/sentry';
+
+// Device Information Service (DIS) — BLE standard
+const DIS_SERVICE_UUID = '0000180a-0000-1000-8000-00805f9b34fb';
+const DIS_SERIAL_NUMBER_CHAR_UUID = '00002a25-0000-1000-8000-00805f9b34fb';
+
+/**
+ * The cross-device-stable identity of a machine for BLE connection and verification.
+ * ble_device_name (BLE Local Name) is the PRIMARY identifier.
+ * ble_serial_number (DIS 0x2A25) is the SECONDARY hardware-bound verifier.
+ * sensor_id (legacy Web Bluetooth opaque hash) is only used as fallback for
+ * machines not yet backfilled with ble_device_name.
+ */
+export interface MachineIdentity {
+  id: string;
+  ble_device_name: string | null;
+  ble_serial_number: string | null;
+  ble_pairing_verified: boolean;
+  sensor_id: string | null;
+  ble_protocol?: 'ftms' | 'csc' | 'yesoul' | null;
+}
 
 import {
   type BLEProtocolType,
@@ -133,6 +155,45 @@ export interface BLEDevice {
   rssi: number | null;
 }
 
+/**
+ * Thrown when BLE scan finds no peripheral matching the requested identity.
+ * Callers should show a "machine not in range" UI path instead of entering the
+ * generic reconnect loop.
+ */
+export class BlePeripheralNotFoundError extends Error {
+  constructor(
+    public readonly requestedIdentifier: string,
+    public readonly detail: string,
+  ) {
+    super(`Peripheral '${requestedIdentifier}' not found: ${detail}`);
+    this.name = 'BlePeripheralNotFoundError';
+  }
+}
+
+/**
+ * Thrown when BLE scan finds multiple peripherals advertising the same Local Name.
+ * This indicates a factory-defect duplicate or an impostor device. Workout cannot
+ * start safely — user must contact gym staff.
+ */
+export class BleAmbiguousIdentityError extends Error {
+  constructor(public readonly conflictingName: string) {
+    super(`Multiple peripherals broadcasting name '${conflictingName}'. Refusing to connect.`);
+    this.name = 'BleAmbiguousIdentityError';
+  }
+}
+
+/**
+ * Thrown when the DIS Serial Number read after GATT connect does not match the
+ * expected serial stored in the DB. Indicates a cross-talk or physical machine
+ * swap. Workout is aborted for safety.
+ */
+export class BlePeripheralMismatchError extends Error {
+  constructor(public readonly detail: string) {
+    super(`BLE peripheral identity mismatch: ${detail}`);
+    this.name = 'BlePeripheralMismatchError';
+  }
+}
+
 export class BLEService {
   private device: Device | string | null = null; // Device for iOS, device ID string for Android
   private deviceId: string | null = null; // Always store device ID as string for reconnect
@@ -163,6 +224,12 @@ export class BLEService {
   private forcedProtocol: BLEProtocolType | null = null;  // If set, skip auto-detection
   private syntheticCrankCounter: number = 0;              // Monotonic counter for FTMS→CSC compat
   private ftmsNotificationSubscriptions: any[] = [];      // FTMS can have multiple char subscriptions
+
+  // ── Peripheral identity tracking ──
+  // verifiedDeviceName: BLE Local Name from advertising packet (cross-device stable)
+  // verifiedSerialNumber: DIS Serial Number read post-GATT-connect (hardware-bound)
+  private verifiedDeviceName: string | null = null;
+  private verifiedSerialNumber: string | null = null;
 
   constructor() {
     if (Platform.OS === 'ios') {
@@ -323,6 +390,59 @@ export class BLEService {
   }
 
   /**
+   * Derive all plausible peripheral-id forms from a sensorId so we can match
+   * against whatever format the OS reports for device.id (Android MAC address,
+   * iOS CBPeripheral UUID, hex string, etc.).
+   *
+   * AGENT NOTE: [2026-05-08] - mobile-coder (BLE cross-talk fix, Step 1)
+   * Made public so verifySessionOwnership in workout.tsx can reuse the same
+   * matching logic when verifying a live peripheral mid-session.
+   */
+  public deriveCandidatePeripheralIds(sensorId: string): string[] {
+    const candidates = new Set<string>([sensorId]);
+    const hex = this.base64ToHex(sensorId);
+    if (hex) {
+      candidates.add(hex);
+      candidates.add(hex.toUpperCase());
+      // Android peripheral.id is often a MAC address (XX:XX:XX:XX:XX:XX)
+      if (hex.length === 12) {
+        const mac = hex.match(/.{2}/g)!.join(':').toUpperCase();
+        candidates.add(mac);
+        candidates.add(mac.toLowerCase());
+      }
+      // Some pairing flows store bytes in little-endian order
+      if (hex.length % 2 === 0) {
+        const reversed = hex.match(/.{2}/g)!.reverse().join('');
+        candidates.add(reversed);
+        candidates.add(reversed.toUpperCase());
+        if (reversed.length === 12) {
+          const macRev = reversed.match(/.{2}/g)!.join(':').toUpperCase();
+          candidates.add(macRev);
+          candidates.add(macRev.toLowerCase());
+        }
+      }
+    }
+    return Array.from(candidates);
+  }
+
+  /**
+   * Returns true when the discovered BLE device's id or name matches any of
+   * the provided candidate peripheral-id strings (normalized, no separators).
+   */
+  private peripheralMatchesSensorId(device: BLEDevice, candidates: string[]): boolean {
+    const normalize = (s: string) => s.replace(/[:\-]/g, '').toLowerCase();
+    const normalizedCandidates = candidates.map(normalize);
+    const deviceIdNorm = normalize(device.id);
+    const deviceNameNorm = device.name ? normalize(device.name) : null;
+    return normalizedCandidates.some(c =>
+      c === deviceIdNorm ||
+      c === deviceNameNorm ||
+      deviceIdNorm.includes(c) ||
+      (deviceNameNorm !== null && deviceNameNorm.includes(c)),
+    );
+  }
+
+  /**
    * Convert base64 string to hex string (if possible)
    */
   private base64ToHex(base64: string): string | null {
@@ -411,9 +531,220 @@ export class BLEService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // connectToMachine — name+serial-based identity (new architecture)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  private deriveIdentityStrategy(
+    machine: MachineIdentity,
+  ): { kind: 'name'; expectedName: string }
+    | { kind: 'name+serial'; expectedName: string; expectedSerial: string }
+    | { kind: 'legacy_strongest_rssi_with_warning' } {
+    if (machine.ble_pairing_verified && machine.ble_device_name && machine.ble_serial_number) {
+      return { kind: 'name+serial', expectedName: machine.ble_device_name, expectedSerial: machine.ble_serial_number };
+    }
+    if (machine.ble_device_name) {
+      return { kind: 'name', expectedName: machine.ble_device_name };
+    }
+    log.warn('[BLE] Machine has no ble_device_name — strongest-RSSI fallback ENABLED. Auto-backfill on connect.');
+    sentryCaptureMessage('ble.legacy_strongest_rssi_fallback', {
+      extra: { machine_id: machine.id, has_sensor_id: !!machine.sensor_id },
+      level: 'warning',
+    });
+    return { kind: 'legacy_strongest_rssi_with_warning' };
+  }
+
+  /**
+   * Connect to a machine using cross-device-stable BLE Local Name identity.
+   * Replaces connectToDevice() for all paired-machine paths.
+   *
+   * Identity strategy:
+   *  - ble_pairing_verified + ble_device_name + ble_serial_number → strict (name match + DIS serial verify)
+   *  - ble_device_name only → name match (serial auto-backfill on connect)
+   *  - no ble_device_name (legacy) → strongest-RSSI with Sentry warning (one-time until auto-backfill)
+   *
+   * Throws:
+   *  - BlePeripheralNotFoundError: no peripheral matching expected name in scan
+   *  - BleAmbiguousIdentityError: multiple peripherals with same name (factory defect)
+   *  - BlePeripheralMismatchError: DIS serial read differs from expected (cross-talk / machine swap)
+   */
+  async connectToMachine(machine: MachineIdentity): Promise<boolean> {
+    // Simulator short-circuit
+    if (machine.sensor_id?.startsWith('sim:')) {
+      const simulator = parseSimulatorDescriptor(machine.sensor_id);
+      if (simulator) {
+        this.simulatorDescriptor = simulator;
+        this.simulatorProfile = simulator.profile;
+        this.device = machine.sensor_id;
+        this.deviceId = machine.sensor_id;
+        this.isConnected = true;
+        this.activeProtocol = simulator.profile === 'custom' ? 'ftms' : 'csc';
+        this.lastMeasurementTime = Date.now();
+        this.emitStatus(`Simulator connected (${simulator.profile})`);
+        log.debug(`[BLE] connectToMachine: simulator (${simulator.profile})`);
+        return true;
+      }
+    }
+
+    const strategy = this.deriveIdentityStrategy(machine);
+    log.debug('[BLE] connectToMachine', { machineId: machine.id, strategy: strategy.kind });
+    this.emitStatus('Scanning...');
+
+    if (Platform.OS === 'android') {
+      await this.requestAndroidPermissions();
+    }
+
+    const devices = await this.scanForDevices(5000);
+    if (devices.length === 0) {
+      throw new BlePeripheralNotFoundError(
+        machine.ble_device_name ?? machine.sensor_id ?? '(unknown)',
+        'No BLE devices in range',
+      );
+    }
+
+    let targetDevice: BLEDevice;
+
+    switch (strategy.kind) {
+      case 'name':
+      case 'name+serial': {
+        const matches = devices.filter(d => d.name === strategy.expectedName);
+        if (matches.length === 0) {
+          log.warn('[BLE] Expected name not found in scan', {
+            expectedName: strategy.expectedName,
+            discovered: devices.map(d => ({ name: d.name, id: d.id, rssi: d.rssi })),
+          });
+          throw new BlePeripheralNotFoundError(
+            strategy.expectedName,
+            `Machine not in range. Scanned ${devices.length} device(s), none matched.`,
+          );
+        }
+        if (matches.length > 1) {
+          log.error('[BLE] Multiple peripherals with same name — factory defect or impostor', {
+            name: strategy.expectedName,
+            matches: matches.map(m => ({ id: m.id, rssi: m.rssi })),
+          });
+          sentryCaptureMessage('ble.duplicate_name_in_scan', {
+            extra: { name: strategy.expectedName, count: matches.length },
+            level: 'error',
+          });
+          throw new BleAmbiguousIdentityError(strategy.expectedName);
+        }
+        targetDevice = matches[0];
+        break;
+      }
+      default: {
+        // legacy_strongest_rssi_with_warning
+        targetDevice = [...devices].sort((a, b) => (b.rssi ?? -100) - (a.rssi ?? -100))[0];
+        break;
+      }
+    }
+
+    log.debug('[BLE] Connecting to matched peripheral', {
+      name: targetDevice.name, id: targetDevice.id, rssi: targetDevice.rssi,
+    });
+    this.emitStatus(`Connecting: ${targetDevice.name ?? 'device'}`);
+
+    const connected = await this.connectToDeviceById(targetDevice.id);
+    if (!connected) {
+      throw new Error('connectToDeviceById returned false');
+    }
+
+    this.verifiedDeviceName = targetDevice.name ?? null;
+
+    // Read DIS Serial Number for auto-backfill or strict verification
+    const observedSerial = await this.readDeviceInformationServiceSerial();
+    this.verifiedSerialNumber = observedSerial;
+
+    if (strategy.kind === 'name+serial') {
+      if (observedSerial === null) {
+        log.warn('[BLE] Expected verified serial but DIS read returned null. Disconnecting for safety.');
+        await this.disconnect();
+        throw new BlePeripheralMismatchError(
+          `Expected serial ${strategy.expectedSerial}, but DIS Serial Number could not be read.`,
+        );
+      }
+      if (observedSerial !== strategy.expectedSerial) {
+        log.error('[BLE] DIS Serial Number mismatch — connected to wrong physical machine!', {
+          expectedSerial: strategy.expectedSerial,
+          observedSerial,
+        });
+        await this.disconnect();
+        throw new BlePeripheralMismatchError(
+          `Connected machine reports serial ${observedSerial}, expected ${strategy.expectedSerial}.`,
+        );
+      }
+      log.debug('[BLE] Serial verification passed', { serial: observedSerial });
+    }
+
+    // Async: cache observed identity to DB (auto-backfill or verify). Non-blocking, fail-soft.
+    void this.cacheBleIdentityToBackend(machine.id, this.verifiedDeviceName, observedSerial);
+
+    return true;
+  }
+
+  private async readDeviceInformationServiceSerial(): Promise<string | null> {
+    try {
+      if (Platform.OS === 'ios') {
+        if (!this.device || !(this.device as Device).readCharacteristicForService) return null;
+        const char = await (this.device as Device).readCharacteristicForService(
+          DIS_SERVICE_UUID,
+          DIS_SERIAL_NUMBER_CHAR_UUID,
+        );
+        if (!char.value) return null;
+        // char.value is base64-encoded — decode to UTF-8 string
+        const decoded = atob(char.value).trim();
+        return decoded.length > 0 ? decoded : null;
+      } else if (Platform.OS === 'android') {
+        if (!this.deviceId) return null;
+        const valueBytes: number[] = await BleManager.read(
+          this.deviceId,
+          DIS_SERVICE_UUID,
+          DIS_SERIAL_NUMBER_CHAR_UUID,
+        );
+        const decoded = new TextDecoder('utf-8').decode(new Uint8Array(valueBytes)).trim();
+        return decoded.length > 0 ? decoded : null;
+      }
+      return null;
+    } catch (err) {
+      log.debug('[BLE] DIS Serial Number not readable (non-FTMS or pre-FTMS firmware):', err);
+      return null;
+    }
+  }
+
+  private async cacheBleIdentityToBackend(
+    machineId: string,
+    observedName: string | null,
+    observedSerial: string | null,
+  ): Promise<void> {
+    try {
+      const { data, error } = await supabase.rpc('cache_machine_ble_identity', {
+        p_machine_id: machineId,
+        p_observed_name: observedName,
+        p_observed_serial: observedSerial,
+      });
+      if (error) {
+        log.warn('[BLE] cache_machine_ble_identity RPC error (non-fatal):', error);
+        return;
+      }
+      if ((data as any)?.action === 'mismatch') {
+        log.error('[BLE] Server-side identity mismatch during backfill', { machineId });
+      } else {
+        log.debug('[BLE] Identity cached to backend', {
+          action: (data as any)?.action,
+          changes: (data as any)?.changes,
+        });
+      }
+    } catch (err) {
+      log.warn('[BLE] cache_machine_ble_identity threw (non-fatal):', err);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   /**
    * Connect to a specific BLE device by sensor ID
    * If sensorId is a base64 string (from Web Bluetooth), we'll scan and match by device name
+   * @deprecated Use connectToMachine(machine) instead. Will be removed after Phase G cleanup.
    */
   async connectToDevice(sensorId: string): Promise<boolean> {
     try {
@@ -445,48 +776,66 @@ export class BLEService {
       log.debug(`[BLE] Connecting to Magene S3+ sensor: ${sensorId}`);
       this.emitStatus('Initializing connection...');
 
-      // Check if sensorId is a base64 string (from Web Bluetooth API)
+      // AGENT NOTE: [2026-05-08] - mobile-coder (BLE cross-talk fix, Step 1)
+      // Previously this branch connected to the strongest-RSSI device in the scan
+      // results regardless of whether it matched the paired sensor.  In a gym with
+      // multiple FTMS treadmills that is deterministic cross-talk.  The new logic
+      // derives all plausible peripheral-id forms from sensorId and only accepts a
+      // discovered device if at least one form matches its id or advertised name.
       const isBase64 = /^[A-Za-z0-9+/=]+$/.test(sensorId) && sensorId.length > 20;
-      
+
       if (isBase64) {
-        log.debug('[BLE] Sensor ID appears to be base64, scanning for devices by name...');
         this.emitStatus('Scanning for devices...');
-        
-        // Try to convert base64 to hex first
-        const hexId = this.base64ToHex(sensorId);
-        if (hexId) {
-          log.debug('[BLE] Converted base64 to hex:', hexId);
-        }
-        
-        // Scan for devices and match by device name (most reliable)
-        log.debug('[BLE] Scanning for CSC devices (5 second timeout)...');
+
+        const candidateIds = this.deriveCandidatePeripheralIds(sensorId);
+        log.debug(`[BLE] Looking for peripheral matching one of:`, candidateIds);
+
         const devices = await this.scanForDevices(5000);
-        
-        if (devices.length === 0) {
-          throw new Error('No BLE devices found. Please ensure sensor/machine is powered on and discoverable.');
-        }
-        
-        // Sort by RSSI (strongest signal first)
-        const sortedDevices = devices.sort((a, b) => (b.rssi || -100) - (a.rssi || -100));
-        
-        // Try to connect to the first available device (strongest signal)
-        // Device name is more reliable than ID for matching
-        const targetDevice = sortedDevices[0];
-        log.debug(`[BLE] Found ${devices.length} CSC device(s):`);
+        log.debug(`[BLE] Found ${devices.length} device(s) in scan:`);
         devices.forEach((d, idx) => {
           log.debug(`  [${idx + 1}] Name: ${d.name || 'Unknown'}, ID: ${d.id}, RSSI: ${d.rssi}`);
         });
-        
+
+        if (devices.length === 0) {
+          throw new BlePeripheralNotFoundError(sensorId, 'No BLE devices in range');
+        }
+
+        const matches = devices.filter(d => this.peripheralMatchesSensorId(d, candidateIds));
+
+        if (matches.length === 0) {
+          log.warn(
+            `[BLE] Sensor ${sensorId} not found among ${devices.length} discovered device(s).`,
+            { discovered: devices.map(d => ({ id: d.id, name: d.name, rssi: d.rssi })) },
+          );
+          throw new BlePeripheralNotFoundError(
+            sensorId,
+            `Expected sensor not in range. Found ${devices.length} other device(s).`,
+          );
+        }
+
+        // Pick highest RSSI among matched devices only (never from non-matching ones)
+        const targetDevice = matches.length === 1
+          ? matches[0]
+          : matches.sort((a, b) => (b.rssi ?? -100) - (a.rssi ?? -100))[0];
+
+        if (matches.length > 1) {
+          log.warn('[BLE] Multiple peripherals match sensorId — picking highest RSSI among matches', {
+            matchCount: matches.length,
+            picked: targetDevice.id,
+          });
+          // Sentry: ble.peripheral_id.multiple_matches will be added in Step 5 telemetry pass
+        }
+
         const deviceDisplayName = targetDevice.name || targetDevice.id;
-        log.debug(`[BLE] Connecting to device: ${deviceDisplayName} (ID: ${targetDevice.id}, RSSI: ${targetDevice.rssi})`);
+        log.debug(`[BLE] Connecting to matched device: ${deviceDisplayName} (ID: ${targetDevice.id}, RSSI: ${targetDevice.rssi})`);
         this.emitStatus(`Found device: ${deviceDisplayName}`);
-        
-        // Use the actual device ID from scan (not the base64 sensor_id)
-        // Device name is logged for reference, but we use ID for connection
+
+        this.verifiedDeviceName = targetDevice.name ?? null;
         return await this.connectToDeviceById(targetDevice.id);
       }
 
-      // If not base64, try direct connection
+      // Non-base64: try direct connection by peripheral id
+      this.verifiedDeviceName = null;
       this.emitStatus('Connecting to device...');
       return await this.connectToDeviceById(sensorId);
     } catch (error: any) {
@@ -1807,6 +2156,8 @@ export class BLEService {
       this.isConnected = false;
       this.device = null;
       this.deviceId = null;
+      this.verifiedDeviceName = null;
+      this.verifiedSerialNumber = null;
       this.activeProtocol = 'csc'; // Reset to default
       this.syntheticCrankCounter = 0;
       this.ftmsNotificationSubscriptions = [];
@@ -1825,6 +2176,40 @@ export class BLEService {
    */
   getConnected(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Returns the BLE Local Name (advertising packet) of the connected peripheral.
+   * This is the PRIMARY identity field — cross-device stable.
+   * Returns null when not connected or name was not observed.
+   */
+  getConnectedDeviceName(): string | null {
+    return this.isConnected ? this.verifiedDeviceName : null;
+  }
+
+  /**
+   * Returns the DIS Serial Number (0x2A25) read post-GATT-connect.
+   * This is the SECONDARY hardware-bound identity verifier.
+   * Returns null when not connected, or if DIS is not available on this hardware.
+   */
+  getConnectedSerialNumber(): string | null {
+    return this.isConnected ? this.verifiedSerialNumber : null;
+  }
+
+  /**
+   * @deprecated Use getConnectedDeviceName() or getConnectedSerialNumber() instead.
+   * Returns the raw peripheral ID (iOS CBPeripheral UUID / Android MAC).
+   * Not cross-device stable on iOS.
+   */
+  getConnectedPeripheralId(): string | null {
+    return this.isConnected ? this.deviceId : null;
+  }
+
+  /**
+   * @deprecated Use getConnectedDeviceName() instead.
+   */
+  getConnectedPeripheralName(): string | null {
+    return this.isConnected ? this.verifiedDeviceName : null;
   }
 
   /**
