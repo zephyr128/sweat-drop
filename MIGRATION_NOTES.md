@@ -2,7 +2,186 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-05-08 (push token environment isolation)
+**Last Updated:** 2026-05-09 (BLE machine identity — name + serial architecture)
+
+---
+
+## [2026-05-09] - BLE machine identity — name + serial schema + RPC guards (Steps 1 + 5)
+
+**Migration Files:**
+- `backend/supabase/migrations/20260509060000_machines_ble_identity_name_and_serial.sql` (Step 1)
+- `backend/supabase/migrations/20260509070000_machine_rpc_observed_ble_identity_check.sql` (Step 5)
+
+**Supersedes / Replaces:**
+- `backend/supabase/migrations/20260508210000_machine_rpc_observed_peripheral_id_check.sql` → **renamed to `.skipped`, NOT to be applied to production**
+
+**Agent:** supabase-dba
+
+**Plan / Trigger:** P0 architectural fix for Vortex pilot cross-talk root cause.
+`machines.sensor_id` (Web Bluetooth opaque `device.id`) cannot be reproduced on iOS (CoreBluetooth hides MAC addresses) and is therefore useless as a cross-device identity. The correct identifiers are the BLE Local Name (advertised, cross-device-stable) and the DIS Serial Number (hardware-bound, read post-GATT-connect). Plan: `docs/plans/feature_ble_machine_identity_name_and_serial_redesign.md`.
+
+---
+
+### Migration 20260509060000 — Schema changes (Step 1)
+
+**Changes (schema):**
+
+- **`public.machines.ble_device_name TEXT`** (NEW, nullable)
+  - BLE Local Name from advertisement packet (e.g., `"38069-129"`). Primary identity field.
+  - Cross-device stable: same value on iOS, Android, and Web Bluetooth regardless of which device performed pairing.
+  - NULL for all existing rows after migration (auto-backfilled on first workout connection via RPC).
+
+- **`public.machines.ble_serial_number TEXT`** (NEW, nullable)
+  - Device Information Service (0x180A) Serial Number String (0x2A25), read post-GATT-connect.
+  - Hardware-bound, factory-burned. Belt-and-suspenders identity verification after connection.
+  - NULL if DIS not exposed by firmware (non-FTMS-spec-compliant machines) or not yet read.
+
+- **`public.machines.ble_pairing_verified BOOLEAN NOT NULL DEFAULT false`** (NEW)
+  - TRUE once `cache_machine_ble_identity` has successfully cached a DIS Serial Number.
+  - When TRUE: mobile clients must verify serial post-connect.
+  - When FALSE: clients auto-backfill on first successful connection.
+
+- **`idx_machines_gym_ble_device_name`** — partial index on `(gym_id, ble_device_name) WHERE ble_device_name IS NOT NULL`. Supports per-gym uniqueness check and scan-result filter.
+
+- **`trg_machines_ble_device_name_unique` / `machines_ble_device_name_unique_per_gym_check()`** — trigger enforcing per-gym uniqueness of `ble_device_name`. NULL rows skipped (allowed during rollout). Duplicate within same gym raises descriptive exception (factory firmware defect indicator).
+
+**Changes (functions):**
+
+- **`public.cache_machine_ble_identity(p_machine_id UUID, p_observed_name TEXT, p_observed_serial TEXT) → JSONB`** (NEW)
+  - Called by mobile client immediately after successful BLE connection during a workout.
+  - Anti-spoofing: caller must hold the machine lock (`is_busy=true AND current_user_id=auth.uid()`). Non-lock callers → `cache_ble_identity_unauthorized` fraud event.
+  - First call (not yet verified): caches observed Local Name + serial, sets `ble_pairing_verified=true` if serial present.
+  - Subsequent calls (already verified): verifies observed values match cached → mismatch logs `ble_identity_post_connect_mismatch` fraud event, returns `{verified:false, action:'mismatch'}`.
+  - Return shape: `{verified: boolean, action: 'no_change'|'name_cached_pending_serial'|'verified_and_cached'|'already_verified'|'mismatch', changes?: object}`
+  - GRANT: `authenticated`
+
+**Impact:**
+- **Admin Panel (Step 2 — admin-coder REQUIRED):**
+  - Capture `device.name` (→ `ble_device_name`) and DIS Serial Number (→ `ble_serial_number`) during Web Bluetooth pairing in `MachinesManager.tsx`.
+  - Save alongside existing `sensor_id` in `updateMachine()` / `machine-actions.ts`.
+  - Display new "BLE Identity" section in `MachineDetailView.tsx` with pairing verified badge.
+- **Mobile App (Steps 3 + 4 — mobile-coder REQUIRED):**
+  - Call `cache_machine_ble_identity` RPC after every successful BLE connection.
+  - Pass `machine.ble_device_name`, `machine.ble_serial_number`, `machine.ble_pairing_verified` to new `connectToMachine()` method.
+- **Admin Panel (Step 6 — admin-coder):**
+  - Backfill UI for legacy machines with NULL `ble_device_name`.
+
+**New fraud_event types:**
+- `cache_ble_identity_unauthorized` (severity high) — cache RPC called by user not holding lock
+- `ble_identity_post_connect_mismatch` (severity high) — cache RPC found mismatch on verified machine
+
+**Breaking Changes:** None. All new columns are nullable or DEFAULT false. Existing clients unaffected.
+
+**Rollback:**
+```sql
+ALTER TABLE public.machines
+  DROP COLUMN IF EXISTS ble_device_name,
+  DROP COLUMN IF EXISTS ble_serial_number,
+  DROP COLUMN IF EXISTS ble_pairing_verified;
+DROP TRIGGER IF EXISTS trg_machines_ble_device_name_unique ON public.machines;
+DROP FUNCTION IF EXISTS public.machines_ble_device_name_unique_per_gym_check();
+DROP FUNCTION IF EXISTS public.cache_machine_ble_identity(UUID, TEXT, TEXT);
+DROP INDEX IF EXISTS idx_machines_gym_ble_device_name;
+```
+
+---
+
+### Migration 20260509070000 — Server-side BLE identity guard (Step 5)
+
+**Changes (functions):**
+
+- **`public.ble_identity_matches_machine(p_observed_name TEXT, p_observed_serial TEXT, p_expected_name TEXT, p_expected_serial TEXT, p_pairing_verified BOOLEAN) → BOOLEAN`** (NEW, IMMUTABLE)
+  - Fail-open when both observed values are NULL (old mobile builds).
+  - Strict mode (pairing_verified=true): serial match is primary truth; name is fallback if serial absent.
+  - Loose mode (pairing_verified=false, name only): name match required.
+  - Legacy mode (no expected name): fail-open (machine predates migration, will auto-backfill).
+
+- **`public.update_machine_heartbeat(p_machine_id UUID, p_user_id UUID, p_observed_name TEXT DEFAULT NULL, p_observed_serial TEXT DEFAULT NULL) → BOOLEAN`** (UPDATED)
+  - New optional params `p_observed_name`, `p_observed_serial`.
+  - On mismatch: logs `ble_identity_server_mismatch` (severity high), sets `sessions.raw_metrics.security.ble_identity_mismatch = "true"`, returns FALSE without extending heartbeat.
+  - NULL observed → no check → backward-compatible with old builds.
+
+- **`public.update_machine_rpm(p_machine_id UUID, p_user_id UUID, p_rpm INTEGER, p_observed_name TEXT DEFAULT NULL, p_observed_serial TEXT DEFAULT NULL) → BOOLEAN`** (UPDATED)
+  - Same as heartbeat. Mismatch prevents `machines.last_rpm` from being overwritten with cross-talk data.
+
+- **`public.award_drops(p_session_id UUID) → TABLE(...)` (UPDATED)**
+  - New early-exit guard: if `sessions.raw_metrics.security.ble_identity_mismatch = "true"`, awards 0 drops, logs `drops_zeroed_ble_identity_mismatch` (severity high), finalises session, returns `(0, 1.0, [])`.
+  - All other behavior (per-gym caps, soft tiers, happy-hour, leaderboard upsert, side-effects) is byte-identical to `20260425182000_award_drops_per_gym_caps.sql`.
+  - Function signature unchanged — purely additive guard.
+
+**Impact:**
+- **Mobile App (Step 4 — workout.tsx — mobile-coder REQUIRED):**
+  - Pass `p_observed_name: bleService.getConnectedDeviceName()` and `p_observed_serial: bleService.getConnectedSerialNumber()` in every `supabase.rpc('update_machine_heartbeat', ...)` and `supabase.rpc('update_machine_rpm', ...)` call.
+- **Admin Panel:** No change.
+
+**New fraud_event types:**
+- `ble_identity_server_mismatch` (severity high) — fires per heartbeat/RPM call when mismatch detected
+- `drops_zeroed_ble_identity_mismatch` (severity high) — fires once per compromised session at award_drops
+
+**Breaking Changes:** None. NULL observed values fail-open. Older mobile builds unaffected.
+
+**Rollback (Step 5 only):**
+Re-apply function bodies from `20260324000014_fraud_events_and_logging.sql` (heartbeat, rpm) and `20260425182000_award_drops_per_gym_caps.sql` (award_drops).
+```sql
+DROP FUNCTION IF EXISTS public.ble_identity_matches_machine(TEXT, TEXT, TEXT, TEXT, BOOLEAN);
+```
+
+---
+
+## [2026-05-08] - BLE peripheral identity check in RPC functions — ⚠️ SKIPPED / SUPERSEDED
+
+**Migration File:**
+- `backend/supabase/migrations/20260508210000_machine_rpc_observed_peripheral_id_check.sql.skipped`
+- **This file was renamed to `.skipped` and must NOT be applied to production.**
+- It is superseded by `20260509060000` + `20260509070000` above.
+
+The original approach compared the opaque Web Bluetooth `device.id` hash (stored as `sensor_id`) via `peripheral_id_matches_sensor()`. This approach is architecturally invalid on iOS because `CBPeripheral.identifier` is per-(device × app-install) and cannot match the Web Bluetooth hash from admin pairing on a different device or browser. The new approach uses BLE Local Name + DIS Serial Number, which are cross-device-stable per the BLE specification.
+
+---
+
+## [2026-05-08] - BLE peripheral identity check in RPC functions — cross-talk defence
+
+**Migration File:**
+- `backend/supabase/migrations/20260508210000_machine_rpc_observed_peripheral_id_check.sql`
+
+**Agent:** supabase-dba
+
+**Plan / Trigger:** P0 production incident at Vortex pilot (2026-05-08): BLE service was silently connecting to the strongest-RSSI FTMS machine in range instead of verifying the discovered peripheral matches `machines.sensor_id`. With 9 side-by-side treadmills, this caused RPM/heartbeat data from a neighbouring machine to be written against the user's session, producing 305 fraud_events across 2 users and drops earned from another machine's metrics.
+
+**Root Cause:**
+`apps/mobile-app/lib/ble-service.ts` (base64 branch) sorted scan results by RSSI and connected to the top device without validating `device.id` or `device.name` against `sensorId`. The "strongest-signal-wins" logic is safe only when one FTMS machine is powered on in range; in Vortex with 9 running treadmills, it deterministically picks the nearest neighbour's device.
+
+**Changes (no schema changes — all are function updates):**
+
+- **`public.peripheral_id_matches_sensor(p_observed TEXT, p_expected_sensor_id TEXT) → BOOLEAN`** (NEW)
+  - Immutable helper. Normalises both inputs (strip separators, lowercase), then tries: exact string match, base64→hex decode of sensor_id, substring prefix match, reversed-byte hex. Returns `TRUE` for `NULL` inputs (backward compat / old builds).
+
+- **`public.update_machine_heartbeat(p_machine_id, p_user_id, p_observed_peripheral_id TEXT DEFAULT NULL) → BOOLEAN`** (UPDATED)
+  - New optional param `p_observed_peripheral_id`.
+  - On mismatch: logs `peripheral_id_server_mismatch` (severity `high`) to `fraud_events`, sets `sessions.raw_metrics.security.peripheral_id_mismatch = 'true'` on the active session, returns `FALSE` without extending the heartbeat.
+  - `NULL` → no peripheral check → identical to previous behaviour.
+
+- **`public.update_machine_rpm(p_machine_id, p_user_id, p_rpm, p_observed_peripheral_id TEXT DEFAULT NULL) → BOOLEAN`** (UPDATED)
+  - Same as heartbeat. On mismatch: logs event, flags session, returns `FALSE` without updating `machines.last_rpm`.
+
+- **`public.award_drops(p_session_id UUID) → TABLE(...)` (UPDATED)**
+  - New early-exit guard: if `sessions.raw_metrics #>> '{security,peripheral_id_mismatch}' = 'true'`, awards `0` drops, logs `drops_zeroed_peripheral_mismatch` (severity `high`), finalises the session (`is_active = false`), and returns `0 drops`. The machine lock is released so the user is not left stuck.
+
+**Impact:**
+- **Mobile App (REQUIRED CHANGE — Step 1 of same plan, mobile-coder):**
+  - `apps/mobile-app/lib/ble-service.ts`: add `getConnectedPeripheralId(): string | null`
+  - `apps/mobile-app/app/workout.tsx`: pass `p_observed_peripheral_id: bleService.getConnectedPeripheralId()` in every `supabase.rpc('update_machine_heartbeat', ...)` and `supabase.rpc('update_machine_rpm', ...)` call.
+  - **Backward compatible:** old builds that omit the param pass `NULL` → no change.
+- **Admin Panel:** no change.
+
+**New fraud_event types (no schema change):**
+- `peripheral_id_server_mismatch` — severity `high` — fires per heartbeat/RPM call when mismatch detected
+- `drops_zeroed_peripheral_mismatch` — severity `high` — fires once per compromised session at award_drops
+
+**Breaking Changes:** None. NULL observed_peripheral_id passes through unchanged.
+
+**Rollback:**
+Re-apply the previous function bodies from `20260324000014_fraud_events_and_logging.sql` (heartbeat, rpm) and `20260425182000_award_drops_per_gym_caps.sql` (award_drops). `peripheral_id_matches_sensor` can be dropped: `DROP FUNCTION IF EXISTS public.peripheral_id_matches_sensor(TEXT, TEXT);`
 
 ---
 
