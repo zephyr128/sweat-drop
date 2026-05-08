@@ -1,0 +1,983 @@
+-- Migration: 20260508210000_machine_rpc_observed_peripheral_id_check.sql
+-- Description: Server-side BLE peripheral identity verification for update_machine_heartbeat,
+--              update_machine_rpm, and award_drops. Belt-and-suspenders defence against
+--              BLE cross-talk (Bug B from the Vortex production incident 2026-05-08).
+--
+-- AGENT NOTE: [2026-05-08] - supabase-dba
+--
+-- ROOT CAUSE:
+--   apps/mobile-app/lib/ble-service.ts (base64 branch, lines 448-491) was silently
+--   connecting to the strongest-RSSI FTMS peripheral in range rather than verifying the
+--   discovered device matches the paired sensor_id stored in machines.sensor_id.  In a
+--   gym with 9 side-by-side treadmills, this deterministically connected to a neighbour's
+--   running machine, causing:
+--   - RPM/heartbeat data for machine X to arrive from a user running machine Y's BLE
+--   - drops to be computed using a different machine's speed metrics
+--   - 305 fraud_events across 2 Vortex pilot users (225 + 80), ~95% cross-talk artefacts
+--
+-- THIS MIGRATION (Step 4 — backend belt-and-suspenders):
+--   1. peripheral_id_matches_sensor()    — pure helper; normalises & compares observed
+--                                          peripheral.id against machines.sensor_id in
+--                                          multiple encodings (plain, base64→hex, MAC).
+--   2. update_machine_heartbeat()        — adds optional p_observed_peripheral_id TEXT.
+--                                          On mismatch: logs fraud event + marks session
+--                                          raw_metrics.security.peripheral_id_mismatch.
+--                                          Heartbeat NOT extended for compromised session.
+--   3. update_machine_rpm()              — same as heartbeat.
+--   4. award_drops()                     — early-exit guard: if session is flagged
+--                                          peripheral_id_mismatch, awards 0 drops, logs
+--                                          drops_zeroed_peripheral_mismatch fraud event.
+--
+-- BACKWARD COMPATIBILITY:
+--   - p_observed_peripheral_id DEFAULT NULL in both RPCs → older mobile builds that
+--     don't send the field behave exactly as before (NULL treated as "not observed").
+--   - award_drops signature is unchanged (p_session_id UUID only).
+--   - No schema changes to any table (sessions.raw_metrics is already JSONB).
+--
+-- NEW fraud_event event_type VALUES (no schema change, column is TEXT):
+--   peripheral_id_server_mismatch     — severity high
+--   drops_zeroed_peripheral_mismatch  — severity high
+--
+-- IMPACT ON FRONTEND:
+--   - Mobile App (Step 1 of same plan): update heartbeat + RPM calls to pass
+--     bleService.getConnectedPeripheralId() as p_observed_peripheral_id.
+--     Backward-compatible: old builds omit the param → NULL → no change.
+--   - Admin Panel: no change.
+--
+-- BREAKING CHANGES: None.
+--
+-- NEXT STEPS after applying:
+--   1. supabase gen types typescript --local > backend/types/database.types.ts
+--   2. Update MIGRATION_NOTES.md
+--   3. Update CHANGELOG.md
+--   4. mobile-coder implements Steps 1–3 (BLE identity fix + pause guard)
+--   5. Step 7 migration blocked until Step 0a forensics report is approved
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 1. HELPER: peripheral_id_matches_sensor
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Compares the BLE peripheral.id the mobile client is currently connected to
+-- against the sensor_id stored in machines.sensor_id (which was paired via the
+-- admin panel / Web Bluetooth API and stored as a base64 string).
+--
+-- Matching strategy (tolerant, explicit):
+--   A. Exact string equality after stripping separators and lower-casing
+--   B. base64 decode sensor_id → hex → compare against normalised peripheral.id
+--   C. Prefix / substring match (handles hex short-form vs full MAC)
+--   D. Reversed-byte hex (some pairing flows store little-endian)
+--
+-- Returns TRUE if NULL is passed for either argument (backward compat — client
+-- doesn't yet send observed peripheral).
+
+CREATE OR REPLACE FUNCTION public.peripheral_id_matches_sensor(
+  p_observed       TEXT,
+  p_expected_sensor_id TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_obs_norm TEXT;
+  v_exp_norm TEXT;
+  v_exp_hex  TEXT;
+  v_exp_hex_rev TEXT;
+BEGIN
+  -- NULL means "client didn't observe / old build" — treat as match (fail open)
+  IF p_observed IS NULL OR p_expected_sensor_id IS NULL THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Normalise: remove colon/dash separators, lower-case
+  v_obs_norm := lower(regexp_replace(p_observed,       '[:\-]', '', 'g'));
+  v_exp_norm := lower(regexp_replace(p_expected_sensor_id, '[:\-]', '', 'g'));
+
+  -- A. Exact normalised match
+  IF v_obs_norm = v_exp_norm THEN
+    RETURN TRUE;
+  END IF;
+
+  -- B/C/D. Attempt base64 → hex decode of the sensor_id
+  BEGIN
+    v_exp_hex := encode(decode(p_expected_sensor_id, 'base64'), 'hex');
+
+    -- B. Exact hex match
+    IF v_obs_norm = v_exp_hex THEN RETURN TRUE; END IF;
+
+    -- C. Substring: observed contains hex or hex contains observed
+    --    (handles MAC with extra bytes vs short hex prefix)
+    IF position(v_exp_hex IN v_obs_norm) > 0 THEN RETURN TRUE; END IF;
+    IF position(v_obs_norm IN v_exp_hex) > 0 THEN RETURN TRUE; END IF;
+
+    -- D. Reversed-byte hex (little-endian pairing artefact)
+    SELECT string_agg(byte_val, '' ORDER BY rn DESC)
+    INTO v_exp_hex_rev
+    FROM (
+      SELECT
+        substring(v_exp_hex, gs * 2 - 1, 2) AS byte_val,
+        gs                                   AS rn
+      FROM generate_series(1, length(v_exp_hex) / 2) AS gs
+    ) bytes;
+
+    IF v_exp_hex_rev IS NOT NULL THEN
+      IF v_obs_norm = v_exp_hex_rev  THEN RETURN TRUE; END IF;
+      IF position(v_exp_hex_rev IN v_obs_norm) > 0 THEN RETURN TRUE; END IF;
+      IF position(v_obs_norm IN v_exp_hex_rev) > 0 THEN RETURN TRUE; END IF;
+    END IF;
+
+  EXCEPTION WHEN OTHERS THEN
+    -- sensor_id wasn't base64 — that's fine, fall through
+    NULL;
+  END;
+
+  RETURN FALSE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.peripheral_id_matches_sensor(TEXT, TEXT) IS
+  'Checks whether the BLE peripheral.id the mobile client observed matches the '
+  'sensor_id stored in machines.sensor_id. Tolerant: handles base64, hex, MAC '
+  'address, and reversed-byte encodings. Returns TRUE for NULL inputs (backward compat).';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 2. UPDATE update_machine_heartbeat — add p_observed_peripheral_id
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.update_machine_heartbeat(
+  p_machine_id             UUID,
+  p_user_id                UUID,
+  p_observed_peripheral_id TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_gym_id            UUID;
+  v_expected_sensor   TEXT;
+  v_session_id        UUID;
+BEGIN
+  SELECT gym_id, sensor_id
+  INTO   v_gym_id, v_expected_sensor
+  FROM   public.machines
+  WHERE  id = p_machine_id;
+
+  -- Auth guard (unchanged)
+  IF auth.uid() IS NULL OR auth.uid() <> p_user_id THEN
+    PERFORM public.log_fraud_event(auth.uid(), v_gym_id, 'heartbeat_unauthorized', 'high',
+      jsonb_build_object('machine_id', p_machine_id, 'requested_user_id', p_user_id));
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- ── NEW: peripheral identity check ──────────────────────────────────────
+  -- Only fires when client sends observed peripheral id AND sensor_id is stored.
+  -- NULL p_observed_peripheral_id = old build / not yet implemented → skip check.
+  IF p_observed_peripheral_id IS NOT NULL
+     AND v_expected_sensor IS NOT NULL
+     AND NOT public.peripheral_id_matches_sensor(p_observed_peripheral_id, v_expected_sensor)
+  THEN
+    PERFORM public.log_fraud_event(
+      p_user_id, v_gym_id, 'peripheral_id_server_mismatch', 'high',
+      jsonb_build_object(
+        'machine_id',             p_machine_id,
+        'expected_sensor_id',     v_expected_sensor,
+        'observed_peripheral_id', p_observed_peripheral_id,
+        'check',                  'heartbeat'
+      )
+    );
+
+    -- Mark the active session as compromised so award_drops will zero it
+    SELECT id INTO v_session_id
+    FROM   public.sessions
+    WHERE  user_id   = p_user_id
+      AND  machine_id = p_machine_id
+      AND  is_active  = true
+    ORDER BY started_at DESC
+    LIMIT 1;
+
+    IF v_session_id IS NOT NULL THEN
+      UPDATE public.sessions
+      SET raw_metrics = jsonb_set(
+            COALESCE(raw_metrics, '{}'::jsonb),
+            '{security,peripheral_id_mismatch}',
+            '"true"'::jsonb,
+            true
+          )
+      WHERE id = v_session_id;
+    END IF;
+
+    -- Do NOT extend the heartbeat — don't let a compromised session stay alive longer
+    RETURN FALSE;
+  END IF;
+  -- ── END peripheral identity check ───────────────────────────────────────
+
+  -- Existing heartbeat update
+  UPDATE public.machines
+  SET    last_heartbeat = NOW()
+  WHERE  id              = p_machine_id
+    AND  current_user_id = p_user_id
+    AND  is_busy         = true;
+
+  IF NOT FOUND THEN
+    PERFORM public.log_fraud_event(p_user_id, v_gym_id, 'heartbeat_without_lock', 'medium',
+      jsonb_build_object('machine_id', p_machine_id));
+  END IF;
+
+  RETURN FOUND;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_machine_heartbeat(UUID, UUID, TEXT) IS
+  'Refreshes machines.last_heartbeat for the given user+machine. '
+  'When p_observed_peripheral_id is provided and does not match machines.sensor_id, '
+  'logs peripheral_id_server_mismatch fraud event, marks sessions.raw_metrics.security '
+  'peripheral_id_mismatch=true, and returns FALSE without extending the heartbeat. '
+  'NULL p_observed_peripheral_id = old client build → behaves as original function.';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 3. UPDATE update_machine_rpm — add p_observed_peripheral_id
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.update_machine_rpm(
+  p_machine_id             UUID,
+  p_user_id                UUID,
+  p_rpm                    INTEGER,
+  p_observed_peripheral_id TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_gym_id            UUID;
+  v_expected_sensor   TEXT;
+  v_session_id        UUID;
+BEGIN
+  SELECT gym_id, sensor_id
+  INTO   v_gym_id, v_expected_sensor
+  FROM   public.machines
+  WHERE  id = p_machine_id;
+
+  -- Auth guard (unchanged)
+  IF auth.uid() IS NULL OR auth.uid() <> p_user_id THEN
+    PERFORM public.log_fraud_event(auth.uid(), v_gym_id, 'rpm_unauthorized', 'high',
+      jsonb_build_object('machine_id', p_machine_id, 'requested_user_id', p_user_id));
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- ── NEW: peripheral identity check ──────────────────────────────────────
+  IF p_observed_peripheral_id IS NOT NULL
+     AND v_expected_sensor IS NOT NULL
+     AND NOT public.peripheral_id_matches_sensor(p_observed_peripheral_id, v_expected_sensor)
+  THEN
+    PERFORM public.log_fraud_event(
+      p_user_id, v_gym_id, 'peripheral_id_server_mismatch', 'high',
+      jsonb_build_object(
+        'machine_id',             p_machine_id,
+        'expected_sensor_id',     v_expected_sensor,
+        'observed_peripheral_id', p_observed_peripheral_id,
+        'rpm',                    p_rpm,
+        'check',                  'rpm'
+      )
+    );
+
+    SELECT id INTO v_session_id
+    FROM   public.sessions
+    WHERE  user_id   = p_user_id
+      AND  machine_id = p_machine_id
+      AND  is_active  = true
+    ORDER BY started_at DESC
+    LIMIT 1;
+
+    IF v_session_id IS NOT NULL THEN
+      UPDATE public.sessions
+      SET raw_metrics = jsonb_set(
+            COALESCE(raw_metrics, '{}'::jsonb),
+            '{security,peripheral_id_mismatch}',
+            '"true"'::jsonb,
+            true
+          )
+      WHERE id = v_session_id;
+    END IF;
+
+    -- Do NOT write the RPM — don't pollute machine's last_rpm with cross-talk data
+    RETURN FALSE;
+  END IF;
+  -- ── END peripheral identity check ───────────────────────────────────────
+
+  -- Existing RPM update
+  UPDATE public.machines
+  SET    last_rpm = p_rpm
+  WHERE  id              = p_machine_id
+    AND  current_user_id = p_user_id
+    AND  is_busy         = true;
+
+  IF NOT FOUND THEN
+    PERFORM public.log_fraud_event(p_user_id, v_gym_id, 'rpm_without_lock', 'medium',
+      jsonb_build_object('machine_id', p_machine_id, 'rpm', p_rpm));
+  END IF;
+
+  RETURN FOUND;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_machine_rpm(UUID, UUID, INTEGER, TEXT) IS
+  'Updates machines.last_rpm for the given user+machine. '
+  'When p_observed_peripheral_id does not match machines.sensor_id, logs '
+  'peripheral_id_server_mismatch fraud event, flags the active session, and '
+  'returns FALSE without writing the RPM. NULL = old client → no change.';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 4. UPDATE award_drops — peripheral mismatch early-exit guard
+-- ═══════════════════════════════════════════════════════════════════════════
+-- If a session has been flagged with raw_metrics.security.peripheral_id_mismatch
+-- = 'true' (set by update_machine_heartbeat / update_machine_rpm above), we
+-- award 0 drops and log drops_zeroed_peripheral_mismatch.
+--
+-- This is the hard-stop: even if client-side checks (Steps 1, 3) have a bug
+-- and a cross-talk session reaches award_drops, it earns nothing.
+--
+-- The full award_drops body below is identical to 20260425182000_award_drops_per_gym_caps.sql
+-- with a single added block after the auth check.
+
+CREATE OR REPLACE FUNCTION public.award_drops(p_session_id uuid)
+RETURNS TABLE(drops_earned integer, multiplier numeric, badges_earned text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_session       RECORD;
+  v_profile       RECORD;
+
+  v_base_drops    INTEGER;
+  v_raw_drops     INTEGER;
+  v_final_drops   INTEGER;
+  v_multiplier    NUMERIC := 1.0;
+  v_balance_after INTEGER;
+  v_new_streak    INTEGER;
+
+  v_today         DATE := (NOW() AT TIME ZONE 'Europe/Belgrade')::DATE;
+  v_week_start    DATE := DATE_TRUNC('week', NOW() AT TIME ZONE 'Europe/Belgrade')::DATE;
+  v_duration_sec  INTEGER;
+  v_capped_sec    INTEGER;
+  v_session_cal   NUMERIC;
+
+  v_max_session   INTEGER := 120;
+  v_max_daily     INTEGER := 300;
+  v_max_weekly    INTEGER := 1500;
+  v_max_sessions_day INTEGER := 4;
+  v_use_drop_model_v2 BOOLEAN := true;
+
+  v_cap_mode      TEXT := 'soft';
+  v_restart_grace_sec INTEGER := 300;
+  v_tier1_factor  NUMERIC := 0.40;
+  v_tier2_factor  NUMERIC := 0.15;
+  v_tier1_span_ratio NUMERIC := 0.50;
+  v_merge_window_sec INTEGER := 900;
+
+  v_rewarded_sessions_today INTEGER := 0;
+  v_effective_rewarded_sessions INTEGER := 0;
+  v_restart_merged_count INTEGER := 0;
+  v_minted_today   INTEGER := 0;
+  v_minted_week    INTEGER := 0;
+  v_day_remaining  INTEGER := 0;
+  v_week_remaining INTEGER := 0;
+
+  v_calc_raw       INTEGER := 0;
+  v_calc_adjusted  INTEGER := 0;
+  v_calc_multiplier NUMERIC := 1.0;
+  v_calc_caps      JSONB := '{}'::JSONB;
+  v_calc_reasons   JSONB := '[]'::JSONB;
+
+  v_rm             JSONB;
+  v_quality_flags  JSONB;
+  v_machine_type   TEXT;
+  v_avg_rpm        NUMERIC;
+  v_rpm_peak       NUMERIC;
+  v_speed_avg_kmh  NUMERIC;
+  v_incline_avg_pct NUMERIC;
+  v_cadence_avg    NUMERIC;
+  v_steps_avg      NUMERIC;
+  v_resistance_avg NUMERIC;
+
+  v_drop_calc_v2   JSONB := '{}'::JSONB;
+  v_cap_after_day  INTEGER := 0;
+
+  v_cap_reason     TEXT := NULL;
+  v_reasons_arr    JSONB := '[]'::JSONB;
+
+  v_boost_info     JSONB;
+  v_boost_mult     NUMERIC := 1.0;
+  v_pre_boost_drops INTEGER := 0;
+
+  v_merged_prior_drops INTEGER := 0;
+  v_combined_drops INTEGER := 0;
+  v_soft_threshold INTEGER;
+  v_tier1_end      INTEGER;
+  v_seg_a          INTEGER;
+  v_seg_b          INTEGER;
+  v_seg_c          INTEGER;
+  v_soft_adjusted  INTEGER;
+  v_prior_soft_adjusted INTEGER;
+BEGIN
+  -- ═══════════════════════════════════════════════════════════════
+  -- LOAD SESSION (with row lock)
+  -- ═══════════════════════════════════════════════════════════════
+  SELECT * INTO v_session
+  FROM public.sessions
+  WHERE id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Session not found: %', p_session_id;
+  END IF;
+
+  IF auth.uid() IS NULL OR auth.uid() <> v_session.user_id THEN
+    PERFORM public.log_fraud_event(auth.uid(), v_session.gym_id, 'award_drops_unauthorized', 'critical',
+      jsonb_build_object('session_id', p_session_id, 'session_user_id', v_session.user_id));
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- ── NEW: Peripheral mismatch guard ────────────────────────────────────────
+  -- If update_machine_heartbeat / update_machine_rpm detected BLE cross-talk and
+  -- flagged this session, award 0 drops unconditionally.  The session is still
+  -- finalised so the machine lock is released and the user isn't left stuck.
+  IF (v_session.raw_metrics #>> '{security,peripheral_id_mismatch}') = 'true' THEN
+    PERFORM public.log_fraud_event(
+      v_session.user_id, v_session.gym_id,
+      'drops_zeroed_peripheral_mismatch', 'high',
+      jsonb_build_object(
+        'session_id',    p_session_id,
+        'machine_id',    v_session.machine_id,
+        'duration_sec',  COALESCE(v_session.duration_seconds, 0)
+      )
+    );
+
+    UPDATE public.sessions
+    SET drops_earned = 0,
+        multiplier   = 1.0,
+        ended_at     = COALESCE(ended_at, NOW()),
+        is_active    = false,
+        raw_metrics  = jsonb_set(
+                         COALESCE(raw_metrics, '{}'::jsonb),
+                         '{security,drops_zeroed_reason}',
+                         '"peripheral_id_mismatch"'::jsonb,
+                         true
+                       ),
+        updated_at   = NOW()
+    WHERE id = p_session_id;
+
+    RETURN QUERY SELECT 0::INTEGER, 1.0::NUMERIC, ARRAY[]::TEXT[];
+    RETURN;
+  END IF;
+  -- ── END peripheral mismatch guard ────────────────────────────────────────
+
+  IF v_session.drops_earned > 0 OR v_session.is_active = false THEN
+    RETURN QUERY SELECT COALESCE(v_session.drops_earned, 0)::INT,
+                        COALESCE(v_session.multiplier, 1.0)::NUMERIC,
+                        ARRAY[]::TEXT[];
+    RETURN;
+  END IF;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- LOAD PROFILE + TOKENOMICS CONFIG
+  -- Falls back to global default (gym_id IS NULL) when this gym
+  -- doesn't have its own row.
+  -- ═══════════════════════════════════════════════════════════════
+  SELECT * INTO v_profile FROM public.profiles WHERE id = v_session.user_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Profile not found for user %', v_session.user_id; END IF;
+
+  BEGIN
+    SELECT
+      COALESCE(tc.max_drops_per_session, v_max_session),
+      COALESCE(tc.max_drops_per_day, v_max_daily),
+      COALESCE(tc.max_drops_per_week, v_max_weekly),
+      COALESCE(tc.max_rewarded_sessions_per_day, v_max_sessions_day),
+      COALESCE(tc.use_drop_model_v2, v_use_drop_model_v2),
+      COALESCE(tc.rewarded_sessions_cap_mode, v_cap_mode),
+      COALESCE(tc.session_restart_grace_sec, v_restart_grace_sec),
+      COALESCE(tc.session_soft_tier_1_factor, v_tier1_factor),
+      COALESCE(tc.session_soft_tier_2_factor, v_tier2_factor),
+      COALESCE(tc.session_soft_tier_1_span_ratio, v_tier1_span_ratio),
+      COALESCE(tc.split_merge_window_sec, v_merge_window_sec)
+    INTO
+      v_max_session, v_max_daily, v_max_weekly, v_max_sessions_day,
+      v_use_drop_model_v2, v_cap_mode, v_restart_grace_sec,
+      v_tier1_factor, v_tier2_factor, v_tier1_span_ratio, v_merge_window_sec
+    FROM public.tokenomics_config tc
+    WHERE (tc.gym_id = v_session.gym_id OR tc.gym_id IS NULL)
+    ORDER BY CASE WHEN tc.gym_id = v_session.gym_id THEN 0 ELSE 1 END
+    LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- DURATION + SHORT SESSION GUARD
+  -- ═══════════════════════════════════════════════════════════════
+  v_duration_sec := GREATEST(
+    COALESCE(v_session.duration_seconds, 0),
+    COALESCE(
+      EXTRACT(EPOCH FROM (COALESCE(v_session.ended_at, NOW()) - v_session.started_at))::INT,
+      0
+    )
+  );
+  v_capped_sec := LEAST(v_duration_sec, 14400);
+
+  IF v_capped_sec < 120 THEN
+    v_raw_drops := 0;
+    v_final_drops := 0;
+    v_drop_calc_v2 := jsonb_build_object(
+      'enabled', v_use_drop_model_v2,
+      'raw_drops', 0,
+      'reason', 'session_too_short',
+      'duration_seconds', v_duration_sec
+    );
+    v_drop_calc_v2 := v_drop_calc_v2 || jsonb_build_object(
+      'happy_hour', jsonb_build_object('active', false, 'multiplier', 1.0)
+    );
+  ELSE
+    -- ═══════════════════════════════════════════════════════════════
+    -- CALCULATE RAW DROPS
+    -- ═══════════════════════════════════════════════════════════════
+    v_rm := COALESCE(v_session.raw_metrics, '{}'::JSONB);
+    v_machine_type := LOWER(COALESCE(
+      v_rm->>'machine_type',
+      (SELECT m.type FROM public.machines m WHERE m.id = v_session.machine_id),
+      'generic'
+    ));
+    v_avg_rpm := COALESCE((v_rm->>'avg_rpm')::NUMERIC, 0);
+    v_rpm_peak := COALESCE((v_rm->>'rpm_peak')::NUMERIC, 0);
+    v_speed_avg_kmh := COALESCE((v_rm->>'speed_avg_kmh')::NUMERIC, 0);
+    v_incline_avg_pct := COALESCE((v_rm->>'incline_avg_pct')::NUMERIC, 0);
+    v_cadence_avg := COALESCE((v_rm->>'cadence_avg')::NUMERIC, COALESCE((v_rm->>'avg_cadence')::NUMERIC, 0));
+    v_steps_avg := COALESCE((v_rm->>'steps_per_min_avg')::NUMERIC, 0);
+    v_resistance_avg := COALESCE((v_rm->>'resistance_avg')::NUMERIC, 0);
+
+    v_quality_flags := COALESCE(v_rm->'quality_flags', jsonb_build_object(
+      'high_effort_ratio', 0.5,
+      'consistency_score', 0.7,
+      'cadence_variance', 0.2
+    ));
+
+    IF v_use_drop_model_v2 THEN
+      SELECT c.raw_drops, c.adjusted_drops, c.applied_multiplier, c.applied_caps, c.reasons
+      INTO v_calc_raw, v_calc_adjusted, v_calc_multiplier, v_calc_caps, v_calc_reasons
+      FROM public.calculate_session_drops_v2(
+        v_session.gym_id, v_machine_type, v_duration_sec,
+        v_avg_rpm, v_speed_avg_kmh, v_incline_avg_pct,
+        v_cadence_avg, COALESCE(v_session.calories, NULL),
+        v_quality_flags, v_rpm_peak, v_steps_avg, v_resistance_avg
+      ) c LIMIT 1;
+
+      v_raw_drops := COALESCE(v_calc_adjusted, 0);
+      v_multiplier := COALESCE(v_calc_multiplier, 1.0);
+
+      IF (COALESCE(v_calc_caps->>'spike_filtered', 'false'))::BOOLEAN
+         OR v_calc_reasons @> '["drop_spike_filtered"]'::JSONB THEN
+        PERFORM public.log_fraud_event(v_session.user_id, v_session.gym_id, 'drop_spike_filtered', 'low',
+          jsonb_build_object('session_id', p_session_id, 'machine_type', v_machine_type, 'calc_caps', v_calc_caps, 'reasons', v_calc_reasons));
+      END IF;
+
+      v_drop_calc_v2 := jsonb_build_object(
+        'enabled', true,
+        'machine_type', v_machine_type,
+        'raw_drops', COALESCE(v_calc_raw, 0),
+        'adjusted_drops', COALESCE(v_calc_adjusted, 0),
+        'applied_multiplier', COALESCE(v_calc_multiplier, 1.0),
+        'applied_caps', COALESCE(v_calc_caps, '{}'::jsonb),
+        'reasons', COALESCE(v_calc_reasons, '[]'::jsonb),
+        'inputs', jsonb_build_object(
+          'duration_seconds', v_duration_sec, 'avg_rpm', v_avg_rpm,
+          'rpm_peak', v_rpm_peak, 'speed_avg_kmh', v_speed_avg_kmh,
+          'incline_avg_pct', v_incline_avg_pct, 'cadence_avg', v_cadence_avg,
+          'steps_per_min_avg', v_steps_avg, 'resistance_avg', v_resistance_avg,
+          'calories', v_session.calories
+        )
+      );
+    ELSE
+      v_session_cal := COALESCE(v_session.calories, (v_capped_sec / 60.0) * 7.0);
+      v_session_cal := LEAST(v_session_cal, (v_capped_sec / 60.0) * 25.0);
+      v_base_drops := GREATEST(1, ROUND(v_session_cal * 2.5));
+
+      v_new_streak := CASE
+        WHEN v_profile.last_visit_date IS NULL THEN 1
+        WHEN v_profile.last_visit_date = v_today THEN v_profile.streak_days
+        WHEN v_profile.last_visit_date = v_today - 1 THEN v_profile.streak_days + 1
+        ELSE 1
+      END;
+      v_multiplier := CASE
+        WHEN v_new_streak >= 14 THEN 2.0
+        WHEN v_new_streak >= 7  THEN 1.5
+        WHEN v_new_streak >= 3  THEN 1.2
+        ELSE 1.0
+      END;
+
+      v_raw_drops := GREATEST(1, ROUND(v_base_drops * v_multiplier));
+      v_drop_calc_v2 := jsonb_build_object(
+        'enabled', false, 'fallback', 'legacy_formula',
+        'raw_drops', v_raw_drops, 'applied_multiplier', v_multiplier,
+        'inputs', jsonb_build_object('duration_seconds', v_duration_sec, 'calories', v_session.calories)
+      );
+    END IF;
+  END IF;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- REWARDED SESSIONS COUNT + RESTART RECONCILIATION (PER GYM)
+  -- All cap-bookkeeping queries below are restricted to v_session.gym_id
+  -- so each gym maintains its own daily/weekly/session quota.
+  -- ═══════════════════════════════════════════════════════════════
+  SELECT COUNT(*)::INT, COALESCE(SUM(s.drops_earned), 0)::INT
+  INTO v_rewarded_sessions_today, v_minted_today
+  FROM public.sessions s
+  WHERE s.user_id = v_session.user_id
+    AND s.gym_id  = v_session.gym_id
+    AND s.id <> v_session.id
+    AND s.is_active = false
+    AND s.drops_earned > 0
+    AND DATE(s.started_at AT TIME ZONE 'Europe/Belgrade') = v_today;
+
+  SELECT COALESCE(SUM(s.drops_earned), 0)::INT
+  INTO v_minted_week
+  FROM public.sessions s
+  WHERE s.user_id = v_session.user_id
+    AND s.gym_id  = v_session.gym_id
+    AND s.id <> v_session.id
+    AND s.is_active = false
+    AND s.drops_earned > 0
+    AND DATE(s.started_at AT TIME ZONE 'Europe/Belgrade') >= v_week_start;
+
+  IF v_restart_grace_sec > 0 AND v_session.machine_id IS NOT NULL THEN
+    SELECT COUNT(*)::INT INTO v_restart_merged_count
+    FROM public.sessions s_inner
+    WHERE s_inner.user_id = v_session.user_id
+      AND s_inner.gym_id  = v_session.gym_id
+      AND s_inner.machine_id = v_session.machine_id
+      AND s_inner.id <> v_session.id
+      AND s_inner.is_active = false
+      AND s_inner.drops_earned > 0
+      AND DATE(s_inner.started_at AT TIME ZONE 'Europe/Belgrade') = v_today
+      AND EXISTS (
+        SELECT 1 FROM public.sessions s_prev
+        WHERE s_prev.user_id = v_session.user_id
+          AND s_prev.gym_id  = v_session.gym_id
+          AND s_prev.machine_id = v_session.machine_id
+          AND s_prev.id <> s_inner.id
+          AND s_prev.is_active = false
+          AND s_prev.ended_at IS NOT NULL
+          AND s_inner.started_at <= s_prev.ended_at + (v_restart_grace_sec || ' seconds')::INTERVAL
+          AND s_inner.started_at >= s_prev.ended_at
+          AND DATE(s_prev.started_at AT TIME ZONE 'Europe/Belgrade') = v_today
+      );
+  END IF;
+
+  v_effective_rewarded_sessions := v_rewarded_sessions_today - v_restart_merged_count;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- REWARDED SESSIONS CAP + SOFT TIERS + HAPPY HOUR + DAY/WEEK CAPS
+  -- ═══════════════════════════════════════════════════════════════
+  v_reasons_arr := COALESCE(v_drop_calc_v2->'reasons', '[]'::jsonb);
+
+  IF v_cap_mode = 'off' THEN
+    NULL;
+  ELSIF v_cap_mode = 'hard' AND v_effective_rewarded_sessions >= v_max_sessions_day THEN
+    PERFORM public.log_fraud_event(v_session.user_id, v_session.gym_id,
+      'drop_cap_rewarded_sessions_day_hit', 'medium',
+      jsonb_build_object('session_id', p_session_id, 'mode', 'hard',
+        'max_rewarded_sessions_per_day', v_max_sessions_day,
+        'effective_rewarded', v_effective_rewarded_sessions,
+        'restart_merged', v_restart_merged_count));
+    v_final_drops := 0;
+    v_cap_reason := 'rewarded_sessions_cap_hard_block';
+    v_reasons_arr := v_reasons_arr || to_jsonb('rewarded_sessions_cap_hard_block'::TEXT);
+  ELSIF v_cap_mode = 'soft' AND v_effective_rewarded_sessions >= v_max_sessions_day THEN
+    PERFORM public.log_fraud_event(v_session.user_id, v_session.gym_id,
+      'rewarded_sessions_cap_soft_signal', 'low',
+      jsonb_build_object('session_id', p_session_id, 'mode', 'soft',
+        'max_rewarded_sessions_per_day', v_max_sessions_day,
+        'effective_rewarded', v_effective_rewarded_sessions,
+        'restart_merged', v_restart_merged_count));
+    v_cap_reason := 'rewarded_sessions_cap_soft_signal';
+    v_reasons_arr := v_reasons_arr || to_jsonb('rewarded_sessions_cap_soft_signal'::TEXT);
+  END IF;
+
+  IF v_cap_reason IS DISTINCT FROM 'rewarded_sessions_cap_hard_block' THEN
+    v_merged_prior_drops := 0;
+    IF v_merge_window_sec > 0 THEN
+      SELECT COALESCE(SUM(s2.drops_earned), 0)::INT
+      INTO v_merged_prior_drops
+      FROM public.sessions s2
+      WHERE s2.user_id = v_session.user_id
+        AND s2.gym_id  = v_session.gym_id
+        AND s2.id <> v_session.id
+        AND s2.is_active = false AND s2.drops_earned > 0
+        AND DATE(s2.started_at AT TIME ZONE 'Europe/Belgrade') = v_today
+        AND s2.ended_at IS NOT NULL
+        AND s2.ended_at <= v_session.started_at
+        AND v_session.started_at <= s2.ended_at + (v_merge_window_sec || ' seconds')::INTERVAL;
+    END IF;
+
+    v_soft_threshold := v_max_session;
+    v_tier1_end := v_soft_threshold + ROUND(v_soft_threshold * v_tier1_span_ratio);
+    v_combined_drops := v_merged_prior_drops + v_raw_drops;
+
+    IF v_combined_drops <= v_soft_threshold THEN
+      v_soft_adjusted := v_combined_drops;
+    ELSIF v_combined_drops <= v_tier1_end THEN
+      v_seg_a := v_soft_threshold;
+      v_seg_b := ROUND((v_combined_drops - v_soft_threshold) * v_tier1_factor);
+      v_soft_adjusted := v_seg_a + v_seg_b;
+    ELSE
+      v_seg_a := v_soft_threshold;
+      v_seg_b := ROUND((v_tier1_end - v_soft_threshold) * v_tier1_factor);
+      v_seg_c := ROUND((v_combined_drops - v_tier1_end) * v_tier2_factor);
+      v_soft_adjusted := v_seg_a + v_seg_b + v_seg_c;
+    END IF;
+
+    IF v_merged_prior_drops <= 0 THEN
+      v_prior_soft_adjusted := 0;
+    ELSIF v_merged_prior_drops <= v_soft_threshold THEN
+      v_prior_soft_adjusted := v_merged_prior_drops;
+    ELSIF v_merged_prior_drops <= v_tier1_end THEN
+      v_prior_soft_adjusted := v_soft_threshold
+        + ROUND((v_merged_prior_drops - v_soft_threshold) * v_tier1_factor);
+    ELSE
+      v_prior_soft_adjusted := v_soft_threshold
+        + ROUND((v_tier1_end - v_soft_threshold) * v_tier1_factor)
+        + ROUND((v_merged_prior_drops - v_tier1_end) * v_tier2_factor);
+    END IF;
+
+    v_raw_drops := GREATEST(0, v_soft_adjusted - v_prior_soft_adjusted);
+
+    IF v_combined_drops > v_soft_threshold THEN
+      v_reasons_arr := v_reasons_arr || to_jsonb('session_soft_threshold_reached'::TEXT);
+      IF v_combined_drops > v_tier1_end THEN
+        v_reasons_arr := v_reasons_arr || to_jsonb('session_soft_tier_2_applied'::TEXT);
+      ELSE
+        v_reasons_arr := v_reasons_arr || to_jsonb('session_soft_tier_1_applied'::TEXT);
+      END IF;
+    END IF;
+
+    v_boost_info := public.get_active_drop_boost(v_session.gym_id, v_session.started_at, v_machine_type);
+    v_boost_mult := COALESCE((v_boost_info->>'multiplier')::NUMERIC, 1.0);
+
+    IF v_boost_mult > 1.0 AND v_raw_drops > 0 THEN
+      v_pre_boost_drops := v_raw_drops;
+      v_raw_drops := ROUND(v_raw_drops * v_boost_mult)::INTEGER;
+      v_drop_calc_v2 := v_drop_calc_v2 || jsonb_build_object(
+        'happy_hour', jsonb_build_object(
+          'active', true, 'multiplier', v_boost_mult,
+          'rule_id', v_boost_info->>'rule_id', 'rule_name', v_boost_info->>'rule_name',
+          'pre_boost_drops', v_pre_boost_drops, 'post_boost_drops', v_raw_drops));
+    ELSE
+      v_drop_calc_v2 := v_drop_calc_v2 || jsonb_build_object(
+        'happy_hour', jsonb_build_object('active', false, 'multiplier', 1.0));
+    END IF;
+
+    v_day_remaining := GREATEST(v_max_daily - v_minted_today, 0);
+    v_cap_after_day := LEAST(v_raw_drops, v_day_remaining);
+    IF v_cap_after_day < v_raw_drops THEN
+      PERFORM public.log_fraud_event(v_session.user_id, v_session.gym_id, 'drop_cap_day_hit', 'low',
+        jsonb_build_object('session_id', p_session_id, 'raw_drops', v_raw_drops, 'day_remaining', v_day_remaining));
+      IF v_cap_reason IS NULL THEN v_cap_reason := 'drop_cap_day_hit'; END IF;
+      v_reasons_arr := v_reasons_arr || to_jsonb('drop_cap_day_hit'::TEXT);
+    END IF;
+
+    v_week_remaining := GREATEST(v_max_weekly - v_minted_week, 0);
+    v_final_drops := LEAST(v_cap_after_day, v_week_remaining);
+    IF v_final_drops < v_cap_after_day THEN
+      PERFORM public.log_fraud_event(v_session.user_id, v_session.gym_id, 'drop_cap_week_hit', 'low',
+        jsonb_build_object('session_id', p_session_id, 'after_day_cap', v_cap_after_day, 'week_remaining', v_week_remaining));
+      IF v_cap_reason IS NULL THEN v_cap_reason := 'drop_cap_week_hit'; END IF;
+      v_reasons_arr := v_reasons_arr || to_jsonb('drop_cap_week_hit'::TEXT);
+    END IF;
+  END IF;
+
+  v_final_drops := GREATEST(COALESCE(v_final_drops, 0), 0);
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- PERSIST TELEMETRY
+  -- ═══════════════════════════════════════════════════════════════
+  v_drop_calc_v2 := v_drop_calc_v2 || jsonb_build_object(
+    'rewarded_sessions', jsonb_build_object(
+      'count', v_rewarded_sessions_today,
+      'effective_count', v_effective_rewarded_sessions,
+      'restart_merged', v_restart_merged_count,
+      'mode', v_cap_mode, 'grace_sec', v_restart_grace_sec,
+      'max_per_day', v_max_sessions_day,
+      'gym_scoped', true),
+    'soft_session', jsonb_build_object(
+      'threshold', v_soft_threshold, 'tier1_end', v_tier1_end,
+      'tier1_factor', v_tier1_factor, 'tier2_factor', v_tier2_factor,
+      'tier1_span_ratio', v_tier1_span_ratio,
+      'merged_prior_drops', v_merged_prior_drops,
+      'combined_drops', v_combined_drops,
+      'adjusted_combined', v_soft_adjusted,
+      'adjusted_prior', v_prior_soft_adjusted,
+      'marginal_credit', GREATEST(0, COALESCE(v_soft_adjusted, 0) - COALESCE(v_prior_soft_adjusted, 0))),
+    'caps', jsonb_build_object(
+      'day_remaining', v_day_remaining, 'week_remaining', v_week_remaining,
+      'final_drops', v_final_drops, 'merge_window_sec', v_merge_window_sec,
+      'gym_scoped', true),
+    'reasons', v_reasons_arr
+  );
+
+  IF v_cap_reason IS NOT NULL THEN
+    v_drop_calc_v2 := v_drop_calc_v2 || jsonb_build_object('cap_reason', v_cap_reason);
+  END IF;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- STREAK
+  -- ═══════════════════════════════════════════════════════════════
+  v_new_streak := CASE
+    WHEN v_profile.last_visit_date IS NULL THEN 1
+    WHEN v_profile.last_visit_date = v_today THEN v_profile.streak_days
+    WHEN v_profile.last_visit_date = v_today - 1 THEN v_profile.streak_days + 1
+    ELSE 1
+  END;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- CORE WRITE: session + profile + wallet + transaction
+  -- ═══════════════════════════════════════════════════════════════
+  UPDATE public.sessions
+  SET drops_earned = v_final_drops,
+      multiplier   = v_multiplier,
+      ended_at     = COALESCE(ended_at, NOW()),
+      is_active    = false,
+      raw_metrics  = jsonb_set(COALESCE(raw_metrics, '{}'::jsonb), '{drop_calc_v2}', v_drop_calc_v2, true),
+      updated_at   = NOW()
+  WHERE id = p_session_id;
+
+  UPDATE public.profiles
+  SET total_drops     = total_drops + v_final_drops,
+      available_drops = available_drops + v_final_drops,
+      weekly_drops    = weekly_drops + v_final_drops,
+      monthly_drops   = monthly_drops + v_final_drops,
+      last_visit_date = v_today,
+      streak_days     = v_new_streak,
+      updated_at      = NOW()
+  WHERE id = v_session.user_id;
+
+  UPDATE public.gym_memberships
+  SET local_drops_balance = local_drops_balance + v_final_drops,
+      updated_at          = NOW()
+  WHERE user_id = v_session.user_id
+    AND gym_id  = v_session.gym_id;
+
+  IF NOT FOUND THEN
+    INSERT INTO public.gym_memberships (user_id, gym_id, local_drops_balance)
+    VALUES (v_session.user_id, v_session.gym_id, v_final_drops)
+    ON CONFLICT (user_id, gym_id)
+    DO UPDATE SET local_drops_balance = gym_memberships.local_drops_balance + EXCLUDED.local_drops_balance,
+                  updated_at = NOW();
+  END IF;
+
+  SELECT available_drops INTO v_balance_after
+  FROM public.profiles WHERE id = v_session.user_id;
+
+  IF v_final_drops > 0 THEN
+    INSERT INTO public.drops_transactions
+      (user_id, gym_id, amount, transaction_type,
+       reference_id, balance_after, expires_at, description)
+    VALUES
+      (v_session.user_id, v_session.gym_id,
+       v_final_drops, 'session',
+       p_session_id, v_balance_after,
+       NOW() + INTERVAL '90 days',
+       'Workout session — ' || v_final_drops || ' drops (×' || v_multiplier
+         || CASE WHEN v_boost_mult > 1.0 THEN ', boost ×' || v_boost_mult ELSE '' END || ')');
+
+    INSERT INTO public.drop_limit_counters (user_id, gym_id, period_type, period_start, minted_drops, rewarded_sessions, updated_at)
+    VALUES (v_session.user_id, v_session.gym_id, 'day', v_today, v_final_drops, 1, NOW())
+    ON CONFLICT (user_id, gym_id, period_type, period_start)
+    DO UPDATE SET minted_drops = public.drop_limit_counters.minted_drops + EXCLUDED.minted_drops,
+                  rewarded_sessions = public.drop_limit_counters.rewarded_sessions + EXCLUDED.rewarded_sessions,
+                  updated_at = NOW();
+
+    INSERT INTO public.drop_limit_counters (user_id, gym_id, period_type, period_start, minted_drops, rewarded_sessions, updated_at)
+    VALUES (v_session.user_id, v_session.gym_id, 'week', v_week_start, v_final_drops, 1, NOW())
+    ON CONFLICT (user_id, gym_id, period_type, period_start)
+    DO UPDATE SET minted_drops = public.drop_limit_counters.minted_drops + EXCLUDED.minted_drops,
+                  rewarded_sessions = public.drop_limit_counters.rewarded_sessions + EXCLUDED.rewarded_sessions,
+                  updated_at = NOW();
+
+    INSERT INTO public.leaderboard_live_scores
+      (gym_id, user_id, weekly_score, monthly_score, alltime_score, refreshed_at)
+    VALUES
+      (v_session.gym_id, v_session.user_id,
+       v_final_drops::NUMERIC, v_final_drops::NUMERIC, v_final_drops::NUMERIC,
+       NOW())
+    ON CONFLICT (gym_id, user_id) DO UPDATE SET
+      weekly_score  = leaderboard_live_scores.weekly_score  + EXCLUDED.weekly_score,
+      monthly_score = leaderboard_live_scores.monthly_score + EXCLUDED.monthly_score,
+      alltime_score = leaderboard_live_scores.alltime_score + EXCLUDED.alltime_score,
+      refreshed_at  = NOW();
+  END IF;
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- ENQUEUE SIDE EFFECTS (async processing by cron)
+  -- ═══════════════════════════════════════════════════════════════
+  INSERT INTO public.pending_session_side_effects
+    (session_id, user_id, gym_id, drops_earned)
+  VALUES
+    (p_session_id, v_session.user_id, v_session.gym_id, v_final_drops);
+
+  RETURN QUERY SELECT v_final_drops, v_multiplier, ARRAY[]::TEXT[];
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.award_drops(UUID) TO authenticated;
+
+COMMENT ON FUNCTION public.award_drops(UUID) IS
+  'Computes and awards drops for a finished session. '
+  'CROSS-TALK GUARD (2026-05-08): if sessions.raw_metrics.security.peripheral_id_mismatch '
+  'is set by update_machine_heartbeat/update_machine_rpm, awards 0 drops unconditionally '
+  'and logs drops_zeroed_peripheral_mismatch fraud event. '
+  'All cap-bookkeeping (rewarded sessions today, minted today/week, '
+  'restart-grace, anti-split merge window) is gym-scoped — drops earned '
+  'at one gym do not consume another gym''s daily/weekly quota. '
+  'Updates sessions, profiles, gym_memberships, drops_transactions, '
+  'drop_limit_counters, and leaderboard_live_scores synchronously; '
+  'enqueues pending_session_side_effects for async fan-out (challenges, '
+  'arenas, badges, snapshots, implicit checkin).';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 5. SMOKE-TEST assertions (executed at migration time, not at runtime)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Verify peripheral_id_matches_sensor behaves correctly for representative cases
+-- before the migration is considered applied.
+
+DO $$
+DECLARE
+  v_pass BOOLEAN;
+BEGIN
+  -- A. NULL inputs → TRUE (backward compat)
+  v_pass := public.peripheral_id_matches_sensor(NULL, NULL);
+  IF NOT v_pass THEN RAISE EXCEPTION 'smoke-test A failed: NULL/NULL should return TRUE'; END IF;
+
+  v_pass := public.peripheral_id_matches_sensor('AA:BB:CC:DD:EE:FF', NULL);
+  IF NOT v_pass THEN RAISE EXCEPTION 'smoke-test A2 failed: NULL expected_sensor should return TRUE'; END IF;
+
+  -- B. Exact normalised match (MAC vs MAC without separators)
+  v_pass := public.peripheral_id_matches_sensor('AA:BB:CC:DD:EE:FF', 'AA:BB:CC:DD:EE:FF');
+  IF NOT v_pass THEN RAISE EXCEPTION 'smoke-test B1 failed: identical MACs should match'; END IF;
+
+  v_pass := public.peripheral_id_matches_sensor('aabbccddeeff', 'AA:BB:CC:DD:EE:FF');
+  IF NOT v_pass THEN RAISE EXCEPTION 'smoke-test B2 failed: lower hex vs MAC should match'; END IF;
+
+  -- C. Mismatch should return FALSE
+  v_pass := public.peripheral_id_matches_sensor('11:22:33:44:55:66', 'AA:BB:CC:DD:EE:FF');
+  IF v_pass THEN RAISE EXCEPTION 'smoke-test C failed: different MACs should NOT match'; END IF;
+
+  -- D. base64 sensor_id → hex match (simulates admin-panel pairing format)
+  -- encode(decode('qrvM3e7/','base64'),'hex') = 'aabcccddeeeff'  (example)
+  -- We test a known pair: base64 of 0xAABBCC → 'qrs=' type encoding
+  -- Using 'AAEC' (base64) → hex '000102'
+  v_pass := public.peripheral_id_matches_sensor('00:01:02', 'AAEC');
+  IF NOT v_pass THEN RAISE EXCEPTION 'smoke-test D failed: base64→hex MAC match failed'; END IF;
+
+  RAISE NOTICE 'peripheral_id_matches_sensor smoke-tests: ALL PASSED';
+END $$;
