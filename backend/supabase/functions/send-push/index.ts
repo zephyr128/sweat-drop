@@ -2,6 +2,17 @@
 // Description: Sends Expo push notifications to an array of tokens.
 // Called by other Edge Functions and pg_cron jobs.
 //
+// AGENT NOTE: [2026-05-08] - supabase-dba — Env isolation:
+//   Reads `APP_ENV` from function secrets (default 'production'). Looks up
+//   each candidate token's stored `profiles.expo_push_token_env` and drops
+//   any token whose env != APP_ENV (counted as `skipped_env_mismatch`). Also
+//   stamps `data.app_env = APP_ENV` on every outbound push + inbox row so
+//   the mobile receiver can defensively suppress cross-env deep links. This
+//   prevents the dev cron from pushing to a prod install (the failure mode
+//   that produced the "happy hour for vortex → gym not found" incident).
+//   Operationally: dev Supabase project MUST set APP_ENV='development'
+//   secret; prod can leave the default.
+//
 // AGENT NOTE: [2026-04-02] - supabase-dba — DeviceNotRegistered receipt handling:
 //   After each batch, tickets with details.error = 'DeviceNotRegistered' have their
 //   push token cleared from profiles. This is defense-in-depth for the mobile-side
@@ -23,6 +34,7 @@
 //     receipt_ok: number,       // Expo tickets with status "ok"
 //     receipt_error: number,    // Expo tickets with status "error"
 //     requested, valid_tokens, skipped_invalid, deduped_in_request,
+//     skipped_env_mismatch,    // tokens dropped because expo_push_token_env != APP_ENV
 //     batches_attempted, batches_failed,
 //     batch_summaries: [...],
 //     tokens_cleared: number,   // DeviceNotRegistered tokens cleared from profiles
@@ -45,6 +57,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type',
 };
+
+/**
+ * Authoritative env tag for THIS Supabase project. Set as a function secret
+ * (`APP_ENV`) in the dev project to 'development' (or 'preview'); prod can
+ * leave the default. Tokens whose stored env != this value are dropped.
+ * Defaults to 'production' to fail-closed: a project that forgets to set
+ * APP_ENV is treated as prod, never the reverse.
+ */
+const APP_ENV: 'production' | 'preview' | 'development' = (() => {
+  const raw = Deno.env.get('APP_ENV');
+  if (raw === 'preview' || raw === 'development') return raw;
+  return 'production';
+})();
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -74,6 +99,15 @@ serve(async (req) => {
 
     const { tokens, title, body, data, client_ref, include_raw_batches, user_ids } = parsed.value;
 
+    // Stamp env on the outbound payload + inbox rows. Callers may override
+    // explicitly (e.g. test fixtures) by passing data.app_env, but the
+    // default is the project's APP_ENV. The mobile receiver suppresses
+    // deep links whose data.app_env != its own APP_ENV.
+    const enrichedData: Record<string, unknown> = {
+      ...(data ?? {}),
+      app_env: (data?.app_env as string | undefined) ?? APP_ENV,
+    };
+
     // Supabase admin client — used for inbox writes and stale token clearing.
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -92,7 +126,7 @@ serve(async (req) => {
             type: notifType,
             title,
             body,
-            data: data ?? {},
+            data: enrichedData,
           }));
         if (rows.length === 0) return 0;
         const { count, error: inboxErr } = await supabaseAdmin
@@ -129,11 +163,13 @@ serve(async (req) => {
         requested: 0,
         valid_tokens: 0,
         skipped_invalid: 0,
+        skipped_env_mismatch: 0,
         deduped_in_request: 0,
         batches_attempted: 0,
         batches_failed: 0,
         batch_summaries: [] as Array<Record<string, unknown>>,
         skip_reason: 'no_tokens' as const,
+        app_env: APP_ENV,
         inbox_persisted,
         result: { skipped: 'no tokens' },
       };
@@ -151,6 +187,59 @@ serve(async (req) => {
     const validRaw = tokens.filter((t) => isExpoPushToken(t));
     const skipped_invalid = requested - validRaw.length;
 
+    // ── Env isolation: drop tokens whose stored expo_push_token_env != APP_ENV.
+    //   - 'unknown' env (column NULL or token row missing) is treated as a
+    //     mismatch, except when APP_ENV='production' AND the row exists with
+    //     env=NULL (legacy data backfilled by 20260508140000). The migration
+    //     backfills NULLs to 'production' so this fallback only matters for
+    //     pre-migration window edge cases.
+    //   - We look up by token, not user_id, so unknown/stale tokens (not in
+    //     profiles at all) are dropped — defensive against caller-supplied
+    //     fake tokens.
+    let skipped_env_mismatch = 0;
+    let envFiltered: string[] = validRaw;
+    if (validRaw.length > 0) {
+      const uniqueRaw = [...new Set(validRaw)];
+      const { data: tokenRows, error: envLookupErr } = await supabaseAdmin
+        .from('profiles')
+        .select('expo_push_token, expo_push_token_env')
+        .in('expo_push_token', uniqueRaw);
+
+      if (envLookupErr) {
+        // Fail open ON LOOKUP ERROR ONLY (DB hiccup must not silently
+        // swallow legitimate sends). Log so we notice if it happens.
+        console.error(JSON.stringify({
+          event: 'send-push:env_lookup_error',
+          error: (envLookupErr.message ?? '').slice(0, 160),
+        }));
+      } else {
+        const envByToken = new Map<string, string | null>();
+        for (const row of tokenRows ?? []) {
+          envByToken.set(
+            row.expo_push_token as string,
+            (row.expo_push_token_env as string | null) ?? null,
+          );
+        }
+        envFiltered = validRaw.filter((t) => {
+          const env = envByToken.get(t);
+          // Token not present in profiles at all → drop (stale/foreign).
+          if (env === undefined) return false;
+          return env === APP_ENV;
+        });
+        skipped_env_mismatch = validRaw.length - envFiltered.length;
+        if (skipped_env_mismatch > 0) {
+          console.log(JSON.stringify({
+            event: 'send-push:env_filter',
+            client_ref: client_ref ?? null,
+            app_env: APP_ENV,
+            requested: validRaw.length,
+            kept: envFiltered.length,
+            skipped_env_mismatch,
+          }));
+        }
+      }
+    }
+
     const seen = new Set<string>();
     const messages: Array<{
       to: string;
@@ -160,7 +249,7 @@ serve(async (req) => {
       data: Record<string, unknown>;
     }> = [];
     let deduped_in_request = 0;
-    for (const token of validRaw) {
+    for (const token of envFiltered) {
       if (seen.has(token)) {
         deduped_in_request++;
         continue;
@@ -171,7 +260,7 @@ serve(async (req) => {
         sound: 'default',
         title,
         body,
-        data: data ?? {},
+        data: enrichedData,
       });
     }
 
@@ -188,11 +277,15 @@ serve(async (req) => {
         requested,
         valid_tokens: 0,
         skipped_invalid,
+        skipped_env_mismatch,
         deduped_in_request,
         batches_attempted: 0,
         batches_failed: 0,
         batch_summaries: [],
-        skip_reason: 'no_valid_tokens' as const,
+        skip_reason: skipped_env_mismatch > 0 && skipped_invalid === 0
+          ? 'all_env_mismatch' as const
+          : 'no_valid_tokens' as const,
+        app_env: APP_ENV,
         inbox_persisted,
         result: { skipped: 'no valid tokens' },
       };
@@ -345,11 +438,13 @@ serve(async (req) => {
     requested,
     valid_tokens,
     skipped_invalid,
+    skipped_env_mismatch,
     deduped_in_request,
     batches_attempted,
     batches_failed,
     batch_summaries,
     tokens_cleared,
+    app_env: APP_ENV,
     inbox_persisted,
   };
 
@@ -362,9 +457,11 @@ serve(async (req) => {
       client_ref: client_ref ?? null,
       duration_ms: Date.now() - started,
       ok,
+      app_env: APP_ENV,
       requested,
       valid_tokens,
       skipped_invalid,
+      skipped_env_mismatch,
       deduped_in_request,
       sent,
       receipt_ok,

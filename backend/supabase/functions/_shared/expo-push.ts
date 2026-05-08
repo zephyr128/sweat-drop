@@ -112,9 +112,11 @@ export function compactSendPushMetrics(body: unknown): Record<string, unknown> {
   const out: Record<string, unknown> = {
     ok: o.ok,
     version: o.version,
+    app_env: o.app_env,
     requested: o.requested,
     valid_tokens: o.valid_tokens,
     skipped_invalid: o.skipped_invalid,
+    skipped_env_mismatch: o.skipped_env_mismatch,
     deduped_in_request: o.deduped_in_request,
     receipt_ok: o.receipt_ok,
     receipt_error: o.receipt_error,
