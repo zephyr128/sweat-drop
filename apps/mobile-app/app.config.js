@@ -41,7 +41,7 @@ module.exports = {
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: true,
-      buildNumber: '19',
+      buildNumber: '20',
       bundleIdentifier: bundleId,
       associatedDomains: ['applinks:sweat-drop.com', 'applinks:www.sweat-drop.com'],
       entitlements: {
@@ -66,7 +66,7 @@ module.exports = {
         foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
         backgroundColor: '#0A0E1A', // Dark navy background
       },
-      versionCode: 46,
+      versionCode: 47,
       package: bundleId,
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON || './google-services.json',

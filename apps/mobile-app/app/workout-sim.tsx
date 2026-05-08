@@ -817,6 +817,7 @@ export default function WorkoutSimScreen() {
         finishButtonStyle={finishButtonStyle}
         finishWorkoutLabel={t('finishWorkout')}
         showPauseButton={false}
+        primaryColor={branding.primary}
       />
 
       {/* Finishing overlay */}

@@ -10,6 +10,7 @@ interface WorkoutControlsProps {
   onFinishPressOut: () => void;
   finishButtonStyle: any;
   finishWorkoutLabel: string;
+  primaryColor: string;
   showPauseButton?: boolean;
 }
 
@@ -20,6 +21,7 @@ export default function WorkoutControls({
   onFinishPressOut,
   finishButtonStyle,
   finishWorkoutLabel,
+  primaryColor,
   showPauseButton = true,
 }: WorkoutControlsProps) {
   return (
@@ -43,8 +45,22 @@ export default function WorkoutControls({
         onPressIn={onFinishPressIn}
         onPressOut={onFinishPressOut}
       >
-        <View style={styles.finishButton}>
-          <Animated.View style={[styles.finishButtonFill, finishButtonStyle]} />
+        <View
+          style={[
+            styles.finishButton,
+            {
+              backgroundColor: primaryColor + '18',
+              borderColor: primaryColor + '60',
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.finishButtonFill,
+              finishButtonStyle,
+              { backgroundColor: primaryColor },
+            ]}
+          />
           <Text style={styles.finishButtonText}>{finishWorkoutLabel}</Text>
         </View>
       </Pressable>
@@ -79,7 +95,7 @@ const styles = StyleSheet.create({
   finishButton: {
     height: 56,
     borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.error,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -90,8 +106,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    backgroundColor: theme.colors.secondary,
-    opacity: 0.8,
+    opacity: 0.9,
   },
   finishButtonText: {
     ...fontStyles.heading,
