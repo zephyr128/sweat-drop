@@ -12,6 +12,13 @@ const googleIosUrlScheme =
 
 const IS_DEV = process.env.EXPO_PUBLIC_APP_ENV !== 'production';
 
+// Authoritative env tag exposed to the JS runtime as `Constants.expoConfig.extra.appEnv`.
+// Used by lib/notifications.ts to stamp the env that minted each push token, so
+// senders can drop tokens that don't belong to their environment.
+// Preserves the explicit 'preview' profile from eas.json instead of collapsing it
+// into 'development'.
+const appEnv = process.env.EXPO_PUBLIC_APP_ENV || 'production';
+
 const bundleId = IS_DEV ? 'com.sweatdrop.app.dev' : 'com.sweatdrop.app';
 const appName = IS_DEV ? 'SweatDrop Dev' : 'SweatDrop';
 const scheme = IS_DEV ? 'sweatdrop-dev' : 'sweatdrop';
@@ -59,7 +66,7 @@ module.exports = {
         foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
         backgroundColor: '#0A0E1A', // Dark navy background
       },
-      versionCode: 45,
+      versionCode: 46,
       package: bundleId,
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON || './google-services.json',
@@ -181,6 +188,11 @@ module.exports = {
     extra: {
       googleWebClientId,
       googleIosClientId,
+      // Surfaced for lib/notifications.ts so push-token writes can stamp the
+      // exact env + bundle that minted the token. Senders rely on this tag
+      // to refuse cross-env delivery (see backend/supabase/functions/send-push).
+      appEnv,
+      bundleId,
       router: {
         origin: false,
       },

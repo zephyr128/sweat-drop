@@ -60,6 +60,25 @@ async function getNotificationsModule(): Promise<NotificationsModule | null> {
 export const PUSH_NOTIFICATIONS_ENABLED =
   (process.env.EXPO_PUBLIC_PUSH_ENABLED ?? '').toLowerCase() === 'true';
 
+/**
+ * Authoritative env tag for THIS install. Stamped onto the token row in
+ * `profiles.expo_push_token_env` so backend senders can refuse cross-env
+ * delivery. Falls back to env var, then 'production' to fail-closed (a build
+ * that forgets to set EXPO_PUBLIC_APP_ENV is treated as prod, never the
+ * reverse — this guarantees prod tokens cannot accidentally be tagged dev).
+ */
+export const APP_ENV: 'production' | 'preview' | 'development' = (() => {
+  const raw =
+    (Constants.expoConfig?.extra?.appEnv as string | undefined) ??
+    process.env.EXPO_PUBLIC_APP_ENV ??
+    'production';
+  if (raw === 'preview' || raw === 'development') return raw;
+  return 'production';
+})();
+
+const APP_BUNDLE_ID: string | null =
+  (Constants.expoConfig?.extra?.bundleId as string | undefined) ?? null;
+
 /** Push notification event types (mirrors backend/types/sweatdrop.ts NotificationTrigger) */
 type NotificationTrigger =
   | 'session_ended'
@@ -219,7 +238,12 @@ export async function clearPushToken(userId: string): Promise<void> {
   try {
     const { error } = await supabase
       .from('profiles')
-      .update({ expo_push_token: null })
+      .update({
+        expo_push_token: null,
+        expo_push_token_env: null,
+        expo_push_token_bundle: null,
+        expo_push_token_updated_at: new Date().toISOString(),
+      })
       .eq('id', userId);
 
     if (error) {
@@ -234,35 +258,50 @@ export async function clearPushToken(userId: string): Promise<void> {
 
 /**
  * Save the push token to the user's profile in Supabase.
- * Only updates if the token has changed (avoids unnecessary writes).
+ *
+ * Re-writes the row when EITHER the token string OR the env tag has changed.
+ * The env-only case is critical: legacy rows backfilled by migration
+ * 20260508140000 carry env='production' regardless of the actual install
+ * environment; on the dev/preview build that mismatch must be corrected on
+ * the next foreground sync, otherwise that user's token would be permanently
+ * mistagged.
  *
  * @param userId - The authenticated user's ID
  * @param token  - The Expo push token string
  */
 export async function savePushToken(userId: string, token: string): Promise<void> {
   try {
-    // Check if token already matches (avoid unnecessary update)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('expo_push_token')
+      .select('expo_push_token, expo_push_token_env, expo_push_token_bundle')
       .eq('id', userId)
       .single();
 
-    if (profile?.expo_push_token === token) {
-      log.debug('[Notifications] Token already saved, skipping update');
+    const tokenUnchanged = profile?.expo_push_token === token;
+    const envUnchanged = profile?.expo_push_token_env === APP_ENV;
+    const bundleUnchanged = profile?.expo_push_token_bundle === APP_BUNDLE_ID;
+    if (tokenUnchanged && envUnchanged && bundleUnchanged) {
+      log.debug('[Notifications] Token + env + bundle already match, skipping update');
       return;
     }
 
-    // Update the profile with the new token
     const { error } = await supabase
       .from('profiles')
-      .update({ expo_push_token: token })
+      .update({
+        expo_push_token: token,
+        expo_push_token_env: APP_ENV,
+        expo_push_token_bundle: APP_BUNDLE_ID,
+        expo_push_token_updated_at: new Date().toISOString(),
+      })
       .eq('id', userId);
 
     if (error) {
       log.error('[Notifications] Failed to save token:', error.message);
     } else {
-      log.debug('[Notifications] Token saved to profile');
+      log.debug(
+        '[Notifications] Token saved to profile',
+        { env: APP_ENV, bundle: APP_BUNDLE_ID },
+      );
     }
   } catch (error) {
     log.error('[Notifications] Error saving token:', error);
@@ -301,6 +340,14 @@ interface NotificationData {
   requires_verification?: string;
   /** Gym name included by finalize-arena edge function */
   gym_name?: string;
+  /**
+   * Origin environment of the push (stamped server-side by send-push). When
+   * present and != this install's APP_ENV, the deep link is suppressed —
+   * defense-in-depth against cross-env token leakage that survives the
+   * server-side env filter (e.g. caller passed `data: { app_env: 'production' }`
+   * but the underlying token routes to a dev install).
+   */
+  app_env?: 'production' | 'preview' | 'development';
 }
 
 /**
@@ -311,6 +358,19 @@ interface NotificationData {
  * @returns Route path for expo-router navigation, or null for no navigation
  */
 export function getDeepLinkFromNotification(data: NotificationData): string | null {
+  // Cross-env guard: if the push was authored by a different environment
+  // (e.g. dev cron leaked through to a prod install via a mistagged token),
+  // refuse to navigate. The user has already seen the OS banner; we don't
+  // compound the confusion by routing them into a screen whose underlying
+  // ID doesn't exist in the local DB ("gym not found", etc.).
+  if (data?.app_env && data.app_env !== APP_ENV) {
+    log.warn(
+      '[Notifications] Cross-env push tap ignored',
+      { payload_env: data.app_env, app_env: APP_ENV, type: data?.type },
+    );
+    return null;
+  }
+
   if (!data?.type) {
     return data?.deep_link ? sanitizeDeepLink(data.deep_link) : null;
   }
