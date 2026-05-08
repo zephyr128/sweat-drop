@@ -872,6 +872,19 @@ export default function WorkoutScreen() {
           }
         };
 
+        // Anti-piggyback: clears "Verifying activity" badge (see activity-proof useEffect).
+        // CSC/Magene often reports rpm=0 on the first 1–2 packets (baseline + ble-service RPM<5 clamp),
+        // so we also mark activity from crank revolutionDelta below — not only rawRPM > 0.
+        const markFirstActivityProofDone = () => {
+          if (firstActivityDetectedRef.current) return;
+          firstActivityDetectedRef.current = true;
+          setAwaitingActivityProof(false);
+          if (activityProofTimerRef.current) {
+            clearTimeout(activityProofTimerRef.current);
+            activityProofTimerRef.current = null;
+          }
+        };
+
         // Start monitoring CSC measurements with sleep detection and reconnect
         await bleService.startMonitoring(
           async (measurement: CSCMeasurement) => {
@@ -1145,6 +1158,9 @@ export default function WorkoutScreen() {
               if (lastRevolutions === 0) {
                 lastCrankRevolutionsRef.current = currentRevolutions;
                 lastStepDetectionRef.current = now;
+                if (rawRPM > 0) {
+                  markFirstActivityProofDone();
+                }
                 return; // Skip drop calculation on first measurement
               }
               
@@ -1165,8 +1181,19 @@ export default function WorkoutScreen() {
               if (revolutionDelta > 0) {
                 const currentMachineType = machineType || 'treadmill';
 
+                // CSC (Magene): real crank movement even when rpm resolves to 0 (slow cadence or 2-sample delay).
+                if (measurement.protocol === 'csc') {
+                  markFirstActivityProofDone();
+                }
+
                 // Keep cadence/revolution tracking for pace/calorie logic. Drops are estimated
                 // from server-equivalent tokenomics rules in a separate timer effect.
+                // ONLY bikes accumulate revolutions: pace/distance/calorie worklets use a
+                // bike-specific multiplier (~2 m per crank revolution). On elliptical the
+                // crank ≠ wheel travel, so we deliberately do NOT inflate revolutions there
+                // — that would write bogus "kilometers" to raw_metrics.total_distance and
+                // pollute global distance achievements (Kilometer Club, Marathoner, etc).
+                // Elliptical distance is only trusted when reported by the machine via FTMS.
                 if (currentMachineType === 'bike') {
                   totalCrankRevolutionsShared.value = totalCrankRevolutionsShared.value + revolutionDelta;
                 }
@@ -1204,14 +1231,7 @@ export default function WorkoutScreen() {
             // Update last RPM time (use raw RPM, not smoothed, for accurate detection)
             // This ensures we detect when sensor actually stops
             if (rawRPM > 0) {
-              if (!firstActivityDetectedRef.current) {
-                firstActivityDetectedRef.current = true;
-                setAwaitingActivityProof(false);
-                if (activityProofTimerRef.current) {
-                  clearTimeout(activityProofTimerRef.current);
-                  activityProofTimerRef.current = null;
-                }
-              }
+              markFirstActivityProofDone();
               lastRPMTimeRef.current = Date.now();
               setShowAutoPauseOverlay(false);
               
