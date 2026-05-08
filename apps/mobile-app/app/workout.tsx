@@ -24,6 +24,8 @@ import Animated, {
   runOnJS,
   cancelAnimation,
   FadeInDown,
+  FadeIn,
+  FadeOut,
 } from 'react-native-reanimated';
 import { PlatformBlur } from '@/components/PlatformBlur';
 import { supabase } from '@/lib/supabase';
@@ -34,7 +36,14 @@ import { DropEmitter } from '@/components/DropEmitter';
 import CircularProgressRing from '@/components/CircularProgressRing';
   
 import { useChallengeProgress } from '@/hooks/useChallengeProgress';
-import { bleService, CSCMeasurement } from '@/lib/ble-service';
+import {
+  bleService,
+  CSCMeasurement,
+  BlePeripheralNotFoundError,
+  BleAmbiguousIdentityError,
+  BlePeripheralMismatchError,
+  type MachineIdentity,
+} from '@/lib/ble-service';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { useTheme } from '@/lib/contexts/ThemeContext';
 import { ActiveChallengesOverlay } from '@/components/ActiveChallengesOverlay';
@@ -56,6 +65,8 @@ import AnimatedText from '@/components/workout/AnimatedText';
 import WorkoutStatsGrid from '@/components/workout/WorkoutStatsGrid';
 import GoalProgressBar from '@/components/workout/GoalProgressBar';
 import WorkoutControls from '@/components/workout/WorkoutControls';
+import { MachineNotInRangeOverlay } from '@/components/workout/MachineNotInRangeOverlay';
+import { PeripheralMismatchModal } from '@/components/workout/PeripheralMismatchModal';
 import { styles } from './workout.styles';
 
 import { useHappyHour } from '@/hooks/useHappyHour';
@@ -207,7 +218,11 @@ export default function WorkoutScreen() {
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [inactivityCountdownSec, setInactivityCountdownSec] = useState(0);
   const [showNoActivityCancelOverlay, setShowNoActivityCancelOverlay] = useState(false);
-  
+
+  // BLE cross-talk safety overlays (Steps 1 + 3)
+  const [showMachineNotInRangeOverlay, setShowMachineNotInRangeOverlay] = useState(false);
+  const [showPeripheralMismatchModal, setShowPeripheralMismatchModal] = useState(false);
+
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [showChallengesOverlay, setShowChallengesOverlay] = useState(false);
   const [reconnectTrigger, setReconnectTrigger] = useState(0); // Increment to force BLE useEffect re-run after reconnect
@@ -230,6 +245,10 @@ export default function WorkoutScreen() {
   const isPausedRef = useRef(false); // Stable ref for BLE callbacks (avoids stale closures & dep array issues)
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastCrankRevolutionsForAutoResumeRef = useRef<number>(0); // Track for auto-resume
+  // Step 2: manual pause guard — prevents FTMS treadmill belt inertia from
+  // triggering auto-resume immediately after the user presses Pause.
+  const manualPausedAtRef = useRef<number | null>(null);
+  const AUTO_RESUME_GUARD_MS = 5000;
   const [bleConnected, setBleConnected] = useState(false);
   const [, setBleStatus] = useState<string>('');
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -386,6 +405,13 @@ export default function WorkoutScreen() {
   useEffect(() => {
     isPausedShared.value = isPaused ? 1 : 0;
   }, [isPaused, isPausedShared]);
+
+  // Step 2: dev-mode guard — detect if auto-resume fired against a manual pause
+  useEffect(() => {
+    if (__DEV__ && pauseReason === 'manual' && !isPaused && pausedTime !== null) {
+      log.warn('[Workout] Suspicious state: pauseReason=manual but isPaused=false while pausedTime is set. Auto-resume guard may have failed.');
+    }
+  }, [isPaused, pauseReason, pausedTime]);
 
   useEffect(() => {
     bleConnectedShared.value = bleConnected ? 1 : 0;
@@ -616,11 +642,20 @@ export default function WorkoutScreen() {
   // CRITICAL: isPaused removed from guard & dep array — pausing should NOT kill BLE connection.
   // isPaused is read via isPausedRef.current inside BLE callbacks.
   useEffect(() => {
-    // Use sensorId from params or from session.machine
-    const activeSensorId = sensorId || session?.machine?.sensor_id;
-    
-    // Simulator sessions have machine_id = null; only require activeSensorId
-    if ((!session?.machine_id && !isSimulator) || !activeSensorId) {
+    // Build full machine identity object for name+serial-based BLE matching
+    const machineIdentity: MachineIdentity = {
+      id: session?.machine_id ?? machineId ?? '',
+      ble_device_name: (session?.machine as any)?.ble_device_name ?? null,
+      ble_serial_number: (session?.machine as any)?.ble_serial_number ?? null,
+      ble_pairing_verified: (session?.machine as any)?.ble_pairing_verified ?? false,
+      sensor_id: sensorId ?? (session?.machine as any)?.sensor_id ?? null,
+      ble_protocol: (bleProtocol ?? (session?.machine as any)?.ble_protocol ?? null) as MachineIdentity['ble_protocol'],
+    };
+
+    // Simulator sessions have machine_id = null; only require sensor_id (sim: prefix)
+    const hasIdentity = !!session?.machine_id || isSimulator;
+    const hasSensorOrName = !!(machineIdentity.ble_device_name ?? machineIdentity.sensor_id);
+    if (!hasIdentity || !hasSensorOrName) {
       setBleConnected(false);
       return;
     }
@@ -628,11 +663,14 @@ export default function WorkoutScreen() {
 
     const startBLEMonitoring = async () => {
       try {
-        log.debug('[Workout] Connecting to BLE sensor:', activeSensorId);
-        
-        // AGENT NOTE: [2026-03-02] - mobile-coder (Task 3.4c)
+        log.debug('[Workout] Connecting to machine:', {
+          machineId: machineIdentity.id,
+          bleName: machineIdentity.ble_device_name,
+          pairingVerified: machineIdentity.ble_pairing_verified,
+        });
+
         // Set BLE protocol from machine data if available (skip auto-detection)
-        const machineProtocol = bleProtocol || session?.machine?.ble_protocol;
+        const machineProtocol = bleProtocol || (session?.machine as any)?.ble_protocol;
         if (machineProtocol === 'ftms') {
           const ftmsMachineType = (paramMachineType || session?.machine?.type) as 'treadmill' | 'bike' | 'elliptical' | undefined;
           bleService.setProtocol('ftms', ftmsMachineType || 'bike');
@@ -641,8 +679,7 @@ export default function WorkoutScreen() {
           bleService.setProtocol('csc');
           ftmsProtocolActiveRef.current = false;
         }
-        // else: auto-detect (default behavior)
-        
+
         bleService.setStatusCallback((status: string) => {
           if (isAppInBackgroundRef.current) return;
           if (status === 'Signal OK') {
@@ -655,18 +692,62 @@ export default function WorkoutScreen() {
             setBleStatus(status);
           }
         });
-        
+
+        const unlockMachine = async () => {
+          if (session?.machine_id && authSession?.user) {
+            try {
+              await supabase.rpc('unlock_machine', {
+                p_machine_id: session.machine_id,
+                p_user_id: authSession.user.id,
+              });
+            } catch (unlockError) {
+              log.error('[Workout] Error unlocking machine during connection failure:', unlockError);
+            }
+          }
+        };
+
         try {
-          const connected = await bleService.connectToDevice(activeSensorId);
-          
+          const connected = await bleService.connectToMachine(machineIdentity);
           if (!connected) {
             throw new Error('Connection returned false');
           }
         } catch (connectError: any) {
           log.error('[Workout] BLE connection error:', connectError);
           setBleConnected(false);
-          
-          // Unlock machine if connection fails
+
+          if (connectError instanceof BlePeripheralNotFoundError) {
+            log.warn('[Workout] Machine not in range — showing overlay', {
+              identifier: connectError.requestedIdentifier,
+              detail: connectError.detail,
+            });
+            await unlockMachine();
+            setShowMachineNotInRangeOverlay(true);
+            setIsReconnecting(false);
+            return;
+          }
+
+          if (connectError instanceof BleAmbiguousIdentityError) {
+            log.error('[Workout] Ambiguous BLE identity — multiple machines with same name', {
+              conflictingName: connectError.conflictingName,
+            });
+            await unlockMachine();
+            showModal({
+              title: t('bleAmbiguousIdentityTitle'),
+              body: t('bleAmbiguousIdentityBody', { name: connectError.conflictingName }),
+              buttons: [{ label: t('common:ok'), onPress: () => router.replace('/home') }],
+            });
+            return;
+          }
+
+          if (connectError instanceof BlePeripheralMismatchError) {
+            log.error('[Workout] BLE peripheral mismatch at connect time — forcing session end', {
+              detail: connectError.detail,
+            });
+            setShowPeripheralMismatchModal(true);
+            return;
+          }
+
+          // Unlock machine if connection fails (generic error path)
           if (session?.machine_id && authSession?.user) {
             try {
               await supabase.rpc('unlock_machine', {
@@ -733,7 +814,11 @@ export default function WorkoutScreen() {
         bleMonitoringRef.current = true;
         setBleConnected(true);
 
-        // Verify session ownership function for reconnect
+        // Verify session ownership + peripheral identity on reconnect
+        // AGENT NOTE: [2026-05-08] - mobile-coder (BLE cross-talk fix, Steps 3 + 1)
+        // Now checks both Supabase ownership AND that the live BLE peripheral
+        // matches the paired sensor_id.  Mismatch triggers the safety modal and
+        // force-finalizes the session so drops are not awarded for cross-talk data.
         const verifySessionOwnership = async (): Promise<boolean> => {
           if (!session?.machine_id || !authSession?.user) {
             return false;
@@ -742,11 +827,45 @@ export default function WorkoutScreen() {
           try {
             const { data: machineData } = await supabase
               .from('machines')
-              .select('is_busy, current_user_id')
+              .select('is_busy, current_user_id, ble_device_name, ble_serial_number, ble_pairing_verified')
               .eq('id', session.machine_id)
               .single();
 
-            return machineData?.is_busy === true && machineData?.current_user_id === authSession.user.id;
+            if (!machineData?.is_busy || machineData.current_user_id !== authSession.user.id) {
+              log.warn('[Workout] Session ownership lost', { machineData });
+              return false;
+            }
+
+            // BLE identity cross-check: prefer serial (hardware-bound), fall back to name
+            const expectedSerial = (machineData as any).ble_serial_number as string | null;
+            const expectedName = (machineData as any).ble_device_name as string | null;
+            const pairingVerified = (machineData as any).ble_pairing_verified as boolean;
+
+            if (pairingVerified && expectedSerial) {
+              const observedSerial = bleService.getConnectedSerialNumber();
+              if (observedSerial !== null && observedSerial !== expectedSerial) {
+                log.error('[Workout] Mid-session SERIAL MISMATCH — connected to wrong machine!', {
+                  sessionMachineId: session.machine_id,
+                  expectedSerial,
+                  observedSerial,
+                });
+                setShowPeripheralMismatchModal(true);
+                return false;
+              }
+            } else if (expectedName) {
+              const observedName = bleService.getConnectedDeviceName();
+              if (observedName !== null && observedName !== expectedName) {
+                log.error('[Workout] Mid-session NAME MISMATCH — connected to wrong machine!', {
+                  sessionMachineId: session.machine_id,
+                  expectedName,
+                  observedName,
+                });
+                setShowPeripheralMismatchModal(true);
+                return false;
+              }
+            }
+
+            return true;
           } catch (error) {
             log.error('[Workout] Error verifying session ownership:', error);
             return false;
@@ -997,10 +1116,25 @@ export default function WorkoutScreen() {
             const lastRevolutions = lastCrankRevolutionsRef.current;
             // Note: 'now' was already declared at the start of this callback
             
-            // PRO-FITNESS: Auto-Resume - if crankRevolutions started growing again, auto-resume
-            if (currentRevolutions > lastCrankRevolutionsForAutoResumeRef.current && isPausedRef.current && isMountedRef.current) {
-              // Crank started moving - auto-resume
-              // Battery Optimization: No logging in measurement callback
+            // PRO-FITNESS: Auto-Resume — but ONLY for inactivity pause, NOT manual pause.
+            // AGENT NOTE: [2026-05-08] - mobile-coder (BLE cross-talk fix, Step 2)
+            // FTMS treadmill belt has mechanical inertia: it keeps emitting incrementing
+            // crankRevolutions for several seconds after the user presses Pause.  Without
+            // this guard, auto-resume fires immediately and defeats manual pause entirely.
+            // The 5 s safety window also covers the edge case where pauseReason transitions
+            // between values before the ref update propagates.
+            const isManualPause = pauseReasonRef.current === 'manual';
+            const isWithinManualGuard =
+              manualPausedAtRef.current !== null &&
+              Date.now() - manualPausedAtRef.current < AUTO_RESUME_GUARD_MS;
+
+            if (
+              currentRevolutions > lastCrankRevolutionsForAutoResumeRef.current &&
+              isPausedRef.current &&
+              isMountedRef.current &&
+              !isManualPause &&
+              !isWithinManualGuard
+            ) {
               runOnJS(setIsPaused)(false);
               runOnJS(setShowAutoPauseOverlay)(false);
             }
@@ -1043,14 +1177,20 @@ export default function WorkoutScreen() {
             }
             
             // Update last RPM in database (every 30 seconds)
+            // Pass observed BLE identity so the server can guard against cross-talk
+            // (matches update_machine_heartbeat — see migration 20260509070000).
             if (session?.machine_id && authSession?.user && measurement.rpm > 0) {
               const now = Date.now();
               if (!lastRPMUpdateRef.current || now - lastRPMUpdateRef.current > 30000) {
                 try {
+                  const observedName = bleService.getConnectedDeviceName();
+                  const observedSerial = bleService.getConnectedSerialNumber();
                   await supabase.rpc('update_machine_rpm', {
                     p_machine_id: session.machine_id,
                     p_user_id: authSession.user.id,
                     p_rpm: measurement.rpm,
+                    ...(observedName !== null && { p_observed_name: observedName }),
+                    ...(observedSerial !== null && { p_observed_serial: observedSerial }),
                   });
                   lastRPMUpdateRef.current = now;
                 } catch (error) {
@@ -1220,7 +1360,7 @@ export default function WorkoutScreen() {
           clearTimeout(autoPauseTimerRef.current);
         }
       };
-    }, [session?.machine_id, session?.machine?.sensor_id, sensorId, authSession?.user, reconnectTrigger]);
+    }, [session?.machine_id, (session?.machine as any)?.ble_device_name, (session?.machine as any)?.sensor_id, sensorId, authSession?.user, reconnectTrigger]);
 
   // Bug 1: 60-second connecting timeout — if BLE never connects, show "Cancel Workout"
   useEffect(() => {
@@ -1460,9 +1600,13 @@ export default function WorkoutScreen() {
 
     const updateHeartbeat = async () => {
       try {
+        const observedName = bleService.getConnectedDeviceName();
+        const observedSerial = bleService.getConnectedSerialNumber();
         await supabase.rpc('update_machine_heartbeat', {
           p_machine_id: session.machine_id,
           p_user_id: authSession.user.id,
+          ...(observedName !== null && { p_observed_name: observedName }),
+          ...(observedSerial !== null && { p_observed_serial: observedSerial }),
         });
       } catch (error) {
         log.error('[Workout] Heartbeat update error:', error);
@@ -1580,7 +1724,7 @@ export default function WorkoutScreen() {
   // Connecting State: Subtle pulse animation while waiting for BLE connection
   useEffect(() => {
     const hasMachine = !!(machineId || session?.machine_id);
-    const hasSensor = !!(sensorId || session?.machine?.sensor_id);
+    const hasSensor = !!(sensorId || (session?.machine as any)?.ble_device_name || (session?.machine as any)?.sensor_id);
 
     if (bleConnected || !hasMachine || !hasSensor) {
       // Stop connecting animation when connected or nothing to connect to
@@ -1607,7 +1751,7 @@ export default function WorkoutScreen() {
       -1,
       false
     );
-  }, [bleConnected, machineId, sensorId, session?.machine_id, session?.machine?.sensor_id]);
+  }, [bleConnected, machineId, sensorId, session?.machine_id, (session?.machine as any)?.ble_device_name, (session?.machine as any)?.sensor_id]);
 
   // Performance Fix: Optimized smoothing for faster response
   // Layer 1: Lerp smoothing (balanced response, prevents jitter)
@@ -2454,6 +2598,8 @@ export default function WorkoutScreen() {
     setPauseReason('manual');
     setPausedTime(new Date());
     setIsPaused(true);
+    // Step 2: record timestamp so auto-resume is suppressed for AUTO_RESUME_GUARD_MS
+    manualPausedAtRef.current = Date.now();
     pausedOverlayOpacity.value = withSpring(1, { damping: 15, stiffness: 100, mass: 1 });
     setShowAutoPauseOverlay(false);
   };
@@ -2465,17 +2611,25 @@ export default function WorkoutScreen() {
     setIsResumingFromPause(true);
 
     try {
-      const activeSensorId = sensorId || session?.machine?.sensor_id;
+      const resumeMachineIdentity: MachineIdentity = {
+        id: session?.machine_id ?? machineId ?? '',
+        ble_device_name: (session?.machine as any)?.ble_device_name ?? null,
+        ble_serial_number: (session?.machine as any)?.ble_serial_number ?? null,
+        ble_pairing_verified: (session?.machine as any)?.ble_pairing_verified ?? false,
+        sensor_id: sensorId ?? (session?.machine as any)?.sensor_id ?? null,
+        ble_protocol: (bleProtocol ?? (session?.machine as any)?.ble_protocol ?? null) as MachineIdentity['ble_protocol'],
+      };
+      const hasResumeIdentity = !!(resumeMachineIdentity.ble_device_name ?? resumeMachineIdentity.sensor_id);
       let reconnectOk = true;
 
       // For machine sessions we require an active BLE link before resume.
-      if (session?.machine_id && activeSensorId && (!bleConnected || !bleService.getConnected())) {
+      if (session?.machine_id && hasResumeIdentity && (!bleConnected || !bleService.getConnected())) {
         setBleStatus(t('reconnecting'));
 
         reconnectOk = await bleService.reconnect();
         if (!reconnectOk) {
           try {
-            reconnectOk = await bleService.connectToDevice(activeSensorId);
+            reconnectOk = await bleService.connectToMachine(resumeMachineIdentity);
           } catch {
             reconnectOk = false;
           }
@@ -2510,6 +2664,8 @@ export default function WorkoutScreen() {
       setPausedTime(null);
       setPauseReason('manual');
       setIsPaused(false);
+      // Step 2: clear manual pause guard on explicit user resume
+      manualPausedAtRef.current = null;
       pausedOverlayOpacity.value = withSpring(0, { damping: 15, stiffness: 100, mass: 1 });
       lastRPMTimeRef.current = Date.now();
       setBleStatus('');
@@ -3175,14 +3331,32 @@ export default function WorkoutScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Activity proof pending badge */}
+          {/* Activity proof pending badge — tappable for machine-specific help */}
           {awaitingActivityProof && !isPaused && bleConnected && (
-            <StatusBadge
-              icon="shield-checkmark-outline"
-              label={t('provingActivity')}
-              color="#FDE68A"
-              pulse
-            />
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => showModal({
+                title: t(`connectStart.${
+                  machineType === 'bike' ? 'bike' :
+                  machineType === 'treadmill' ? 'treadmill' :
+                  machineType === 'elliptical' ? 'elliptical' :
+                  machineType === 'stepper' ? 'stepper' : 'generic'
+                }.title`),
+                body: t(`connectStart.${
+                  machineType === 'bike' ? 'bike' :
+                  machineType === 'treadmill' ? 'treadmill' :
+                  machineType === 'elliptical' ? 'elliptical' :
+                  machineType === 'stepper' ? 'stepper' : 'generic'
+                }.body`),
+              })}
+            >
+              <StatusBadge
+                icon="shield-checkmark-outline"
+                label={t('provingActivity')}
+                color="#FDE68A"
+                pulse
+              />
+            </TouchableOpacity>
           )}
         </View>
 
@@ -3247,7 +3421,7 @@ export default function WorkoutScreen() {
         <View style={styles.circleWrapper}>
           {/* Connecting state: pulsing circle with machine-specific instructions.
               Shows icon + "Start pedaling to connect..." + machine name. */}
-          {!bleConnected && (machineId || session?.machine_id) && (sensorId || session?.machine?.sensor_id) && (
+          {!bleConnected && (machineId || session?.machine_id) && (sensorId || (session?.machine as any)?.ble_device_name || (session?.machine as any)?.sensor_id) && (
             <Animated.View
               style={[
                 styles.connectingCircle,
@@ -3371,6 +3545,52 @@ export default function WorkoutScreen() {
             />
           )}
 
+          {/* Activity proof overlay: BLE connected but machine not started yet.
+              MUST be last child so it renders on top of LiquidGauge, CircularProgressRing,
+              and DROPS label (React Native stacks later siblings on top).
+              Appears 600ms after connect (lets explosion animation play first)
+              and fades out the moment first RPM > 0 is detected. */}
+          {awaitingActivityProof && bleConnected && !isPaused && (
+            <Animated.View
+              entering={FadeIn.delay(600).duration(400)}
+              exiting={FadeOut.duration(300)}
+              style={[
+                styles.connectingCircle,
+                { borderColor: branding.primary + '50', backgroundColor: 'rgba(6,8,20,0.96)' },
+              ]}
+              pointerEvents="none"
+            >
+              <Ionicons
+                name={
+                  machineType === 'bike' ? 'bicycle-outline' :
+                  machineType === 'treadmill' ? 'walk-outline' :
+                  machineType === 'elliptical' ? 'fitness-outline' :
+                  machineType === 'stepper' ? 'trending-up-outline' :
+                  'fitness-outline'
+                }
+                size={36}
+                color={branding.primary}
+                style={{ marginBottom: 12, opacity: 0.95 }}
+              />
+              <Text style={[styles.connectingText, { color: branding.primary }]}>
+                {t(`connectStart.${
+                  machineType === 'bike' ? 'bike' :
+                  machineType === 'treadmill' ? 'treadmill' :
+                  machineType === 'elliptical' ? 'elliptical' :
+                  machineType === 'stepper' ? 'stepper' : 'generic'
+                }.title`)}
+              </Text>
+              <Text style={styles.connectingSubtext}>
+                {t(`connectStart.${
+                  machineType === 'bike' ? 'bike' :
+                  machineType === 'treadmill' ? 'treadmill' :
+                  machineType === 'elliptical' ? 'elliptical' :
+                  machineType === 'stepper' ? 'stepper' : 'generic'
+                }.body`)}
+              </Text>
+            </Animated.View>
+          )}
+
         </View>
       </View>
 
@@ -3380,7 +3600,7 @@ export default function WorkoutScreen() {
         duration={duration}
         bleConnected={bleConnected}
         signalStatus={signalStatus}
-        hasSensor={!!(session?.machine?.sensor_id || sensorId)}
+        hasSensor={!!(sensorId || (session?.machine as any)?.ble_device_name || (session?.machine as any)?.sensor_id)}
         animatedRPMText={animatedRPMText}
         animatedCaloriesText={animatedCaloriesText}
         animatedPaceText={animatedPaceText}
@@ -3535,7 +3755,7 @@ export default function WorkoutScreen() {
       )}
 
       {/* Auto-Pause Warning Overlay (when RPM = 0 for 10+ seconds) */}
-      {showAutoPauseOverlay && !isPaused && (session?.machine?.sensor_id || sensorId) && (
+      {showAutoPauseOverlay && !isPaused && (sensorId || (session?.machine as any)?.ble_device_name || (session?.machine as any)?.sensor_id) && (
         <Animated.View style={[styles.autoPauseOverlay, pausedOverlayStyle]} pointerEvents="none">
           <Ionicons name="warning-outline" size={48} color={theme.colors.warning || '#FFA500'} />
           <Text style={styles.autoPauseTitle}>{t('sensorNotSending')}</Text>
@@ -3550,7 +3770,7 @@ export default function WorkoutScreen() {
       {/* BLE initial-connect escape hatch — appears after 60s timeout.
           Positioned as a subtle link below the gauge area so it doesn't
           steal focus but is always reachable. */}
-      {!showNoActivityCancelOverlay && !isPaused && !bleConnected && session?.machine_id && (session?.machine?.sensor_id || sensorId) && showConnectingCancel && (
+      {!showNoActivityCancelOverlay && !isPaused && !bleConnected && session?.machine_id && (sensorId || (session?.machine as any)?.ble_device_name || (session?.machine as any)?.sensor_id) && showConnectingCancel && (
         <TouchableOpacity
           style={styles.connectingCancelLink}
           onPress={() => handleFinishWorkout()}
@@ -3577,6 +3797,7 @@ export default function WorkoutScreen() {
         onFinishPressOut={handleFinishPressOut}
         finishButtonStyle={finishButtonStyle}
         finishWorkoutLabel={t('finishWorkout')}
+        primaryColor={branding.primary}
       />
 
       {isFinishing && (
@@ -3584,6 +3805,29 @@ export default function WorkoutScreen() {
           <ActivityIndicator size="large" color={brandingHook.primary} />
           <Text style={styles.finishingOverlayText}>{t('savingWorkout')}</Text>
         </View>
+      )}
+
+      {/* Step 1: machine off / sensor not in range — don't enter reconnect loop */}
+      {showMachineNotInRangeOverlay && (
+        <MachineNotInRangeOverlay
+          primaryColor={branding.primary}
+          machineType={paramMachineType ?? session?.machine?.type ?? null}
+          onEndAndRescan={() => {
+            setShowMachineNotInRangeOverlay(false);
+            void handleFinishWorkout();
+          }}
+        />
+      )}
+
+      {/* Step 3: mid-session peripheral mismatch safety brake */}
+      {showPeripheralMismatchModal && (
+        <PeripheralMismatchModal
+          primaryColor={branding.primary}
+          onAcknowledge={() => {
+            setShowPeripheralMismatchModal(false);
+            void handleFinishWorkout();
+          }}
+        />
       )}
     </SafeAreaView>
   );

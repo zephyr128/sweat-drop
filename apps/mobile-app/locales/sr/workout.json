@@ -41,15 +41,15 @@
   "connectingSubtitle": "Samo trenutak — povezaćemo se čim sprava počne da se kreće.",
   "connectStart": {
     "bike": {
-      "title": "Počni da pedališ",
-      "body": "Sedi na bicikl i počni da pedališ — senzor se budi tek kada krene kretanje."
+      "title": "Počni da okrećeš pedale",
+      "body": "Sedi na bicikl i počni da okrećeš pedale — senzor se budi tek kada krene kretanje."
     },
     "treadmill": {
       "title": "Uključi traku i počni da hodaš",
       "body": "Pritisni Start na konzoli i stani na traku. Povezaćemo se čim traka krene."
     },
     "elliptical": {
-      "title": "Stani na eliptiku i počni",
+      "title": "Stani na eliptik i počni",
       "body": "Stani na pedale i počni da koračaš ujednačeno — senzor se budi pri pokretu."
     },
     "stepper": {
@@ -193,5 +193,16 @@
     "syncingDrops": "Sinhronizujemo tvoje drops — samo trenutak...",
     "syncFailed": "Nismo uspeli da sinhronizujemo drops — proveri konekciju. Trening je sačuvan i drops će biti dodeljeni čim se povežeš.",
     "retrySync": "Pokušaj ponovo"
-  }
+  },
+  "machineNotInRangeTitle": "Mašina nije u dometu",
+  "machineNotInRangeBody": "Proverite da li je mašina upaljena, pa ponovo skenirajte QR kod.",
+  "machineNotInRangePowerHint": "Upalite mašinu korišćenjem prekidača za napajanje, a zatim se vratite na ekran za skeniranje.",
+  "machineNotInRangeAction": "Završi i skeniraj ponovo",
+  "peripheralMismatchTitle": "Povezan na pogrešnu mašinu",
+  "peripheralMismatchBody": "Tvoj telefon se povezao sa drugom mašinom umesto sa onom koju si skenirao. Trening je završen radi bezbednosti. Drops su dodeljeni za potvrđenu aktivnost.",
+  "peripheralMismatchAction": "U redu",
+  "pauseSuppressBelt": "Pauza je aktivna. Zaustavi traku da bi se trening potpuno zaustavio.",
+  "bleAmbiguousIdentityTitle": "Više mašina sa istim imenom",
+  "bleAmbiguousIdentityBody": "Dva uređaja emituju ime '{{name}}'. Ne možemo bezbedno da se povežemo — kontaktiraj osoblje teretane.",
+  "bleIdentityVerifyingTitle": "Proveravam identitet mašine..."
 }

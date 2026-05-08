@@ -192,5 +192,16 @@
     "syncingDrops": "Syncing your drops — just a moment...",
     "syncFailed": "Couldn't sync your drops — check your connection. Your workout is saved and drops will be awarded once you're back online.",
     "retrySync": "Retry Now"
-  }
+  },
+  "machineNotInRangeTitle": "Machine not in range",
+  "machineNotInRangeBody": "Make sure the machine is powered on, then scan the QR code again.",
+  "machineNotInRangePowerHint": "Turn the machine on using its power switch, then return to the scan screen.",
+  "machineNotInRangeAction": "End and rescan",
+  "peripheralMismatchTitle": "Connected to wrong machine",
+  "peripheralMismatchBody": "We detected your phone connected to a different machine than the one you scanned. Your workout has been ended for safety. Drops are awarded for your verified activity.",
+  "peripheralMismatchAction": "OK",
+  "pauseSuppressBelt": "Pause active. Stop the belt to fully stop the workout.",
+  "bleAmbiguousIdentityTitle": "Multiple machines with same name",
+  "bleAmbiguousIdentityBody": "Two devices broadcasting '{{name}}' were detected. Cannot safely connect — please contact gym staff.",
+  "bleIdentityVerifyingTitle": "Verifying machine identity..."
 }
