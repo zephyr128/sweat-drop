@@ -47,6 +47,9 @@ interface Machine {
   sensor_paired_at?: string | null;
   ble_protocol?: string | null;
   protocol_verified?: boolean;
+  ble_device_name?: string | null;
+  ble_serial_number?: string | null;
+  ble_pairing_verified?: boolean;
   created_at: string;
   updated_at: string;
   gyms?: {
@@ -80,12 +83,14 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
   const [isPairing, setIsPairing] = useState(false);
   const [bleRegistrationModal, setBleRegistrationModal] = useState<string | null>(null);
   const [bleStatus, setBleStatus] = useState<{
-    step: 'idle' | 'scanning' | 'connecting' | 'detecting' | 'testing' | 'done' | 'error';
+    step: 'idle' | 'scanning' | 'connecting' | 'reading_serial' | 'detecting' | 'testing' | 'done' | 'error';
     deviceName?: string;
     protocol?: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | 'unknown';
     dataReceived?: boolean;
     error?: string;
     scanAll?: boolean;
+    capturedSerial?: string | null;
+    capturedBleName?: string | null;
   }>({ step: 'idle' });
   const [gyms, setGyms] = useState<Array<{ id: string; name: string; city: string | null; country: string | null }>>([]);
   const [selectedGymId, setSelectedGymId] = useState<string>(gymId || '');
@@ -299,11 +304,26 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
   // BLE Protocol UUIDs
   const BLE_SERVICES = {
-    FTMS: 0x1826,       // Fitness Machine Service
-    CSC: 0x1816,        // Cycling Speed and Cadence (Magene)
-    RSC: 0x1814,        // Running Speed and Cadence
-    HEART_RATE: 0x180D,  // Heart Rate
+    FTMS: 0x1826,
+    CSC: 0x1816,
+    RSC: 0x1814,
+    HEART_RATE: 0x180D,
   };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function readDISSerialNumber(server: any): Promise<string | null> {
+    try {
+      const disService = await server.getPrimaryService('device_information');
+      const serialChar = await disService.getCharacteristic('serial_number_string');
+      const valueDataView = await serialChar.readValue();
+      const decoder = new TextDecoder('utf-8');
+      const serial = decoder.decode(valueDataView).trim();
+      return serial.length > 0 ? serial : null;
+    } catch (err) {
+      console.warn('[Pairing] DIS Serial Number not available:', err);
+      return null;
+    }
+  }
 
   const handleBLERegistration = async (machineId: string, scanAll = false) => {
     if (!('bluetooth' in navigator)) {
@@ -347,16 +367,21 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
       const device = await (navigator as any).bluetooth.requestDevice(requestOptions);
 
-      // CRITICAL: Save device.id (Web Bluetooth opaque ID, base64) as sensor_id for the DB.
-      // Mobile app detects base64 strings and enters scan-by-name mode instead of direct connect.
-      // device.name is the human-readable name (e.g., "YESOUL282920") — used for UI display only.
+      // sensor_id: legacy Web Bluetooth opaque ID (base64 hash) — kept for backward compat
+      // ble_device_name: BLE Local Name from advertising — cross-device stable, primary identity
       const bleDeviceId = device.id || `BLE-${Date.now()}`;
+      const bleDeviceNameCapture: string | null = device.name || null;
       const deviceName = device.name || device.id || 'Unknown Device';
       setBleStatus({ step: 'connecting', deviceName });
 
       // Connect to GATT server
       const server = await device.gatt.connect();
-      setBleStatus({ step: 'detecting', deviceName });
+
+      // Read DIS Serial Number (Device Information Service 0x180A, characteristic 0x2A25)
+      setBleStatus({ step: 'reading_serial', deviceName });
+      const bleSerialNumber = await readDISSerialNumber(server);
+
+      setBleStatus({ step: 'detecting', deviceName, capturedBleName: bleDeviceNameCapture, capturedSerial: bleSerialNumber });
 
       // Protocol detection — try FTMS first, then CSC (Magene), then others
       let detectedProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | 'unknown' = scanAll ? 'unknown' : 'magene';
@@ -457,14 +482,17 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
         deviceName,
         protocol: detectedProtocol,
         dataReceived,
+        capturedBleName: bleDeviceNameCapture,
+        capturedSerial: bleSerialNumber,
       });
 
-      // Save to database — use bleDeviceId (base64 opaque ID) so mobile can scan-match
       const result = await registerBLEDevice(
         machineId,
         bleDeviceId,
         detectedProtocol,
-        dataReceived
+        dataReceived,
+        bleDeviceNameCapture,
+        bleSerialNumber,
       );
 
       if (result.success) {
@@ -477,6 +505,9 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                   sensor_paired_at: new Date().toISOString(),
                   ble_protocol: detectedProtocol === 'unknown' ? null : detectedProtocol,
                   protocol_verified: dataReceived,
+                  ble_device_name: bleDeviceNameCapture,
+                  ble_serial_number: bleSerialNumber,
+                  ble_pairing_verified: bleSerialNumber !== null,
                 }
               : m
           )
@@ -531,6 +562,15 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
             <BarChart3 className="w-4 h-4" />
             Machine Hub
           </Link>
+          {isSuperAdmin && (
+            <Link
+              href="/dashboard/super/machines/legacy-backfill"
+              className="px-5 py-3 bg-[#1A1A1A] border border-[#2A2A2A] text-[#808080] hover:text-white hover:border-yellow-500/50 rounded-lg font-medium transition-colors inline-flex items-center gap-2 text-sm"
+            >
+              <Bluetooth className="w-4 h-4" />
+              BLE Backfill
+            </Link>
+          )}
         </div>
       </div>
 
@@ -661,22 +701,32 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                             </button>
                           )}
                         </div>
-                        {isSuperAdmin && machine.sensor_id && (
-                          <div className="mt-2 text-xs text-[#808080] flex items-center gap-2">
-                            <span>BLE: <span className="text-[#00E5FF]" title={machine.sensor_id}>
-                              {machine.sensor_id.length > 16 ? `${machine.sensor_id.slice(0, 12)}…` : machine.sensor_id}
-                            </span></span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                              machine.ble_protocol
-                                ? machine.protocol_verified 
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                                  : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                                : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                            }`}>
-                              {machine.ble_protocol 
-                                ? `${machine.ble_protocol.toUpperCase()}${machine.protocol_verified ? ' ✓' : ' ?'}`
-                                : 'PROPRIETARY'}
-                            </span>
+                        {isSuperAdmin && (machine.ble_device_name || machine.sensor_id) && (
+                          <div className="mt-2 space-y-1">
+                            {machine.ble_device_name ? (
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="text-[#808080]">BLE:</span>
+                                <span className="text-[#00E5FF] font-mono font-medium">{machine.ble_device_name}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                                  machine.ble_pairing_verified
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                }`}>
+                                  {machine.ble_pairing_verified ? 'Verified ✓' : 'Pending'}
+                                </span>
+                                {machine.ble_protocol && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    {machine.ble_protocol.toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                            ) : machine.sensor_id ? (
+                              <div className="flex items-center gap-2 text-xs text-[#808080]">
+                                <span title="Legacy Web Bluetooth ID — superseded by BLE Device Name">
+                                  Legacy: <span className="font-mono">{machine.sensor_id.length > 16 ? `${machine.sensor_id.slice(0, 12)}…` : machine.sensor_id}</span>
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </td>
@@ -761,11 +811,18 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                                     onClick={() => handleBLERegistration(machine.id)}
                                     disabled={isPairing && pairingMachineId === machine.id}
                                     className="p-2 text-[#808080] hover:text-[#00E5FF] transition-colors disabled:opacity-50"
-                                    title={machine.sensor_id ? `${machine.ble_protocol?.toUpperCase() || 'BLE'} ${machine.protocol_verified ? '✓' : '?'} — Click to re-pair` : 'Register BLE device'}
+                                    title={
+                                      machine.ble_device_name
+                                        ? `${machine.ble_device_name} — ${machine.ble_pairing_verified ? 'Identity Verified ✓' : 'Pending verification'} — Click to re-pair`
+                                        : machine.sensor_id
+                                          ? 'Legacy BLE paired — re-pair to capture BLE Device Name'
+                                          : 'Pair BLE device'
+                                    }
                                   >
                                     <Bluetooth
                                       className={`w-4 h-4 ${
-                                        machine.protocol_verified ? 'text-emerald-400' :
+                                        machine.ble_pairing_verified ? 'text-emerald-400' :
+                                        machine.ble_device_name ? 'text-yellow-400' :
                                         machine.sensor_id ? 'text-[#00E5FF]' : ''
                                       }`}
                                     />
@@ -1151,24 +1208,46 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                 {/* Step 2: Connecting */}
                 <div className={`flex items-center gap-3 p-3 rounded-lg ${
                   bleStatus.step === 'connecting' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
-                  ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
+                  ['reading_serial', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
                 }`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                     bleStatus.step === 'connecting' ? 'bg-[#00E5FF] text-black animate-pulse' :
-                    ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
+                    ['reading_serial', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
                   }`}>
-                    {['detecting', 'testing', 'done'].includes(bleStatus.step) ? '✓' : '2'}
+                    {['reading_serial', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? '✓' : '2'}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-white">Connect via GATT</p>
                     <p className="text-xs text-[#808080]">
                       {bleStatus.step === 'connecting' ? 'Establishing connection...' :
-                       ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'Connected' : 'Connect to device'}
+                       ['reading_serial', 'detecting', 'testing', 'done'].includes(bleStatus.step) ? 'Connected' : 'Connect to device'}
                     </p>
                   </div>
                 </div>
 
-                {/* Step 3: Protocol Detection */}
+                {/* Step 3: Read DIS Serial Number */}
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  bleStatus.step === 'reading_serial' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
+                  ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
+                }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    bleStatus.step === 'reading_serial' ? 'bg-[#00E5FF] text-black animate-pulse' :
+                    ['detecting', 'testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
+                  }`}>
+                    {['detecting', 'testing', 'done'].includes(bleStatus.step) ? '✓' : '3'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Read DIS Serial Number</p>
+                    <p className="text-xs text-[#808080]">
+                      {bleStatus.step === 'reading_serial' ? 'Reading Device Information Service...' :
+                       bleStatus.step === 'done' || ['detecting', 'testing'].includes(bleStatus.step) ?
+                         (bleStatus.capturedSerial ? `Serial: ${bleStatus.capturedSerial}` : 'Not available (non-FTMS or older firmware)') :
+                       'Read hardware serial from DIS (0x180A)'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 4: Protocol Detection */}
                 <div className={`flex items-center gap-3 p-3 rounded-lg ${
                   bleStatus.step === 'detecting' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
                   ['testing', 'done'].includes(bleStatus.step) ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
@@ -1177,7 +1256,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                     bleStatus.step === 'detecting' ? 'bg-[#00E5FF] text-black animate-pulse' :
                     ['testing', 'done'].includes(bleStatus.step) ? 'bg-emerald-500 text-white' : 'bg-[#2A2A2A] text-[#808080]'
                   }`}>
-                    {['testing', 'done'].includes(bleStatus.step) ? '✓' : '3'}
+                    {['testing', 'done'].includes(bleStatus.step) ? '✓' : '4'}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-white">Detect Protocol</p>
@@ -1189,7 +1268,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                   </div>
                 </div>
 
-                {/* Step 4: Data Stream Test */}
+                {/* Step 5: Data Stream Test */}
                 <div className={`flex items-center gap-3 p-3 rounded-lg ${
                   bleStatus.step === 'testing' ? 'bg-[#1A1A1A] border border-[#00E5FF]/30' :
                   bleStatus.step === 'done' ? 'bg-[#1A1A1A]/50' : 'bg-[#1A1A1A]/30'
@@ -1198,7 +1277,7 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
                     bleStatus.step === 'testing' ? 'bg-[#00E5FF] text-black animate-pulse' :
                     bleStatus.step === 'done' ? (bleStatus.dataReceived ? 'bg-emerald-500 text-white' : 'bg-yellow-500 text-black') : 'bg-[#2A2A2A] text-[#808080]'
                   }`}>
-                    {bleStatus.step === 'done' ? (bleStatus.dataReceived ? '✓' : '!') : '4'}
+                    {bleStatus.step === 'done' ? (bleStatus.dataReceived ? '✓' : '!') : '5'}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-white">Verify Data Stream</p>
@@ -1224,17 +1303,33 @@ export function MachinesManager({ gymId, initialMachines, initialReports = new M
 
               {/* Success state */}
               {bleStatus.step === 'done' && (
-                <div className={`${bleStatus.dataReceived ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-yellow-500/10 border-yellow-500/30'} border rounded-lg p-4`}>
-                  <p className={`text-sm font-medium ${bleStatus.dataReceived ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                    {bleStatus.dataReceived ? '✓ Device registered & verified' : '⚠ Device registered (unverified)'}
+                <div className={`${bleStatus.capturedSerial ? 'bg-emerald-500/10 border-emerald-500/30' : bleStatus.capturedBleName ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-[#1A1A1A] border-[#2A2A2A]'} border rounded-lg p-4 space-y-2`}>
+                  <p className={`text-sm font-medium ${bleStatus.capturedSerial ? 'text-emerald-400' : bleStatus.capturedBleName ? 'text-yellow-400' : 'text-[#808080]'}`}>
+                    {bleStatus.capturedSerial
+                      ? '✓ BLE Identity verified (name + serial captured)'
+                      : bleStatus.capturedBleName
+                        ? '⚠ BLE Device Name captured — serial pending (will auto-verify on first workout)'
+                        : '⚠ Device registered (BLE name not available)'}
                   </p>
-                  <p className="text-xs text-[#808080] mt-1">
-                    {bleStatus.deviceName} — {bleStatus.protocol === 'unknown' ? 'Proprietary Protocol' : bleStatus.protocol?.toUpperCase()}
+                  {bleStatus.capturedBleName && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-[#808080]">BLE Device Name:</span>
+                      <code className="text-xs text-[#00E5FF] font-mono font-semibold">{bleStatus.capturedBleName}</code>
+                    </div>
+                  )}
+                  {bleStatus.capturedSerial && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-[#808080]">Serial:</span>
+                      <code className="text-xs text-zinc-300 font-mono">{bleStatus.capturedSerial}</code>
+                    </div>
+                  )}
+                  <p className="text-xs text-[#808080]">
+                    Protocol: {bleStatus.protocol === 'unknown' ? 'Proprietary' : bleStatus.protocol?.toUpperCase() ?? '—'}
                     {!bleStatus.dataReceived && ' — Start pedaling/walking to verify data stream'}
                   </p>
                   {bleStatus.protocol === 'unknown' && (
-                    <p className="text-xs text-amber-400 mt-2">
-                      ⚠ This device uses a proprietary BLE protocol. Workout tracking requires a custom parser in the mobile app.
+                    <p className="text-xs text-amber-400">
+                      ⚠ Proprietary BLE protocol. Workout tracking requires a custom parser in the mobile app.
                     </p>
                   )}
                 </div>

@@ -237,9 +237,11 @@ export async function pairSensorToMachine(machineId: string, sensorId: string) {
 
 export async function registerBLEDevice(
   machineId: string,
-  bleDeviceName: string,
+  sensorId: string,
   bleProtocol: 'ftms' | 'fitshow' | 'magene' | 'ksfit' | 'unknown' | null,
-  protocolVerified: boolean
+  protocolVerified: boolean,
+  bleDeviceName: string | null = null,
+  bleSerialNumber: string | null = null,
 ) {
   try {
     const profile = await getCurrentProfile();
@@ -253,20 +255,22 @@ export async function registerBLEDevice(
     }
 
     // DB CHECK constraint only allows: 'ftms', 'fitshow', 'magene', 'ksfit'
-    // For unknown protocols (proprietary devices), save as NULL
     const dbProtocol = bleProtocol === 'unknown' ? null : bleProtocol;
 
     const { data, error } = await supabaseAdmin
       .from('machines')
       // @ts-expect-error - Supabase type inference issue
       .update({
-        sensor_id: bleDeviceName,
+        sensor_id: sensorId,
         sensor_paired_at: new Date().toISOString(),
         ble_protocol: dbProtocol,
         protocol_verified: protocolVerified,
+        ble_device_name: bleDeviceName,
+        ble_serial_number: bleSerialNumber,
+        ble_pairing_verified: bleSerialNumber !== null,
       } as any)
       .eq('id', machineId)
-      .select('gym_id, name, type, ble_protocol, protocol_verified')
+      .select('gym_id, name, type, ble_protocol, protocol_verified, ble_device_name, ble_serial_number, ble_pairing_verified')
       .single();
 
     if (error) throw error;
@@ -278,6 +282,58 @@ export async function registerBLEDevice(
     }
 
     return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function setBleDeviceNameManual(
+  machineId: string,
+  bleDeviceName: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile || profile.role !== 'superadmin') {
+      return { success: false, error: 'Only superadmins can manually set BLE device names' };
+    }
+
+    const trimmed = bleDeviceName.trim();
+    if (!trimmed) {
+      return { success: false, error: 'BLE device name cannot be empty' };
+    }
+
+    const supabaseAdmin = getAdminClient();
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('machines')
+      // @ts-expect-error - Supabase type inference issue
+      .update({
+        ble_device_name: trimmed,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', machineId)
+      .select('gym_id')
+      .single();
+
+    if (error) {
+      // Uniqueness trigger surfaces as a PostgreSQL exception
+      if (error.message?.includes('already used by another machine')) {
+        return { success: false, error: `BLE device name "${trimmed}" is already assigned to another machine in this gym.` };
+      }
+      throw error;
+    }
+
+    if (data) {
+      const machineData = data as { gym_id: string };
+      revalidatePath(`/dashboard/gym/${machineData.gym_id}/machines`);
+      revalidatePath(`/dashboard/super/machines`);
+      revalidatePath('/dashboard/super/machines/legacy-backfill');
+    }
+
+    return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

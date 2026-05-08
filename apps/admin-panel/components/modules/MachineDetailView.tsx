@@ -29,6 +29,10 @@ export interface MachineForDetail {
   maintenance_notes?: string;
   sensor_id?: string | null;
   sensor_paired_at?: string | null;
+  ble_device_name?: string | null;
+  ble_serial_number?: string | null;
+  ble_pairing_verified?: boolean;
+  ble_protocol?: string | null;
   created_at: string;
   updated_at: string;
   gyms?: {
@@ -255,23 +259,70 @@ export function MachineDetailView({ machine, userRole, gymName }: MachineDetailV
                     )}
                   </div>
                 </div>
-                {machine.sensor_id && (
-                  <div>
-                    <p className="text-[10px] text-zinc-600 uppercase tracking-wider">
-                      BLE Sensor
-                    </p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <Radio className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30">
-                        Paired
-                      </span>
-                      <code
-                        className="text-[10px] text-zinc-500 font-mono truncate"
-                        title={machine.sensor_id}
-                      >
-                        {machine.sensor_id}
-                      </code>
-                    </div>
+                {/* BLE Identity section */}
+                {(machine.ble_device_name || machine.sensor_id) && (
+                  <div className="space-y-2 pt-1 border-t border-[#1A1A1A]">
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-wider">BLE Identity</p>
+
+                    {/* Primary: BLE Device Name */}
+                    {machine.ble_device_name ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Radio className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
+                          <code className="text-sm text-[#00E5FF] font-mono font-semibold">{machine.ble_device_name}</code>
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                            machine.ble_pairing_verified
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                              : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                          }`}>
+                            {machine.ble_pairing_verified ? 'Identity verified' : 'Pending verification'}
+                          </span>
+                        </div>
+                        {!machine.ble_pairing_verified && (
+                          <p className="text-[10px] text-zinc-600 pl-5">Will auto-cache serial on first workout</p>
+                        )}
+                        {/* Serial — superadmin only */}
+                        {isSuperAdmin && machine.ble_serial_number && (
+                          <div className="pl-5">
+                            <p className="text-[10px] text-zinc-600 mb-0.5">Serial</p>
+                            <code className="text-[10px] text-zinc-400 font-mono">{machine.ble_serial_number}</code>
+                          </div>
+                        )}
+                        {/* Protocol badge */}
+                        {machine.ble_protocol && (
+                          <div className="pl-5">
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              {machine.ble_protocol.toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-yellow-500 pl-5">
+                        BLE Device Name not yet captured — re-pair or will auto-cache on first workout
+                      </p>
+                    )}
+
+                    {/* Legacy sensor_id — greyed out, superadmin only */}
+                    {isSuperAdmin && machine.sensor_id && (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <p className="text-[10px] text-zinc-600">Legacy ID:</p>
+                        <code
+                          className="text-[10px] text-zinc-600 font-mono truncate"
+                          title={`Legacy Web Bluetooth device.id — superseded by BLE Device Name. Value: ${machine.sensor_id}`}
+                        >
+                          {machine.sensor_id.length > 20 ? `${machine.sensor_id.slice(0, 16)}…` : machine.sensor_id}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* No BLE pairing at all */}
+                {!machine.ble_device_name && !machine.sensor_id && isSuperAdmin && (
+                  <div className="pt-1 border-t border-[#1A1A1A]">
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">BLE Identity</p>
+                    <p className="text-[10px] text-zinc-600">Not paired — use the Bluetooth button in the machines list to pair</p>
                   </div>
                 )}
               </div>
