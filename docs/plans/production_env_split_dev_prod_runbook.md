@@ -68,6 +68,29 @@
 - Verify behavior with dev tokens and dev DB only.
 - Deploy same commit hash to prod after QA gate.
 
+#### 5a) Push token environment isolation (mandatory)
+- Each Supabase project MUST set the `APP_ENV` function secret:
+  - prod project: leave default (or set `APP_ENV=production` explicitly)
+  - dev project:  `APP_ENV=development`
+  - preview project (if any): `APP_ENV=preview`
+- The `send-push` edge function reads this value, looks up
+  `profiles.expo_push_token_env` for every input token, and drops any token
+  whose stored env != `APP_ENV`. Mismatches are counted in
+  `skipped_env_mismatch` (response body + structured logs) and never reach
+  Expo.
+- The mobile app stamps the env that minted each token onto
+  `profiles.expo_push_token_env` (via `lib/notifications.ts`,
+  `Constants.expoConfig?.extra?.appEnv`), so cross-env DB clones cannot
+  cause cross-env push delivery.
+- Defense-in-depth: every outbound push now carries `data.app_env`. If a
+  token slips through the server filter (e.g. a stale row missing env tag),
+  the mobile receiver suppresses the deep link instead of routing into a
+  screen whose ID doesn't exist in the local DB.
+- Migration: `backend/supabase/migrations/20260508140000_push_token_env_isolation.sql`
+  adds the columns + index and backfills existing tokens to
+  `expo_push_token_env = 'production'`. The mobile client auto-corrects
+  the tag on next foreground sync if the install is actually dev/preview.
+
 ### 6) Secret Hygiene
 - Do not store live secrets in repo.
 - Rotate keys if leaked.
@@ -82,6 +105,10 @@
 - [ ] Dev writes are invisible in prod DB and vice versa.
 - [ ] Edge function invocation in dev cannot mutate prod data.
 - [ ] Push credentials tested in both environments.
+- [ ] `APP_ENV` function secret is set in dev Supabase project (`development`).
+- [ ] `send-push` logs include `app_env` and `skipped_env_mismatch` after deploy.
+- [ ] Smoke test: dev cron run with at least one prod-tagged token in dev DB
+      produces `skipped_env_mismatch >= 1` and zero pushes delivered.
 
 ## Rollback Plan
 

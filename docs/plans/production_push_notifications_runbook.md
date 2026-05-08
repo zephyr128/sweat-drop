@@ -15,6 +15,14 @@
 ### Environment Split
 - Dev tokens remain in dev tables/environment.
 - Prod tokens are collected only from production binaries.
+- Each push token is tagged with the env that minted it
+  (`profiles.expo_push_token_env`, written by the mobile client). The
+  `send-push` edge function reads the project's `APP_ENV` secret and drops
+  any token whose stored env != `APP_ENV` (counted as
+  `skipped_env_mismatch` in the response/logs). Outbound payloads also
+  stamp `data.app_env` so the mobile receiver can suppress cross-env deep
+  links defensively. See `production_env_split_dev_prod_runbook.md` §5a
+  and migration `20260508140000_push_token_env_isolation.sql`.
 
 ## 2) Token Lifecycle Verification
 

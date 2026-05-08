@@ -2,7 +2,65 @@
 
 This file tracks database schema changes and their impact on frontend applications.
 
-**Last Updated:** 2026-05-07 (`cleanup_abandoned_sessions` — orphan session sweep)
+**Last Updated:** 2026-05-08 (push token environment isolation)
+
+---
+
+## [2026-05-08] - `profiles.expo_push_token_env` — push token environment isolation
+
+**Migration File:**
+- `backend/supabase/migrations/20260508140000_push_token_env_isolation.sql`
+
+**Agent:** supabase-dba
+
+**Plan / Trigger:** Production incident — dev `send-happy-hour-reminders` cron delivered a Vortex Happy Hour push to a phone running the **prod** build, surfacing `/gym-detail?gymId=<dev-uuid>` → "gym not found". Root cause: `profiles.expo_push_token` had no env tag, so any scheduler in any environment could send to any token row.
+
+**Root Cause:**
+1. `eas.json` development + production profiles both use the same `EXPO_PUBLIC_EAS_PROJECT_ID`, so dev and prod share an Expo push namespace.
+2. `profiles.expo_push_token` stored a single opaque token string with no env metadata.
+3. Dev DB seeded from prod inherited prod-issued tokens. Dev cron `send-happy-hour-reminders` read those rows and called Expo, which routed the push to whichever install owned the token (prod).
+4. Prod app received a payload whose `gym_id` was authored against the dev DB → "gym not found".
+
+**Changes:**
+- `public.profiles` gains:
+  - `expo_push_token_env       TEXT` with `CHECK (env IS NULL OR env IN ('production', 'preview', 'development'))`
+  - `expo_push_token_bundle    TEXT` (diagnostic; senders do not branch on it)
+  - `expo_push_token_updated_at TIMESTAMPTZ`
+- Partial index `idx_profiles_push_token_env ON (expo_push_token_env) WHERE expo_push_token IS NOT NULL` — supports the per-send `IN (...)` lookup performed by `send-push`.
+- One-shot backfill: `UPDATE profiles SET expo_push_token_env = 'production' WHERE expo_push_token IS NOT NULL AND expo_push_token_env IS NULL`. Mobile clients running a dev/preview build re-write the tag on next foreground sync (savePushToken now treats env mismatch as a write trigger).
+
+**Impact:**
+- **Mobile App (REQUIRED CHANGE — shipped in same release):**
+  - `apps/mobile-app/app.config.js` exposes `appEnv` and `bundleId` via `Constants.expoConfig.extra`.
+  - `apps/mobile-app/lib/notifications.ts`:
+    - `savePushToken()` writes the three new columns and re-writes the row when the env tag has changed (not just the token string), so backfilled-as-`production` rows on dev/preview builds self-correct.
+    - `clearPushToken()` clears all four columns.
+    - `getDeepLinkFromNotification()` refuses to navigate when `data.app_env` differs from the install's `APP_ENV` — defense-in-depth against any token that slips past the server filter.
+- **Backend (REQUIRED CHANGE — shipped in same release):**
+  - `backend/supabase/functions/send-push/index.ts` reads `APP_ENV` Supabase function secret (default `'production'`), looks up `expo_push_token_env` for each input token, and drops env mismatches (counted as `skipped_env_mismatch` in the response body and structured logs). Stamps `data.app_env = APP_ENV` on every outbound Expo message and inbox row.
+  - `backend/supabase/functions/_shared/expo-push.ts` — `compactSendPushMetrics` now surfaces `app_env` and `skipped_env_mismatch`.
+- **Other schedulers** (happy-hour, streak, re-engagement, drops-expiry, finalize-arena, leaderboard-prizes, notify-arena-participants, send-prize-ready-push, process-campaigns) need NO changes — `send-push` is the single gate.
+- **Operational:** Dev Supabase project MUST set the function secret `APP_ENV=development` (preview project: `'preview'`). Prod project can leave the default. See `docs/plans/production_env_split_dev_prod_runbook.md` §5a.
+- **Admin Panel:** No change.
+
+**Breaking Changes:**
+- None for prod users (backfill = `'production'` matches the existing routing for prod-issued tokens).
+- Dev DB tokens that were originally minted by prod are now correctly tagged `'production'` and will be skipped by dev cron once dev's `APP_ENV='development'` secret is set. Mobile clients running the actual dev build re-stamp their token to `'development'` on next foreground sync, restoring dev push delivery for them.
+
+**Safety:**
+- `APP_ENV` defaults to `'production'` in `send-push` — a project that forgets to configure the secret is treated as prod, never the reverse. Dev project explicitly opts in.
+- Env lookup failure (DB error) is logged and falls open — a transient hiccup must not silently swallow legitimate prod sends. Sustained failures are visible in `event: send-push:env_lookup_error` logs.
+- Mobile `APP_ENV` resolution falls back to `'production'` for the same reason. A misconfigured EAS profile cannot mistag a real prod build as dev.
+
+**Rollback:**
+```sql
+ALTER TABLE public.profiles
+  DROP COLUMN IF EXISTS expo_push_token_env,
+  DROP COLUMN IF EXISTS expo_push_token_bundle,
+  DROP COLUMN IF EXISTS expo_push_token_updated_at;
+DROP INDEX IF EXISTS public.idx_profiles_push_token_env;
+```
+After rollback the next `send-push` deploy must also revert the env-filter block (it will fail open on the missing column lookup, so behavior degrades gracefully even pre-revert).
 
 ---
 
