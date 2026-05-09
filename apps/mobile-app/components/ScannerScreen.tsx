@@ -572,21 +572,32 @@ export function ScannerScreen() {
 
         if (!ciError) {
           const ciResult = ciData as Record<string, unknown>;
-          const ciStatus = ciResult?.success ? 'success' : String(ciResult?.error || 'error');
-          if (ciStatus === 'success') {
+          const ciSuccess = ciResult?.success === true;
+
+          if (ciSuccess) {
             void supabase.rpc('evaluate_referral_qualification', { p_referral_id: null });
+
+            // Success → show /checkin-result with +N drops animation, then
+            // forward to /workout via the encoded pendingWorkout payload.
+            await autoCheckinThenStartWorkout(machine, isFirstGym, ciResult, 'success');
+            return;
           }
 
-          // Encode the pending workout so checkin-result can forward to it
-          // after the success animation. The workout itself is started here
-          // so checkin-result only needs to navigate (no RPC needed there).
-          await autoCheckinThenStartWorkout(machine, isFirstGym, ciResult, ciStatus);
-          return;
+          // Non-success (already_checked_in / too_far / cap_reached / …): the
+          // user scanned a MACHINE QR — they want to work out, not see a
+          // check-in receipt. The /checkin-result screen is reserved for the
+          // explicit check-in QR path. Silently proceed to the workout.
+          log.debug(
+            '[Scanner] Auto-checkin not awarded (status=' +
+              String(ciResult?.error || 'unknown') +
+              '), proceeding to workout',
+          );
+        } else {
+          log.warn('[Scanner] Auto-checkin RPC failed, proceeding to workout anyway:', ciError);
         }
-        log.warn('[Scanner] Auto-checkin failed, proceeding to workout anyway:', ciError);
       }
 
-      // Already checked in (or checkin failed) — proceed normally
+      // Already checked in / auto-checkin not awarded / RPC failed — proceed normally
       proceedWithWorkout(machine, isFirstGym);
     } catch (error: any) {
       log.error('[Scanner] Error processing QR code:', error);

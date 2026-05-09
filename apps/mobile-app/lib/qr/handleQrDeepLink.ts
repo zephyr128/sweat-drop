@@ -445,19 +445,29 @@ async function handleMachineFlow(
 
       if (!ciError) {
         const ciResult = ciData as Record<string, unknown>;
-        const ciStatus = ciResult?.success
-          ? 'success'
-          : String(ciResult?.error || 'error');
-        if (ciStatus === 'success') {
+        const ciSuccess = ciResult?.success === true;
+
+        if (ciSuccess) {
           void supabase.rpc('evaluate_referral_qualification', { p_referral_id: null });
+          await startSessionAndRoute(machine, isFirstGym, options, ciResult, 'success');
+          return;
         }
-        await startSessionAndRoute(machine, isFirstGym, options, ciResult, ciStatus);
-        return;
+
+        // Non-success (already_checked_in / too_far / cap_reached / …): the
+        // user scanned a MACHINE QR — they want to work out, not see a
+        // check-in receipt. The /checkin-result screen is reserved for the
+        // explicit check-in QR path. Silently proceed to the workout.
+        log.debug(
+          '[handleMachineFlow] Auto-checkin not awarded (status=' +
+            String(ciResult?.error || 'unknown') +
+            '), proceeding to workout',
+        );
+      } else {
+        log.warn('[handleMachineFlow] Auto-checkin RPC failed, proceeding anyway:', ciError);
       }
-      log.warn('[handleMachineFlow] Auto-checkin failed, proceeding anyway:', ciError);
     }
 
-    // Already checked in (or checkin failed) — go straight to workout
+    // Already checked in / auto-checkin not awarded / RPC failed — go straight to workout
     await startSessionAndRoute(machine, isFirstGym, options, null, null);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
