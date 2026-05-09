@@ -3576,7 +3576,7 @@ export default function WorkoutScreen() {
               exiting={FadeOut.duration(300)}
               style={[
                 styles.connectingCircle,
-                { borderColor: branding.primary + '50', backgroundColor: 'rgba(6,8,20,0.96)' },
+                { borderColor: branding.primary + '50', backgroundColor: 'rgba(6,8,20,0.96)', zIndex: 20 },
               ]}
               pointerEvents="none"
             >
