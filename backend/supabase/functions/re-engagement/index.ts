@@ -40,6 +40,7 @@ const corsHeaders = {
 interface GymRow {
   id: string;
   name: string;
+  owner_id: string | null;
   logo_url: string | null;
 }
 
@@ -67,14 +68,45 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── Load all active gyms (shared across both windows) ─────────────
-    const { data: gyms, error: gymsErr } = await supabase
+    // Schema note: gym logo lives in `owner_branding` keyed on owner_id
+    // (legacy `gyms.logo_url` column was dropped — see
+    // 20240101000034_unify_branding_and_cleanup). Hydrate logos via a second
+    // query so each gym row carries both name + logo_url.
+    const { data: gymsRaw, error: gymsErr } = await supabase
       .from('gyms')
-      .select('id, name, logo_url')
+      .select('id, name, owner_id')
       .eq('is_active', true);
 
     if (gymsErr) throw gymsErr;
 
-    const activeGyms = (gyms ?? []) as GymRow[];
+    const ownerIds = [...new Set(
+      (gymsRaw ?? [])
+        .map((g: any) => g?.owner_id)
+        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+    )];
+    const logoByOwnerId = new Map<string, string | null>();
+    if (ownerIds.length > 0) {
+      const { data: brandingRows, error: brandingErr } = await supabase
+        .from('owner_branding')
+        .select('owner_id, logo_url')
+        .in('owner_id', ownerIds);
+      if (brandingErr) {
+        console.error(JSON.stringify({ event: 're-engagement:owner_branding_error', error: brandingErr.message }));
+      }
+      for (const b of brandingRows ?? []) {
+        if (!b?.owner_id) continue;
+        const url = typeof (b as any).logo_url === 'string' && (b as any).logo_url.length > 0
+          ? (b as any).logo_url as string
+          : null;
+        logoByOwnerId.set(b.owner_id, url);
+      }
+    }
+    const activeGyms: GymRow[] = (gymsRaw ?? []).map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      owner_id: g.owner_id ?? null,
+      logo_url: g.owner_id ? (logoByOwnerId.get(g.owner_id) ?? null) : null,
+    }));
 
     // ── Date targets ──────────────────────────────────────────────────
     const sevenDaysAgo = new Date();
@@ -140,8 +172,16 @@ serve(async (req) => {
             .map((m: any) => m.profiles?.expo_push_token)
             .filter((t: unknown): t is string => typeof t === 'string' && t.length > 0);
 
-          const gymName = gym.name ?? 'your gym';
-          const gymLogoUrl = gym.logo_url ?? null;
+          const rawName = typeof gym.name === 'string' ? gym.name.trim() : '';
+          const gymName = rawName.length > 0 ? rawName : null;
+          const gymLogoUrl = gym.logo_url;
+          const title = gymName ? titleFn(gymName) : titleFn('').replace(/ — $/, '').trim();
+          const data: Record<string, unknown> = {
+            type: notifType,
+            gym_id: gym.id,
+            ...(gymName ? { gym_name: gymName } : {}),
+            ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
+          };
 
           const pushRes = await fetch(
             `${supabaseUrl}/functions/v1/send-push`,
@@ -155,14 +195,9 @@ serve(async (req) => {
                 client_ref: clientRef,
                 tokens,
                 user_ids: userIds,
-                title: titleFn(gymName),
+                title,
                 body,
-                data: {
-                  type: notifType,
-                  gym_id: gym.id,
-                  gym_name: gymName,
-                  gym_logo_url: gymLogoUrl,
-                },
+                data,
               }),
             }
           );
@@ -180,7 +215,7 @@ serve(async (req) => {
           console.log(JSON.stringify({
             event: `re-engagement:${windowKey}:gym`,
             gym_id: maskId(gym.id),
-            gym_name: gymName,
+            gym_name: gymName ?? null,
             users: inactive.length,
             tokens_submitted: tokens.length,
             delivered,

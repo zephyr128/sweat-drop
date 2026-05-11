@@ -45,6 +45,7 @@ function maskId(id: string): string {
 interface GymRow {
   id: string;
   name: string;
+  owner_id: string | null;
   logo_url: string | null;
 }
 
@@ -71,21 +72,52 @@ serve(async (req) => {
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Belgrade' });
 
     // ── 1. Load all active gyms ───────────────────────────────────────
-    const { data: gyms, error: gymsErr } = await supabase
+    // Schema note: gym logo lives in `owner_branding` keyed on owner_id, NOT
+    // on the `gyms` table (the legacy `gyms.logo_url` column was dropped by
+    // 20240101000034_unify_branding_and_cleanup). We hydrate logos in a
+    // second query so the per-gym push loop has both name + logo.
+    const { data: gymsRaw, error: gymsErr } = await supabase
       .from('gyms')
-      .select('id, name, logo_url')
+      .select('id, name, owner_id')
       .eq('is_active', true);
 
     if (gymsErr) throw gymsErr;
-    if (!gyms || gyms.length === 0) {
+    if (!gymsRaw || gymsRaw.length === 0) {
       console.log(JSON.stringify({ event: 'streak-reminder', skipped: 'no_active_gyms' }));
       return jsonResponse({ summary }, 200);
     }
 
+    const ownerIds = [...new Set(
+      gymsRaw.map((g: any) => g?.owner_id).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+    )];
+    const logoByOwnerId = new Map<string, string | null>();
+    if (ownerIds.length > 0) {
+      const { data: brandingRows, error: brandingErr } = await supabase
+        .from('owner_branding')
+        .select('owner_id, logo_url')
+        .in('owner_id', ownerIds);
+      if (brandingErr) {
+        console.error(JSON.stringify({ event: 'streak-reminder:owner_branding_error', error: brandingErr.message }));
+      }
+      for (const b of brandingRows ?? []) {
+        if (!b?.owner_id) continue;
+        const url = typeof (b as any).logo_url === 'string' && (b as any).logo_url.length > 0
+          ? (b as any).logo_url as string
+          : null;
+        logoByOwnerId.set(b.owner_id, url);
+      }
+    }
+    const gyms: GymRow[] = gymsRaw.map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      owner_id: g.owner_id ?? null,
+      logo_url: g.owner_id ? (logoByOwnerId.get(g.owner_id) ?? null) : null,
+    }));
+
     summary.gyms_scanned = gyms.length;
 
     // ── 2. Per-gym: find at-risk members and send gym-scoped push ─────
-    for (const gym of gyms as GymRow[]) {
+    for (const gym of gyms) {
       try {
         // Fetch all members of this gym; filter at-risk in JS.
         // profiles!inner ensures only members who have a profile row.
@@ -121,8 +153,16 @@ serve(async (req) => {
           .map((m: any) => m.profiles?.expo_push_token)
           .filter((t: unknown): t is string => typeof t === 'string' && t.length > 0);
 
-        const gymName = gym.name ?? 'your gym';
-        const gymLogoUrl = gym.logo_url ?? null;
+        const rawName = typeof gym.name === 'string' ? gym.name.trim() : '';
+        const gymName = rawName.length > 0 ? rawName : null;
+        const gymLogoUrl = gym.logo_url;
+        const title = gymName ? `🔥 Streak at risk! — ${gymName}` : '🔥 Streak at risk!';
+        const data: Record<string, unknown> = {
+          type: 'streak_reminder',
+          gym_id: gym.id,
+          ...(gymName ? { gym_name: gymName } : {}),
+          ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
+        };
 
         const pushRes = await fetch(
           `${supabaseUrl}/functions/v1/send-push`,
@@ -136,14 +176,9 @@ serve(async (req) => {
               client_ref: 'streak_reminder',
               tokens,
               user_ids: userIds,
-              title: `🔥 Streak at risk! — ${gymName}`,
+              title,
               body: 'Visit the gym today to keep your streak alive.',
-              data: {
-                type: 'streak_reminder',
-                gym_id: gym.id,
-                gym_name: gymName,
-                gym_logo_url: gymLogoUrl,
-              },
+              data,
             }),
           }
         );

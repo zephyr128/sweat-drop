@@ -123,18 +123,46 @@ serve(async (req) => {
       }
 
       // Pre-fetch gym names and logos for all non-null gym_ids.
+      // Schema: logo lives in owner_branding keyed by owner_id (legacy
+      // gyms.logo_url was dropped — see 20240101000034 migration).
       const gymIdList = [...byGym.keys()].filter((k) => k !== 'null');
-      const gymInfoById = new Map<string, { name: string; logo_url: string | null }>();
+      const gymInfoById = new Map<string, { name: string | null; logo_url: string | null }>();
       if (gymIdList.length > 0) {
         const { data: gymRows, error: gymErr } = await supabase
           .from('gyms')
-          .select('id, name, logo_url')
+          .select('id, name, owner_id')
           .in('id', gymIdList);
         if (gymErr) {
           console.error(JSON.stringify({ event: `drops-expiry-${windowKey}:gym_lookup_error`, error: gymErr.message }));
         } else {
+          const ownerIds = [...new Set(
+            (gymRows ?? [])
+              .map((g: any) => g?.owner_id)
+              .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+          )];
+          const logoByOwnerId = new Map<string, string | null>();
+          if (ownerIds.length > 0) {
+            const { data: brandingRows, error: brandingErr } = await supabase
+              .from('owner_branding')
+              .select('owner_id, logo_url')
+              .in('owner_id', ownerIds);
+            if (brandingErr) {
+              console.error(JSON.stringify({ event: `drops-expiry-${windowKey}:owner_branding_error`, error: brandingErr.message }));
+            }
+            for (const b of brandingRows ?? []) {
+              if (!b?.owner_id) continue;
+              const url = typeof (b as any).logo_url === 'string' && (b as any).logo_url.length > 0
+                ? (b as any).logo_url as string
+                : null;
+              logoByOwnerId.set(b.owner_id, url);
+            }
+          }
           for (const g of gymRows ?? []) {
-            if (g?.id) gymInfoById.set(g.id, { name: g.name ?? 'your gym', logo_url: (g as any).logo_url ?? null });
+            if (!g?.id) continue;
+            const rawName = typeof g.name === 'string' ? g.name.trim() : '';
+            const name = rawName.length > 0 ? rawName : null;
+            const logoUrl = g.owner_id ? (logoByOwnerId.get(g.owner_id) ?? null) : null;
+            gymInfoById.set(g.id, { name, logo_url: logoUrl });
           }
         }
       }
@@ -146,7 +174,7 @@ serve(async (req) => {
 
       for (const [gid, users] of byGym) {
         const gymInfo = gid !== 'null' ? gymInfoById.get(gid) : undefined;
-        const gymName = gymInfo?.name ?? 'your gym';
+        const gymName = gymInfo?.name ?? null;
         const gymLogoUrl = gymInfo?.logo_url ?? null;
         const gymId = gid !== 'null' ? gid : null;
 
@@ -158,6 +186,9 @@ serve(async (req) => {
         totalUsers += userIds.length;
 
         try {
+          // Push title carries a gym suffix only when we know the gym name —
+          // never inject "your gym" placeholder text into user-visible copy.
+          const finalTitle = gymName ? title(gymName) : title('').replace(/ — $/, '').trim();
           const pushRes = await fetch(
             `${supabaseUrl}/functions/v1/send-push`,
             {
@@ -170,13 +201,13 @@ serve(async (req) => {
                 client_ref: clientRef,
                 tokens,
                 user_ids: userIds,
-                title: title(gymName),
+                title: finalTitle,
                 body,
                 data: {
                   type: notifType,
                   ...(gymId ? { gym_id: gymId } : {}),
-                  gym_name: gymName,
-                  gym_logo_url: gymLogoUrl,
+                  ...(gymName ? { gym_name: gymName } : {}),
+                  ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
                 },
               }),
             }

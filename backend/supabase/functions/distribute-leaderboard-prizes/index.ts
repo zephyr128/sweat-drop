@@ -98,13 +98,44 @@ serve(async (req) => {
       );
     }
 
-    // Get all active gyms (logo_url used in push data for gym differentiation in inbox)
-    const { data: gyms, error: gymsError } = await supabase
+    // Get all active gyms. Logo lives in owner_branding keyed on owner_id
+    // (legacy gyms.logo_url was dropped — see 20240101000034 migration).
+    // Hydrate logo via a second query so each gym row carries name + logo_url.
+    const { data: gymsRaw, error: gymsError } = await supabase
       .from('gyms')
-      .select('id, name, logo_url')
+      .select('id, name, owner_id')
       .eq('is_active', true);
 
     if (gymsError) throw gymsError;
+
+    const ownerIds = [...new Set(
+      (gymsRaw ?? [])
+        .map((g: any) => g?.owner_id)
+        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+    )];
+    const logoByOwnerId = new Map<string, string | null>();
+    if (ownerIds.length > 0) {
+      const { data: brandingRows, error: brandingErr } = await supabase
+        .from('owner_branding')
+        .select('owner_id, logo_url')
+        .in('owner_id', ownerIds);
+      if (brandingErr) {
+        console.error(JSON.stringify({ event: 'distribute-leaderboard-prizes:owner_branding_error', error: brandingErr.message }));
+      }
+      for (const b of brandingRows ?? []) {
+        if (!b?.owner_id) continue;
+        const url = typeof (b as any).logo_url === 'string' && (b as any).logo_url.length > 0
+          ? (b as any).logo_url as string
+          : null;
+        logoByOwnerId.set(b.owner_id, url);
+      }
+    }
+    const gyms = (gymsRaw ?? []).map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      owner_id: g.owner_id ?? null,
+      logo_url: g.owner_id ? (logoByOwnerId.get(g.owner_id) ?? null) : null,
+    }));
 
     const details: Array<{
       gym_id: string;

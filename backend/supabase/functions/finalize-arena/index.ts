@@ -115,15 +115,42 @@ serve(async (req) => {
     const arenaGymIds = [...new Set(
       arenasToFinalize.map((a) => a.gym_id).filter((id): id is string => !!id)
     )];
+    // Schema: logo lives in owner_branding (legacy gyms.logo_url dropped in
+    // 20240101000034). Two-query pattern: gyms → owner_id, then owner_branding.
     const arenaGymInfoById = new Map<string, { name: string; logo_url: string | null }>();
     if (arenaGymIds.length > 0) {
       const { data: gymRows } = await supabase
         .from('gyms')
-        .select('id, name, logo_url')
+        .select('id, name, owner_id')
         .in('id', arenaGymIds);
+      const ownerIds = [...new Set(
+        (gymRows ?? [])
+          .map((g: any) => g?.owner_id)
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      )];
+      const logoByOwnerId = new Map<string, string | null>();
+      if (ownerIds.length > 0) {
+        const { data: brandingRows, error: brandingErr } = await supabase
+          .from('owner_branding')
+          .select('owner_id, logo_url')
+          .in('owner_id', ownerIds);
+        if (brandingErr) {
+          console.error(JSON.stringify({ event: 'finalize-arena:owner_branding_error', error: brandingErr.message }));
+        }
+        for (const b of brandingRows ?? []) {
+          if (!b?.owner_id) continue;
+          const url = typeof (b as any).logo_url === 'string' && (b as any).logo_url.length > 0
+            ? (b as any).logo_url as string
+            : null;
+          logoByOwnerId.set(b.owner_id, url);
+        }
+      }
       for (const g of gymRows ?? []) {
         if (g?.id) {
-          arenaGymInfoById.set(g.id, { name: g.name ?? 'the gym', logo_url: (g as any).logo_url ?? null });
+          arenaGymInfoById.set(g.id, {
+            name: g.name ?? 'the gym',
+            logo_url: g.owner_id ? (logoByOwnerId.get(g.owner_id) ?? null) : null,
+          });
         }
       }
     }

@@ -77,16 +77,31 @@ serve(async (req) => {
     }
 
     // Look up gym name + logo for push gym differentiation.
+    // Logo lives in owner_branding keyed by owner_id (legacy gyms.logo_url
+    // was dropped — see 20240101000034 migration). Two queries: gyms first
+    // for name + owner_id, then owner_branding for logo_url.
     let gymName = 'the gym';
     let gymLogoUrl: string | null = null;
     if (arena.gym_id) {
       const { data: gymRow } = await supabase
         .from('gyms')
-        .select('name, logo_url')
+        .select('name, owner_id')
         .eq('id', arena.gym_id)
         .maybeSingle();
       if (gymRow?.name) gymName = gymRow.name;
-      gymLogoUrl = (gymRow as any)?.logo_url ?? null;
+      const ownerId = typeof (gymRow as any)?.owner_id === 'string' ? (gymRow as any).owner_id as string : null;
+      if (ownerId) {
+        const { data: brandingRow, error: brandingErr } = await supabase
+          .from('owner_branding')
+          .select('logo_url')
+          .eq('owner_id', ownerId)
+          .maybeSingle();
+        if (brandingErr) {
+          console.error(JSON.stringify({ event: 'notify-arena-participants:owner_branding_error', error: brandingErr.message }));
+        } else if (brandingRow && typeof (brandingRow as any).logo_url === 'string' && (brandingRow as any).logo_url.length > 0) {
+          gymLogoUrl = (brandingRow as any).logo_url as string;
+        }
+      }
     }
 
     let notified = 0;

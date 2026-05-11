@@ -61,18 +61,87 @@ serve(async (req) => {
       );
     }
 
-    // Pre-fetch gym name + logo_url for all campaign gym_ids in one query.
+    // Pre-fetch gym name + logo_url for all campaign gym_ids.
+    //
+    // Schema note: branding columns were removed from `public.gyms` by the
+    // 20240101000034_unify_branding_and_cleanup migration. Logos now live in
+    // `public.owner_branding` keyed on `owner_id`. We therefore need TWO
+    // lookups: gyms → (id, name, owner_id), then owner_branding → logo_url
+    // joined in memory. Queries that still reference `gyms.logo_url` raise
+    // "column gyms.logo_url does not exist" (see prod logs 2026-05-11).
+    //
+    // We do NOT default the name to a placeholder ("your gym" etc.) — a missing
+    // or whitespace-only name means we cannot reliably differentiate the gym
+    // for the recipient and we must NOT pollute the inbox with misleading
+    // labels. Downstream code treats a null name as "omit the gym_name field
+    // from the payload" so the mobile inbox simply hides the gym chip instead
+    // of showing a fake name.
     const campaignGymIds = [...new Set(
       campaigns.map((c: any) => c.gym_id).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
     )];
-    const gymInfoById = new Map<string, { name: string; logo_url: string | null }>();
+    const gymInfoById = new Map<string, { name: string | null; logo_url: string | null }>();
     if (campaignGymIds.length > 0) {
-      const { data: gymRows } = await supabase
+      const { data: gymRows, error: gymPrefetchErr } = await supabase
         .from('gyms')
-        .select('id, name, logo_url')
+        .select('id, name, owner_id')
         .in('id', campaignGymIds);
+      if (gymPrefetchErr) {
+        console.error(JSON.stringify({
+          event: 'process-campaigns:gym_prefetch_error',
+          gym_ids: campaignGymIds,
+          error: gymPrefetchErr.message,
+        }));
+      }
+
+      // Resolve branding (logo) per owner via owner_branding.
+      const ownerIds = [...new Set(
+        (gymRows ?? [])
+          .map((g: any) => g?.owner_id)
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      )];
+      const logoByOwnerId = new Map<string, string | null>();
+      if (ownerIds.length > 0) {
+        const { data: brandingRows, error: brandingErr } = await supabase
+          .from('owner_branding')
+          .select('owner_id, logo_url')
+          .in('owner_id', ownerIds);
+        if (brandingErr) {
+          console.error(JSON.stringify({
+            event: 'process-campaigns:owner_branding_prefetch_error',
+            owner_ids: ownerIds,
+            error: brandingErr.message,
+          }));
+        }
+        for (const b of brandingRows ?? []) {
+          if (!b?.owner_id) continue;
+          const logoUrl = typeof (b as any).logo_url === 'string' && (b as any).logo_url.length > 0
+            ? (b as any).logo_url as string
+            : null;
+          logoByOwnerId.set(b.owner_id, logoUrl);
+        }
+      }
+
       for (const g of gymRows ?? []) {
-        if (g?.id) gymInfoById.set(g.id, { name: g.name ?? 'your gym', logo_url: (g as any).logo_url ?? null });
+        if (!g?.id) continue;
+        const rawName = typeof g.name === 'string' ? g.name.trim() : '';
+        const name = rawName.length > 0 ? rawName : null;
+        const logoUrl = g.owner_id ? (logoByOwnerId.get(g.owner_id) ?? null) : null;
+        if (!name) {
+          console.warn(JSON.stringify({
+            event: 'process-campaigns:gym_name_empty_in_prefetch',
+            gym_id: g.id,
+          }));
+        }
+        gymInfoById.set(g.id, { name, logo_url: logoUrl });
+      }
+      // Surface gyms that were requested but not returned at all.
+      for (const gid of campaignGymIds) {
+        if (!gymInfoById.has(gid)) {
+          console.warn(JSON.stringify({
+            event: 'process-campaigns:gym_prefetch_missing_row',
+            gym_id: gid,
+          }));
+        }
       }
     }
 
@@ -121,13 +190,84 @@ serve(async (req) => {
         // Determine notification type for inbox
         const notifType = campaign.campaign_type === 'offer' ? 'comeback_offer' : 'campaign';
 
-        // Gym context for push differentiation
-        const gymInfo = campaign.gym_id ? gymInfoById.get(campaign.gym_id) : undefined;
-        const gymName = gymInfo?.name ?? 'your gym';
+        // Gym context for push differentiation.
+        // Primary path: pre-fetched map. Fallback path: single-row query for this
+        // campaign gym_id (defensive against a transient prefetch miss).
+        let gymInfo = campaign.gym_id ? gymInfoById.get(campaign.gym_id) : undefined;
+        let gymInfoSource: 'prefetch' | 'fallback_query' | 'missing' | 'no_gym_id' =
+          campaign.gym_id ? (gymInfo ? 'prefetch' : 'missing') : 'no_gym_id';
+        if (campaign.gym_id && !gymInfo) {
+          // Fallback: two-query lookup matching prefetch schema (logo lives in
+          // owner_branding, not gyms — see schema note above).
+          const { data: fallbackGym, error: fallbackGymErr } = await supabase
+            .from('gyms')
+            .select('name, owner_id')
+            .eq('id', campaign.gym_id)
+            .maybeSingle();
+          if (fallbackGymErr) {
+            console.error(JSON.stringify({
+              event: 'process-campaigns:gym_lookup_fallback_error',
+              campaign_id: campaign.id,
+              gym_id: campaign.gym_id,
+              error: fallbackGymErr.message,
+            }));
+          } else if (fallbackGym) {
+            const rawName = typeof fallbackGym.name === 'string' ? fallbackGym.name.trim() : '';
+            const ownerId = typeof (fallbackGym as any).owner_id === 'string'
+              ? (fallbackGym as any).owner_id as string
+              : null;
+            let logoUrl: string | null = null;
+            if (ownerId) {
+              const { data: fallbackBranding, error: fallbackBrandingErr } = await supabase
+                .from('owner_branding')
+                .select('logo_url')
+                .eq('owner_id', ownerId)
+                .maybeSingle();
+              if (fallbackBrandingErr) {
+                console.error(JSON.stringify({
+                  event: 'process-campaigns:owner_branding_fallback_error',
+                  campaign_id: campaign.id,
+                  owner_id: ownerId,
+                  error: fallbackBrandingErr.message,
+                }));
+              } else if (fallbackBranding && typeof (fallbackBranding as any).logo_url === 'string'
+                && (fallbackBranding as any).logo_url.length > 0) {
+                logoUrl = (fallbackBranding as any).logo_url as string;
+              }
+            }
+            gymInfo = {
+              name: rawName.length > 0 ? rawName : null,
+              logo_url: logoUrl,
+            };
+            gymInfoSource = 'fallback_query';
+          } else {
+            console.warn(JSON.stringify({
+              event: 'process-campaigns:gym_lookup_missing',
+              campaign_id: campaign.id,
+              gym_id: campaign.gym_id,
+            }));
+          }
+        }
+
+        const gymName = gymInfo?.name && gymInfo.name.trim().length > 0
+          ? gymInfo.name.trim()
+          : null;
         const gymLogoUrl = gymInfo?.logo_url ?? null;
-        const campaignTitle = campaign.gym_id
+        const campaignTitle = campaign.gym_id && gymName
           ? `${campaign.title} — ${gymName}`
           : campaign.title;
+
+        // Structured diagnostic — visible in Supabase Function logs. Lets us
+        // verify exactly which path resolved gym context for any given
+        // campaign without rerunning queries by hand.
+        console.log(JSON.stringify({
+          event: 'process-campaigns:gym_context_resolved',
+          campaign_id: campaign.id,
+          gym_id: campaign.gym_id,
+          source: gymInfoSource,
+          gym_name_present: !!gymName,
+          gym_logo_present: !!gymLogoUrl,
+        }));
 
         // Batch deliveries for send-push (max batch per call)
         const BATCH_SIZE = 80;
@@ -138,7 +278,7 @@ serve(async (req) => {
           type: notifType,
           campaign_id: campaign.id,
           ...(campaign.gym_id ? { gym_id: campaign.gym_id } : {}),
-          gym_name: gymName,
+          ...(gymName ? { gym_name: gymName } : {}),
           ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
           ...(deepLink ? { deep_link: deepLink } : {}),
         };

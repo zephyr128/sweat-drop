@@ -134,19 +134,37 @@ serve(async (req) => {
     });
   }
 
-  let gymName = 'your gym';
+  // Look up gym name + logo. Logo lives in owner_branding keyed on owner_id
+  // (legacy gyms.logo_url was dropped — see 20240101000034 migration).
+  let gymName: string | null = null;
   let gymLogoUrl: string | null = null;
   if (row.gym_id) {
     const { data: gym } = await supabase
       .from('gyms')
-      .select('name, logo_url')
+      .select('name, owner_id')
       .eq('id', row.gym_id)
       .maybeSingle();
     if (gym?.name) gymName = gym.name;
-    gymLogoUrl = (gym as any)?.logo_url ?? null;
+    const ownerId = typeof (gym as any)?.owner_id === 'string' ? (gym as any).owner_id as string : null;
+    if (ownerId) {
+      const { data: brandingRow, error: brandingErr } = await supabase
+        .from('owner_branding')
+        .select('logo_url')
+        .eq('owner_id', ownerId)
+        .maybeSingle();
+      if (brandingErr) {
+        console.error(JSON.stringify({ event: 'send-prize-ready-push:owner_branding_error', error: brandingErr.message }));
+      } else if (brandingRow && typeof (brandingRow as any).logo_url === 'string' && (brandingRow as any).logo_url.length > 0) {
+        gymLogoUrl = (brandingRow as any).logo_url as string;
+      }
+    }
   }
 
   const code = row.redemption_code ?? '—';
+  const title = gymName ? `🎁 Your prize is ready! — ${gymName}` : '🎁 Your prize is ready!';
+  const bodyText = gymName
+    ? `Your prize is ready at ${gymName}. Show code ${code} to collect it.`
+    : `Your prize is ready. Show code ${code} to collect it.`;
 
   const pushRes = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
     method: 'POST',
@@ -158,13 +176,13 @@ serve(async (req) => {
       client_ref: 'prize_ready',
       tokens: [token],
       user_ids: [row.user_id],
-      title: `🎁 Your prize is ready! — ${gymName}`,
-      body: `Your prize is ready at ${gymName}. Show code ${code} to collect it.`,
+      title,
+      body: bodyText,
       data: {
         type: 'prize_ready',
         redemption_id: row.id,
         gym_id: row.gym_id ?? '',
-        gym_name: gymName,
+        ...(gymName ? { gym_name: gymName } : {}),
         ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
       },
     }),
