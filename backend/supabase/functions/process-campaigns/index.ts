@@ -2,6 +2,13 @@
 // Description: Processes queued engagement campaigns by sending push notifications
 //              and persisting to in-app inbox via send-push.
 //
+// AGENT NOTE: [2026-05-11] - edge-function-agent (feature_multigym_notification_differentiation)
+//   Pre-fetches gym name + logo_url for all campaign gym_ids before the campaign loop.
+//   Push title suffixed with gym name: "[Campaign Title] — [Gym Name]".
+//   Push data now includes gym_id (already present via campaign.gym_id), gym_name,
+//   gym_logo_url so the in-app inbox can render gym logos and users can identify
+//   which gym sent the campaign.
+//
 // Called by:
 //   - Admin panel immediately after queueCampaign
 //   - pg_cron every 2 minutes as a fallback sweep
@@ -54,6 +61,21 @@ serve(async (req) => {
       );
     }
 
+    // Pre-fetch gym name + logo_url for all campaign gym_ids in one query.
+    const campaignGymIds = [...new Set(
+      campaigns.map((c: any) => c.gym_id).filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+    )];
+    const gymInfoById = new Map<string, { name: string; logo_url: string | null }>();
+    if (campaignGymIds.length > 0) {
+      const { data: gymRows } = await supabase
+        .from('gyms')
+        .select('id, name, logo_url')
+        .in('id', campaignGymIds);
+      for (const g of gymRows ?? []) {
+        if (g?.id) gymInfoById.set(g.id, { name: g.name ?? 'your gym', logo_url: (g as any).logo_url ?? null });
+      }
+    }
+
     let campaignsProcessed = 0;
     let totalSent = 0;
     let totalFailed = 0;
@@ -99,6 +121,14 @@ serve(async (req) => {
         // Determine notification type for inbox
         const notifType = campaign.campaign_type === 'offer' ? 'comeback_offer' : 'campaign';
 
+        // Gym context for push differentiation
+        const gymInfo = campaign.gym_id ? gymInfoById.get(campaign.gym_id) : undefined;
+        const gymName = gymInfo?.name ?? 'your gym';
+        const gymLogoUrl = gymInfo?.logo_url ?? null;
+        const campaignTitle = campaign.gym_id
+          ? `${campaign.title} — ${gymName}`
+          : campaign.title;
+
         // Batch deliveries for send-push (max batch per call)
         const BATCH_SIZE = 80;
         let sentCount = 0;
@@ -107,6 +137,9 @@ serve(async (req) => {
         const inboxData: Record<string, unknown> = {
           type: notifType,
           campaign_id: campaign.id,
+          ...(campaign.gym_id ? { gym_id: campaign.gym_id } : {}),
+          gym_name: gymName,
+          ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
           ...(deepLink ? { deep_link: deepLink } : {}),
         };
 
@@ -144,7 +177,7 @@ serve(async (req) => {
               .map((uid) => ({
                 user_id: uid,
                 type: notifType,
-                title: campaign.title,
+                title: campaignTitle,
                 body: campaign.body,
                 data: inboxData,
               }));
@@ -184,7 +217,7 @@ serve(async (req) => {
               client_ref: `campaign_${campaign.id.slice(0, 8)}`,
               tokens,
               user_ids: userIds,
-              title: campaign.title,
+              title: campaignTitle,
               body: campaign.body,
               data: inboxData,
             }),

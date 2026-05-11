@@ -2,6 +2,13 @@
 // Description: Finalizes ended arenas by calling finalize_arena() RPC and sending push notifications.
 // Called by cron job: Daily at 00:30 UTC
 //
+// AGENT NOTE: [2026-05-11] - edge-function-agent (feature_multigym_notification_differentiation)
+//   Added gym_id to sweat_arenas query; pre-fetches gym name + logo_url for each arena.
+//   Winner notifications: title now suffixed "🏆 Arena Prize Won! — [Gym Name]";
+//     gym_logo_url added to pushData alongside existing gym_id + gym_name.
+//   Participant (non-winner) notifications: gym_id, gym_name, gym_logo_url now included
+//     in data payload; title now "🏁 Arena Ended — [Gym Name]".
+//
 // AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 1.1)
 //   Winners loop: token check removed — send-push called with tokens:[] when no token, user_ids always present.
 //   Non-winner loop: token filter removed from DB query; gated on user count, not token count.
@@ -71,13 +78,13 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Find arenas to finalize
-    let arenasToFinalize: Array<{ id: string; name: string }> = [];
+    let arenasToFinalize: Array<{ id: string; name: string; gym_id: string | null }> = [];
 
     if (arena_id) {
       // Finalize specific arena
       const { data: arena, error: arenaError } = await supabase
         .from('sweat_arenas')
-        .select('id, name')
+        .select('id, name, gym_id')
         .eq('id', arena_id)
         .eq('is_finalized', false)
         .single();
@@ -93,7 +100,7 @@ serve(async (req) => {
       // Find all arenas that have ended and are not finalized
       const { data: arenas, error: arenasError } = await supabase
         .from('sweat_arenas')
-        .select('id, name')
+        .select('id, name, gym_id')
         .eq('is_finalized', false)
         .lt('end_date', new Date().toISOString().split('T')[0]); // end_date < CURRENT_DATE
 
@@ -102,6 +109,23 @@ serve(async (req) => {
       }
 
       arenasToFinalize = arenas || [];
+    }
+
+    // Pre-fetch gym names + logos for all arena gym_ids in one query.
+    const arenaGymIds = [...new Set(
+      arenasToFinalize.map((a) => a.gym_id).filter((id): id is string => !!id)
+    )];
+    const arenaGymInfoById = new Map<string, { name: string; logo_url: string | null }>();
+    if (arenaGymIds.length > 0) {
+      const { data: gymRows } = await supabase
+        .from('gyms')
+        .select('id, name, logo_url')
+        .in('id', arenaGymIds);
+      for (const g of gymRows ?? []) {
+        if (g?.id) {
+          arenaGymInfoById.set(g.id, { name: g.name ?? 'the gym', logo_url: (g as any).logo_url ?? null });
+        }
+      }
     }
 
     if (arenasToFinalize.length === 0) {
@@ -122,7 +146,7 @@ serve(async (req) => {
     const errors: string[] = [];
 
     // Process each arena
-    for (const arena of arenasToFinalize) {
+    for (const arena of arenasToFinalize as Array<{ id: string; name: string; gym_id: string | null }>) {
       try {
         // Call finalize_arena RPC
         const { data: result, error: rpcError } = await supabase.rpc(
@@ -180,7 +204,10 @@ serve(async (req) => {
               const code = redemption?.redemption_code ?? null;
               const redemptionStatus = redemption?.status ?? 'pending';
               const needsVerification = redemptionStatus === 'pending_verification';
-              const gymName = redemption?.gyms?.name ?? 'the gym';
+              // Prefer gym name from redemption embed; fall back to arena-level gym lookup.
+              const arenaGymInfo = arena.gym_id ? arenaGymInfoById.get(arena.gym_id) : undefined;
+              const gymName = redemption?.gyms?.name ?? arenaGymInfo?.name ?? 'the gym';
+              const gymLogoUrl = arenaGymInfo?.logo_url ?? null;
               const rank = typeof wr.rank === 'number' ? wr.rank : 0;
 
               const pushBody = !code
@@ -197,10 +224,10 @@ serve(async (req) => {
                 requires_verification: needsVerification ? 'true' : 'false',
                 rank: String(rank),
               };
-              if (redemption?.gym_id) {
-                pushData.gym_id = redemption.gym_id;
-              }
+              const effectiveGymId = redemption?.gym_id ?? arena.gym_id ?? null;
+              if (effectiveGymId) pushData.gym_id = effectiveGymId;
               pushData.gym_name = gymName;
+              if (gymLogoUrl) pushData.gym_logo_url = gymLogoUrl;
               if (redemption?.id) {
                 pushData.redemption_id = redemption.id;
               }
@@ -222,7 +249,7 @@ serve(async (req) => {
                       : 'arena_prize',
                     tokens: token ? [token] : [],
                     user_ids: [wr.user_id],
-                    title: '🏆 Arena Prize Won!',
+                    title: `🏆 Arena Prize Won! — ${gymName}`,
                     body: pushBody,
                     data: pushData,
                   }),
@@ -262,6 +289,10 @@ serve(async (req) => {
           .filter((t: string | null) => isExpoPushToken(t));
 
         if (nonWinnerUserIds.length > 0) {
+          const participantGymInfo = arena.gym_id ? arenaGymInfoById.get(arena.gym_id) : undefined;
+          const participantGymName = participantGymInfo?.name ?? 'the gym';
+          const participantGymLogoUrl = participantGymInfo?.logo_url ?? null;
+
           const pushResponse = await fetch(
             `${supabaseUrl}/functions/v1/send-push`,
             {
@@ -274,12 +305,15 @@ serve(async (req) => {
                 client_ref: 'finalize_arena_participants',
                 tokens: nonWinnerTokens,       // may be empty array — inbox still written
                 user_ids: nonWinnerUserIds,    // always present
-                title: '🏁 Arena Ended',
+                title: `🏁 Arena Ended — ${participantGymName}`,
                 body: `${arena.name} has ended. Check your final ranking!`,
                 data: {
                   type: 'arena_ended',
                   arena_id: arena.id,
                   arena_name: arena.name,
+                  ...(arena.gym_id ? { gym_id: arena.gym_id } : {}),
+                  gym_name: participantGymName,
+                  ...(participantGymLogoUrl ? { gym_logo_url: participantGymLogoUrl } : {}),
                 },
               }),
             }

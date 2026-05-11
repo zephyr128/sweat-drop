@@ -33,6 +33,11 @@
 //   - Missing redemption rows (e.g. DB migration not yet applied) fall back to
 //     the legacy push body gracefully — no crash.
 //
+// AGENT NOTE: [2026-05-11] - edge-function-agent (feature_multigym_notification_differentiation)
+//   Added logo_url to gyms query. Push data now includes gym_name + gym_logo_url alongside
+//   the existing gym_id. Title suffixed with gym name:
+//   "🏆 You Won a Leaderboard Prize! — [Gym Name]".
+//
 // AGENT NOTE: [2026-04-17] - edge-function-agent (verification gate Phase 2)
 // Reference: docs/plans/exec_verification_gate_fulfillment_v1.md — Phase 2a
 //   - Redemptions may be status pending_verification; push copy + data branch.
@@ -93,10 +98,10 @@ serve(async (req) => {
       );
     }
 
-    // Get all active gyms
+    // Get all active gyms (logo_url used in push data for gym differentiation in inbox)
     const { data: gyms, error: gymsError } = await supabase
       .from('gyms')
-      .select('id, name')
+      .select('id, name, logo_url')
       .eq('is_active', true);
 
     if (gymsError) throw gymsError;
@@ -202,15 +207,18 @@ serve(async (req) => {
               ? `You finished ${ordinal(user.rank)} at ${gym.name} this ${period}! 🏆 Verify your membership at reception first, then collect with code ${redemption!.code}.`
               : `You finished ${ordinal(user.rank)} at ${gym.name} this ${period}! Show code ${redemption!.code} at the desk to collect your prize. 🎁`;
 
-            // Push data: include redemption_id for deep-link navigation
+            // Push data: include redemption_id for deep-link navigation + gym context
+            const gymLogoUrl = (gym as any).logo_url ?? null;
             const pushData: Record<string, string> = {
               type: 'leaderboard_prize',
               gym_id: gym.id,
+              gym_name: gym.name,
               rank: String(user.rank),
               period,
               redemption_status: redemptionStatus,
               requires_verification: needsVerification ? 'true' : 'false',
             };
+            if (gymLogoUrl) pushData.gym_logo_url = gymLogoUrl;
             if (redemption?.id) {
               pushData.redemption_id = redemption.id;
             }
@@ -230,7 +238,7 @@ serve(async (req) => {
                   : 'leaderboard_prize',
                 tokens: [profile.expo_push_token],
                 user_ids: [user.user_id],
-                title: '🏆 You Won a Leaderboard Prize!',
+                title: `🏆 You Won a Leaderboard Prize! — ${gym.name}`,
                 body: pushBody,
                 data: pushData,
               }),

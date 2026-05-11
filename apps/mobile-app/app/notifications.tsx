@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useThrottledRouter } from '@/hooks/useThrottledRouter';
@@ -197,6 +198,10 @@ export default function NotificationsScreen() {
         typeof item.data?.gym_name === 'string' && item.data.gym_name.length > 0
           ? (item.data.gym_name as string)
           : null;
+      const dataGymLogoUrl =
+        typeof item.data?.gym_logo_url === 'string' && item.data.gym_logo_url.length > 0
+          ? (item.data.gym_logo_url as string)
+          : null;
 
       return (
         <TouchableOpacity
@@ -209,10 +214,23 @@ export default function NotificationsScreen() {
             <View style={[styles.unreadDot, { backgroundColor: branding.primary }]} />
           )}
 
-          {/* Icon */}
-          <View style={[styles.iconWrap, { backgroundColor: hexToRgba(meta.color, 0.12) }]}>
-            <Ionicons name={meta.icon} size={20} color={meta.color} />
-          </View>
+          {/* Icon / gym logo */}
+          {dataGymLogoUrl ? (
+            <Image
+              source={{ uri: dataGymLogoUrl }}
+              style={styles.gymLogo}
+              contentFit="cover"
+              transition={150}
+            />
+          ) : dataGymName ? (
+            <View style={[styles.iconWrap, { backgroundColor: hexToRgba(branding.primary, 0.10) }]}>
+              <Ionicons name="business-outline" size={20} color={branding.primary} />
+            </View>
+          ) : (
+            <View style={[styles.iconWrap, { backgroundColor: hexToRgba(meta.color, 0.12) }]}>
+              <Ionicons name={meta.icon} size={20} color={meta.color} />
+            </View>
+          )}
 
           {/* Content */}
           <View style={styles.cardContent}>
@@ -430,6 +448,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  gymLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    marginRight: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   cardContent: {
     flex: 1,

@@ -344,7 +344,7 @@ export function useMyStats(gymId: string | null | undefined) {
       const dateDropMap = new Map<string, { drops: number; active: boolean }>();
       for (const s of sessions) {
         if (!s.started_at) continue;
-        const key = new Date(s.started_at).toISOString().slice(0, 10);
+        const key = toBelgradeDayKey(s.started_at);
         const existing = dateDropMap.get(key) ?? { drops: 0, active: false };
         existing.drops += s.drops_earned ?? 0;
         existing.active = true;
@@ -352,7 +352,7 @@ export function useMyStats(gymId: string | null | undefined) {
       }
       for (const c of periodCheckinRows ?? []) {
         if (!c.checked_in_at) continue;
-        const key = new Date(c.checked_in_at).toISOString().slice(0, 10);
+        const key = toBelgradeDayKey(c.checked_in_at);
         const existing = dateDropMap.get(key) ?? { drops: 0, active: false };
         existing.active = true;
         dateDropMap.set(key, existing);
@@ -362,11 +362,11 @@ export function useMyStats(gymId: string | null | undefined) {
       let weekDays: WeekDay[] = [];
       let weekActive = 0;
       if (period === 'week') {
-        const weekStart = startOfWeek();
+        const weekStartKey = toBelgradeDayKey(startOfWeek().toISOString());
         weekDays = DAY_LABELS.map((label, i) => {
-          const d = new Date(weekStart);
-          d.setDate(d.getDate() + i);
-          const key = d.toISOString().slice(0, 10);
+          const slotDate = new Date(weekStartKey + 'T12:00:00Z');
+          slotDate.setUTCDate(slotDate.getUTCDate() + i);
+          const key = slotDate.toISOString().slice(0, 10);
           const data = dateDropMap.get(key);
           return { dayLabel: label, active: !!data?.active, drops: data?.drops ?? 0 };
         });
@@ -382,37 +382,43 @@ export function useMyStats(gymId: string | null | undefined) {
       const txRows = originRows ?? [];
 
       if (period === 'week') {
-        // 7 bars: Mon–Sun, each = one day's total earned drops
-        const todayStr = startOfToday().toISOString().slice(0, 10);
-        const weekStart = startOfWeek();
+        // 7 bars: Mon–Sun, each = one day's total earned drops (Belgrade TZ)
+        const todayStr = toBelgradeDayKey(new Date().toISOString());
+        const weekStartKey = toBelgradeDayKey(startOfWeek().toISOString());
         const dayDropMap = new Map<string, number>();
         for (const tx of txRows) {
           if (!tx.created_at) continue;
-          const key = new Date(tx.created_at).toISOString().slice(0, 10);
+          const key = toBelgradeDayKey(tx.created_at);
           dayDropMap.set(key, (dayDropMap.get(key) ?? 0) + (tx.amount ?? 0));
         }
         activityChart = DAY_LABELS.map((label, i) => {
-          const d = new Date(weekStart);
-          d.setDate(d.getDate() + i);
-          const key = d.toISOString().slice(0, 10);
+          // Use noon UTC to avoid DST shifts during pure calendar arithmetic
+          const slotDate = new Date(weekStartKey + 'T12:00:00Z');
+          slotDate.setUTCDate(slotDate.getUTCDate() + i);
+          const key = slotDate.toISOString().slice(0, 10);
           return { day: label, drops: dayDropMap.get(key) ?? 0, isToday: key === todayStr };
         });
         activityChartActive = activityChart.filter((b) => b.drops > 0).length;
 
       } else if (period === 'month') {
-        // 4–5 bars: W1–W5, each = total earned drops for that week of the month
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        // 4–5 bars: W1–W5, each = total earned drops for that week of the month (Belgrade TZ)
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
         const totalWeeks = Math.ceil(daysInMonth / 7);
         const weekBuckets = new Map<number, number>();
+        const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
         for (const tx of txRows) {
           if (!tx.created_at) continue;
-          const d = new Date(tx.created_at);
-          // Only include transactions from the current calendar month
-          if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) continue;
-          const weekNum = Math.ceil(d.getDate() / 7);
+          const belgKey = toBelgradeDayKey(tx.created_at);
+          if (!belgKey.startsWith(monthPrefix)) continue;
+          const dayOfMonth = parseInt(belgKey.slice(8, 10), 10);
+          const weekNum = Math.ceil(dayOfMonth / 7);
           weekBuckets.set(weekNum, (weekBuckets.get(weekNum) ?? 0) + (tx.amount ?? 0));
         }
-        const todayWeekNum = Math.ceil(now.getDate() / 7);
+        const todayBelg = toBelgradeDayKey(new Date().toISOString());
+        const todayDay = parseInt(todayBelg.slice(8, 10), 10);
+        const todayWeekNum = Math.ceil(todayDay / 7);
         activityChart = [];
         for (let w = 1; w <= totalWeeks; w++) {
           activityChart.push({ day: `W${w}`, drops: weekBuckets.get(w) ?? 0, isToday: w === todayWeekNum });
@@ -420,12 +426,11 @@ export function useMyStats(gymId: string | null | undefined) {
         activityChartActive = activityChart.filter((b) => b.drops > 0).length;
 
       } else if (period === 'all') {
-        // 6 bars: last 6 calendar months, each = total earned drops for that month
+        // 6 bars: last 6 calendar months, each = total earned drops for that month (Belgrade TZ)
         const monthDropMap = new Map<string, number>();
         for (const tx of txRows) {
           if (!tx.created_at) continue;
-          const d = new Date(tx.created_at);
-          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const key = toBelgradeDayKey(tx.created_at).slice(0, 7); // "YYYY-MM"
           monthDropMap.set(key, (monthDropMap.get(key) ?? 0) + (tx.amount ?? 0));
         }
         const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

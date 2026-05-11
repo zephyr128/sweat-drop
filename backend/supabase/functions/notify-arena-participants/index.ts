@@ -2,6 +2,11 @@
 // Description: Re-sends push notifications for a finalized arena.
 // Called by admin panel "Notify Winners" / "Notify All Participants" buttons.
 //
+// AGENT NOTE: [2026-05-11] - edge-function-agent (feature_multigym_notification_differentiation)
+//   Added gym_id to sweat_arenas query; looks up gym name + logo_url.
+//   Winner push title: "🏆 Arena Prize Won! — [Gym Name]"; gym_id, gym_name, gym_logo_url in data.
+//   Participant push title: "🏁 Arena Ended — [Gym Name]"; same gym fields in data.
+//
 // AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 2.2)
 //   Added user_ids to both winners and non-winner send-push calls for inbox parity.
 //   Token filter on winner profiles query removed — inbox written for all winners.
@@ -53,7 +58,7 @@ serve(async (req) => {
     // Verify arena exists and is finalized
     const { data: arena, error: arenaError } = await supabase
       .from('sweat_arenas')
-      .select('id, name, is_finalized')
+      .select('id, name, is_finalized, gym_id')
       .eq('id', arena_id)
       .single();
 
@@ -69,6 +74,19 @@ serve(async (req) => {
         JSON.stringify({ success: false, error: 'Arena is not yet finalized' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
+    }
+
+    // Look up gym name + logo for push gym differentiation.
+    let gymName = 'the gym';
+    let gymLogoUrl: string | null = null;
+    if (arena.gym_id) {
+      const { data: gymRow } = await supabase
+        .from('gyms')
+        .select('name, logo_url')
+        .eq('id', arena.gym_id)
+        .maybeSingle();
+      if (gymRow?.name) gymName = gymRow.name;
+      gymLogoUrl = (gymRow as any)?.logo_url ?? null;
     }
 
     let notified = 0;
@@ -106,12 +124,15 @@ serve(async (req) => {
             client_ref: 'notify_arena_winners',
             tokens: winnerTokens,
             user_ids: winnerUserIds,
-            title: '🏆 Arena Prize Won!',
+            title: `🏆 Arena Prize Won! — ${gymName}`,
             body: `Congratulations! You won a prize in ${arena.name}. Check your redemptions for your code.`,
             data: {
               type: 'arena_prize',
               arena_id: arena.id,
               arena_name: arena.name,
+              ...(arena.gym_id ? { gym_id: arena.gym_id } : {}),
+              gym_name: gymName,
+              ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
             },
           }),
         }
@@ -155,12 +176,15 @@ serve(async (req) => {
               client_ref: 'notify_arena_participants',
               tokens: nonWinnerTokens,
               user_ids: nonWinnerUserIds,
-              title: '🏁 Arena Ended',
+              title: `🏁 Arena Ended — ${gymName}`,
               body: `${arena.name} has ended. Check your final ranking!`,
               data: {
                 type: 'arena_ended',
                 arena_id: arena.id,
                 arena_name: arena.name,
+                ...(arena.gym_id ? { gym_id: arena.gym_id } : {}),
+                gym_name: gymName,
+                ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
               },
             }),
           }

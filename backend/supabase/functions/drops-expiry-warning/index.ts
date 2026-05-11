@@ -2,6 +2,15 @@
 // Description: Sends push notifications to members whose drops are about
 //              to expire (30 days and 7 days before expiry).
 //
+// AGENT NOTE: [2026-05-11] - edge-function-agent (feature_multigym_notification_differentiation)
+//   Added gym_id to drops_transactions select; groups by user_id + gym_id instead of
+//   user_id alone. Pre-fetches gym name + logo_url. Each notification now carries:
+//   title  → "💧 Drops expiring soon — [Gym Name]"  (30d)
+//            "⚠️ Drops expiring in 7 days — [Gym Name]"  (7d)
+//   data   → gym_id, gym_name, gym_logo_url
+//   Users with drops from multiple gyms receive one notification per gym so they know
+//   exactly which gym's drops are expiring.
+//
 // AGENT NOTE: [2026-04-20] - supabase-dba (push_notifications_systemic_fix_plan Phase 2.2)
 //   Added user_ids to both 30d and 7d send-push calls for inbox parity.
 //   userMap now aggregates all users (with or without token) so every user gets an inbox row.
@@ -33,7 +42,8 @@ const corsHeaders = {
 
 interface ExpiringDropsRow {
   user_id: string;
-  total_expiring: number;
+  gym_id: string | null;
+  amount: number;
   expo_push_token: string | null;
 }
 
@@ -50,166 +60,166 @@ serve(async (req) => {
 
     const results: Record<string, unknown> = {};
 
-    // --- 30-day warning (expires in 29–31 days) ---
-    const { data: expiring30d, error: err30 } = await supabase.rpc(
-      'get_expiring_drops_by_window',
-      { p_days_from: 29, p_days_to: 31 }
+    // Helper: process one expiry window. Groups by user+gym for gym-differentiated pushes.
+    async function processWindow(
+      windowKey: string,
+      daysFrom: number,
+      daysTo: number,
+      title: (gymName: string) => string,
+      body: string,
+      clientRef: string,
+      notifType: string,
+    ) {
+      const { data: rawRows, error: queryErr } = await supabase
+        .from('drops_transactions')
+        .select(`
+          user_id,
+          gym_id,
+          amount,
+          profiles!inner(expo_push_token)
+        `)
+        .not('expires_at', 'is', null)
+        .gt('expires_at', new Date(Date.now() + daysFrom * 86400000).toISOString())
+        .lt('expires_at', new Date(Date.now() + daysTo * 86400000).toISOString())
+        .gt('amount', 0)
+        .eq('transaction_type', 'session');
+
+      if (queryErr) throw queryErr;
+
+      if (!rawRows || rawRows.length === 0) {
+        return { users: 0, skipped: true };
+      }
+
+      // Aggregate by (user_id, gym_id) — a user may have drops from multiple gyms.
+      const gymUserMap = new Map<
+        string, // key: `${gym_id}|${user_id}`
+        { user_id: string; gym_id: string | null; total: number; token: string | null }
+      >();
+
+      for (const row of rawRows) {
+        const uid = row.user_id;
+        const gid = (row as any).gym_id ?? null;
+        const token = (row as any).profiles?.expo_push_token ?? null;
+        const key = `${gid ?? 'null'}|${uid}`;
+
+        const existing = gymUserMap.get(key);
+        if (existing) {
+          existing.total += (row as any).amount ?? 0;
+          if (!existing.token && token) existing.token = token;
+        } else {
+          gymUserMap.set(key, { user_id: uid, gym_id: gid, total: (row as any).amount ?? 0, token });
+        }
+      }
+
+      // Group entries by gym_id for batch send-push calls (one per gym).
+      const byGym = new Map<
+        string, // gym_id (or 'null' for rows without gym)
+        Array<{ user_id: string; token: string | null }>
+      >();
+      for (const entry of gymUserMap.values()) {
+        const gid = entry.gym_id ?? 'null';
+        if (!byGym.has(gid)) byGym.set(gid, []);
+        byGym.get(gid)!.push({ user_id: entry.user_id, token: entry.token });
+      }
+
+      // Pre-fetch gym names and logos for all non-null gym_ids.
+      const gymIdList = [...byGym.keys()].filter((k) => k !== 'null');
+      const gymInfoById = new Map<string, { name: string; logo_url: string | null }>();
+      if (gymIdList.length > 0) {
+        const { data: gymRows, error: gymErr } = await supabase
+          .from('gyms')
+          .select('id, name, logo_url')
+          .in('id', gymIdList);
+        if (gymErr) {
+          console.error(JSON.stringify({ event: `drops-expiry-${windowKey}:gym_lookup_error`, error: gymErr.message }));
+        } else {
+          for (const g of gymRows ?? []) {
+            if (g?.id) gymInfoById.set(g.id, { name: g.name ?? 'your gym', logo_url: (g as any).logo_url ?? null });
+          }
+        }
+      }
+
+      let totalUsers = 0;
+      let totalDelivered = 0;
+      let windowFailed = 0;
+      const windowMetrics: unknown[] = [];
+
+      for (const [gid, users] of byGym) {
+        const gymInfo = gid !== 'null' ? gymInfoById.get(gid) : undefined;
+        const gymName = gymInfo?.name ?? 'your gym';
+        const gymLogoUrl = gymInfo?.logo_url ?? null;
+        const gymId = gid !== 'null' ? gid : null;
+
+        const userIds = users.map((u) => u.user_id);
+        const tokens = users
+          .map((u) => u.token)
+          .filter((t): t is string => isExpoPushToken(t));
+
+        totalUsers += userIds.length;
+
+        try {
+          const pushRes = await fetch(
+            `${supabaseUrl}/functions/v1/send-push`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${internalJwt}`,
+              },
+              body: JSON.stringify({
+                client_ref: clientRef,
+                tokens,
+                user_ids: userIds,
+                title: title(gymName),
+                body,
+                data: {
+                  type: notifType,
+                  ...(gymId ? { gym_id: gymId } : {}),
+                  gym_name: gymName,
+                  gym_logo_url: gymLogoUrl,
+                },
+              }),
+            }
+          );
+
+          const pushJson = await pushRes.json().catch(() => null);
+          const delivered = deliveryCountFromSendPushBody(pushJson);
+          totalDelivered += delivered;
+          if (!pushRes.ok) windowFailed++;
+          windowMetrics.push({ gym_name: gymName, users: userIds.length, ...compactSendPushMetrics(pushJson) });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'unknown';
+          console.error(JSON.stringify({ event: `drops-expiry-${windowKey}:push_error`, gym: gymName, error: msg }));
+          windowFailed++;
+        }
+      }
+
+      return {
+        users: totalUsers,
+        delivered: totalDelivered,
+        failed: windowFailed,
+        gyms: byGym.size,
+        metrics: windowMetrics,
+      };
+    }
+
+    // ── 30-day warning ────────────────────────────────────────────────
+    results['30d'] = await processWindow(
+      '30d', 29, 31,
+      (gymName) => `💧 Drops expiring soon — ${gymName}`,
+      'You have drops expiring in 30 days. Visit the reward store!',
+      'drops_expiry_30d',
+      'drops_expiry_30d',
     );
 
-    if (err30) {
-      // Fallback if RPC doesn't exist yet — use direct query
-      console.warn('RPC get_expiring_drops_by_window not found, using fallback query');
-    }
-
-    // Use direct query as primary approach (simpler, no extra RPC needed)
-    const { data: warn30, error: qErr30 } = await supabase
-      .from('drops_transactions')
-      .select(`
-        user_id,
-        amount,
-        profiles!inner(expo_push_token)
-      `)
-      .not('expires_at', 'is', null)
-      .gt('expires_at', new Date(Date.now() + 29 * 86400000).toISOString())
-      .lt('expires_at', new Date(Date.now() + 31 * 86400000).toISOString())
-      .gt('amount', 0)
-      .eq('transaction_type', 'session');
-
-    if (qErr30) throw qErr30;
-
-    if (warn30 && warn30.length > 0) {
-      // Aggregate by user — include all users regardless of token presence
-      const userMap = new Map<string, { total: number; token: string | null }>();
-      for (const row of warn30) {
-        const uid = row.user_id;
-        const token = (row as any).profiles?.expo_push_token ?? null;
-
-        const existing = userMap.get(uid);
-        if (existing) {
-          existing.total += row.amount;
-          if (!existing.token && token) existing.token = token;
-        } else {
-          userMap.set(uid, { total: row.amount, token });
-        }
-      }
-
-      const userIds30 = [...userMap.keys()];
-      const tokens30: string[] = [];
-      for (const [_uid, { token }] of userMap) {
-        if (token && isExpoPushToken(token)) {
-          tokens30.push(token);
-        }
-      }
-
-      if (userIds30.length > 0) {
-        const res30 = await fetch(
-          `${supabaseUrl}/functions/v1/send-push`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${internalJwt}`,
-            },
-            body: JSON.stringify({
-              client_ref: 'drops_expiry_30d',
-              tokens: tokens30,
-              user_ids: userIds30,
-              title: '💧 Drops expiring soon',
-              body: 'You have drops expiring in 30 days. Visit the reward store!',
-              data: { type: 'drops_expiry_30d' },
-            }),
-          }
-        );
-
-        const body30 = await res30.json().catch(() => null);
-        results['30d'] = {
-          users: userIds30.length,
-          tokens: tokens30.length,
-          delivered: deliveryCountFromSendPushBody(body30),
-          http_ok: res30.ok,
-          push: compactSendPushMetrics(body30),
-        };
-      } else {
-        results['30d'] = { users: 0, skipped: true };
-      }
-    } else {
-      results['30d'] = { users: 0, skipped: true };
-    }
-
-    // --- 7-day warning (expires in 6–8 days) ---
-    const { data: warn7, error: qErr7 } = await supabase
-      .from('drops_transactions')
-      .select(`
-        user_id,
-        amount,
-        profiles!inner(expo_push_token)
-      `)
-      .not('expires_at', 'is', null)
-      .gt('expires_at', new Date(Date.now() + 6 * 86400000).toISOString())
-      .lt('expires_at', new Date(Date.now() + 8 * 86400000).toISOString())
-      .gt('amount', 0)
-      .eq('transaction_type', 'session');
-
-    if (qErr7) throw qErr7;
-
-    if (warn7 && warn7.length > 0) {
-      // Aggregate by user — include all users regardless of token presence
-      const userMap7 = new Map<string, { total: number; token: string | null }>();
-      for (const row of warn7) {
-        const uid = row.user_id;
-        const token = (row as any).profiles?.expo_push_token ?? null;
-
-        const existing = userMap7.get(uid);
-        if (existing) {
-          existing.total += row.amount;
-          if (!existing.token && token) existing.token = token;
-        } else {
-          userMap7.set(uid, { total: row.amount, token });
-        }
-      }
-
-      const userIds7 = [...userMap7.keys()];
-      const tokens7: string[] = [];
-      for (const [_uid, { token }] of userMap7) {
-        if (token && isExpoPushToken(token)) {
-          tokens7.push(token);
-        }
-      }
-
-      if (userIds7.length > 0) {
-        const res7 = await fetch(
-          `${supabaseUrl}/functions/v1/send-push`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${internalJwt}`,
-            },
-            body: JSON.stringify({
-              client_ref: 'drops_expiry_7d',
-              tokens: tokens7,
-              user_ids: userIds7,
-              title: '⚠️ Drops expiring in 7 days',
-              body: 'Spend them in the reward store before they expire!',
-              data: { type: 'drops_expiry_7d' },
-            }),
-          }
-        );
-
-        const body7w = await res7.json().catch(() => null);
-        results['7d'] = {
-          users: userIds7.length,
-          tokens: tokens7.length,
-          delivered: deliveryCountFromSendPushBody(body7w),
-          http_ok: res7.ok,
-          push: compactSendPushMetrics(body7w),
-        };
-      } else {
-        results['7d'] = { users: 0, skipped: true };
-      }
-    } else {
-      results['7d'] = { users: 0, skipped: true };
-    }
+    // ── 7-day warning ─────────────────────────────────────────────────
+    results['7d'] = await processWindow(
+      '7d', 6, 8,
+      (gymName) => `⚠️ Drops expiring in 7 days — ${gymName}`,
+      'Spend them in the reward store before they expire!',
+      'drops_expiry_7d',
+      'drops_expiry_7d',
+    );
 
     console.log(JSON.stringify({
       event: 'drops-expiry-warning',

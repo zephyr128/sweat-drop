@@ -14,5 +14,6 @@
   "earlier": "Ranije",
   "justNow": "Upravo sada",
   "minutesAgo": "pre {{count}}m",
-  "hoursAgo": "pre {{count}}h"
+  "hoursAgo": "pre {{count}}h",
+  "fromGym": "od {{gymName}}"
 }

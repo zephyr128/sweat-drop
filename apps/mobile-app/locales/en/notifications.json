@@ -14,5 +14,6 @@
   "earlier": "Earlier",
   "justNow": "Just now",
   "minutesAgo": "{{count}}m ago",
-  "hoursAgo": "{{count}}h ago"
+  "hoursAgo": "{{count}}h ago",
+  "fromGym": "from {{gymName}}"
 }

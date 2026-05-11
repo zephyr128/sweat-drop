@@ -2,6 +2,10 @@
 // Description: After staff marks a redemption fulfilled, notify the user that the prize is at the desk.
 // Invoked server-to-server from admin (Authorization: Bearer service_role only).
 //
+// AGENT NOTE: [2026-05-11] - edge-function-agent (feature_multigym_notification_differentiation)
+//   Added logo_url to gym query. Push data now includes gym_name + gym_logo_url.
+//   Title suffixed: "🎁 Your prize is ready! — [Gym Name]".
+//
 // Reference: docs/plans/exec_verification_gate_fulfillment_v1.md — Phase 2c
 //
 // INTERFACE CONTRACT:
@@ -131,13 +135,15 @@ serve(async (req) => {
   }
 
   let gymName = 'your gym';
+  let gymLogoUrl: string | null = null;
   if (row.gym_id) {
     const { data: gym } = await supabase
       .from('gyms')
-      .select('name')
+      .select('name, logo_url')
       .eq('id', row.gym_id)
       .maybeSingle();
     if (gym?.name) gymName = gym.name;
+    gymLogoUrl = (gym as any)?.logo_url ?? null;
   }
 
   const code = row.redemption_code ?? '—';
@@ -152,12 +158,14 @@ serve(async (req) => {
       client_ref: 'prize_ready',
       tokens: [token],
       user_ids: [row.user_id],
-      title: '🎁 Your prize is ready!',
+      title: `🎁 Your prize is ready! — ${gymName}`,
       body: `Your prize is ready at ${gymName}. Show code ${code} to collect it.`,
       data: {
         type: 'prize_ready',
         redemption_id: row.id,
         gym_id: row.gym_id ?? '',
+        gym_name: gymName,
+        ...(gymLogoUrl ? { gym_logo_url: gymLogoUrl } : {}),
       },
     }),
   });

@@ -3,6 +3,36 @@
  */
 import { PUSH_BODY_LIMITS } from './expo-push.ts';
 
+/**
+ * Gym context fields — callers SHOULD include these in the `data` object for
+ * every gym-scoped notification. They enable:
+ *   1. In-app notification inbox: render gym logo thumbnail + gym name chip
+ *      so multi-gym users can instantly identify the originating gym.
+ *   2. OS banner differentiation: gym name is already in the title suffix
+ *      ("Title — Gym Name") by convention; these fields are for the inbox.
+ *
+ * Standard pattern for all gym-scoped notification senders:
+ * ```typescript
+ * data: {
+ *   type: 'notification_type',
+ *   gym_id:       gymRow.id,          // UUID
+ *   gym_name:     gymRow.name,        // Display name, e.g. "Vortex"
+ *   gym_logo_url: gymRow.logo_url ?? null,  // CDN URL or null
+ *   // ...other fields
+ * }
+ * ```
+ *
+ * Title convention (suffix pattern — actionable content first):
+ * ```typescript
+ * title = `🔥 Your streak is at risk! — ${gymName}`;
+ * ```
+ */
+export interface GymPushContext {
+  gym_id: string;
+  gym_name: string;
+  gym_logo_url: string | null;
+}
+
 export interface PushRequest {
   tokens: string[];
   title: string;

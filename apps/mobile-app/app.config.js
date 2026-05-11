@@ -66,7 +66,7 @@ module.exports = {
         foregroundImage: './assets/adaptive-icon.png', // Android adaptive icon foreground (1024x1024)
         backgroundColor: '#0A0E1A', // Dark navy background
       },
-      versionCode: 47,
+      versionCode: 48,
       package: bundleId,
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON || './google-services.json',

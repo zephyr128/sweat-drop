@@ -500,21 +500,55 @@ export default function RootLayout() {
     SpaceMono_400Regular,
   });
 
-  // Push notification tap handler
+  // Keep session in a ref so the notification tap callback never changes reference.
+  //
+  // BUG: useThrottledRouter() returns a new object literal `{ ...router, push, … }`
+  // on every render. Putting that object in useCallback deps means handleNotificationTap
+  // is a new function reference on EVERY render. addNotificationListeners' effect
+  // re-runs on every render, re-registering addNotificationResponseReceivedListener.
+  // On Android, a newly registered listener replays the notification that launched
+  // the app → router.push fires again → user lands back on the notification screen
+  // every time the component re-renders (navigation changes, auth token refreshes, …).
+  //
+  // FIX: read session via a ref (never stale, no dependency), and use the individually
+  // stable push/replace callbacks from useThrottledRouter (each is a memoised
+  // useCallback with stable deps inside useThrottledRouter) so the outer useCallback
+  // deps are truly stable → handleNotificationTap identity never changes.
+  const notifSessionRef = useRef(session);
+  notifSessionRef.current = session;
+
+  // These are the individually-memoised methods — stable across renders.
+  const { push: routerPush, replace: routerReplace } = router;
+
+  // Track the last notification we have already navigated for so that the
+  // getInitialNotification path and the addNotificationResponseReceivedListener
+  // path cannot both fire for the same cold-start notification.
+  const lastHandledDeepLink = useRef<string | null>(null);
+
   const handleNotificationTap = useCallback(
     (deepLink: string | null) => {
-      if (shouldRequireEmailVerification(session?.user)) {
-        router.replace('/(onboarding)/verify-email');
+      if (shouldRequireEmailVerification(notifSessionRef.current?.user)) {
+        routerReplace('/(onboarding)/verify-email');
         return;
       }
       if (deepLink) {
+        // Deduplicate: ignore if this exact link was just handled (within 2s).
+        // Prevents double-fire when both getInitialNotification and the response
+        // listener deliver the same cold-start notification on Android.
+        if (lastHandledDeepLink.current === deepLink) {
+          log.debug('[App] Notification tap deduplicated (already handled):', deepLink);
+          return;
+        }
+        lastHandledDeepLink.current = deepLink;
+        setTimeout(() => { lastHandledDeepLink.current = null; }, 2000);
+
         log.debug('[App] Navigating from notification tap:', deepLink);
         setTimeout(() => {
-          router.push(deepLink as any);
+          routerPush(deepLink as any);
         }, 100);
       }
     },
-    [router, session?.user],
+    [routerPush, routerReplace], // stable: individually memoised inside useThrottledRouter
   );
 
   // Single auth initialization — THE ONLY auth listener in the app
