@@ -184,6 +184,10 @@ export function useMyStats(gymId: string | null | undefined) {
 
     try {
       const now = new Date();
+      const nowBelgradeKey = toBelgradeDayKey(now.toISOString()); // YYYY-MM-DD
+      const nowBelgradeYear = Number.parseInt(nowBelgradeKey.slice(0, 4), 10);
+      const nowBelgradeMonth = Number.parseInt(nowBelgradeKey.slice(5, 7), 10); // 1-12
+      const nowBelgradeDay = Number.parseInt(nowBelgradeKey.slice(8, 10), 10); // 1-31
       const todayISO = startOfToday().toISOString();
       const weekISO = startOfWeek().toISOString();
       const monthISO = startOfMonth().toISOString();
@@ -332,7 +336,7 @@ export function useMyStats(gymId: string | null | undefined) {
       let totalDaysInPeriod = 1;
       if (period === 'today') totalDaysInPeriod = 1;
       else if (period === 'week') totalDaysInPeriod = 7;
-      else if (period === 'month') totalDaysInPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      else if (period === 'month') totalDaysInPeriod = new Date(nowBelgradeYear, nowBelgradeMonth, 0).getDate();
       else {
         const memberDate = memberSince ? new Date(memberSince) : now;
         totalDaysInPeriod = Math.max(1, Math.ceil((now.getTime() - memberDate.getTime()) / 86400000));
@@ -401,11 +405,36 @@ export function useMyStats(gymId: string | null | undefined) {
         activityChartActive = activityChart.filter((b) => b.drops > 0).length;
 
       } else if (period === 'month') {
-        // 4–5 bars: W1–W5, each = total earned drops for that week of the month (Belgrade TZ)
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
+        // 4–6 bars: W1–Wn, each = total earned drops for that week of the month (Belgrade TZ).
+        //
+        // Weeks follow ISO calendar boundaries (Mon–Sun), NOT naive
+        // `Math.ceil(day/7)` blocks. The latter is calendar-agnostic and
+        // misattributes drops whenever the 1st of the month is not a Monday:
+        // e.g. May 1 2026 is Friday, so May 7 (Thu) belonged to the same
+        // Mon–Sun week as May 4 (Mon), but `Math.ceil(7/7)=1` filed it as W1.
+        // Users mentally map "This week" (which is Mon–Sun in the Week tab)
+        // onto the W1/W2/... bars, so consistency demands ISO weeks here too.
+        const currentYear = nowBelgradeYear;
+        const currentMonth = nowBelgradeMonth - 1; // JS Date month index (0-11)
         const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-        const totalWeeks = Math.ceil(daysInMonth / 7);
+
+        // ISO day-of-week for the 1st of the month: 1=Mon … 7=Sun.
+        // Use UTC accessors so this is purely calendar arithmetic, not TZ.
+        const firstDayDOW = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay(); // 0=Sun
+        const firstDayISO = firstDayDOW === 0 ? 7 : firstDayDOW;
+        // Day-of-month of the first Monday. If the 1st is Monday, there is
+        // no pre-week prelude (W1 = days 1–7).
+        const firstMondayDay = firstDayISO === 1 ? 1 : 1 + (8 - firstDayISO);
+
+        const weekOfMonth = (dayOfMonth: number): number => {
+          if (firstDayISO === 1) return Math.floor((dayOfMonth - 1) / 7) + 1;
+          // Days before the first Monday form the W1 prelude (1..firstMondayDay-1).
+          if (dayOfMonth < firstMondayDay) return 1;
+          return Math.floor((dayOfMonth - firstMondayDay) / 7) + 2;
+        };
+
+        const totalWeeks = weekOfMonth(daysInMonth);
+
         const weekBuckets = new Map<number, number>();
         const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
         for (const tx of txRows) {
@@ -413,12 +442,10 @@ export function useMyStats(gymId: string | null | undefined) {
           const belgKey = toBelgradeDayKey(tx.created_at);
           if (!belgKey.startsWith(monthPrefix)) continue;
           const dayOfMonth = parseInt(belgKey.slice(8, 10), 10);
-          const weekNum = Math.ceil(dayOfMonth / 7);
+          const weekNum = weekOfMonth(dayOfMonth);
           weekBuckets.set(weekNum, (weekBuckets.get(weekNum) ?? 0) + (tx.amount ?? 0));
         }
-        const todayBelg = toBelgradeDayKey(new Date().toISOString());
-        const todayDay = parseInt(todayBelg.slice(8, 10), 10);
-        const todayWeekNum = Math.ceil(todayDay / 7);
+        const todayWeekNum = weekOfMonth(nowBelgradeDay);
         activityChart = [];
         for (let w = 1; w <= totalWeeks; w++) {
           activityChart.push({ day: `W${w}`, drops: weekBuckets.get(w) ?? 0, isToday: w === todayWeekNum });
@@ -433,10 +460,10 @@ export function useMyStats(gymId: string | null | undefined) {
           const key = toBelgradeDayKey(tx.created_at).slice(0, 7); // "YYYY-MM"
           monthDropMap.set(key, (monthDropMap.get(key) ?? 0) + (tx.amount ?? 0));
         }
-        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const currentMonthKey = `${nowBelgradeYear}-${String(nowBelgradeMonth).padStart(2, '0')}`;
         activityChart = [];
         for (let i = 5; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const d = new Date(Date.UTC(nowBelgradeYear, (nowBelgradeMonth - 1) - i, 1));
           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           activityChart.push({ day: MONTH_LABELS[d.getMonth()], drops: monthDropMap.get(key) ?? 0, isToday: key === currentMonthKey });
         }
@@ -452,12 +479,11 @@ export function useMyStats(gymId: string | null | undefined) {
         const sessionCountMap = new Map<string, number>();
         for (const s of sessions) {
           if (!s.started_at) continue;
-          const d = new Date(s.started_at);
-          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const key = toBelgradeDayKey(s.started_at).slice(0, 7); // "YYYY-MM"
           sessionCountMap.set(key, (sessionCountMap.get(key) ?? 0) + 1);
         }
         for (let i = 5; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const d = new Date(Date.UTC(nowBelgradeYear, (nowBelgradeMonth - 1) - i, 1));
           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           // drops from chart (already tx-based) — reuse activityChart[5-i]
           const chartBar = activityChart[5 - i];

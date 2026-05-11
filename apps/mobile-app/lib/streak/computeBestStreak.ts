@@ -26,7 +26,17 @@ const BELGRADE_TZ = 'Europe/Belgrade';
  * is what actually drives correctness.
  */
 export function toBelgradeDayKey(ts: string | Date): string {
-  const d = typeof ts === 'string' ? new Date(ts) : ts;
+  const d = (() => {
+    if (typeof ts !== 'string') return ts;
+    const raw = ts.trim();
+    // Supabase RPCs can occasionally return ISO-like strings without an explicit
+    // timezone suffix. JS then parses them as local time, which shifts Belgrade
+    // bucketing by one day near midnight. Force UTC interpretation in that case.
+    const hasExplicitTz = /(?:[zZ]|[+\-]\d{2}:\d{2})$/.test(raw);
+    if (hasExplicitTz) return new Date(raw);
+    const isIsoWithoutTz = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw);
+    return new Date(isIsoWithoutTz ? `${raw}Z` : raw);
+  })();
   return d.toLocaleDateString('sv-SE', { timeZone: BELGRADE_TZ });
 }
 
