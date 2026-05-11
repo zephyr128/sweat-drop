@@ -31,6 +31,7 @@ import { fontStyles, getNumberStyle, theme as appTheme, hexToRgba } from '@/lib/
 import ScreenHeader from '@/components/ScreenHeader';
 import { SliderTabs } from '@/components/SliderTabs';
 import { WeeklyActivityChart } from '@/components/WeeklyActivityChart';
+import { useThrottledRouter } from '@/hooks/useThrottledRouter';
 import { useMyStats, StatsPeriod } from '@/hooks/useMyStats';
 import type { TodaySession, MyStatsState } from '@/hooks/useMyStats';
 import { useGymStore } from '@/lib/stores/useGymStore';
@@ -216,9 +217,10 @@ interface PeriodPageProps {
   periodState: MyStatsState;
   branding: { primary: string };
   t: TFunction<'stats'>;
+  onOpenWorkouts: () => void;
 }
 
-const PeriodPage: React.FC<PeriodPageProps> = ({ p, periodState, branding, t }) => {
+const PeriodPage: React.FC<PeriodPageProps> = ({ p, periodState, branding, t, onOpenWorkouts }) => {
   const {
     periodStats, origin,
     todaySessions, activityChart, activityChartActive,
@@ -351,40 +353,46 @@ const PeriodPage: React.FC<PeriodPageProps> = ({ p, periodState, branding, t }) 
 
       {/* ── Activity Visualization (period-specific) ── */}
       {p === 'today' && (
-        <TodayTimeline sessions={todaySessions} branding={branding} t={t} />
+        <TodayTimeline sessions={todaySessions} branding={branding} t={t} onOpenWorkouts={onOpenWorkouts} />
       )}
       {p === 'week' && activityChart.length > 0 && (
-        <WeeklyActivityChart
-          data={activityChart}
-          activeDays={activityChartActive}
-          totalSlots={7}
-          brandPrimary={branding.primary}
-          title={t('thisWeek')}
-          activeSuffix={t('days')}
-          showDropLabels
-        />
+        <TouchableOpacity activeOpacity={0.92} onPress={onOpenWorkouts}>
+          <WeeklyActivityChart
+            data={activityChart}
+            activeDays={activityChartActive}
+            totalSlots={7}
+            brandPrimary={branding.primary}
+            title={t('thisWeek')}
+            activeSuffix={t('days')}
+            showDropLabels
+          />
+        </TouchableOpacity>
       )}
       {p === 'month' && activityChart.length > 0 && (
-        <WeeklyActivityChart
-          data={activityChart}
-          activeDays={activityChartActive}
-          totalSlots={activityChart.length}
-          brandPrimary={branding.primary}
-          title={t('monthActivity')}
-          activeSuffix={t('weeks')}
-          showDropLabels
-        />
+        <TouchableOpacity activeOpacity={0.92} onPress={onOpenWorkouts}>
+          <WeeklyActivityChart
+            data={activityChart}
+            activeDays={activityChartActive}
+            totalSlots={activityChart.length}
+            brandPrimary={branding.primary}
+            title={t('monthActivity')}
+            activeSuffix={t('weeks')}
+            showDropLabels
+          />
+        </TouchableOpacity>
       )}
       {p === 'all' && activityChart.length > 0 && (
-        <WeeklyActivityChart
-          data={activityChart}
-          activeDays={activityChartActive}
-          totalSlots={6}
-          brandPrimary={branding.primary}
-          title={t('monthlyTrend')}
-          activeSuffix={t('months')}
-          showDropLabels
-        />
+        <TouchableOpacity activeOpacity={0.92} onPress={onOpenWorkouts}>
+          <WeeklyActivityChart
+            data={activityChart}
+            activeDays={activityChartActive}
+            totalSlots={6}
+            brandPrimary={branding.primary}
+            title={t('monthlyTrend')}
+            activeSuffix={t('months')}
+            showDropLabels
+          />
+        </TouchableOpacity>
       )}
 
       {/* ── Machines ── */}
@@ -502,9 +510,10 @@ const TodayTimeline: React.FC<{
   sessions: TodaySession[];
   branding: { primary: string };
   t: TFunction<'stats'>;
-}> = ({ sessions, branding, t }) => {
+  onOpenWorkouts: () => void;
+}> = ({ sessions, branding, t, onOpenWorkouts }) => {
   return (
-    <View>
+    <TouchableOpacity activeOpacity={0.92} onPress={onOpenWorkouts}>
       <Text style={styles.sectionTitle}>{t('todaySessions')}</Text>
       <View style={styles.sectionCardOuter}>
         <PlatformBlur intensity={50} tint="dark" style={styles.sectionCardBlur} androidColor="rgba(18,18,28,0.97)">
@@ -544,7 +553,7 @@ const TodayTimeline: React.FC<{
           )}
         </PlatformBlur>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -555,6 +564,7 @@ export default function StatsScreen() {
   const branding = useBranding();
   const insets = useSafeAreaInsets();
   const { session } = useSession();
+  const router = useThrottledRouter();
   const { getActiveGymId } = useGymStore();
   const activeGymId = getActiveGymId();
 
@@ -606,6 +616,10 @@ export default function StatsScreen() {
     await refresh(period);
     setRefreshing(false);
   }, [period, refresh]);
+
+  const handleOpenWorkouts = useCallback(() => {
+    router.push('/workout-history');
+  }, [router]);
 
   return (
     <View style={styles.container}>
@@ -665,7 +679,13 @@ export default function StatsScreen() {
                 ) : undefined
               }
             >
-              <PeriodPage p={p} periodState={states[p]} branding={branding} t={t} />
+              <PeriodPage
+                p={p}
+                periodState={states[p]}
+                branding={branding}
+                t={t}
+                onOpenWorkouts={handleOpenWorkouts}
+              />
             </ScrollView>
           ))}
         </SliderTabs>
