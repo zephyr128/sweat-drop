@@ -10,8 +10,9 @@ import {
   Target, CheckCircle2, XCircle, Droplet, Calendar, Plus,
   Power, Trash2, Pencil, BarChart3, Users, X, Upload, Image,
   Building2, Minus, Info, CalendarDays, Infinity, Flame,
-  Trophy, ArrowRight, Clock, Repeat, Milestone,
+  Trophy, ArrowRight, Clock, Repeat, Milestone, Palette,
 } from 'lucide-react';
+import { BadgeStudioModal } from '@/components/badge-studio/BadgeStudioModal';
 import { DataTable, type ColumnDef, type DataTableQuery, type FilterDef } from '@/components/ui/DataTable';
 import { listChallenges } from '@/lib/actions/list-actions';
 import type { ChallengeRow } from '@/lib/actions/list-helpers';
@@ -309,6 +310,7 @@ export function ChallengesList({ gymId }: ChallengesListProps) {
   // Form state
   const [uploadingBadge, setUploadingBadge] = useState(false);
   const [badgePreview, setBadgePreview] = useState<string | null>(null);
+  const [showBadgeStudio, setShowBadgeStudio] = useState(false);
   const [showDateRange, setShowDateRange] = useState(false);
   const [tiers, setTiers] = useState<TierInput[]>([
     { label: 'Bronze', target: 100, drops: 25 },
@@ -909,7 +911,17 @@ export function ChallengesList({ gymId }: ChallengesListProps) {
 
               {/* Badge Image */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">Badge Image</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Badge Image</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowBadgeStudio(true)}
+                    className="flex items-center gap-1 px-2 py-1 bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] font-medium rounded-lg hover:bg-zinc-700 hover:text-white transition-colors"
+                  >
+                    <Palette className="w-3 h-3 text-[#00E5FF]" />
+                    Generate Badge
+                  </button>
+                </div>
                 <div {...badgeDropzone.getRootProps()}
                   className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${badgeDropzone.isDragActive ? 'border-[#00E5FF] bg-[#00E5FF]/5' : 'border-zinc-800 bg-[#111] hover:border-zinc-700'} ${uploadingBadge ? 'opacity-50 pointer-events-none' : ''}`}>
                   <input {...badgeDropzone.getInputProps()} />
@@ -937,6 +949,19 @@ export function ChallengesList({ gymId }: ChallengesListProps) {
                     onChange={(e) => setBadgePreview(e.target.value || null)} />
                 </div>
               </div>
+
+              {/* Badge Studio quick-generate modal */}
+              {showBadgeStudio && (
+                <BadgeStudioModal
+                  gymId={gymId}
+                  onComplete={(url) => {
+                    reset({ ...watch(), badgeImageUrl: url });
+                    setBadgePreview(url);
+                    setShowBadgeStudio(false);
+                  }}
+                  onClose={() => setShowBadgeStudio(false)}
+                />
+              )}
 
               {/* Actions */}
               <div className="flex gap-3 pt-2">
