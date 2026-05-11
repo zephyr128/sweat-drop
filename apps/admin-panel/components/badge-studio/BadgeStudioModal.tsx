@@ -44,22 +44,39 @@ export function BadgeStudioModal({ gymId, onComplete, onClose }: BadgeStudioModa
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Fetch gym logo on mount ──
+  // Logo lives in `owner_branding` keyed by owner_id (legacy `gyms.logo_url`
+  // was dropped — see 20240101000034 migration). Resolve gym → owner_id →
+  // logo_url in two hops.
   useEffect(() => {
     let cancelled = false;
     setGymLogoLoading(true);
-    supabase
-      .from('gyms')
-      .select('logo_url')
-      .eq('id', gymId)
-      .single()
-      .then(async ({ data }) => {
+    (async () => {
+      try {
+        const { data: gymRow, error: gymErr } = await supabase
+          .from('gyms')
+          .select('owner_id')
+          .eq('id', gymId)
+          .single();
         if (cancelled) return;
-        if (!data?.logo_url) {
+        if (gymErr || !gymRow?.owner_id) {
+          setGymLogoLoading(false);
+          return;
+        }
+        const { data: branding } = await supabase
+          .from('owner_branding')
+          .select('logo_url')
+          .eq('owner_id', gymRow.owner_id)
+          .maybeSingle();
+        if (cancelled) return;
+        const url = typeof branding?.logo_url === 'string' && branding.logo_url.length > 0
+          ? branding.logo_url
+          : null;
+        if (!url) {
           setGymLogoLoading(false);
           return;
         }
         try {
-          const dataUrl = await fetchAsDataUrl(data.logo_url);
+          const dataUrl = await fetchAsDataUrl(url);
           if (!cancelled) {
             setGymLogoDataUrl(dataUrl);
             setSource('gym_logo');
@@ -69,7 +86,10 @@ export function BadgeStudioModal({ gymId, onComplete, onClose }: BadgeStudioModa
         } finally {
           if (!cancelled) setGymLogoLoading(false);
         }
-      }, () => { if (!cancelled) setGymLogoLoading(false); });
+      } catch {
+        if (!cancelled) setGymLogoLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
   }, [gymId]);
 

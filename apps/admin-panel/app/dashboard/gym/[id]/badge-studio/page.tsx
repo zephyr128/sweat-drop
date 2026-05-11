@@ -12,10 +12,14 @@ export default async function BadgeStudioPage({ params }: PageProps) {
   const { id: gymId } = await params;
   const supabase = await createClient();
 
+  // Schema note: gym logo lives on `owner_branding` (keyed by owner_id) — the
+  // legacy `gyms.logo_url` column was dropped by the
+  // 20240101000034_unify_branding_and_cleanup migration. Two queries here so
+  // the Badge Studio sees the same logo Admin uses everywhere else.
   const [gymRes, challengesRes] = await Promise.all([
     supabase
       .from('gyms')
-      .select('id, name, logo_url')
+      .select('id, name, owner_id')
       .eq('id', gymId)
       .single(),
     supabase
@@ -27,7 +31,23 @@ export default async function BadgeStudioPage({ params }: PageProps) {
 
   if (gymRes.error || !gymRes.data) notFound();
 
-  const gym      = gymRes.data;
+  let logoUrl: string | null = null;
+  if (gymRes.data.owner_id) {
+    const { data: branding } = await supabase
+      .from('owner_branding')
+      .select('logo_url')
+      .eq('owner_id', gymRes.data.owner_id)
+      .maybeSingle();
+    if (branding && typeof branding.logo_url === 'string' && branding.logo_url.length > 0) {
+      logoUrl = branding.logo_url;
+    }
+  }
+
+  const gym = {
+    id: gymRes.data.id,
+    name: gymRes.data.name,
+    logo_url: logoUrl,
+  };
   const challenges = challengesRes.data ?? [];
 
   return (
