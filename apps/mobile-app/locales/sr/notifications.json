@@ -15,5 +15,17 @@
   "justNow": "Upravo sada",
   "minutesAgo": "pre {{count}}m",
   "hoursAgo": "pre {{count}}h",
-  "fromGym": "od {{gymName}}"
+  "fromGym": "od {{gymName}}",
+  "detailTitle": "Obaveštenje",
+  "fromGymNotHome": "Ovo obaveštenje je od {{gymName}}",
+  "actionGoHome": "Idi na početnu",
+  "actionStartWorkout": "Započni trening",
+  "actionViewPrize": "Pogledaj nagradu",
+  "actionViewOffer": "Pogledaj ponudu",
+  "actionViewWallet": "Pogledaj novčanik",
+  "actionViewLeaderboard": "Pogledaj rang listu",
+  "actionViewTrophies": "Pogledaj trofeje",
+  "actionView": "Pogledaj",
+  "actionViewGym": "Pogledaj teretanu",
+  "actionDismiss": "Zatvori"
 }

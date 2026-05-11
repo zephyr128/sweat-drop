@@ -35,6 +35,7 @@ import {
   addNotificationListeners,
   getInitialNotification,
   getDeepLinkFromNotification,
+  type NotificationTapPayload,
 } from '@/lib/notifications';
 import { log } from '@/lib/logger';
 import { shouldRequireEmailVerification } from '@/lib/authEmailVerification';
@@ -142,6 +143,7 @@ function StackNavigator() {
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_bottom', animationDuration: 350 }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
+      <Stack.Screen name="notification-detail" options={{ headerShown: false }} />
       <Stack.Screen name="happy-hours" options={{ headerShown: false }} />
       <Stack.Screen name="invite-friend" options={{ headerShown: false }} />
       <Stack.Screen name="auth/confirm" options={{ headerShown: false, animation: 'none' }} />
@@ -526,23 +528,45 @@ export default function RootLayout() {
   const lastHandledDeepLink = useRef<string | null>(null);
 
   const handleNotificationTap = useCallback(
-    (deepLink: string | null) => {
+    (deepLink: string | null, payload: NotificationTapPayload | null) => {
       if (shouldRequireEmailVerification(notifSessionRef.current?.user)) {
         routerReplace('/(onboarding)/verify-email');
         return;
       }
-      if (deepLink) {
-        // Deduplicate: ignore if this exact link was just handled (within 2s).
-        // Prevents double-fire when both getInitialNotification and the response
-        // listener deliver the same cold-start notification on Android.
-        if (lastHandledDeepLink.current === deepLink) {
-          log.debug('[App] Notification tap deduplicated (already handled):', deepLink);
-          return;
-        }
-        lastHandledDeepLink.current = deepLink;
-        setTimeout(() => { lastHandledDeepLink.current = null; }, 2000);
 
-        log.debug('[App] Navigating from notification tap:', deepLink);
+      // Dedup key incorporates type + deepLink so two different notification types
+      // that happen to share the same deep link are not collapsed into one navigation.
+      // This also prevents the double-fire on Android cold-start (getInitialNotification
+      // + addNotificationResponseReceivedListener both delivering the same notification).
+      const dedupKey = payload
+        ? `/notification-detail?type=${payload.data?.type ?? ''}&dl=${deepLink ?? ''}`
+        : (deepLink ?? '');
+
+      if (dedupKey && lastHandledDeepLink.current === dedupKey) {
+        log.debug('[App] Notification tap deduplicated (already handled):', dedupKey);
+        return;
+      }
+      if (dedupKey) {
+        lastHandledDeepLink.current = dedupKey;
+        setTimeout(() => { lastHandledDeepLink.current = null; }, 2000);
+      }
+
+      if (payload) {
+        const params = new URLSearchParams();
+        params.set('title', payload.title ?? '');
+        params.set('body', payload.body ?? '');
+        if (payload.data?.type) params.set('type', payload.data.type);
+        if (payload.data?.gym_id) params.set('gymId', payload.data.gym_id);
+        if (payload.data?.gym_name) params.set('gymName', payload.data.gym_name);
+        if (payload.data?.gym_logo_url) params.set('gymLogoUrl', payload.data.gym_logo_url);
+        if (deepLink) params.set('deepLink', deepLink);
+        log.debug('[App] Navigating to notification-detail:', payload.data?.type);
+        setTimeout(() => {
+          routerPush(`/notification-detail?${params.toString()}` as any);
+        }, 100);
+      } else if (deepLink) {
+        // Fallback: no payload (shouldn't happen in practice)
+        log.debug('[App] Navigating from notification tap (no payload):', deepLink);
         setTimeout(() => {
           routerPush(deepLink as any);
         }, 100);
@@ -619,10 +643,10 @@ export default function RootLayout() {
 
     syncGrantedPushToken();
 
-    getInitialNotification().then((data) => {
-      if (data) {
-        const deepLink = getDeepLinkFromNotification(data);
-        handleNotificationTap(deepLink);
+    getInitialNotification().then((result) => {
+      if (result) {
+        const deepLink = getDeepLinkFromNotification(result.data);
+        handleNotificationTap(deepLink, result);
       }
     });
   }, [session?.user?.id, handleNotificationTap]);

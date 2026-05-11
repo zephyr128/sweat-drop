@@ -313,7 +313,7 @@ export async function savePushToken(userId: string, token: string): Promise<void
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /** Data payload shape from our Edge Functions */
-interface NotificationData {
+export interface NotificationData {
   type?: NotificationTrigger;
   session_id?: string;
   drops_earned?: string;
@@ -338,8 +338,10 @@ interface NotificationData {
   redemption_status?: string;
   /** 'true' | 'false' string — mobile should pattern-match this string */
   requires_verification?: string;
-  /** Gym name included by finalize-arena edge function */
+  /** Originating gym name — stamped by all gym-scoped edge functions */
   gym_name?: string;
+  /** Originating gym logo URL — stamped by all gym-scoped edge functions */
+  gym_logo_url?: string;
   /**
    * Origin environment of the push (stamped server-side by send-push). When
    * present and != this install's APP_ENV, the deep link is suppressed —
@@ -348,6 +350,17 @@ interface NotificationData {
    * but the underlying token routes to a dev install).
    */
   app_env?: 'production' | 'preview' | 'development';
+}
+
+/**
+ * Full notification content forwarded to the handleNotificationTap callback.
+ * Carries the OS-level title + body alongside the structured data payload so
+ * the detail screen can display the complete message with gym attribution.
+ */
+export interface NotificationTapPayload {
+  title: string;
+  body: string;
+  data: NotificationData;
 }
 
 /**
@@ -437,10 +450,14 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
       return '/redemptions';
 
     case 'reminder':
-      return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/home';
+      if (data.deep_link) return sanitizeDeepLink(data.deep_link);
+      if (data.gym_id) return `/gym-detail?gymId=${data.gym_id}`;
+      return '/home';
 
     case 'comeback_offer':
-      return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/store';
+      if (data.deep_link) return sanitizeDeepLink(data.deep_link);
+      if (data.gym_id) return `/gym-detail?gymId=${data.gym_id}`;
+      return '/store';
 
     case 'happy_hour':
       return '/home';
@@ -450,7 +467,9 @@ export function getDeepLinkFromNotification(data: NotificationData): string | nu
       return '/home';
 
     case 'campaign':
-      return data.deep_link ? sanitizeDeepLink(data.deep_link) : '/home';
+      if (data.deep_link) return sanitizeDeepLink(data.deep_link);
+      if (data.gym_id) return `/gym-detail?gymId=${data.gym_id}`;
+      return '/home';
 
     default:
       return '/home';
@@ -462,6 +481,7 @@ const ALLOWED_DEEP_LINK_PREFIXES = [
   '/trophy-room', '/arenas', '/redemptions', '/profile',
   '/workout-history', '/gym-detail', '/challenge-detail',
   '/reward-detail', '/arena', '/session-summary', '/gyms', '/happy-hours',
+  '/notification-detail',
 ];
 
 function sanitizeDeepLink(raw: string): string {
@@ -480,10 +500,11 @@ function sanitizeDeepLink(raw: string): string {
  * Returns cleanup function to remove listeners.
  *
  * @param onNotificationTap - Callback when user taps a notification.
- *                            Receives the deep link path (or null).
+ *                            Receives the deep link path (or null) and the full
+ *                            notification content payload (title, body, data).
  */
 export function addNotificationListeners(
-  onNotificationTap: (deepLink: string | null) => void
+  onNotificationTap: (deepLink: string | null, payload: NotificationTapPayload | null) => void
 ): () => void {
   let receivedSubscription: NotificationSubscription | null = null;
   let responseSubscription: NotificationSubscription | null = null;
@@ -510,10 +531,13 @@ export function addNotificationListeners(
     // Background/Killed: user tapped a notification
     responseSubscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        const data = response.notification.request.content.data as NotificationData;
+        const content = response.notification.request.content;
+        const data = content.data as NotificationData;
+        const title = (content.title ?? '') as string;
+        const body = (content.body ?? '') as string;
         log.debug('[Notifications] Tapped:', data?.type);
         const deepLink = getDeepLinkFromNotification(data);
-        onNotificationTap(deepLink);
+        onNotificationTap(deepLink, { title, body, data });
       }
     );
   });
@@ -529,18 +553,22 @@ export function addNotificationListeners(
  * Check if the app was opened from a notification (cold start).
  * Should be called once on app startup.
  *
- * @returns The notification data if app was opened from notification, null otherwise
+ * @returns The full notification content (data + title + body) if the app was
+ *          opened from a notification tap, null otherwise.
  */
-export async function getInitialNotification(): Promise<NotificationData | null> {
+export async function getInitialNotification(): Promise<NotificationTapPayload | null> {
   const Notifications = await getNotificationsModule();
   if (!Notifications || typeof Notifications.getLastNotificationResponseAsync !== 'function') {
     return null;
   }
   const response = await Notifications.getLastNotificationResponseAsync();
   if (response) {
-    const data = response.notification.request.content.data as NotificationData;
+    const content = response.notification.request.content;
+    const data = content.data as NotificationData;
+    const title = (content.title ?? '') as string;
+    const body = (content.body ?? '') as string;
     log.debug('[Notifications] App opened from notification:', data?.type);
-    return data;
+    return { data, title, body };
   }
   return null;
 }

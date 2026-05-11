@@ -15,5 +15,17 @@
   "justNow": "Just now",
   "minutesAgo": "{{count}}m ago",
   "hoursAgo": "{{count}}h ago",
-  "fromGym": "from {{gymName}}"
+  "fromGym": "from {{gymName}}",
+  "detailTitle": "Notification",
+  "fromGymNotHome": "This notification is from {{gymName}}",
+  "actionGoHome": "Go to Home",
+  "actionStartWorkout": "Start Workout",
+  "actionViewPrize": "View Prize",
+  "actionViewOffer": "View Offer",
+  "actionViewWallet": "View Wallet",
+  "actionViewLeaderboard": "View Leaderboard",
+  "actionViewTrophies": "View Trophies",
+  "actionView": "View",
+  "actionViewGym": "View Gym",
+  "actionDismiss": "Dismiss"
 }

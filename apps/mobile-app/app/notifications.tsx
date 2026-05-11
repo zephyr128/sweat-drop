@@ -178,9 +178,17 @@ export default function NotificationsScreen() {
       const deepLink = getDeepLinkFromNotification(
         item.data as Parameters<typeof getDeepLinkFromNotification>[0],
       );
-      if (deepLink) {
-        router.push(deepLink as any);
-      }
+      const params = new URLSearchParams();
+      params.set('notificationId', item.id);
+      params.set('title', item.title);
+      params.set('body', item.body);
+      params.set('type', item.type);
+      if (item.data?.gym_id) params.set('gymId', item.data.gym_id as string);
+      if (item.data?.gym_name) params.set('gymName', item.data.gym_name as string);
+      if (item.data?.gym_logo_url) params.set('gymLogoUrl', item.data.gym_logo_url as string);
+      if (deepLink) params.set('deepLink', deepLink);
+      params.set('createdAt', item.created_at);
+      router.push(`/notification-detail?${params.toString()}` as any);
     },
     [markRead, router],
   );
