@@ -71,6 +71,11 @@ import { styles } from './workout.styles';
 
 import { useHappyHour } from '@/hooks/useHappyHour';
 import { log } from '@/lib/logger';
+import {
+  applyCumulativeBaseline,
+  MAX_FTMS_DISTANCE_BASELINE_M,
+  MAX_FTMS_CALORIES_BASELINE_KCAL,
+} from '@/lib/ble/cumulativeBaseline';
 
 // AnimatedText is imported from @/components/workout/AnimatedText
 
@@ -302,6 +307,19 @@ export default function WorkoutScreen() {
   const ftmsPowerHistoryRef = useRef<number[]>([]);
   const ftmsDeviceCaloriesRef = useRef<number>(0);
   const ftmsProtocolActiveRef = useRef<boolean>(false);
+  // FTMS cumulative-metric baselines (per-session). These ride alongside
+  // ftmsTotalDistanceRef / ftmsDeviceCaloriesRef which now hold the *adjusted*
+  // (session-scoped) totals; the raw device values live behind these baselines.
+  //
+  // AGENT NOTE: cumulative FTMS scalars (distance, total energy) survive across
+  // our BLE connect/disconnect cycle — they only reset when the user resets the
+  // machine itself. Without a per-session baseline, a fresh session inherits the
+  // prior user's distance and kcal the moment the first packet arrives.
+  // See: docs/plans/bugfix_workout_metrics_baseline_carryover_from_prior_session.md
+  const ftmsDistanceBaselineRef = useRef<number | null>(null);
+  const ftmsDistanceCarryOverRef = useRef<number>(0);
+  const ftmsCaloriesBaselineRef = useRef<number | null>(null);
+  const ftmsCaloriesCarryOverRef = useRef<number>(0);
   // Simulator: tracks elapsedTime from FTMS measurement so timeScale is honoured
   const simulatorElapsedRef = useRef<number | null>(null);
   const treadmillDropAccRef = useRef<number>(0);
@@ -956,9 +974,38 @@ export default function WorkoutScreen() {
                 }
               }
               
-              // Distance tracking (meters) - use device total directly
+              // Distance tracking (meters) — session-adjusted via cumulative baseline.
+              // The device emits machine-scoped cumulative totals; applyCumulativeBaseline
+              // anchors on the first packet so session distance always starts at 0.
               if (measurement.distance != null && measurement.distance > 0) {
-                ftmsTotalDistanceRef.current = measurement.distance;
+                if (ftmsDistanceBaselineRef.current === null && measurement.distance > MAX_FTMS_DISTANCE_BASELINE_M) {
+                  log.warn('[Workout] FTMS distance baseline exceeds sanity ceiling, skipping anchor', {
+                    device: measurement.distance,
+                    ceiling: MAX_FTMS_DISTANCE_BASELINE_M,
+                  });
+                } else {
+                  const { next: distNext, resetDetected: distReset } = applyCumulativeBaseline(
+                    {
+                      baseline: ftmsDistanceBaselineRef.current,
+                      carryOver: ftmsDistanceCarryOverRef.current,
+                      adjusted: ftmsTotalDistanceRef.current,
+                    },
+                    measurement.distance,
+                  );
+                  if (ftmsDistanceBaselineRef.current === null) {
+                    log.debug('[Workout] FTMS distance baseline anchored', { device: measurement.distance });
+                  }
+                  if (distReset) {
+                    log.debug('[Workout] FTMS distance device reset detected', {
+                      device: measurement.distance,
+                      carryOver: distNext.carryOver,
+                      adjusted: distNext.adjusted,
+                    });
+                  }
+                  ftmsDistanceBaselineRef.current = distNext.baseline;
+                  ftmsDistanceCarryOverRef.current = distNext.carryOver;
+                  ftmsTotalDistanceRef.current = distNext.adjusted;
+                }
               }
               
               // Power tracking (watts)
@@ -970,9 +1017,37 @@ export default function WorkoutScreen() {
                 }
               }
               
-              // Device calories (kcal) - authoritative from machine
+              // Device calories (kcal) — session-adjusted via cumulative baseline.
               if (measurement.calories != null && measurement.calories > 0) {
-                ftmsDeviceCaloriesRef.current = measurement.calories;
+                if (ftmsCaloriesBaselineRef.current === null && measurement.calories > MAX_FTMS_CALORIES_BASELINE_KCAL) {
+                  log.warn('[Workout] FTMS calories baseline exceeds sanity ceiling, skipping anchor', {
+                    device: measurement.calories,
+                    ceiling: MAX_FTMS_CALORIES_BASELINE_KCAL,
+                  });
+                } else {
+                  const { next: calNext, resetDetected: calReset } = applyCumulativeBaseline(
+                    {
+                      baseline: ftmsCaloriesBaselineRef.current,
+                      carryOver: ftmsCaloriesCarryOverRef.current,
+                      adjusted: ftmsDeviceCaloriesRef.current,
+                    },
+                    measurement.calories,
+                  );
+                  if (ftmsCaloriesBaselineRef.current === null) {
+                    log.debug('[Workout] FTMS calories baseline anchored', { device: measurement.calories });
+                  }
+                  if (calReset) {
+                    log.debug('[Workout] FTMS calories device reset detected', {
+                      device: measurement.calories,
+                      carryOver: calNext.carryOver,
+                      adjusted: calNext.adjusted,
+                    });
+                  }
+                  ftmsCaloriesBaselineRef.current = calNext.baseline;
+                  ftmsCaloriesCarryOverRef.current = calNext.carryOver;
+                  ftmsDeviceCaloriesRef.current = calNext.adjusted;
+                  caloriesShared.value = calNext.adjusted;
+                }
               }
 
               // Simulator timeScale: track simulated elapsed time from FTMS measurements
@@ -1007,10 +1082,11 @@ export default function WorkoutScreen() {
                 const validDt = dtSec > 0 && dtSec < 5;
                 treadmillLastMeasureTimeRef.current = measNow;
 
-                // Distance: use device value if available, otherwise accumulate from speed
-                if (measurement.distance != null && measurement.distance > 0) {
-                  ftmsTotalDistanceRef.current = measurement.distance;
-                } else if (spd > 0.3 && validDt) {
+                // Distance: device branch already handled by the generic FTMS block above
+                // (which runs applyCumulativeBaseline and writes the session-adjusted value
+                // into ftmsTotalDistanceRef). Here we only apply the speed-based fallback
+                // when the device does not report distance.
+                if (!(measurement.distance != null && measurement.distance > 0) && spd > 0.3 && validDt) {
                   ftmsTotalDistanceRef.current += (spd / 3.6) * dtSec;
                 }
                 
@@ -1021,11 +1097,12 @@ export default function WorkoutScreen() {
                     : Math.round(dist).toString();
                 }
 
-                // Calories: device value (authoritative) or speed-based MET estimation
+                // Calories: device branch already handled by the generic FTMS block above
+                // (which runs applyCumulativeBaseline and writes the session-adjusted value
+                // into both ftmsDeviceCaloriesRef and caloriesShared). Here we only apply
+                // the speed-based MET fallback when the device does not report calories.
                 // ~1 kcal/min per km/h (approximation for 70 kg person)
-                if (measurement.calories != null && measurement.calories > 0) {
-                  caloriesShared.value = measurement.calories;
-                } else if (spd > 0.3 && validDt) {
+                if (!(measurement.calories != null && measurement.calories > 0) && spd > 0.3 && validDt) {
                   treadmillCalAccRef.current += (spd / 60) * dtSec;
                   caloriesShared.value = Math.floor(treadmillCalAccRef.current);
                 }
@@ -2856,7 +2933,11 @@ export default function WorkoutScreen() {
       ...existingRawMetrics,
       avg_rpm: finalAverageRPM,
       avg_cadence: finalAverageRPM,
-      calories_source: ftmsProtocolActiveRef.current && ftmsDeviceCaloriesRef.current > 0
+      // After the cumulative-baseline fix, ftmsDeviceCaloriesRef starts at 0 for the
+      // first packet (the device value was the baseline anchor). Use the baseline ref
+      // as the sentinel for "device did report calories this session".
+      calories_source: ftmsProtocolActiveRef.current &&
+        (ftmsDeviceCaloriesRef.current > 0 || ftmsCaloriesBaselineRef.current !== null)
         ? 'device' : 'estimated',
       ble_protocol: ftmsProtocolActiveRef.current ? 'ftms' : 'csc',
       security: {
@@ -2897,8 +2978,10 @@ export default function WorkoutScreen() {
         rawMetrics.max_power_watts = ftmsMaxPowerRef.current;
       }
 
-      // Device calories (from machine, more accurate than estimation)
-      if (ftmsDeviceCaloriesRef.current > 0) {
+      // Device calories (from machine, more accurate than estimation).
+      // Write when the device reported at least once (baseline anchored), even if
+      // the session-adjusted value is still 0 (very short session, <1 kcal earned).
+      if (ftmsDeviceCaloriesRef.current > 0 || ftmsCaloriesBaselineRef.current !== null) {
         rawMetrics.device_calories = ftmsDeviceCaloriesRef.current;
       }
     }
@@ -2917,8 +3000,10 @@ export default function WorkoutScreen() {
 
     // Final sync: Save duration, calories, raw_metrics BEFORE calling award_drops()
     // CRITICAL: Do NOT save drops_earned — award_drops() uses it for idempotency check
-    // Prefer FTMS device calories when available (more accurate than estimation)
-    const finalCalories = ftmsProtocolActiveRef.current && ftmsDeviceCaloriesRef.current > 0
+    // Prefer FTMS device calories when available (more accurate than estimation).
+    // Use baseline sentinel: even if adjusted=0, the device did report calories.
+    const finalCalories = ftmsProtocolActiveRef.current &&
+      (ftmsDeviceCaloriesRef.current > 0 || ftmsCaloriesBaselineRef.current !== null)
       ? ftmsDeviceCaloriesRef.current
       : estimatedCalories;
 
